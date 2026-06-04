@@ -606,10 +606,40 @@ app.get("*", (req, res) => {
 });
 
 /* ============================================================
+   RESET DE EMERGÊNCIA (se a variável RESET_ADMIN estiver ligada)
+   Restaura o acesso gerente / admin123 SEM apagar vendedores/leads.
+   ============================================================ */
+function resetAdminSeNecessario() {
+  if (!process.env.RESET_ADMIN) return;
+  let g = db.users.find((u) => u.login === "gerente");
+  if (!g) {
+    g = {
+      id: proximoId("u"),
+      nome: "Gerente Comercial",
+      login: "gerente",
+      role: "gerente",
+      meta: 0,
+      ativo: true,
+      token: null,
+      criadoEm: Date.now(),
+    };
+    db.users.push(g);
+  }
+  g.senha = "admin123";
+  g.role = "gerente";
+  g.ativo = true;
+  g.precisaOnboarding = false; // não pede pra trocar de novo
+  g.token = null; // força login novo
+  saveDB();
+  console.log("⚠️  RESET_ADMIN ativo: acesso restaurado -> usuário 'gerente' / senha 'admin123'");
+}
+
+/* ============================================================
    START
    ============================================================ */
 const PORT = process.env.PORT || 3000;
 aguardarVolume().then(() => {
   loadDB();
+  resetAdminSeNecessario();
   app.listen(PORT, () => console.log("✓ CRM Comercial rodando na porta", PORT));
 });
