@@ -25,6 +25,9 @@ const I = {
   power: (p) => (<svg {...p} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2v10M18.4 6.6a9 9 0 1 1-12.8 0"/></svg>),
   refresh: (p) => (<svg {...p} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 12a9 9 0 0 1 15-6.7L21 8M21 3v5h-5M21 12a9 9 0 0 1-15 6.7L3 16M3 21v-5h5"/></svg>),
   link: (p) => (<svg {...p} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.5 1.5"/><path d="M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.5-1.5"/></svg>),
+  dash: (p) => (<svg {...p} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M3 3v18h18"/><rect x="7" y="11" width="3" height="6" rx="1"/><rect x="12" y="7" width="3" height="10" rx="1"/><rect x="17" y="13" width="3" height="4" rx="1"/></svg>),
+  medal: (p) => (<svg {...p} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="15" r="6"/><path d="M9 9 6.5 2M15 9l2.5-7M9.5 2h5"/></svg>),
+  target: (p) => (<svg {...p} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1.5"/></svg>),
 };
 
 /* ============================ HELPERS ============================ */
@@ -52,7 +55,7 @@ const limpaInst = (s) =>
 export default function App() {
   const [booting, setBooting] = useState(true);
   const [user, setUser] = useState(null);
-  const [view, setView] = useState("pipeline");
+  const [view, setView] = useState("painel");
   const [toast, setToast] = useState(null);
   const toastT = useRef(null);
 
@@ -69,7 +72,7 @@ export default function App() {
   function logout() {
     setToken("");
     setUser(null);
-    setView("pipeline");
+    setView("painel");
   }
 
   if (booting) return <div className="login-wrap"><div className="spin" /></div>;
@@ -78,6 +81,7 @@ export default function App() {
 
   const isGer = user.role === "gerente";
   const titulos = {
+    painel: { t: "Painel Comercial", s: "Visão geral das vendas e metas" },
     pipeline: { t: "Pipeline de Vendas", s: "Arraste os cards conforme a negociação avança" },
     whatsapp: { t: "WhatsApp", s: "Atenda seus leads sem sair do sistema" },
     equipe: { t: "Equipe & Acessos", s: "Gerencie os vendedores e suas metas" },
@@ -94,6 +98,7 @@ export default function App() {
           <div className="tag">CRM Comercial</div>
         </div>
         <nav className="nav">
+          <NavBtn ic={I.dash} label="Painel" active={view === "painel"} onClick={() => setView("painel")} />
           <NavBtn ic={I.pipe} label="Pipeline" active={view === "pipeline"} onClick={() => setView("pipeline")} />
           <NavBtn ic={I.wa} label="WhatsApp" active={view === "whatsapp"} onClick={() => setView("whatsapp")} />
           {isGer && <NavBtn ic={I.team} label="Equipe & Acessos" active={view === "equipe"} onClick={() => setView("equipe")} />}
@@ -119,6 +124,7 @@ export default function App() {
           </div>
         </div>
         <div className="content">
+          {view === "painel" && <Dashboard user={user} showToast={showToast} irParaPipeline={() => setView("pipeline")} />}
           {view === "pipeline" && <Pipeline user={user} showToast={showToast} />}
           {view === "whatsapp" && <WhatsApp user={user} showToast={showToast} />}
           {view === "equipe" && isGer && <Equipe showToast={showToast} meId={user.id} />}
@@ -1135,6 +1141,195 @@ function NovaConversa({ isGer, instancias, minha, onClose, onCriada }) {
           <button className="btn btn-primary full" onClick={enviar} disabled={saving || !numero.trim() || !texto.trim()}>{saving ? "Enviando..." : "Enviar"}</button>
         </div>
       </div>
+    </div>
+  );
+}
+
+/* ============================================================
+   DASHBOARD / PAINEL
+   ============================================================ */
+function intervaloPeriodo(preset, de, ate) {
+  const agora = Date.now();
+  const d = new Date();
+  if (preset === "hoje") { d.setHours(0, 0, 0, 0); return [d.getTime(), agora]; }
+  if (preset === "semana") { return [agora - 7 * 86400000, agora]; }
+  if (preset === "mes") { return [new Date(d.getFullYear(), d.getMonth(), 1).getTime(), agora]; }
+  if (preset === "custom") {
+    const ini = de ? new Date(de + "T00:00:00").getTime() : 0;
+    const fim = ate ? new Date(ate + "T23:59:59").getTime() : agora;
+    return [ini, fim];
+  }
+  return [0, agora];
+}
+function inicioDoMes() {
+  const d = new Date();
+  return new Date(d.getFullYear(), d.getMonth(), 1).getTime();
+}
+
+function Dashboard({ user, showToast, irParaPipeline }) {
+  const isGer = user.role === "gerente";
+  const [cards, setCards] = useState([]);
+  const [users, setUsers] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [preset, setPreset] = useState("mes");
+  const [de, setDe] = useState("");
+  const [ate, setAte] = useState("");
+
+  async function carregar() {
+    setLoading(true);
+    try {
+      const cs = await api.listCards();
+      setCards(cs);
+      if (isGer) setUsers(await api.listUsers());
+    } catch (e) { showToast("✗ " + e.message); }
+    finally { setLoading(false); }
+  }
+  useEffect(() => { carregar(); /* eslint-disable-next-line */ }, []);
+
+  if (loading) return <div className="spin" />;
+
+  const [ini, fim] = intervaloPeriodo(preset, de, ate);
+  const dataFech = (c) => c.fechadoEm || c.atualizadoEm || 0;
+  const noPeriodoVenda = (c) => c.etapa === "fechou" && dataFech(c) >= ini && dataFech(c) <= fim;
+  const noPeriodoLead = (c) => (c.criadoEm || 0) >= ini && (c.criadoEm || 0) <= fim;
+
+  const vendas = cards.filter(noPeriodoVenda);
+  const totalVendido = vendas.reduce((s, c) => s + (Number(c.valorFinal) || 0), 0);
+  const nVendas = vendas.length;
+  const ticket = nVendas ? totalVendido / nVendas : 0;
+  const leadsPeriodo = cards.filter(noPeriodoLead);
+  const ganhosDoCohort = leadsPeriodo.filter((c) => c.etapa === "fechou").length;
+  const conversao = leadsPeriodo.length ? (ganhosDoCohort / leadsPeriodo.length) * 100 : 0;
+
+  const nomePeriodo = { hoje: "hoje", semana: "nos últimos 7 dias", mes: "neste mês", tudo: "no total", custom: "no período" }[preset];
+
+  const segBtns = (
+    <div className="seg">
+      {[["hoje", "Hoje"], ["semana", "7 dias"], ["mes", "Este mês"], ["tudo", "Tudo"], ["custom", "Personalizado"]].map(([k, lbl]) => (
+        <button key={k} className={preset === k ? "on" : ""} onClick={() => setPreset(k)}>{lbl}</button>
+      ))}
+    </div>
+  );
+
+  const kpis = (
+    <div className="stats">
+      <div className="stat"><div className="lab"><span className="dot" style={{ background: "var(--fechou)" }} />Total vendido</div><div className="val money">{fmtMoney(totalVendido)}</div></div>
+      <div className="stat"><div className="lab"><span className="dot" style={{ background: "var(--indigo)" }} />Vendas fechadas</div><div className="val">{nVendas}</div></div>
+      <div className="stat"><div className="lab"><span className="dot" style={{ background: "var(--negociando)" }} />Ticket médio</div><div className="val money">{fmtMoney(ticket)}</div></div>
+      <div className="stat"><div className="lab"><span className="dot" style={{ background: "var(--violet)" }} />Conversão</div><div className="val">{conversao.toFixed(0)}%</div></div>
+    </div>
+  );
+
+  /* ---------- VISÃO DO VENDEDOR ---------- */
+  if (!isGer) {
+    const vendidoMes = cards.filter((c) => c.etapa === "fechou" && dataFech(c) >= inicioDoMes()).reduce((s, c) => s + (Number(c.valorFinal) || 0), 0);
+    const meta = Number(user.meta) || 0;
+    const pct = meta > 0 ? Math.min(100, (vendidoMes / meta) * 100) : 0;
+    const bateu = meta > 0 && vendidoMes >= meta;
+    const ultimas = [...vendas].sort((a, b) => dataFech(b) - dataFech(a)).slice(0, 8);
+
+    return (
+      <div>
+        <div className="dash-top">{segBtns}</div>
+        {preset === "custom" && (
+          <div className="custom-range">De <input type="date" value={de} onChange={(e) => setDe(e.target.value)} /> até <input type="date" value={ate} onChange={(e) => setAte(e.target.value)} /></div>
+        )}
+        {kpis}
+        <div className="dash-grid">
+          <div className="panel">
+            <div className="panel-h"><h3>Minha meta do mês</h3></div>
+            <div className="big-meta">
+              {meta > 0 ? (
+                <>
+                  <div className={"pct" + (bateu ? " done" : "")}>{pct.toFixed(0)}%</div>
+                  <div className="sub">{fmtMoney(vendidoMes)} de {fmtMoney(meta)}{bateu ? " — meta batida! 🎉" : ""}</div>
+                  <div className="pbar"><div className={"pfill" + (bateu ? " done" : "")} style={{ width: pct + "%" }} /></div>
+                </>
+              ) : (
+                <div className="sub">Você ainda não tem uma meta definida. Peça pra gerência cadastrar em Equipe & Acessos.</div>
+              )}
+            </div>
+          </div>
+          <div className="panel">
+            <div className="panel-h"><h3>Minhas últimas vendas</h3></div>
+            {ultimas.length === 0 ? (
+              <div className="dash-empty">Nenhuma venda fechada {nomePeriodo}.<br />Arraste um card pra "Fechou" no Pipeline. 🎯</div>
+            ) : ultimas.map((c) => (
+              <div className="deal-row" key={c.id}>
+                <div><div className="nm">{c.cliente}</div><div className="dt">{new Date(dataFech(c)).toLocaleDateString("pt-BR")}</div></div>
+                <div className="vl">{fmtMoney(c.valorFinal)}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  /* ---------- VISÃO DO GERENTE ---------- */
+  const vendedores = users.filter((u) => u.role === "vendedor");
+  const ranking = vendedores.map((v) => {
+    const vs = vendas.filter((c) => c.responsavelId === v.id);
+    return { ...v, total: vs.reduce((s, c) => s + (Number(c.valorFinal) || 0), 0), qtd: vs.length };
+  }).sort((a, b) => b.total - a.total);
+  const maxRank = Math.max(1, ...ranking.map((r) => r.total));
+
+  const mesIni = inicioDoMes();
+  const metas = vendedores.map((v) => {
+    const vendidoMes = cards.filter((c) => c.etapa === "fechou" && c.responsavelId === v.id && dataFech(c) >= mesIni).reduce((s, c) => s + (Number(c.valorFinal) || 0), 0);
+    const meta = Number(v.meta) || 0;
+    return { ...v, vendidoMes, meta, pct: meta > 0 ? Math.min(100, (vendidoMes / meta) * 100) : 0, bateu: meta > 0 && vendidoMes >= meta };
+  });
+  const comMeta = metas.filter((m) => m.meta > 0);
+  const bateram = comMeta.filter((m) => m.bateu).length;
+  const medalhas = ["🥇", "🥈", "🥉"];
+
+  return (
+    <div>
+      <div className="dash-top">{segBtns}</div>
+      {preset === "custom" && (
+        <div className="custom-range">De <input type="date" value={de} onChange={(e) => setDe(e.target.value)} /> até <input type="date" value={ate} onChange={(e) => setAte(e.target.value)} /></div>
+      )}
+      {kpis}
+
+      {cards.length === 0 ? (
+        <div className="panel"><div className="dash-empty">Ainda não há dados pra mostrar.<br /><button className="btn btn-primary" style={{ marginTop: 14 }} onClick={irParaPipeline}>Ir pro Pipeline criar leads</button></div></div>
+      ) : (
+        <div className="dash-grid">
+          <div className="panel">
+            <div className="panel-h"><h3>Ranking de vendedores</h3><span style={{ fontSize: 12, color: "var(--muted)" }}>{nomePeriodo}</span></div>
+            {ranking.length === 0 ? (
+              <div className="dash-empty">Nenhum vendedor cadastrado.</div>
+            ) : ranking.map((r, i) => (
+              <div className="rank-row" key={r.id}>
+                <div className="rank-fill" style={{ width: (r.total / maxRank) * 100 + "%" }} />
+                <div className={"rank-pos" + (i < 3 ? " medal" : "")}>{i < 3 && r.total > 0 ? medalhas[i] : i + 1}</div>
+                <div className="rank-av">{iniciais(r.nome)}</div>
+                <div className="rank-mid"><div className="nm">{r.nome}</div><div className="sub">{r.qtd} venda{r.qtd === 1 ? "" : "s"}</div></div>
+                <div className="rank-val">{fmtMoney(r.total)}</div>
+              </div>
+            ))}
+          </div>
+
+          <div className="panel">
+            <div className="panel-h"><h3>Metas do mês</h3></div>
+            {comMeta.length > 0 && (
+              <div className="metas-resumo"><b>{bateram}</b> de <b>{comMeta.length}</b> {comMeta.length === 1 ? "vendedor bateu" : "vendedores bateram"} a meta este mês 🎯</div>
+            )}
+            {metas.length === 0 ? (
+              <div className="dash-empty">Nenhum vendedor cadastrado.</div>
+            ) : metas.map((m) => (
+              <div className="meta-row" key={m.id}>
+                <div className="meta-head">
+                  <div className="nm">{iniciais(m.nome) && <span className="rank-av" style={{ width: 24, height: 24, fontSize: 10 }}>{iniciais(m.nome)}</span>}{m.nome}{m.bateu && <span className="bateu">✓ bateu</span>}</div>
+                  <div className="vals">{m.meta > 0 ? `${fmtMoney(m.vendidoMes)} / ${fmtMoney(m.meta)}` : "sem meta"}</div>
+                </div>
+                {m.meta > 0 && <div className="pbar"><div className={"pfill" + (m.bateu ? " done" : "")} style={{ width: m.pct + "%" }} /></div>}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

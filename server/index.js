@@ -256,6 +256,7 @@ app.post("/api/cards", auth, (req, res) => {
     responsavelId: resp,
     obs: (obs || "").trim(),
     arquivado: false,
+    fechadoEm: ETAPAS.includes(etapa) && etapa === "fechou" ? Date.now() : null,
     criadoEm: Date.now(),
     atualizadoEm: Date.now(),
   };
@@ -279,6 +280,12 @@ app.put("/api/cards/:id", auth, (req, res) => {
   if (b.valorFinal !== undefined) card.valorFinal = Number(b.valorFinal) || 0;
   if (b.obs !== undefined) card.obs = String(b.obs).trim();
   if (b.etapa !== undefined && ETAPAS.includes(b.etapa)) card.etapa = b.etapa;
+  // registra/limpa a data de fechamento (pro dashboard filtrar por período)
+  if (card.etapa === "fechou") {
+    if (!card.fechadoEm) card.fechadoEm = Date.now();
+  } else {
+    card.fechadoEm = null;
+  }
   // transferência: gerente transfere pra qualquer um; vendedor pode repassar o próprio card
   if (b.responsavelId !== undefined) {
     const destino = db.users.find((u) => u.id === b.responsavelId);
