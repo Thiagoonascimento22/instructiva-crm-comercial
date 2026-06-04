@@ -825,3 +825,330 @@ textarea {
     padding-right: 18px;
   }
 }
+
+/* ============================================================
+   WHATSAPP
+   ============================================================ */
+.wa-page {
+  display: flex;
+  flex-direction: column;
+  height: calc(100vh - 150px);
+  min-height: 460px;
+}
+.wa-grid {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  box-shadow: var(--shadow-sm);
+  overflow: hidden;
+}
+/* lista de conversas */
+.wa-list {
+  width: 320px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  border-right: 1px solid var(--line);
+  background: #fbfbfe;
+}
+.wa-list-h {
+  padding: 14px 14px 12px;
+  border-bottom: 1px solid var(--line);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.wa-search {
+  position: relative;
+}
+.wa-search input {
+  width: 100%;
+  border: 1px solid var(--line-2);
+  border-radius: 10px;
+  padding: 9px 12px;
+  font-size: 13.5px;
+}
+.wa-search input:focus {
+  outline: none;
+  border-color: var(--indigo);
+}
+.wa-list-actions {
+  display: flex;
+  gap: 8px;
+}
+.wa-list-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+.wa-conv {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--line);
+  cursor: pointer;
+  transition: background 0.13s;
+}
+.wa-conv:hover {
+  background: rgba(99, 102, 241, 0.05);
+}
+.wa-conv.active {
+  background: rgba(99, 102, 241, 0.1);
+}
+.wa-conv .av {
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  background: var(--grad);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 15px;
+  flex-shrink: 0;
+}
+.wa-conv .mid {
+  flex: 1;
+  min-width: 0;
+}
+.wa-conv .mid .nm {
+  font-weight: 700;
+  font-size: 14px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.wa-conv .mid .last {
+  font-size: 12.5px;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-top: 2px;
+}
+.wa-conv .seller-tag {
+  font-size: 10.5px;
+  color: var(--indigo-600);
+  font-weight: 600;
+  margin-top: 3px;
+}
+.wa-badge {
+  background: var(--fechou);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  min-width: 20px;
+  height: 20px;
+  border-radius: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 6px;
+}
+
+/* área da conversa */
+.wa-chat {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  background: #f4f3fb;
+  background-image: radial-gradient(rgba(99, 102, 241, 0.06) 1px, transparent 1px);
+  background-size: 22px 22px;
+}
+.wa-chat-h {
+  padding: 13px 18px;
+  background: var(--card);
+  border-bottom: 1px solid var(--line);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.wa-chat-h .av {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: var(--grad);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+.wa-chat-h .nm {
+  font-weight: 700;
+  font-size: 15px;
+}
+.wa-chat-h .num {
+  font-size: 12.5px;
+  color: var(--muted);
+}
+.wa-msgs {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 20px 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+.wa-bubble {
+  max-width: 74%;
+  padding: 9px 13px;
+  border-radius: 14px;
+  font-size: 14px;
+  line-height: 1.4;
+  box-shadow: var(--shadow-sm);
+  word-break: break-word;
+  position: relative;
+}
+.wa-bubble .t {
+  display: block;
+  font-size: 10.5px;
+  margin-top: 4px;
+  opacity: 0.65;
+  text-align: right;
+}
+.wa-bubble.them {
+  background: #fff;
+  align-self: flex-start;
+  border-bottom-left-radius: 4px;
+}
+.wa-bubble.me {
+  background: var(--grad);
+  color: #fff;
+  align-self: flex-end;
+  border-bottom-right-radius: 4px;
+}
+.wa-input {
+  padding: 12px 16px;
+  background: var(--card);
+  border-top: 1px solid var(--line);
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+.wa-input input {
+  flex: 1;
+  border: 1px solid var(--line-2);
+  border-radius: 22px;
+  padding: 11px 16px;
+  font-size: 14px;
+}
+.wa-input input:focus {
+  outline: none;
+  border-color: var(--indigo);
+}
+.wa-send {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: var(--grad);
+  color: #fff;
+  border: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  box-shadow: 0 8px 18px -8px rgba(124, 92, 240, 0.7);
+}
+.wa-send:disabled {
+  opacity: 0.5;
+}
+.wa-none {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  color: var(--faint);
+  gap: 12px;
+  padding: 30px;
+  text-align: center;
+}
+.wa-none .ico {
+  width: 54px;
+  height: 54px;
+  color: var(--line-2);
+}
+
+/* QR modal */
+.qr-box {
+  text-align: center;
+  padding: 10px 0;
+}
+.qr-box img {
+  width: 230px;
+  height: 230px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 8px;
+  background: #fff;
+}
+.qr-wait {
+  width: 230px;
+  height: 230px;
+  margin: 0 auto;
+  border: 1.5px dashed var(--line-2);
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--faint);
+  font-size: 13px;
+}
+.qr-steps {
+  text-align: left;
+  font-size: 13px;
+  color: var(--muted);
+  margin-top: 16px;
+  line-height: 1.7;
+}
+
+/* config wa */
+.wa-inst-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 13px 0;
+  border-bottom: 1px solid var(--line);
+  flex-wrap: wrap;
+}
+.wa-inst-row:last-child {
+  border-bottom: none;
+}
+.wa-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.wa-dot.on {
+  background: var(--fechou);
+  box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.18);
+}
+.wa-dot.off {
+  background: var(--faint);
+}
+.danger-zone {
+  border: 1px solid #fecaca;
+  background: #fff7f7;
+  border-radius: var(--r);
+  padding: 18px;
+  margin-top: 20px;
+}
+.danger-zone h4 {
+  color: #b91c1c;
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-bottom: 12px;
+}

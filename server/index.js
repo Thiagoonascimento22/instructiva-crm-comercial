@@ -53,6 +53,14 @@ function dbVazio() {
       },
     ],
     cards: [],
+    waConfig: {
+      url: "",
+      apiKey: "",
+      publicUrl: "",
+      webhookToken: crypto.randomBytes(12).toString("hex"),
+      instancias: [], // [{ instance, vendedorId }]
+    },
+    waChats: {}, // { "instance::numero": { ...conversa } }
     seq: 1,
   };
 }
@@ -68,6 +76,11 @@ function loadDB() {
       if (!Array.isArray(db.users)) db.users = dbVazio().users;
       if (!Array.isArray(db.cards)) db.cards = [];
       if (typeof db.seq !== "number") db.seq = 1;
+      if (!db.waConfig) db.waConfig = dbVazio().waConfig;
+      if (!db.waConfig.webhookToken)
+        db.waConfig.webhookToken = crypto.randomBytes(12).toString("hex");
+      if (!Array.isArray(db.waConfig.instancias)) db.waConfig.instancias = [];
+      if (!db.waChats || typeof db.waChats !== "object") db.waChats = {};
       db.users.forEach((u) => {
         if (typeof u.meta !== "number") u.meta = 0;
         if (typeof u.ativo !== "boolean") u.ativo = true;
@@ -283,6 +296,302 @@ app.delete("/api/cards/:id", auth, (req, res) => {
     return res.status(403).json({ error: "Sem acesso a esse card" });
   card.arquivado = true;
   card.atualizadoEm = Date.now();
+  saveSoon();
+  res.json({ ok: true });
+});
+
+/* ============================================================
+   WHATSAPP (Evolution API)
+   ============================================================ */
+function instanciaLimpa(nome) {
+  return String(nome || "")
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, "-")
+    .replace(/[^a-z0-9_-]/g, "");
+}
+function instanciasDoUser(user) {
+  const insts = db.waConfig.instancias || [];
+  if (user.role === "gerente") {
+    // gerente: todas as cadastradas + as que aparecem em conversas
+    const set = new Set(insts.map((i) => i.instance));
+    Object.values(db.waChats).forEach((c) => set.add(c.instance));
+    return [...set];
+  }
+  return insts.filter((i) => i.vendedorId === user.id).map((i) => i.instance);
+}
+function vendedorDaInstancia(instance) {
+  const m = (db.waConfig.instancias || []).find((i) => i.instance === instance);
+  return m ? m.vendedorId : null;
+}
+async function evo(method, caminho, body) {
+  const cfg = db.waConfig;
+  if (!cfg.url || !cfg.apiKey) throw new Error("Conexão Evolution não configurada");
+  const base = cfg.url.replace(/\/+$/, "");
+  const res = await fetch(base + caminho, {
+    method,
+    headers: { "Content-Type": "application/json", apikey: cfg.apiKey },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  let data = null;
+  try { data = await res.json(); } catch (_) {}
+  if (!res.ok) {
+    const msg = (data && (data.message || data.error)) || "Erro Evolution " + res.status;
+    throw new Error(Array.isArray(msg) ? msg.join("; ") : String(msg));
+  }
+  return data;
+}
+function webhookUrl() {
+  const base = (db.waConfig.publicUrl || "").replace(/\/+$/, "");
+  return base ? `${base}/api/wa/webhook/${db.waConfig.webhookToken}` : "";
+}
+async function configurarWebhook(instance) {
+  const url = webhookUrl();
+  if (!url) return;
+  try {
+    await evo("POST", `/webhook/set/${instance}`, {
+      webhook: {
+        enabled: true,
+        url,
+        webhookByEvents: false,
+        webhookBase64: true,
+        events: ["MESSAGES_UPSERT"],
+      },
+    });
+  } catch (e) {
+    console.error("Falha ao configurar webhook:", e.message);
+  }
+}
+
+/* ---- WEBHOOK (Evolution chama aqui quando chega mensagem) ---- */
+app.post("/api/wa/webhook/:token", (req, res) => {
+  if (req.params.token !== db.waConfig.webhookToken)
+    return res.status(403).json({ error: "token inválido" });
+  try {
+    const b = req.body || {};
+    const instance = b.instance || (b.sender && b.sender.instanceName) || "";
+    const data = b.data || {};
+    const key = data.key || {};
+    const jid = key.remoteJid || "";
+    if (!instance || !jid || jid.endsWith("@g.us")) {
+      return res.json({ ok: true }); // ignora grupos / sem dados
+    }
+    const numero = jid.split("@")[0];
+    const fromMe = !!key.fromMe;
+    const msg = data.message || {};
+    const texto =
+      msg.conversation ||
+      (msg.extendedTextMessage && msg.extendedTextMessage.text) ||
+      (msg.imageMessage && "[imagem]") ||
+      (msg.audioMessage && "[áudio]") ||
+      (msg.documentMessage && "[documento]") ||
+      (msg.videoMessage && "[vídeo]") ||
+      "";
+    if (!texto) return res.json({ ok: true });
+
+    const id = `${instance}::${numero}`;
+    let chat = db.waChats[id];
+    if (!chat) {
+      chat = {
+        id, instance, numero,
+        nome: data.pushName || numero,
+        mensagens: [], naoLidas: 0, atualizadoEm: Date.now(),
+      };
+      db.waChats[id] = chat;
+    }
+    if (!fromMe && data.pushName) chat.nome = data.pushName;
+    chat.mensagens.push({
+      role: fromMe ? "me" : "them",
+      content: texto,
+      ts: Date.now(),
+    });
+    if (chat.mensagens.length > 300) chat.mensagens = chat.mensagens.slice(-300);
+    if (!fromMe) chat.naoLidas = (chat.naoLidas || 0) + 1;
+    chat.atualizadoEm = Date.now();
+    saveSoon();
+    res.json({ ok: true });
+  } catch (e) {
+    console.error("Webhook erro:", e.message);
+    res.json({ ok: true });
+  }
+});
+
+/* ---- CONFIG (gerente) ---- */
+app.get("/api/wa/config", auth, gerenteOnly, (req, res) => {
+  const c = db.waConfig;
+  res.json({
+    url: c.url, publicUrl: c.publicUrl,
+    temApiKey: !!c.apiKey,
+    instancias: c.instancias,
+    webhookUrl: webhookUrl(),
+  });
+});
+app.put("/api/wa/config", auth, gerenteOnly, (req, res) => {
+  const { url, apiKey, publicUrl, instancias } = req.body || {};
+  if (url !== undefined) db.waConfig.url = String(url).trim();
+  if (apiKey) db.waConfig.apiKey = String(apiKey).trim();
+  if (publicUrl) db.waConfig.publicUrl = String(publicUrl).trim();
+  if (Array.isArray(instancias)) {
+    db.waConfig.instancias = instancias
+      .filter((i) => i && i.instance)
+      .map((i) => ({ instance: instanciaLimpa(i.instance), vendedorId: i.vendedorId || null }));
+  }
+  saveSoon();
+  res.json({ ok: true, webhookUrl: webhookUrl() });
+});
+
+/* ---- minha instância (vendedor conecta o próprio) ---- */
+app.get("/api/wa/minha", auth, async (req, res) => {
+  const insts = instanciasDoUser(req.user);
+  const instance = insts[0] || null;
+  let estado = "sem_instancia";
+  if (instance) {
+    try {
+      const r = await evo("GET", `/instance/connectionState/${instance}`);
+      estado = (r && r.instance && r.instance.state) || "close";
+    } catch (_) { estado = "desconhecido"; }
+  }
+  res.json({ instance, estado });
+});
+
+/* ---- listar conversas (escopo por instância) ---- */
+app.get("/api/wa/chats", auth, (req, res) => {
+  const permitidas = new Set(instanciasDoUser(req.user));
+  let chats = Object.values(db.waChats).filter((c) => permitidas.has(c.instance));
+  if (req.user.role === "gerente" && req.query.instance && req.query.instance !== "todas") {
+    chats = chats.filter((c) => c.instance === req.query.instance);
+  }
+  chats.sort((a, b) => (b.atualizadoEm || 0) - (a.atualizadoEm || 0));
+  res.json(
+    chats.map((c) => ({
+      id: c.id, instance: c.instance, numero: c.numero, nome: c.nome,
+      naoLidas: c.naoLidas || 0, atualizadoEm: c.atualizadoEm,
+      ultima: c.mensagens.length ? c.mensagens[c.mensagens.length - 1].content : "",
+      vendedorId: vendedorDaInstancia(c.instance),
+    }))
+  );
+});
+
+/* ---- abrir conversa (marca como lida) ---- */
+app.get("/api/wa/chats/:id", auth, (req, res) => {
+  const chat = db.waChats[req.params.id];
+  if (!chat) return res.status(404).json({ error: "Conversa não encontrada" });
+  const permitidas = new Set(instanciasDoUser(req.user));
+  if (!permitidas.has(chat.instance))
+    return res.status(403).json({ error: "Sem acesso a essa conversa" });
+  chat.naoLidas = 0;
+  saveSoon();
+  res.json(chat);
+});
+
+/* ---- enviar mensagem ---- */
+app.post("/api/wa/chats/:id/send", auth, async (req, res) => {
+  const chat = db.waChats[req.params.id];
+  if (!chat) return res.status(404).json({ error: "Conversa não encontrada" });
+  const permitidas = new Set(instanciasDoUser(req.user));
+  if (!permitidas.has(chat.instance))
+    return res.status(403).json({ error: "Sem acesso a essa conversa" });
+  const texto = (req.body && req.body.texto) || "";
+  if (!texto.trim()) return res.status(400).json({ error: "Mensagem vazia" });
+  try {
+    await evo("POST", `/message/sendText/${chat.instance}`, {
+      number: chat.numero,
+      text: texto,
+    });
+    chat.mensagens.push({ role: "me", content: texto, ts: Date.now() });
+    chat.atualizadoEm = Date.now();
+    saveSoon();
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+/* ---- iniciar nova conversa (manda 1ª mensagem pra um número) ---- */
+app.post("/api/wa/iniciar", auth, async (req, res) => {
+  const { instance, numero, texto } = req.body || {};
+  const permitidas = new Set(instanciasDoUser(req.user));
+  const inst = instance || instanciasDoUser(req.user)[0];
+  if (!inst || !permitidas.has(inst))
+    return res.status(403).json({ error: "Sem WhatsApp vinculado" });
+  const num = String(numero || "").replace(/\D/g, "");
+  if (num.length < 8) return res.status(400).json({ error: "Número inválido" });
+  try {
+    await evo("POST", `/message/sendText/${inst}`, { number: num, text: texto || "Olá!" });
+    const id = `${inst}::${num}`;
+    let chat = db.waChats[id];
+    if (!chat) {
+      chat = { id, instance: inst, numero: num, nome: num, mensagens: [], naoLidas: 0, atualizadoEm: Date.now() };
+      db.waChats[id] = chat;
+    }
+    chat.mensagens.push({ role: "me", content: texto || "Olá!", ts: Date.now() });
+    chat.atualizadoEm = Date.now();
+    saveSoon();
+    res.json({ ok: true, id });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+/* ---- criar instância + QR (gerente, ou vendedor pra própria) ---- */
+app.post("/api/wa/connect", auth, async (req, res) => {
+  let { instance, publicUrl } = req.body || {};
+  instance = instanciaLimpa(instance);
+  if (!instance) return res.status(400).json({ error: "Informe o nome da instância" });
+  // permissão: gerente conecta qualquer uma; vendedor só a dele
+  if (req.user.role !== "gerente") {
+    const minhas = instanciasDoUser(req.user);
+    if (!minhas.includes(instance))
+      return res.status(403).json({ error: "Você só pode conectar o seu WhatsApp" });
+  }
+  if (publicUrl && !db.waConfig.publicUrl) {
+    db.waConfig.publicUrl = String(publicUrl).trim();
+    saveSoon();
+  }
+  try {
+    // cria a instância (se já existir, a Evolution dá erro — então tentamos só conectar)
+    try {
+      await evo("POST", `/instance/create`, {
+        instanceName: instance,
+        integration: "WHATSAPP-BAILEYS",
+        qrcode: true,
+      });
+    } catch (e) {
+      // provavelmente já existe — segue pro connect
+    }
+    await configurarWebhook(instance);
+    const r = await evo("GET", `/instance/connect/${instance}`);
+    const base64 = r.base64 || (r.qrcode && r.qrcode.base64) || null;
+    res.json({ qr: base64, pairingCode: r.pairingCode || null });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.get("/api/wa/status/:instance", auth, async (req, res) => {
+  try {
+    const r = await evo("GET", `/instance/connectionState/${req.params.instance}`);
+    res.json({ estado: (r && r.instance && r.instance.state) || "close" });
+  } catch (e) {
+    res.json({ estado: "desconhecido" });
+  }
+});
+
+app.post("/api/wa/logout/:instance", auth, gerenteOnly, async (req, res) => {
+  try { await evo("DELETE", `/instance/logout/${req.params.instance}`); res.json({ ok: true }); }
+  catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.delete("/api/wa/instance/:instance", auth, gerenteOnly, async (req, res) => {
+  try {
+    try { await evo("DELETE", `/instance/logout/${req.params.instance}`); } catch (_) {}
+    await evo("DELETE", `/instance/delete/${req.params.instance}`);
+  } catch (e) { /* segue mesmo se já não existir */ }
+  // remove do mapeamento e conversas
+  db.waConfig.instancias = db.waConfig.instancias.filter((i) => i.instance !== req.params.instance);
+  Object.keys(db.waChats).forEach((k) => {
+    if (db.waChats[k].instance === req.params.instance) delete db.waChats[k];
+  });
   saveSoon();
   res.json({ ok: true });
 });

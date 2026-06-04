@@ -45,4 +45,19 @@ export const api = {
   createCard: (dados) => req("POST", "/api/cards", dados),
   updateCard: (id, dados) => req("PUT", "/api/cards/" + id, dados),
   deleteCard: (id) => req("DELETE", "/api/cards/" + id),
+
+  // WhatsApp
+  waConfig: () => req("GET", "/api/wa/config"),
+  waSetConfig: (dados) => req("PUT", "/api/wa/config", dados),
+  waMinha: () => req("GET", "/api/wa/minha"),
+  waChats: (instance) =>
+    req("GET", "/api/wa/chats" + (instance ? "?instance=" + instance : "")),
+  waChat: (id) => req("GET", "/api/wa/chats/" + id),
+  waSend: (id, texto) => req("POST", "/api/wa/chats/" + id + "/send", { texto }),
+  waIniciar: (dados) => req("POST", "/api/wa/iniciar", dados),
+  waConnect: (instance) =>
+    req("POST", "/api/wa/connect", { instance, publicUrl: window.location.origin }),
+  waStatus: (instance) => req("GET", "/api/wa/status/" + instance),
+  waLogout: (instance) => req("POST", "/api/wa/logout/" + instance),
+  waDeleteInstance: (instance) => req("DELETE", "/api/wa/instance/" + instance),
 };

@@ -19,6 +19,12 @@ const I = {
   trash: (p) => (<svg {...p} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>),
   out: (p) => (<svg {...p} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></svg>),
   empty: (p) => (<svg {...p} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/></svg>),
+  send: (p) => (<svg {...p} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/></svg>),
+  search: (p) => (<svg {...p} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>),
+  chat: (p) => (<svg {...p} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>),
+  power: (p) => (<svg {...p} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2v10M18.4 6.6a9 9 0 1 1-12.8 0"/></svg>),
+  refresh: (p) => (<svg {...p} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 12a9 9 0 0 1 15-6.7L21 8M21 3v5h-5M21 12a9 9 0 0 1-15 6.7L3 16M3 21v-5h5"/></svg>),
+  link: (p) => (<svg {...p} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.5 1.5"/><path d="M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.5-1.5"/></svg>),
 };
 
 /* ============================ HELPERS ============================ */
@@ -39,6 +45,8 @@ function iniciais(nome) {
   return ((p[0]?.[0] || "") + (p[1]?.[0] || "")).toUpperCase() || "?";
 }
 const soDigitos = (s) => (s || "").replace(/\D/g, "");
+const limpaInst = (s) =>
+  (s || "").trim().toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9_-]/g, "");
 
 /* ============================ APP ============================ */
 export default function App() {
@@ -71,6 +79,7 @@ export default function App() {
   const isGer = user.role === "gerente";
   const titulos = {
     pipeline: { t: "Pipeline de Vendas", s: "Arraste os cards conforme a negociação avança" },
+    whatsapp: { t: "WhatsApp", s: "Atenda seus leads sem sair do sistema" },
     equipe: { t: "Equipe & Acessos", s: "Gerencie os vendedores e suas metas" },
     config: { t: "Configurações", s: "Seus dados de acesso" },
   };
@@ -86,6 +95,7 @@ export default function App() {
         </div>
         <nav className="nav">
           <NavBtn ic={I.pipe} label="Pipeline" active={view === "pipeline"} onClick={() => setView("pipeline")} />
+          <NavBtn ic={I.wa} label="WhatsApp" active={view === "whatsapp"} onClick={() => setView("whatsapp")} />
           {isGer && <NavBtn ic={I.team} label="Equipe & Acessos" active={view === "equipe"} onClick={() => setView("equipe")} />}
           <NavBtn ic={I.cog} label="Configurações" active={view === "config"} onClick={() => setView("config")} />
         </nav>
@@ -110,6 +120,7 @@ export default function App() {
         </div>
         <div className="content">
           {view === "pipeline" && <Pipeline user={user} showToast={showToast} />}
+          {view === "whatsapp" && <WhatsApp user={user} showToast={showToast} />}
           {view === "equipe" && isGer && <Equipe showToast={showToast} meId={user.id} />}
           {view === "config" && <Config user={user} setUser={setUser} showToast={showToast} />}
         </div>
@@ -732,6 +743,397 @@ function Config({ user, setUser, showToast }) {
           <input className="input" type="password" value={senha} onChange={(e) => setSenha(e.target.value)} placeholder="••••••••" />
         </div>
         <button className="btn btn-primary" onClick={salvar} disabled={saving}>{saving ? "Salvando..." : "Salvar alterações"}</button>
+      </div>
+    </div>
+  );
+}
+
+/* ============================================================
+   WHATSAPP
+   ============================================================ */
+function WhatsApp({ user, showToast }) {
+  const isGer = user.role === "gerente";
+  const [chats, setChats] = useState([]);
+  const [usersMap, setUsersMap] = useState({});
+  const [instancias, setInstancias] = useState([]);
+  const [minha, setMinha] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [sel, setSel] = useState(null);
+  const [chat, setChat] = useState(null);
+  const [texto, setTexto] = useState("");
+  const [busca, setBusca] = useState("");
+  const [filtro, setFiltro] = useState("todas");
+  const [showCfg, setShowCfg] = useState(false);
+  const [qrInst, setQrInst] = useState(null);
+  const [nova, setNova] = useState(false);
+  const [enviando, setEnviando] = useState(false);
+  const msgsEnd = useRef(null);
+  const selRef = useRef(null);
+  const filtroRef = useRef("todas");
+  useEffect(() => { selRef.current = sel; }, [sel]);
+  useEffect(() => { filtroRef.current = filtro; }, [filtro]);
+
+  async function carregarChats(silencioso) {
+    if (!silencioso) setLoading(true);
+    try {
+      const cs = await api.waChats(isGer ? filtroRef.current : null);
+      setChats(cs);
+    } catch (e) { if (!silencioso) showToast("✗ " + e.message); }
+    finally { if (!silencioso) setLoading(false); }
+  }
+  async function initGerente() {
+    try {
+      const [cfg, us] = await Promise.all([api.waConfig(), api.listUsers()]);
+      setInstancias(cfg.instancias || []);
+      const m = {}; us.forEach((u) => (m[u.id] = u)); setUsersMap(m);
+    } catch (_) {}
+  }
+  async function initVendedor() {
+    try { setMinha(await api.waMinha()); } catch (_) {}
+  }
+
+  useEffect(() => {
+    (async () => {
+      if (isGer) await initGerente(); else await initVendedor();
+      await carregarChats(false);
+    })();
+    const t = setInterval(async () => {
+      await carregarChats(true);
+      if (selRef.current) {
+        try { setChat(await api.waChat(selRef.current)); } catch (_) {}
+      }
+    }, 6000);
+    return () => clearInterval(t);
+    // eslint-disable-next-line
+  }, []);
+
+  useEffect(() => { if (isGer) carregarChats(true); /* eslint-disable-next-line */ }, [filtro]);
+  useEffect(() => { if (msgsEnd.current) msgsEnd.current.scrollIntoView({ block: "end" }); }, [chat]);
+
+  async function abrir(id) {
+    setSel(id); selRef.current = id;
+    try {
+      setChat(await api.waChat(id));
+      setChats((cs) => cs.map((x) => (x.id === id ? { ...x, naoLidas: 0 } : x)));
+    } catch (e) { showToast("✗ " + e.message); }
+  }
+  async function enviar() {
+    const t = texto.trim();
+    if (!t || !sel) return;
+    setTexto(""); setEnviando(true);
+    try {
+      await api.waSend(sel, t);
+      setChat((c) => (c ? { ...c, mensagens: [...c.mensagens, { role: "me", content: t, ts: Date.now() }] } : c));
+      carregarChats(true);
+    } catch (e) { showToast("✗ " + e.message); setTexto(t); }
+    finally { setEnviando(false); }
+  }
+  async function virarCard() {
+    if (!chat) return;
+    const conv = chats.find((c) => c.id === chat.id);
+    const dados = { cliente: chat.nome, telefone: chat.numero };
+    if (isGer && conv && conv.vendedorId) dados.responsavelId = conv.vendedorId;
+    try { await api.createCard(dados); showToast("✓ Lead criado no Pipeline"); }
+    catch (e) { showToast("✗ " + e.message); }
+  }
+
+  const filtrados = chats.filter((c) => {
+    const q = busca.trim().toLowerCase();
+    if (!q) return true;
+    return (c.nome || "").toLowerCase().includes(q) || (c.numero || "").includes(q);
+  });
+
+  if (loading) return <div className="spin" />;
+
+  if (!isGer && (!minha || !minha.instance)) {
+    return (
+      <div className="wa-page">
+        <div className="wa-grid"><div className="wa-none">
+          <I.wa className="ico" />
+          <div><b>Seu WhatsApp ainda não foi vinculado.</b><br />Peça pra gerente cadastrar o seu número em WhatsApp → Configurar conexão.</div>
+        </div></div>
+      </div>
+    );
+  }
+
+  if (showCfg) return <WhatsAppConfig onVoltar={() => { setShowCfg(false); initGerente(); }} showToast={showToast} />;
+
+  return (
+    <div className="wa-page">
+      <div style={{ display: "flex", justifyContent: "space-between", gap: 10, marginBottom: 14, flexWrap: "wrap" }}>
+        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+          {isGer && (
+            <select className="select" style={{ width: 220 }} value={filtro} onChange={(e) => setFiltro(e.target.value)}>
+              <option value="todas">Todos os WhatsApps</option>
+              {instancias.map((i) => <option key={i.instance} value={i.instance}>{usersMap[i.vendedorId]?.nome || i.instance}</option>)}
+            </select>
+          )}
+          {!isGer && minha && minha.estado !== "open" && (
+            <button className="btn btn-primary" onClick={() => setQrInst(minha.instance)}><I.link style={{ width: 15, height: 15 }} /> Conectar meu WhatsApp</button>
+          )}
+          {!isGer && minha && minha.estado === "open" && (
+            <span style={{ fontSize: 13, color: "var(--fechou)", fontWeight: 600, display: "flex", alignItems: "center", gap: 6 }}><span className="wa-dot on" /> WhatsApp conectado</span>
+          )}
+        </div>
+        <div style={{ display: "flex", gap: 8 }}>
+          <button className="btn" onClick={() => setNova(true)}><I.plus style={{ width: 15, height: 15 }} /> Nova conversa</button>
+          {isGer && <button className="btn" onClick={() => setShowCfg(true)}><I.cog style={{ width: 15, height: 15 }} /> Configurar conexão</button>}
+        </div>
+      </div>
+
+      <div className="wa-grid">
+        <div className="wa-list">
+          <div className="wa-list-h">
+            <div className="wa-search"><input value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Buscar conversa..." /></div>
+          </div>
+          <div className="wa-list-scroll">
+            {filtrados.length === 0 && <div style={{ padding: 30, textAlign: "center", color: "var(--faint)", fontSize: 13 }}>Nenhuma conversa ainda.</div>}
+            {filtrados.map((c) => (
+              <div key={c.id} className={"wa-conv" + (sel === c.id ? " active" : "")} onClick={() => abrir(c.id)}>
+                <div className="av">{iniciais(c.nome)}</div>
+                <div className="mid">
+                  <div className="nm">{c.nome}</div>
+                  <div className="last">{c.ultima}</div>
+                  {isGer && c.vendedorId && <div className="seller-tag">{usersMap[c.vendedorId]?.nome || ""}</div>}
+                </div>
+                {c.naoLidas > 0 && <div className="wa-badge">{c.naoLidas}</div>}
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {!chat ? (
+          <div className="wa-chat"><div className="wa-none"><I.chat className="ico" /><div>Selecione uma conversa pra começar</div></div></div>
+        ) : (
+          <div className="wa-chat">
+            <div className="wa-chat-h">
+              <div className="av">{iniciais(chat.nome)}</div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div className="nm">{chat.nome}</div>
+                <div className="num">{chat.numero}</div>
+              </div>
+              <button className="btn btn-sm" onClick={virarCard}><I.pipe style={{ width: 14, height: 14 }} /> Virar card</button>
+            </div>
+            <div className="wa-msgs">
+              {chat.mensagens.map((m, i) => (
+                <div key={i} className={"wa-bubble " + (m.role === "me" ? "me" : "them")}>
+                  {m.content}
+                  <span className="t">{new Date(m.ts).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}</span>
+                </div>
+              ))}
+              <div ref={msgsEnd} />
+            </div>
+            <div className="wa-input">
+              <input value={texto} onChange={(e) => setTexto(e.target.value)} onKeyDown={(e) => e.key === "Enter" && enviar()} placeholder="Escreva uma mensagem..." />
+              <button className="wa-send" onClick={enviar} disabled={enviando || !texto.trim()}><I.send style={{ width: 19, height: 19 }} /></button>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {qrInst && <QrModal instance={qrInst} onClose={() => setQrInst(null)} onConnected={() => { setQrInst(null); initVendedor(); showToast("🎉 WhatsApp conectado!"); }} />}
+      {nova && <NovaConversa isGer={isGer} instancias={instancias} minha={minha} onClose={() => setNova(false)} onCriada={(id) => { setNova(false); carregarChats(true).then(() => abrir(id)); }} />}
+    </div>
+  );
+}
+
+/* ---------- CONFIG WHATSAPP (gerente) ---------- */
+function WhatsAppConfig({ onVoltar, showToast }) {
+  const [cfg, setCfg] = useState(null);
+  const [users, setUsers] = useState([]);
+  const [url, setUrl] = useState("");
+  const [apiKey, setApiKey] = useState("");
+  const [rows, setRows] = useState([]);
+  const [status, setStatus] = useState({});
+  const [saving, setSaving] = useState(false);
+  const [qrInst, setQrInst] = useState(null);
+
+  async function carregar() {
+    const [c, us] = await Promise.all([api.waConfig(), api.listUsers()]);
+    setCfg(c); setUrl(c.url || "");
+    setRows((c.instancias || []).map((i) => ({ ...i })));
+    setUsers(us.filter((u) => u.ativo));
+    (c.instancias || []).forEach(async (i) => {
+      try { const s = await api.waStatus(i.instance); setStatus((st) => ({ ...st, [i.instance]: s.estado })); } catch (_) {}
+    });
+  }
+  useEffect(() => { carregar(); }, []);
+
+  const addRow = () => setRows((r) => [...r, { instance: "", vendedorId: users[0]?.id || null }]);
+  const setRow = (i, k, v) => setRows((r) => r.map((x, j) => (j === i ? { ...x, [k]: v } : x)));
+
+  async function salvar() {
+    setSaving(true);
+    try {
+      const dados = { url, publicUrl: window.location.origin, instancias: rows.filter((r) => r.instance.trim()) };
+      if (apiKey) dados.apiKey = apiKey;
+      await api.waSetConfig(dados);
+      setApiKey("");
+      showToast("✓ Conexão salva");
+      carregar();
+    } catch (e) { showToast("✗ " + e.message); } finally { setSaving(false); }
+  }
+  async function desconectar(inst) {
+    if (!confirm(`Desconectar o WhatsApp "${inst}"?`)) return;
+    try { await api.waLogout(inst); setStatus((s) => ({ ...s, [inst]: "close" })); showToast("✓ Desconectado"); } catch (e) { showToast("✗ " + e.message); }
+  }
+  async function excluir(inst) {
+    if (!confirm(`Excluir a instância "${inst}"? Isso apaga as conversas dela.`)) return;
+    try { await api.waDeleteInstance(inst); setRows((r) => r.filter((x) => x.instance !== inst)); showToast("✓ Instância excluída"); } catch (e) { showToast("✗ " + e.message); }
+  }
+
+  if (!cfg) return <div className="spin" />;
+
+  return (
+    <div style={{ maxWidth: 720 }}>
+      <button className="btn btn-sm" onClick={onVoltar} style={{ marginBottom: 16 }}>← Voltar pras conversas</button>
+
+      <div className="panel" style={{ marginBottom: 18 }}>
+        <div className="panel-h"><h3>Servidor Evolution</h3></div>
+        <div style={{ padding: 22 }}>
+          <div className="field">
+            <label>Endereço da Evolution (URL)</label>
+            <input className="input" value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://sua-evolution.up.railway.app" />
+          </div>
+          <div className="field">
+            <label>Chave da API (apikey){cfg.temApiKey ? " — já salva, preencha só pra trocar" : ""}</label>
+            <input className="input" value={apiKey} onChange={(e) => setApiKey(e.target.value)} placeholder={cfg.temApiKey ? "•••••••• (mantém a atual)" : "cole a AUTHENTICATION_API_KEY"} />
+          </div>
+        </div>
+      </div>
+
+      <div className="panel">
+        <div className="panel-h">
+          <h3>WhatsApps dos vendedores</h3>
+          <button className="btn btn-sm" onClick={addRow}><I.plus style={{ width: 14, height: 14 }} /> Adicionar</button>
+        </div>
+        <div style={{ padding: "6px 22px 18px" }}>
+          {rows.length === 0 && <p style={{ color: "var(--muted)", fontSize: 13, padding: "14px 0" }}>Nenhum WhatsApp cadastrado. Clique em "Adicionar".</p>}
+          {rows.map((r, i) => {
+            const on = status[r.instance] === "open";
+            return (
+              <div className="wa-inst-row" key={i}>
+                <span className={"wa-dot " + (on ? "on" : "off")} title={on ? "conectado" : "desconectado"} />
+                <input className="input" style={{ flex: "1 1 130px" }} value={r.instance} onChange={(e) => setRow(i, "instance", e.target.value)} placeholder="nome (ex: com-maria)" />
+                <select className="select" style={{ flex: "1 1 150px" }} value={r.vendedorId || ""} onChange={(e) => setRow(i, "vendedorId", e.target.value)}>
+                  <option value="">— vendedor —</option>
+                  {users.map((u) => <option key={u.id} value={u.id}>{u.nome}</option>)}
+                </select>
+                {on
+                  ? <button className="btn btn-sm btn-danger" onClick={() => desconectar(r.instance)}><I.power style={{ width: 14, height: 14 }} /> Desconectar</button>
+                  : <button className="btn btn-sm" onClick={() => setQrInst(limpaInst(r.instance))}>Conectar</button>}
+                <button className="x-btn" onClick={() => excluir(r.instance)} title="Excluir"><I.trash style={{ width: 15, height: 15 }} /></button>
+              </div>
+            );
+          })}
+          <div style={{ marginTop: 16, display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+            <button className="btn btn-primary" onClick={salvar} disabled={saving}>{saving ? "Salvando..." : "Salvar conexão"}</button>
+            <span style={{ fontSize: 12.5, color: "var(--muted)" }}>Salve antes de conectar, pra vincular cada número ao vendedor.</span>
+          </div>
+        </div>
+      </div>
+
+      {qrInst && <QrModal instance={qrInst} onClose={() => setQrInst(null)} onConnected={() => { setStatus((s) => ({ ...s, [qrInst]: "open" })); setQrInst(null); showToast("🎉 Conectado!"); }} />}
+    </div>
+  );
+}
+
+/* ---------- QR MODAL ---------- */
+function QrModal({ instance, onClose, onConnected }) {
+  const [qr, setQr] = useState(null);
+  const [erro, setErro] = useState("");
+  const [estado, setEstado] = useState("connecting");
+  const [carregando, setCarregando] = useState(true);
+
+  async function gerar() {
+    setErro(""); setQr(null); setCarregando(true);
+    try {
+      const r = await api.waConnect(instance);
+      setQr(r.qr);
+      if (!r.qr) setErro("A Evolution não retornou o QR. Tente gerar de novo.");
+    } catch (e) { setErro(e.message); } finally { setCarregando(false); }
+  }
+  useEffect(() => {
+    gerar();
+    const t = setInterval(async () => {
+      try {
+        const s = await api.waStatus(instance);
+        setEstado(s.estado);
+        if (s.estado === "open") { clearInterval(t); onConnected && onConnected(); }
+      } catch (_) {}
+    }, 3000);
+    return () => clearInterval(t);
+    // eslint-disable-next-line
+  }, [instance]);
+
+  return (
+    <div className="modal" onClick={(e) => e.target === e.currentTarget && onClose()}>
+      <div className="modal-box">
+        <div className="mh"><h3>Conectar WhatsApp</h3><p>Instância <b>{instance}</b></p></div>
+        <div className="mb">
+          {estado === "open" ? (
+            <div className="qr-box"><div style={{ fontSize: 46 }}>✅</div><b style={{ fontSize: 17 }}>Conectado!</b></div>
+          ) : (
+            <div className="qr-box">
+              {erro && <div className="err">{erro}</div>}
+              {qr ? <img src={qr} alt="QR Code" /> : <div className="qr-wait">{carregando ? "Gerando QR..." : "Sem QR"}</div>}
+              <div className="qr-steps">
+                1. Abra o WhatsApp do vendedor no celular<br />
+                2. Toque em <b>Aparelhos conectados</b><br />
+                3. <b>Conectar um aparelho</b> e aponte a câmera pro QR
+              </div>
+            </div>
+          )}
+        </div>
+        <div className="mf">
+          <button className="btn full" onClick={onClose}>Fechar</button>
+          {estado !== "open" && <button className="btn btn-primary full" onClick={gerar} disabled={carregando}><I.refresh style={{ width: 15, height: 15 }} /> Gerar novo QR</button>}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ---------- NOVA CONVERSA ---------- */
+function NovaConversa({ isGer, instancias, minha, onClose, onCriada }) {
+  const [instance, setInstance] = useState(isGer ? (instancias[0]?.instance || "") : (minha?.instance || ""));
+  const [numero, setNumero] = useState("");
+  const [texto, setTexto] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  async function enviar() {
+    if (!numero.trim() || !texto.trim()) return;
+    setSaving(true);
+    try { const r = await api.waIniciar({ instance, numero, texto }); onCriada(r.id); }
+    catch (e) { alert(e.message); setSaving(false); }
+  }
+
+  return (
+    <div className="modal" onClick={(e) => e.target === e.currentTarget && onClose()}>
+      <div className="modal-box">
+        <div className="mh"><h3>Nova conversa</h3><p>Envie a primeira mensagem pra um número.</p></div>
+        <div className="mb">
+          {isGer && (
+            <div className="field">
+              <label>Enviar pelo WhatsApp de</label>
+              <select className="select" value={instance} onChange={(e) => setInstance(e.target.value)}>
+                {instancias.map((i) => <option key={i.instance} value={i.instance}>{i.instance}</option>)}
+              </select>
+            </div>
+          )}
+          <div className="field">
+            <label>Número (com DDD)</label>
+            <input className="input" value={numero} onChange={(e) => setNumero(e.target.value)} placeholder="Ex: 5544999990000" autoFocus />
+          </div>
+          <div className="field">
+            <label>Mensagem</label>
+            <textarea className="textarea" value={texto} onChange={(e) => setTexto(e.target.value)} placeholder="Olá! Tudo bem?" />
+          </div>
+        </div>
+        <div className="mf">
+          <button className="btn full" onClick={onClose}>Cancelar</button>
+          <button className="btn btn-primary full" onClick={enviar} disabled={saving || !numero.trim() || !texto.trim()}>{saving ? "Enviando..." : "Enviar"}</button>
+        </div>
       </div>
     </div>
   );
