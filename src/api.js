@@ -46,6 +46,7 @@ export const api = {
   updateCard: (id, dados) => req("PUT", "/api/cards/" + id, dados),
   deleteCard: (id) => req("DELETE", "/api/cards/" + id),
   importCards: (dados) => req("POST", "/api/cards/import", dados),
+  bulkCards: (dados) => req("POST", "/api/cards/bulk", dados),
   listVendedores: () => req("GET", "/api/vendedores"),
 
   // WhatsApp

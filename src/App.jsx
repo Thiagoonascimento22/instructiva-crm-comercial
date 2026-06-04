@@ -253,6 +253,8 @@ function Pipeline({ user, showToast, irParaWhatsApp }) {
   const [novo, setNovo] = useState(false); // modal novo lead
   const [importar, setImportar] = useState(false); // modal importar lista
   const [fechar, setFechar] = useState(null); // { card } -> modal valor final
+  const [modoSel, setModoSel] = useState(false); // seleção em massa
+  const [selSet, setSelSet] = useState(() => new Set());
 
   const usersMap = useMemo(() => {
     const m = {};
@@ -296,6 +298,32 @@ function Pipeline({ user, showToast, irParaWhatsApp }) {
     setDragId(null);
   }
 
+  // ---- seleção em massa ----
+  const toggleSel = (id) => setSelSet((s) => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
+  const limparSel = () => setSelSet(new Set());
+  const sairSel = () => { setModoSel(false); setSelSet(new Set()); };
+  const allSel = cards.length > 0 && selSet.size === cards.length;
+  const toggleTodos = () => setSelSet(allSel ? new Set() : new Set(cards.map((c) => c.id)));
+  function toggleColuna(etapaId) {
+    const ids = cards.filter((c) => c.etapa === etapaId).map((c) => c.id);
+    setSelSet((s) => {
+      const n = new Set(s);
+      const todos = ids.length > 0 && ids.every((id) => n.has(id));
+      ids.forEach((id) => (todos ? n.delete(id) : n.add(id)));
+      return n;
+    });
+  }
+  async function bulk(acao, extra) {
+    if (selSet.size === 0) return;
+    if (acao === "excluir" && !confirm(`Excluir ${selSet.size} lead(s)? Eles serão arquivados.`)) return;
+    try {
+      const r = await api.bulkCards({ ids: [...selSet], acao, ...(extra || {}) });
+      showToast(`✓ ${r.afetados} lead(s) atualizado(s)`);
+      setSelSet(new Set());
+      carregar();
+    } catch (e) { showToast("✗ " + e.message); }
+  }
+
   const stats = useMemo(() => {
     const ativos = cards.filter((c) => !["fechou", "perdeu"].includes(c.etapa));
     const fechados = cards.filter((c) => c.etapa === "fechou");
@@ -321,6 +349,9 @@ function Pipeline({ user, showToast, irParaWhatsApp }) {
           </select>
         ) : <div />}
         <div style={{ display: "flex", gap: 8 }}>
+          <button className={"btn" + (modoSel ? " btn-primary" : "")} onClick={() => (modoSel ? sairSel() : setModoSel(true))}>
+            <I.check style={{ width: 16, height: 16 }} /> {modoSel ? "Cancelar seleção" : "Selecionar"}
+          </button>
           <button className="btn" onClick={() => setImportar(true)}>
             <I.out style={{ width: 16, height: 16, transform: "rotate(180deg)" }} /> Importar lista
           </button>
@@ -329,6 +360,26 @@ function Pipeline({ user, showToast, irParaWhatsApp }) {
           </button>
         </div>
       </div>
+
+      {modoSel && (
+        <div className="bulk-bar">
+          <label className="bulk-all">
+            <input type="checkbox" checked={allSel} onChange={toggleTodos} /> Todos ({cards.length})
+          </label>
+          <span className="bulk-count">{selSet.size} selecionado{selSet.size === 1 ? "" : "s"}</span>
+          <div className="bulk-actions">
+            <select className="select bulk-sel" value="" disabled={selSet.size === 0} onChange={(e) => { if (e.target.value) bulk("mover", { etapa: e.target.value }); }}>
+              <option value="">Mover para…</option>
+              {ETAPAS.map((et) => <option key={et.id} value={et.id}>{et.nome}</option>)}
+            </select>
+            <select className="select bulk-sel" value="" disabled={selSet.size === 0} onChange={(e) => { if (e.target.value) bulk("atribuir", { responsavelId: e.target.value }); }}>
+              <option value="">Atribuir a…</option>
+              {users.map((u) => <option key={u.id} value={u.id}>{u.nome}</option>)}
+            </select>
+            <button className="btn btn-danger btn-sm" disabled={selSet.size === 0} onClick={() => bulk("excluir")}><I.trash style={{ width: 14, height: 14 }} /> Excluir</button>
+          </div>
+        </div>
+      )}
 
       {/* STATS */}
       <div className="stats">
@@ -363,7 +414,10 @@ function Pipeline({ user, showToast, irParaWhatsApp }) {
               onDrop={(e) => onDrop(e, et.id)}
             >
               <div className="col-h">
-                <div className="nm"><span className="bar" style={{ background: et.cor }} /> {et.nome}</div>
+                <div className="nm">
+                  {modoSel && <input type="checkbox" className="col-check" checked={lista.length > 0 && lista.every((c) => selSet.has(c.id))} onChange={() => toggleColuna(et.id)} />}
+                  <span className="bar" style={{ background: et.cor }} /> {et.nome}
+                </div>
                 <span className="cnt">{lista.length}</span>
               </div>
               <div className="col-body">
@@ -371,13 +425,14 @@ function Pipeline({ user, showToast, irParaWhatsApp }) {
                 {lista.map((c) => (
                   <div
                     key={c.id}
-                    className={"kcard" + (dragId === c.id ? " dragging" : "")}
+                    className={"kcard" + (dragId === c.id ? " dragging" : "") + (modoSel && selSet.has(c.id) ? " sel" : "")}
                     style={{ borderLeftColor: et.cor }}
-                    draggable
+                    draggable={!modoSel}
                     onDragStart={(e) => { e.dataTransfer.setData("id", c.id); setDragId(c.id); }}
                     onDragEnd={() => { setDragId(null); setOverCol(null); }}
-                    onClick={() => setSel(c)}
+                    onClick={() => (modoSel ? toggleSel(c.id) : setSel(c))}
                   >
+                    {modoSel && <span className={"kcheck" + (selSet.has(c.id) ? " on" : "")}>{selSet.has(c.id) ? "✓" : ""}</span>}
                     <div className="nm">{c.cliente}</div>
                     {c.curso && <div className="kcurso">{c.curso}</div>}
                     <div className={"val" + (c.etapa === "fechou" ? " win" : "")}>
@@ -388,7 +443,7 @@ function Pipeline({ user, showToast, irParaWhatsApp }) {
                       {isGer && (
                         <span className="seller"><span className="mini-av">{iniciais(nomeResp(c.responsavelId))}</span>{nomeResp(c.responsavelId).split(" ")[0]}</span>
                       )}
-                      {c.telefone && (
+                      {c.telefone && !modoSel && (
                         <button className="wa-btn" title="Abrir conversa no sistema" onClick={(e) => { e.stopPropagation(); irParaWhatsApp && irParaWhatsApp(c.telefone, c.cliente); }}>
                           <I.wa style={{ width: 16, height: 16 }} />
                         </button>

@@ -355,6 +355,36 @@ app.get("/api/vendedores", auth, (req, res) => {
   );
 });
 
+// ações em massa: mover etapa, atribuir vendedor, ou excluir
+app.post("/api/cards/bulk", auth, (req, res) => {
+  const { ids, acao, etapa, responsavelId } = req.body || {};
+  if (!Array.isArray(ids) || ids.length === 0)
+    return res.status(400).json({ error: "Nada selecionado" });
+  const agora = Date.now();
+  let afetados = 0;
+  ids.slice(0, 5000).forEach((id) => {
+    const card = db.cards.find((c) => c.id === id && !c.arquivado);
+    if (!card || !podeVerCard(req.user, card)) return;
+    if (acao === "mover" && ETAPAS.includes(etapa)) {
+      card.etapa = etapa;
+      if (etapa === "fechou") { if (!card.fechadoEm) card.fechadoEm = agora; }
+      else card.fechadoEm = null;
+    } else if (acao === "atribuir" && responsavelId) {
+      const destino = db.users.find((u) => u.id === responsavelId);
+      if (!destino) return;
+      card.responsavelId = destino.id;
+    } else if (acao === "excluir") {
+      card.arquivado = true;
+    } else {
+      return;
+    }
+    card.atualizadoEm = agora;
+    afetados++;
+  });
+  saveSoon();
+  res.json({ afetados });
+});
+
 /* ============================================================
    WHATSAPP (Evolution API)
    ============================================================ */
