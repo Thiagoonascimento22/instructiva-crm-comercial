@@ -604,33 +604,39 @@ app.delete("/api/wa/instance/:instance", auth, gerenteOnly, async (req, res) => 
 });
 
 /* ============================================================
-   ANÁLISE POR IA (Gemini) — sugestão da equipe e individual
+   ANÁLISE POR IA (Claude / Anthropic) — sugestão da equipe e individual
    ============================================================ */
-const GEMINI_MODEL = process.env.GEMINI_MODEL || "gemini-2.5-flash-lite";
+const ANTHROPIC_MODEL = process.env.ANTHROPIC_MODEL || "claude-haiku-4-5-20251001";
 
-async function gemini(prompt) {
-  const key = process.env.GEMINI_API_KEY;
+async function chamarIA(prompt) {
+  const key = process.env.ANTHROPIC_API_KEY;
   if (!key)
-    throw new Error("IA não configurada: adicione a variável GEMINI_API_KEY no Railway.");
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${key}`;
-  const res = await fetch(url, {
+    throw new Error("IA não configurada: adicione a variável ANTHROPIC_API_KEY no Railway.");
+  const res = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      "content-type": "application/json",
+      "x-api-key": key,
+      "anthropic-version": "2023-06-01",
+    },
     body: JSON.stringify({
-      contents: [{ parts: [{ text: prompt }] }],
-      generationConfig: { temperature: 0.4, maxOutputTokens: 1200 },
+      model: ANTHROPIC_MODEL,
+      max_tokens: 1200,
+      messages: [{ role: "user", content: prompt }],
     }),
   });
   let data = null;
   try { data = await res.json(); } catch (_) {}
   if (!res.ok) {
-    const m = (data && data.error && data.error.message) || "Erro Gemini " + res.status;
-    if (res.status === 404)
-      throw new Error("Modelo da IA não encontrado. Ajuste a variável GEMINI_MODEL no Railway (ex: gemini-2.5-flash-lite ou gemini-3.5-flash). Detalhe: " + m);
+    const m = (data && data.error && data.error.message) || "Erro na IA " + res.status;
+    if (res.status === 404 || /model/i.test(m))
+      throw new Error("Modelo da IA não encontrado. Ajuste a variável ANTHROPIC_MODEL no Railway (ex: claude-haiku-4-5-20251001 ou claude-sonnet-4-6). Detalhe: " + m);
+    if (res.status === 401)
+      throw new Error("Chave da IA inválida. Confira o valor da ANTHROPIC_API_KEY no Railway.");
     throw new Error(m);
   }
-  const txt = (((data.candidates || [])[0] || {}).content || {}).parts;
-  const out = Array.isArray(txt) ? txt.map((p) => p.text || "").join("") : "";
+  const blocos = Array.isArray(data && data.content) ? data.content : [];
+  const out = blocos.filter((b) => b.type === "text").map((b) => b.text).join("");
   if (!out.trim()) throw new Error("A IA não retornou resposta. Tente de novo.");
   return out;
 }
@@ -700,7 +706,7 @@ ${amostras.join("\n\n") || "Sem conversas registradas ainda."}
 Responda SOMENTE em JSON puro, sem markdown, neste formato:
 {"resumo":"2 a 4 frases sobre o estado geral da equipe","pontos_fortes":["..."],"pontos_a_melhorar":["..."],"sugestoes":["3 a 5 sugestões práticas e específicas pra melhorar os resultados do time"]}
 Escreva em português brasileiro, tom direto e construtivo.`;
-    res.json(parseIA(await gemini(prompt)));
+    res.json(parseIA(await chamarIA(prompt)));
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
@@ -725,7 +731,7 @@ ${conv.join("\n\n") || "Poucas conversas registradas pra avaliar o atendimento."
 Responda SOMENTE em JSON puro, sem markdown, neste formato:
 {"resumo":"2 a 4 frases avaliando esse vendedor","pontos_fortes":["..."],"pontos_a_melhorar":["..."],"sugestoes":["3 a 5 sugestões práticas e específicas pra esse vendedor melhorar"]}
 Escreva em português brasileiro, tom direto e construtivo, sem ser ofensivo.`;
-    const out = parseIA(await gemini(prompt));
+    const out = parseIA(await chamarIA(prompt));
     out.vendedor = v.nome;
     res.json(out);
   } catch (e) {

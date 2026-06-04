@@ -1436,3 +1436,153 @@ textarea {
   font-size: 13.5px;
   line-height: 1.5;
 }
+
+/* ============================================================
+   PAINEL v2 — cartões com ícone, barra de meta, gráficos
+   ============================================================ */
+.filtro-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 20px;
+}
+.filtro-datas { display: flex; align-items: center; gap: 7px; font-size: 13px; color: var(--muted); }
+.filtro-datas input {
+  border: 1px solid var(--line-2);
+  border-radius: 9px;
+  padding: 7px 10px;
+  font-size: 13px;
+  font-family: inherit;
+  color: var(--text);
+  background: var(--card);
+}
+.filtro-hoje {
+  margin-left: auto;
+  background: transparent;
+  border: none;
+  color: var(--indigo-600);
+  font-weight: 700;
+  font-size: 13px;
+  cursor: pointer;
+  padding: 6px 10px;
+  border-radius: 8px;
+}
+.filtro-hoje:hover { background: rgba(99, 102, 241, 0.08); }
+
+/* cartão de número com ícone */
+.stat-ico {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+.stat-ico .badge {
+  width: 46px;
+  height: 46px;
+  border-radius: 13px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.stat-ico .badge svg { width: 22px; height: 22px; }
+.stat-ico .info .val { font-size: 26px; font-weight: 800; font-family: "Sora", sans-serif; letter-spacing: -0.02em; line-height: 1.1; }
+.stat-ico .info .val.money { font-family: "JetBrains Mono", monospace; font-size: 21px; }
+.stat-ico .info .lab { font-size: 12.5px; color: var(--muted); margin-top: 2px; }
+
+/* barra de conclusão/meta grande */
+.comp-card {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  box-shadow: var(--shadow-sm);
+  padding: 20px 24px;
+  margin-bottom: 22px;
+  display: flex;
+  align-items: center;
+  gap: 22px;
+}
+.comp-info { flex-shrink: 0; }
+.comp-info .lab { font-size: 13px; color: var(--muted); }
+.comp-info .num { font-size: 15px; font-weight: 700; color: var(--text); font-family: "JetBrains Mono", monospace; margin-top: 2px; }
+.comp-bar-wrap { flex: 1; display: flex; align-items: center; gap: 16px; }
+.comp-bar { flex: 1; height: 14px; background: var(--line-2); border-radius: 14px; overflow: hidden; }
+.comp-bar .fill { height: 100%; border-radius: 14px; background: var(--grad); transition: width 0.5s ease; }
+.comp-bar .fill.done { background: linear-gradient(90deg, #10b981, #34d399); }
+.comp-pct { font-size: 30px; font-weight: 800; font-family: "Sora", sans-serif; letter-spacing: -0.02em; background: var(--grad); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; flex-shrink: 0; }
+
+/* grades de gráficos */
+.charts-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; margin-bottom: 18px; align-items: start; }
+@media (max-width: 900px) { .charts-2 { grid-template-columns: 1fr; } }
+.panel-sub { font-size: 12px; color: var(--muted); margin-top: 2px; font-weight: 500; }
+.panel-h .panel-sub { display: block; }
+.chart-body { padding: 18px 20px 20px; }
+.chart-svg { width: 100%; height: auto; display: block; }
+.chart-axis { font-size: 10px; fill: var(--faint); font-family: "JetBrains Mono", monospace; }
+.chart-val { font-size: 11px; fill: var(--text); font-weight: 700; font-family: "JetBrains Mono", monospace; }
+.chart-label { font-size: 11px; fill: var(--muted); font-weight: 600; }
+.chart-empty { text-align: center; color: var(--faint); font-size: 13px; padding: 40px 10px; }
+
+/* rosca / donut */
+.donut-wrap { display: flex; align-items: center; gap: 20px; flex-wrap: wrap; justify-content: center; }
+.donut-svg { width: 180px; height: 180px; flex-shrink: 0; }
+.donut-center-n { font-size: 30px; font-weight: 800; font-family: "Sora", sans-serif; fill: var(--text); }
+.donut-center-l { font-size: 11px; fill: var(--muted); }
+.donut-leg { display: flex; flex-direction: column; gap: 9px; }
+.leg-item { display: flex; align-items: center; gap: 9px; font-size: 13px; color: var(--text); }
+.leg-item b { margin-left: auto; font-family: "JetBrains Mono", monospace; }
+.leg-dot { width: 11px; height: 11px; border-radius: 4px; flex-shrink: 0; }
+
+/* ============================================================
+   PÁGINA ANÁLISE IA
+   ============================================================ */
+.ia-tabs { display: inline-flex; gap: 3px; background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 4px; box-shadow: var(--shadow-sm); margin-bottom: 22px; }
+.ia-tabs button { border: none; background: transparent; padding: 9px 18px; border-radius: 9px; font-size: 13.5px; font-weight: 600; color: var(--muted); cursor: pointer; display: flex; align-items: center; gap: 7px; transition: all 0.13s; }
+.ia-tabs button svg { width: 16px; height: 16px; }
+.ia-tabs button.on { background: var(--grad); color: #fff; box-shadow: 0 6px 14px -6px rgba(124, 92, 240, 0.6); }
+.ia-hero {
+  position: relative;
+  border-radius: 20px;
+  padding: 30px 32px;
+  color: #fff;
+  overflow: hidden;
+  background: linear-gradient(120deg, #1b1830 0%, #2a2342 55%, #3a2d5c 100%);
+  box-shadow: 0 24px 60px -28px rgba(40, 30, 70, 0.7);
+}
+.ia-hero::after {
+  content: "";
+  position: absolute;
+  top: -40%; right: -10%;
+  width: 360px; height: 360px;
+  background: radial-gradient(circle, rgba(139, 92, 246, 0.5), transparent 65%);
+  pointer-events: none;
+}
+.ia-hero-badge {
+  display: inline-flex; align-items: center; gap: 7px;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  color: #d6c9ff;
+  font-size: 11.5px; font-weight: 700;
+  padding: 6px 12px; border-radius: 20px;
+  text-transform: uppercase; letter-spacing: 0.04em;
+}
+.ia-hero h2 { font-size: 27px; font-weight: 800; margin: 16px 0 10px; letter-spacing: -0.02em; position: relative; }
+.ia-hero p { font-size: 14.5px; line-height: 1.6; color: rgba(255, 255, 255, 0.78); max-width: 620px; position: relative; }
+.ia-hero-stats { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; font-size: 13.5px; color: rgba(255, 255, 255, 0.7); margin: 18px 0 22px; position: relative; }
+.ia-hero-stats b { color: #fff; }
+.ia-hero-stats .sep { opacity: 0.4; }
+.btn-hero {
+  position: relative;
+  background: #fff; color: #2a2342;
+  border: none; border-radius: 12px;
+  padding: 13px 22px; font-size: 14.5px; font-weight: 700;
+  cursor: pointer; display: inline-flex; align-items: center; gap: 9px;
+  transition: transform 0.12s, box-shadow 0.12s;
+}
+.btn-hero:hover { transform: translateY(-1px); box-shadow: 0 12px 24px -12px rgba(0,0,0,0.5); }
+.btn-hero:disabled { opacity: 0.7; cursor: default; transform: none; }
+.ia-pick { margin-bottom: 20px; }
+.ia-pick label { display: block; font-size: 12.5px; color: var(--muted); font-weight: 600; margin-bottom: 7px; }
+.ia-resultado-card { background: var(--card); border: 1px solid var(--line); border-radius: var(--r); box-shadow: var(--shadow-sm); padding: 24px; margin-top: 18px; }
+.ia-resultado-card .rc-h { display: flex; align-items: center; gap: 10px; margin-bottom: 16px; font-weight: 800; font-size: 16px; }
+.ia-resultado-card .rc-h .rank-av { width: 34px; height: 34px; font-size: 13px; }

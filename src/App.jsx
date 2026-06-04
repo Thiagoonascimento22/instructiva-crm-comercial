@@ -28,6 +28,12 @@ const I = {
   dash: (p) => (<svg {...p} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M3 3v18h18"/><rect x="7" y="11" width="3" height="6" rx="1"/><rect x="12" y="7" width="3" height="10" rx="1"/><rect x="17" y="13" width="3" height="4" rx="1"/></svg>),
   medal: (p) => (<svg {...p} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="15" r="6"/><path d="M9 9 6.5 2M15 9l2.5-7M9.5 2h5"/></svg>),
   target: (p) => (<svg {...p} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1.5"/></svg>),
+  cash: (p) => (<svg {...p} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2.5"/><path d="M6 12h.01M18 12h.01"/></svg>),
+  check: (p) => (<svg {...p} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21.8 10A10 10 0 1 1 17 3.3"/><path d="m9 11 3 3L22 4"/></svg>),
+  trend: (p) => (<svg {...p} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M16 7h6v6"/><path d="m22 7-8.5 8.5-5-5L2 17"/></svg>),
+  users: (p) => (<svg {...p} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>),
+  spark: (p) => (<svg {...p} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3v4M12 17v4M3 12h4M17 12h4M5.6 5.6l2.8 2.8M15.6 15.6l2.8 2.8M18.4 5.6l-2.8 2.8M8.4 15.6l-2.8 2.8"/></svg>),
+  funnel: (p) => (<svg {...p} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M3 4h18l-7 8v7l-4-2v-5z"/></svg>),
 };
 
 /* ============================ HELPERS ============================ */
@@ -84,6 +90,7 @@ export default function App() {
     painel: { t: "Painel Comercial", s: "Visão geral das vendas e metas" },
     pipeline: { t: "Pipeline de Vendas", s: "Arraste os cards conforme a negociação avança" },
     whatsapp: { t: "WhatsApp", s: "Atenda seus leads sem sair do sistema" },
+    ia: { t: "Análise Inteligente", s: "A IA lê o desempenho e sugere melhorias" },
     equipe: { t: "Equipe & Acessos", s: "Gerencie os vendedores e suas metas" },
     config: { t: "Configurações", s: "Seus dados de acesso" },
   };
@@ -101,6 +108,7 @@ export default function App() {
           <NavBtn ic={I.dash} label="Painel" active={view === "painel"} onClick={() => setView("painel")} />
           <NavBtn ic={I.pipe} label="Pipeline" active={view === "pipeline"} onClick={() => setView("pipeline")} />
           <NavBtn ic={I.wa} label="WhatsApp" active={view === "whatsapp"} onClick={() => setView("whatsapp")} />
+          <NavBtn ic={I.spark} label="Análise IA" active={view === "ia"} onClick={() => setView("ia")} />
           {isGer && <NavBtn ic={I.team} label="Equipe & Acessos" active={view === "equipe"} onClick={() => setView("equipe")} />}
           <NavBtn ic={I.cog} label="Configurações" active={view === "config"} onClick={() => setView("config")} />
         </nav>
@@ -124,9 +132,10 @@ export default function App() {
           </div>
         </div>
         <div className="content">
-          {view === "painel" && <Dashboard user={user} showToast={showToast} irParaPipeline={() => setView("pipeline")} />}
+          {view === "painel" && <Painel user={user} showToast={showToast} irParaPipeline={() => setView("pipeline")} />}
           {view === "pipeline" && <Pipeline user={user} showToast={showToast} />}
           {view === "whatsapp" && <WhatsApp user={user} showToast={showToast} />}
+          {view === "ia" && <PaginaIA user={user} showToast={showToast} />}
           {view === "equipe" && isGer && <Equipe showToast={showToast} meId={user.id} />}
           {view === "config" && <Config user={user} setUser={setUser} showToast={showToast} />}
         </div>
@@ -1460,12 +1469,403 @@ function AnaliseIA({ user, vendedores, showToast }) {
 }
 
 function IAErro({ msg }) {
-  const semChave = /GEMINI_API_KEY/i.test(msg || "");
+  const semChave = /ANTHROPIC_API_KEY/i.test(msg || "");
   return (
     <div className="ia-erro">
       <b>Não foi possível gerar a análise.</b>
       <div style={{ marginTop: 6 }}>{msg}</div>
-      {semChave && <div style={{ marginTop: 8, fontSize: 12.5 }}>👉 No Railway, em Variables, adicione <b>GEMINI_API_KEY</b> com a sua chave do Gemini (a mesma que você usa nos outros projetos).</div>}
+      {semChave && <div style={{ marginTop: 8, fontSize: 12.5 }}>👉 No Railway, em Variables, adicione <b>ANTHROPIC_API_KEY</b> com a mesma chave do Claude que você já usa no suporte.</div>}
+    </div>
+  );
+}
+
+/* ============================================================
+   GRÁFICOS (SVG, sem dependências)
+   ============================================================ */
+function GraficoBarras({ dados }) {
+  const max = Math.max(1, ...dados.map((d) => d.valor));
+  const W = 560, H = 240, padT = 16, padB = 34, axisW = 36, gap = 18;
+  const n = dados.length || 1;
+  const chartH = H - padT - padB;
+  const areaW = W - axisW - 10;
+  const bw = Math.min(70, (areaW - gap * (n - 1)) / n);
+  const ticks = 4;
+  const tem = dados.some((d) => d.valor > 0);
+  if (!tem) return <div className="chart-empty">Sem vendas no período pra mostrar.</div>;
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} className="chart-svg" preserveAspectRatio="xMidYMid meet">
+      <defs><linearGradient id="gradBar" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#8b5cf6" /><stop offset="100%" stopColor="#6366f1" /></linearGradient></defs>
+      {Array.from({ length: ticks + 1 }).map((_, i) => {
+        const y = padT + (chartH / ticks) * i;
+        return <g key={i}><line x1={axisW} y1={y} x2={W - 6} y2={y} stroke="var(--line)" strokeDasharray="3 4" /><text x={axisW - 6} y={y + 3} className="chart-axis" textAnchor="end">{Math.round(max - (max / ticks) * i)}</text></g>;
+      })}
+      {dados.map((d, i) => {
+        const h = (d.valor / max) * chartH;
+        const x = axisW + 6 + i * (bw + gap);
+        const y = padT + chartH - h;
+        return <g key={i}>
+          <rect x={x} y={y} width={bw} height={Math.max(2, h)} rx="6" fill={d.cor || "url(#gradBar)"} />
+          {d.valor > 0 && <text x={x + bw / 2} y={y - 6} className="chart-val" textAnchor="middle">{d.rotulo || d.valor}</text>}
+          <text x={x + bw / 2} y={H - 12} className="chart-label" textAnchor="middle">{(d.label || "").slice(0, 9)}</text>
+        </g>;
+      })}
+    </svg>
+  );
+}
+
+function GraficoRosca({ dados }) {
+  const total = dados.reduce((s, d) => s + d.valor, 0);
+  const r = 66, sw = 26, cx = 90, cy = 90, c = 2 * Math.PI * r;
+  let acc = 0;
+  return (
+    <div className="donut-wrap">
+      <svg viewBox="0 0 180 180" className="donut-svg">
+        <circle cx={cx} cy={cy} r={r} fill="none" stroke="var(--line-2)" strokeWidth={sw} />
+        {total > 0 && dados.map((d, i) => {
+          if (d.valor <= 0) return null;
+          const len = (d.valor / total) * c;
+          const el = <circle key={i} cx={cx} cy={cy} r={r} fill="none" stroke={d.cor} strokeWidth={sw} strokeDasharray={`${len} ${c - len}`} strokeDashoffset={-acc} transform={`rotate(-90 ${cx} ${cy})`} />;
+          acc += len;
+          return el;
+        })}
+        <text x={cx} y={cy - 2} textAnchor="middle" className="donut-center-n">{total}</text>
+        <text x={cx} y={cy + 15} textAnchor="middle" className="donut-center-l">leads</text>
+      </svg>
+      <div className="donut-leg">
+        {dados.map((d, i) => <div className="leg-item" key={i}><span className="leg-dot" style={{ background: d.cor }} />{d.label} <b>{d.valor}</b></div>)}
+      </div>
+    </div>
+  );
+}
+
+function GraficoLinha({ dados }) {
+  const W = 600, H = 200, padL = 38, padR = 10, padT = 14, padB = 26;
+  const max = Math.max(1, ...dados.map((d) => d.valor));
+  const n = dados.length;
+  const innerW = W - padL - padR, innerH = H - padT - padB, ticks = 4;
+  const x = (i) => padL + (n <= 1 ? innerW / 2 : (innerW / (n - 1)) * i);
+  const y = (v) => padT + innerH - (v / max) * innerH;
+  const pts = dados.map((d, i) => `${x(i)},${y(d.valor)}`).join(" ");
+  const passo = Math.max(1, Math.ceil(n / 7));
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} className="chart-svg" preserveAspectRatio="xMidYMid meet">
+      <defs><linearGradient id="gradArea" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#6366f1" stopOpacity="0.32" /><stop offset="100%" stopColor="#6366f1" stopOpacity="0" /></linearGradient></defs>
+      {Array.from({ length: ticks + 1 }).map((_, i) => {
+        const yy = padT + (innerH / ticks) * i;
+        return <g key={i}><line x1={padL} y1={yy} x2={W - padR} y2={yy} stroke="var(--line)" strokeDasharray="3 4" /><text x={padL - 6} y={yy + 3} className="chart-axis" textAnchor="end">{Math.round(max - (max / ticks) * i)}</text></g>;
+      })}
+      {n > 1 && <polygon points={`${padL},${padT + innerH} ${pts} ${x(n - 1)},${padT + innerH}`} fill="url(#gradArea)" />}
+      {n > 1 && <polyline points={pts} fill="none" stroke="#6366f1" strokeWidth="2.5" strokeLinejoin="round" strokeLinecap="round" />}
+      {dados.map((d, i) => <circle key={i} cx={x(i)} cy={y(d.valor)} r="3.4" fill="#fff" stroke="#6366f1" strokeWidth="2" />)}
+      {dados.map((d, i) => (i % passo === 0 || i === n - 1) ? <text key={i} x={x(i)} y={H - 8} className="chart-label" textAnchor="middle">{d.label}</text> : null)}
+    </svg>
+  );
+}
+
+/* ============================================================
+   PAINEL v2
+   ============================================================ */
+const ETAPA_INFO = [
+  { k: "lead", label: "Lead", cor: "#64748b" },
+  { k: "contato", label: "Em contato", cor: "#6366f1" },
+  { k: "negociando", label: "Negociando", cor: "#f59e0b" },
+  { k: "fechou", label: "Fechou", cor: "#10b981" },
+  { k: "perdeu", label: "Perdeu", cor: "#ef4444" },
+];
+
+function Painel({ user, showToast, irParaPipeline }) {
+  const isGer = user.role === "gerente";
+  const [cards, setCards] = useState([]);
+  const [users, setUsers] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [preset, setPreset] = useState("mes");
+  const [de, setDe] = useState("");
+  const [ate, setAte] = useState("");
+
+  async function carregar() {
+    setLoading(true);
+    try {
+      setCards(await api.listCards());
+      if (isGer) setUsers(await api.listUsers());
+    } catch (e) { showToast("✗ " + e.message); }
+    finally { setLoading(false); }
+  }
+  useEffect(() => { carregar(); /* eslint-disable-next-line */ }, []);
+
+  // sincroniza as datas com o preset escolhido
+  useEffect(() => {
+    if (preset === "custom") return;
+    const [i, f] = intervaloPeriodo(preset, "", "");
+    const iso = (t) => new Date(t).toISOString().slice(0, 10);
+    setDe(iso(preset === "tudo" ? Date.now() : i));
+    setAte(iso(f));
+    // eslint-disable-next-line
+  }, [preset]);
+
+  if (loading) return <div className="spin" />;
+
+  const [ini, fim] = intervaloPeriodo(preset, de, ate);
+  const dataFech = (c) => c.fechadoEm || c.atualizadoEm || 0;
+  const ativos = cards.filter((c) => !c.arquivado);
+  const noPeriodoVenda = (c) => c.etapa === "fechou" && dataFech(c) >= ini && dataFech(c) <= fim;
+  const noPeriodoLead = (c) => (c.criadoEm || 0) >= ini && (c.criadoEm || 0) <= fim;
+
+  const vendas = ativos.filter(noPeriodoVenda);
+  const totalVendido = vendas.reduce((s, c) => s + (Number(c.valorFinal) || 0), 0);
+  const nVendas = vendas.length;
+  const ticket = nVendas ? totalVendido / nVendas : 0;
+  const leadsPeriodo = ativos.filter(noPeriodoLead);
+  const conversao = leadsPeriodo.length ? Math.round((leadsPeriodo.filter((c) => c.etapa === "fechou").length / leadsPeriodo.length) * 100) : 0;
+
+  // gráfico de linha: vendas por dia (período, máx ~14 pontos)
+  const dias = Math.min(14, Math.max(1, Math.ceil((fim - ini) / 86400000)));
+  const serie = [];
+  for (let d = dias - 1; d >= 0; d--) {
+    const dia = new Date(fim - d * 86400000); dia.setHours(0, 0, 0, 0);
+    const ini2 = dia.getTime(), fim2 = ini2 + 86400000;
+    const v = vendas.filter((c) => dataFech(c) >= ini2 && dataFech(c) < fim2).reduce((s, c) => s + (Number(c.valorFinal) || 0), 0);
+    serie.push({ label: dia.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" }), valor: Math.round(v) });
+  }
+
+  // rosca: distribuição do funil (snapshot atual)
+  const rosca = ETAPA_INFO.map((e) => ({ label: e.label, cor: e.cor, valor: ativos.filter((c) => c.etapa === e.k).length }));
+
+  const filtroBar = (
+    <div className="filtro-bar">
+      <div className="seg">
+        {[["hoje", "Hoje"], ["semana", "Semana"], ["mes", "Mês"], ["tudo", "Tudo"]].map(([k, lbl]) => (
+          <button key={k} className={preset === k ? "on" : ""} onClick={() => setPreset(k)}>{lbl}</button>
+        ))}
+      </div>
+      <div className="filtro-datas">
+        <input type="date" value={de} onChange={(e) => { setDe(e.target.value); setPreset("custom"); }} />
+        até
+        <input type="date" value={ate} onChange={(e) => { setAte(e.target.value); setPreset("custom"); }} />
+      </div>
+      <button className="filtro-hoje" onClick={() => setPreset("hoje")}>Hoje</button>
+    </div>
+  );
+
+  /* ---------- VENDEDOR ---------- */
+  if (!isGer) {
+    const vendidoMes = ativos.filter((c) => c.etapa === "fechou" && dataFech(c) >= inicioDoMes()).reduce((s, c) => s + (Number(c.valorFinal) || 0), 0);
+    const meta = Number(user.meta) || 0;
+    const pct = meta > 0 ? Math.min(100, Math.round((vendidoMes / meta) * 100)) : 0;
+    const bateu = meta > 0 && vendidoMes >= meta;
+    const ultimas = [...vendas].sort((a, b) => dataFech(b) - dataFech(a)).slice(0, 8);
+    const roscaV = ETAPA_INFO.map((e) => ({ label: e.label, cor: e.cor, valor: ativos.filter((c) => c.etapa === e.k).length }));
+    return (
+      <div>
+        {filtroBar}
+        <div className="stats">
+          <StatIco ico={I.cash} cor="#10b981" val={fmtMoney(totalVendido)} money lab="Vendido no período" />
+          <StatIco ico={I.check} cor="#6366f1" val={nVendas} lab="Vendas fechadas" />
+          <StatIco ico={I.cash} cor="#f59e0b" val={fmtMoney(ticket)} money lab="Ticket médio" />
+          <StatIco ico={I.target} cor="#8b5cf6" val={conversao + "%"} lab="Conversão" />
+        </div>
+        <div className="comp-card">
+          <div className="comp-info"><div className="lab">Minha meta do mês</div><div className="num">{fmtMoney(vendidoMes)} / {meta > 0 ? fmtMoney(meta) : "—"}</div></div>
+          <div className="comp-bar-wrap"><div className="comp-bar"><div className={"fill" + (bateu ? " done" : "")} style={{ width: pct + "%" }} /></div><div className="comp-pct">{pct}%</div></div>
+        </div>
+        <div className="charts-2">
+          <div className="panel"><div className="panel-h"><h3>Minha evolução<span className="panel-sub">vendas por dia</span></h3></div><div className="chart-body"><GraficoLinha dados={serie} /></div></div>
+          <div className="panel"><div className="panel-h"><h3>Meu funil<span className="panel-sub">situação atual</span></h3></div><div className="chart-body"><GraficoRosca dados={roscaV} /></div></div>
+        </div>
+        <div className="panel">
+          <div className="panel-h"><h3>Minhas últimas vendas</h3></div>
+          {ultimas.length === 0 ? <div className="dash-empty">Nenhuma venda fechada no período. 🎯</div> : ultimas.map((c) => (
+            <div className="deal-row" key={c.id}><div><div className="nm">{c.cliente}</div><div className="dt">{new Date(dataFech(c)).toLocaleDateString("pt-BR")}</div></div><div className="vl">{fmtMoney(c.valorFinal)}</div></div>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  /* ---------- GERENTE ---------- */
+  const vendedores = users.filter((u) => u.role === "vendedor");
+  const ranking = vendedores.map((v) => {
+    const vs = vendas.filter((c) => c.responsavelId === v.id);
+    return { ...v, total: vs.reduce((s, c) => s + (Number(c.valorFinal) || 0), 0), qtd: vs.length };
+  }).sort((a, b) => b.total - a.total);
+  const maxRank = Math.max(1, ...ranking.map((r) => r.total));
+  const barras = ranking.slice(0, 7).map((r) => ({ label: r.nome.split(" ")[0], valor: Math.round(r.total), rotulo: r.total >= 1000 ? "R$" + (r.total / 1000).toFixed(1) + "k" : "R$" + r.total }));
+
+  const mesIni = inicioDoMes();
+  const metas = vendedores.map((v) => {
+    const vendidoMes = ativos.filter((c) => c.etapa === "fechou" && c.responsavelId === v.id && dataFech(c) >= mesIni).reduce((s, c) => s + (Number(c.valorFinal) || 0), 0);
+    const meta = Number(v.meta) || 0;
+    return { ...v, vendidoMes, meta, pct: meta > 0 ? Math.min(100, Math.round((vendidoMes / meta) * 100)) : 0, bateu: meta > 0 && vendidoMes >= meta };
+  });
+  const comMeta = metas.filter((m) => m.meta > 0);
+  const bateram = comMeta.filter((m) => m.bateu).length;
+  const somaMetas = comMeta.reduce((s, m) => s + m.meta, 0);
+  const somaVendidoMes = metas.reduce((s, m) => s + m.vendidoMes, 0);
+  const pctMeta = somaMetas > 0 ? Math.min(100, Math.round((somaVendidoMes / somaMetas) * 100)) : 0;
+  const medalhas = ["🥇", "🥈", "🥉"];
+
+  return (
+    <div>
+      {filtroBar}
+      <div className="stats">
+        <StatIco ico={I.cash} cor="#10b981" val={fmtMoney(totalVendido)} money lab="Total vendido" />
+        <StatIco ico={I.check} cor="#6366f1" val={nVendas} lab="Vendas fechadas" />
+        <StatIco ico={I.cash} cor="#f59e0b" val={fmtMoney(ticket)} money lab="Ticket médio" />
+        <StatIco ico={I.target} cor="#8b5cf6" val={conversao + "%"} lab="Conversão" />
+      </div>
+
+      {somaMetas > 0 && (
+        <div className="comp-card">
+          <div className="comp-info"><div className="lab">Meta do time este mês — {bateram}/{comMeta.length} bateram</div><div className="num">{fmtMoney(somaVendidoMes)} / {fmtMoney(somaMetas)}</div></div>
+          <div className="comp-bar-wrap"><div className="comp-bar"><div className={"fill" + (pctMeta >= 100 ? " done" : "")} style={{ width: pctMeta + "%" }} /></div><div className="comp-pct">{pctMeta}%</div></div>
+        </div>
+      )}
+
+      <div className="charts-2">
+        <div className="panel"><div className="panel-h"><h3>Vendas por vendedor<span className="panel-sub">no período</span></h3></div><div className="chart-body"><GraficoBarras dados={barras} /></div></div>
+        <div className="panel"><div className="panel-h"><h3>Distribuição do funil<span className="panel-sub">situação atual</span></h3></div><div className="chart-body"><GraficoRosca dados={rosca} /></div></div>
+      </div>
+
+      <div className="panel" style={{ marginBottom: 18 }}><div className="panel-h"><h3>Evolução de vendas<span className="panel-sub">últimos dias</span></h3></div><div className="chart-body"><GraficoLinha dados={serie} /></div></div>
+
+      <div className="charts-2">
+        <div className="panel">
+          <div className="panel-h"><h3>Ranking de vendedores</h3></div>
+          {ranking.length === 0 ? <div className="dash-empty">Nenhum vendedor cadastrado.</div> : ranking.map((r, i) => (
+            <div className="rank-row" key={r.id}>
+              <div className="rank-fill" style={{ width: (r.total / maxRank) * 100 + "%" }} />
+              <div className={"rank-pos" + (i < 3 ? " medal" : "")}>{i < 3 && r.total > 0 ? medalhas[i] : i + 1}</div>
+              <div className="rank-av">{iniciais(r.nome)}</div>
+              <div className="rank-mid"><div className="nm">{r.nome}</div><div className="sub">{r.qtd} venda{r.qtd === 1 ? "" : "s"}</div></div>
+              <div className="rank-val">{fmtMoney(r.total)}</div>
+            </div>
+          ))}
+        </div>
+        <div className="panel">
+          <div className="panel-h"><h3>Metas do mês</h3></div>
+          {metas.length === 0 ? <div className="dash-empty">Nenhum vendedor cadastrado.</div> : metas.map((m) => (
+            <div className="meta-row" key={m.id}>
+              <div className="meta-head"><div className="nm"><span className="rank-av" style={{ width: 24, height: 24, fontSize: 10 }}>{iniciais(m.nome)}</span>{m.nome}{m.bateu && <span className="bateu">✓ bateu</span>}</div><div className="vals">{m.meta > 0 ? `${fmtMoney(m.vendidoMes)} / ${fmtMoney(m.meta)}` : "sem meta"}</div></div>
+              {m.meta > 0 && <div className="pbar"><div className={"pfill" + (m.bateu ? " done" : "")} style={{ width: m.pct + "%" }} /></div>}
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function StatIco({ ico: Ico, cor, val, money, lab }) {
+  return (
+    <div className="stat stat-ico">
+      <div className="badge" style={{ background: cor + "1f", color: cor }}><Ico /></div>
+      <div className="info"><div className={"val" + (money ? " money" : "")}>{val}</div><div className="lab">{lab}</div></div>
+    </div>
+  );
+}
+
+/* ============================================================
+   PÁGINA ANÁLISE IA
+   ============================================================ */
+function PaginaIA({ user, showToast }) {
+  const isGer = user.role === "gerente";
+  const [aba, setAba] = useState("equipe");
+  const [users, setUsers] = useState([]);
+  const [cards, setCards] = useState([]);
+  const [selVend, setSelVend] = useState("");
+  const [eq, setEq] = useState({ loading: false, res: null, erro: "" });
+  const [ind, setInd] = useState({ loading: false, res: null, erro: "" });
+
+  async function carregar() {
+    try {
+      setCards(await api.listCards());
+      if (isGer) {
+        const us = (await api.listUsers()).filter((u) => u.role === "vendedor" && u.ativo);
+        setUsers(us);
+        if (us[0]) setSelVend(us[0].id);
+      }
+    } catch (_) {}
+  }
+  useEffect(() => { carregar(); /* eslint-disable-next-line */ }, []);
+
+  const ativos = cards.filter((c) => !c.arquivado);
+  const nFechou = ativos.filter((c) => c.etapa === "fechou").length;
+  const conv = ativos.length ? Math.round((nFechou / ativos.length) * 100) : 0;
+  const totalV = ativos.filter((c) => c.etapa === "fechou").reduce((s, c) => s + (Number(c.valorFinal) || 0), 0);
+
+  async function gerarEquipe() {
+    setEq({ loading: true, res: null, erro: "" });
+    try { setEq({ loading: false, res: await api.iaEquipe(), erro: "" }); }
+    catch (e) { setEq({ loading: false, res: null, erro: e.message }); }
+  }
+  async function gerarIndividual(id) {
+    setInd({ loading: true, res: null, erro: "" });
+    try { setInd({ loading: false, res: await api.iaVendedor(id), erro: "" }); }
+    catch (e) { setInd({ loading: false, res: null, erro: e.message }); }
+  }
+
+  // VENDEDOR: só a própria análise
+  if (!isGer) {
+    return (
+      <div className="ia-page">
+        <div className="ia-hero">
+          <span className="ia-hero-badge"><I.spark style={{ width: 14, height: 14 }} /> Inteligência Artificial</span>
+          <h2>Análise do meu desempenho</h2>
+          <p>A IA olha seus números de vendas e o seu jeito de atender no WhatsApp (tom, rapidez, educação) e te dá uma leitura honesta com sugestões pra vender mais.</p>
+          <div className="ia-hero-stats"><span><b>{nFechou}</b> vendas</span><span className="sep">•</span><span><b>{fmtMoney(totalV)}</b> vendido</span><span className="sep">•</span><span><b>{conv}%</b> conversão</span></div>
+          <button className="btn-hero" onClick={() => gerarIndividual(user.id)} disabled={ind.loading}><I.spark style={{ width: 17, height: 17 }} /> {ind.loading ? "Analisando..." : "Gerar minha análise"}</button>
+        </div>
+        {ind.loading && <div className="ia-resultado-card"><div className="ia-loading">A IA está lendo seus números e conversas... ✨</div></div>}
+        {ind.erro && <div className="ia-resultado-card"><IAErro msg={ind.erro} /></div>}
+        {ind.res && <div className="ia-resultado-card"><div className="rc-h"><span className="rank-av">{iniciais(user.nome)}</span>{user.nome}</div><IAResultado res={ind.res} /></div>}
+      </div>
+    );
+  }
+
+  // GERENTE
+  return (
+    <div className="ia-page">
+      <div className="ia-tabs">
+        <button className={aba === "equipe" ? "on" : ""} onClick={() => setAba("equipe")}><I.users /> Equipe inteira</button>
+        <button className={aba === "individual" ? "on" : ""} onClick={() => setAba("individual")}><I.team /> Vendedor específico</button>
+      </div>
+
+      {aba === "equipe" && (
+        <>
+          <div className="ia-hero">
+            <span className="ia-hero-badge"><I.spark style={{ width: 14, height: 14 }} /> Inteligência Artificial</span>
+            <h2>Relatório gerencial da equipe</h2>
+            <p>A IA analisa volume de vendas, conversão, metas e o padrão de atendimento de cada vendedor, gerando uma leitura geral e recomendações pra apresentar à diretoria.</p>
+            <div className="ia-hero-stats"><span><b>{nFechou}</b> vendas</span><span className="sep">•</span><span><b>{users.length}</b> vendedores</span><span className="sep">•</span><span><b>{conv}%</b> conversão</span></div>
+            <button className="btn-hero" onClick={gerarEquipe} disabled={eq.loading}><I.spark style={{ width: 17, height: 17 }} /> {eq.loading ? "Analisando..." : "Gerar análise da equipe"}</button>
+          </div>
+          {eq.loading && <div className="ia-resultado-card"><div className="ia-loading">A IA está analisando o time... ✨</div></div>}
+          {eq.erro && <div className="ia-resultado-card"><IAErro msg={eq.erro} /></div>}
+          {eq.res && <div className="ia-resultado-card"><div className="rc-h">📊 Visão geral da equipe</div><IAResultado res={eq.res} /></div>}
+        </>
+      )}
+
+      {aba === "individual" && (
+        <>
+          <div className="ia-pick">
+            <label>Escolha o vendedor</label>
+            <select className="select" style={{ maxWidth: 320 }} value={selVend} onChange={(e) => { setSelVend(e.target.value); setInd({ loading: false, res: null, erro: "" }); }}>
+              {users.length === 0 && <option value="">Nenhum vendedor cadastrado</option>}
+              {users.map((u) => <option key={u.id} value={u.id}>{u.nome}</option>)}
+            </select>
+          </div>
+          {selVend && (
+            <div className="ia-hero">
+              <span className="ia-hero-badge"><I.spark style={{ width: 14, height: 14 }} /> Inteligência Artificial</span>
+              <h2>Avaliação individual</h2>
+              <p>Análise dos resultados e da qualidade do atendimento de <b>{(users.find((u) => u.id === selVend) || {}).nome}</b>, com pontos fortes, pontos a melhorar e sugestões específicas.</p>
+              <button className="btn-hero" onClick={() => gerarIndividual(selVend)} disabled={ind.loading}><I.spark style={{ width: 17, height: 17 }} /> {ind.loading ? "Analisando..." : "Gerar análise do vendedor"}</button>
+            </div>
+          )}
+          {ind.loading && <div className="ia-resultado-card"><div className="ia-loading">Lendo números e conversas... ✨</div></div>}
+          {ind.erro && <div className="ia-resultado-card"><IAErro msg={ind.erro} /></div>}
+          {ind.res && <div className="ia-resultado-card"><div className="rc-h"><span className="rank-av">{iniciais(ind.res.vendedor || "")}</span>{ind.res.vendedor}</div><IAResultado res={ind.res} /></div>}
+        </>
+      )}
     </div>
   );
 }
