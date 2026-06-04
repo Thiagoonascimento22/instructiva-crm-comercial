@@ -1356,3 +1356,83 @@ textarea {
 }
 .big-meta .sub { font-size: 13px; color: var(--muted); margin-top: 4px; }
 .big-meta .pbar { margin-top: 16px; height: 12px; }
+
+/* ============================================================
+   ANÁLISE POR IA
+   ============================================================ */
+.ia-panel .panel-h { align-items: center; }
+.ia-hint { color: var(--muted); font-size: 13.5px; line-height: 1.6; }
+.ia-loading {
+  color: var(--indigo-600);
+  font-size: 13.5px;
+  font-weight: 600;
+  padding: 8px 0;
+  animation: pulse 1.4s ease-in-out infinite;
+}
+@keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.5; } }
+.ia-res { animation: fadein 0.3s ease; }
+@keyframes fadein { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+.ia-resumo {
+  font-size: 14.5px;
+  line-height: 1.65;
+  color: var(--text);
+  background: rgba(99, 102, 241, 0.06);
+  border-left: 3px solid var(--indigo);
+  padding: 12px 15px;
+  border-radius: 0 10px 10px 0;
+  margin-bottom: 14px;
+}
+.ia-bloco { margin-bottom: 13px; }
+.ia-bloco-h {
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-bottom: 6px;
+}
+.ia-bloco-h.pos { color: var(--fechou); }
+.ia-bloco-h.warn { color: var(--negociando); }
+.ia-bloco-h.sug { color: var(--violet); }
+.ia-bloco ul { margin: 0; padding-left: 20px; }
+.ia-bloco li { font-size: 13.5px; line-height: 1.55; color: var(--text); margin-bottom: 5px; }
+.ia-tag-time, .ia-sub-titulo {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--faint);
+  margin-bottom: 10px;
+}
+.ia-individual {
+  margin-top: 22px;
+  border-top: 1px solid var(--line);
+  padding-top: 18px;
+}
+.ia-sub-titulo { margin-bottom: 12px; }
+.ia-vend {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  margin-bottom: 10px;
+  overflow: hidden;
+}
+.ia-vend-h {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 11px 14px;
+  cursor: pointer;
+  background: #fbfbfe;
+  gap: 10px;
+}
+.ia-vend-h:hover { background: rgba(99, 102, 241, 0.05); }
+.ia-vend-nm { display: flex; align-items: center; gap: 9px; font-weight: 700; font-size: 14px; }
+.ia-vend-body { padding: 14px 16px; border-top: 1px solid var(--line); }
+.ia-erro {
+  background: #fff7f7;
+  border: 1px solid #fecaca;
+  color: #b91c1c;
+  border-radius: 10px;
+  padding: 12px 14px;
+  font-size: 13.5px;
+  line-height: 1.5;
+}

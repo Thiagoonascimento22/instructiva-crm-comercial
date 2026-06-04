@@ -60,4 +60,8 @@ export const api = {
   waStatus: (instance) => req("GET", "/api/wa/status/" + instance),
   waLogout: (instance) => req("POST", "/api/wa/logout/" + instance),
   waDeleteInstance: (instance) => req("DELETE", "/api/wa/instance/" + instance),
+
+  // IA
+  iaEquipe: () => req("POST", "/api/ia/equipe"),
+  iaVendedor: (id) => req("POST", "/api/ia/vendedor/" + id),
 };

@@ -1262,6 +1262,7 @@ function Dashboard({ user, showToast, irParaPipeline }) {
             ))}
           </div>
         </div>
+        <AnaliseIA user={user} showToast={showToast} />
       </div>
     );
   }
@@ -1330,6 +1331,141 @@ function Dashboard({ user, showToast, irParaPipeline }) {
           </div>
         </div>
       )}
+      <AnaliseIA user={user} vendedores={vendedores} showToast={showToast} />
+    </div>
+  );
+}
+
+/* ============================================================
+   ANÁLISE POR IA
+   ============================================================ */
+function IAResultado({ res }) {
+  if (!res) return null;
+  return (
+    <div className="ia-res">
+      {res.resumo && <p className="ia-resumo">{res.resumo}</p>}
+      {res.pontosFortes && res.pontosFortes.length > 0 && (
+        <div className="ia-bloco">
+          <div className="ia-bloco-h pos">✓ Pontos fortes</div>
+          <ul>{res.pontosFortes.map((x, i) => <li key={i}>{x}</li>)}</ul>
+        </div>
+      )}
+      {res.pontosMelhorar && res.pontosMelhorar.length > 0 && (
+        <div className="ia-bloco">
+          <div className="ia-bloco-h warn">▲ Pontos a melhorar</div>
+          <ul>{res.pontosMelhorar.map((x, i) => <li key={i}>{x}</li>)}</ul>
+        </div>
+      )}
+      {res.sugestoes && res.sugestoes.length > 0 && (
+        <div className="ia-bloco">
+          <div className="ia-bloco-h sug">💡 Sugestões</div>
+          <ul>{res.sugestoes.map((x, i) => <li key={i}>{x}</li>)}</ul>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function AnaliseIA({ user, vendedores, showToast }) {
+  const isGer = user.role === "gerente";
+  const [eqLoading, setEqLoading] = useState(false);
+  const [eq, setEq] = useState(null);
+  const [eqErro, setEqErro] = useState("");
+  const [vState, setVState] = useState({}); // { [id]: {loading, res, erro, aberto} }
+  const [meu, setMeu] = useState({ loading: false, res: null, erro: "" });
+
+  async function analisarEquipe() {
+    setEqLoading(true); setEqErro("");
+    try { setEq(await api.iaEquipe()); }
+    catch (e) { setEqErro(e.message); }
+    finally { setEqLoading(false); }
+  }
+  async function analisarVendedor(id) {
+    setVState((s) => ({ ...s, [id]: { ...(s[id] || {}), loading: true, erro: "", aberto: true } }));
+    try {
+      const r = await api.iaVendedor(id);
+      setVState((s) => ({ ...s, [id]: { loading: false, res: r, erro: "", aberto: true } }));
+    } catch (e) {
+      setVState((s) => ({ ...s, [id]: { loading: false, res: null, erro: e.message, aberto: true } }));
+    }
+  }
+  async function analisarMeu() {
+    setMeu({ loading: true, res: null, erro: "" });
+    try { setMeu({ loading: false, res: await api.iaVendedor(user.id), erro: "" }); }
+    catch (e) { setMeu({ loading: false, res: null, erro: e.message }); }
+  }
+  function toggle(id) {
+    const st = vState[id];
+    if (st && (st.res || st.erro)) setVState((s) => ({ ...s, [id]: { ...st, aberto: !st.aberto } }));
+    else analisarVendedor(id);
+  }
+
+  // VENDEDOR
+  if (!isGer) {
+    return (
+      <div className="panel ia-panel" style={{ marginTop: 18 }}>
+        <div className="panel-h"><h3>🤖 Minha análise</h3>
+          <button className="btn btn-sm btn-primary" onClick={analisarMeu} disabled={meu.loading}>{meu.loading ? "Analisando..." : "Analisar meu atendimento"}</button>
+        </div>
+        <div style={{ padding: "18px 22px" }}>
+          {meu.loading && <div className="ia-loading">A IA está lendo seus números e conversas... ✨</div>}
+          {meu.erro && <IAErro msg={meu.erro} />}
+          {!meu.loading && !meu.res && !meu.erro && <p className="ia-hint">Clique em "Analisar meu atendimento" pra receber uma avaliação dos seus resultados e do seu jeito de atender, com sugestões pra vender mais.</p>}
+          <IAResultado res={meu.res} />
+        </div>
+      </div>
+    );
+  }
+
+  // GERENTE
+  return (
+    <div className="panel ia-panel" style={{ marginTop: 18 }}>
+      <div className="panel-h"><h3>🤖 Análise inteligente</h3>
+        <button className="btn btn-sm btn-primary" onClick={analisarEquipe} disabled={eqLoading}>{eqLoading ? "Analisando..." : "Analisar equipe"}</button>
+      </div>
+      <div style={{ padding: "18px 22px" }}>
+        {eqLoading && <div className="ia-loading">A IA está analisando o desempenho do time... ✨</div>}
+        {eqErro && <IAErro msg={eqErro} />}
+        {!eqLoading && !eq && !eqErro && <p className="ia-hint">Clique em "Analisar equipe" pra uma visão geral do time com sugestões. Abaixo, você pode analisar cada vendedor individualmente.</p>}
+        {eq && (<><div className="ia-tag-time">Visão da equipe</div><IAResultado res={eq} /></>)}
+
+        {vendedores && vendedores.length > 0 && (
+          <div className="ia-individual">
+            <div className="ia-sub-titulo">Análise individual</div>
+            {vendedores.map((v) => {
+              const st = vState[v.id] || {};
+              return (
+                <div className="ia-vend" key={v.id}>
+                  <div className="ia-vend-h" onClick={() => toggle(v.id)}>
+                    <div className="ia-vend-nm"><span className="rank-av" style={{ width: 28, height: 28, fontSize: 11 }}>{iniciais(v.nome)}</span>{v.nome}</div>
+                    <button className="btn btn-sm" onClick={(e) => { e.stopPropagation(); analisarVendedor(v.id); }} disabled={st.loading}>
+                      {st.loading ? "Analisando..." : (st.res || st.erro) ? "Atualizar" : "Analisar"}
+                    </button>
+                  </div>
+                  {st.aberto && (
+                    <div className="ia-vend-body">
+                      {st.loading && <div className="ia-loading">Lendo números e conversas... ✨</div>}
+                      {st.erro && <IAErro msg={st.erro} />}
+                      <IAResultado res={st.res} />
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function IAErro({ msg }) {
+  const semChave = /GEMINI_API_KEY/i.test(msg || "");
+  return (
+    <div className="ia-erro">
+      <b>Não foi possível gerar a análise.</b>
+      <div style={{ marginTop: 6 }}>{msg}</div>
+      {semChave && <div style={{ marginTop: 8, fontSize: 12.5 }}>👉 No Railway, em Variables, adicione <b>GEMINI_API_KEY</b> com a sua chave do Gemini (a mesma que você usa nos outros projetos).</div>}
     </div>
   );
 }

@@ -604,6 +604,136 @@ app.delete("/api/wa/instance/:instance", auth, gerenteOnly, async (req, res) => 
 });
 
 /* ============================================================
+   ANÁLISE POR IA (Gemini) — sugestão da equipe e individual
+   ============================================================ */
+const GEMINI_MODEL = process.env.GEMINI_MODEL || "gemini-2.5-flash-lite";
+
+async function gemini(prompt) {
+  const key = process.env.GEMINI_API_KEY;
+  if (!key)
+    throw new Error("IA não configurada: adicione a variável GEMINI_API_KEY no Railway.");
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${key}`;
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      contents: [{ parts: [{ text: prompt }] }],
+      generationConfig: { temperature: 0.4, maxOutputTokens: 1200 },
+    }),
+  });
+  let data = null;
+  try { data = await res.json(); } catch (_) {}
+  if (!res.ok) {
+    const m = (data && data.error && data.error.message) || "Erro Gemini " + res.status;
+    if (res.status === 404)
+      throw new Error("Modelo da IA não encontrado. Ajuste a variável GEMINI_MODEL no Railway (ex: gemini-2.5-flash-lite ou gemini-3.5-flash). Detalhe: " + m);
+    throw new Error(m);
+  }
+  const txt = (((data.candidates || [])[0] || {}).content || {}).parts;
+  const out = Array.isArray(txt) ? txt.map((p) => p.text || "").join("") : "";
+  if (!out.trim()) throw new Error("A IA não retornou resposta. Tente de novo.");
+  return out;
+}
+function parseIA(txt) {
+  let t = (txt || "").trim().replace(/^```json/i, "").replace(/^```/, "").replace(/```$/, "").trim();
+  try {
+    const o = JSON.parse(t);
+    const arr = (a) => (Array.isArray(a) ? a.filter(Boolean).map(String) : []);
+    return {
+      resumo: o.resumo || o.avaliacao || "",
+      pontosFortes: arr(o.pontos_fortes || o.pontosFortes),
+      pontosMelhorar: arr(o.pontos_a_melhorar || o.pontosMelhorar),
+      sugestoes: arr(o.sugestoes),
+    };
+  } catch (_) {
+    return { resumo: txt, pontosFortes: [], pontosMelhorar: [], sugestoes: [] };
+  }
+}
+function statsVendedor(vendedorId) {
+  const cs = db.cards.filter((c) => !c.arquivado && c.responsavelId === vendedorId);
+  const fechados = cs.filter((c) => c.etapa === "fechou");
+  const total = fechados.reduce((s, c) => s + (Number(c.valorFinal) || 0), 0);
+  return {
+    leads: cs.length,
+    fechados: fechados.length,
+    perdidos: cs.filter((c) => c.etapa === "perdeu").length,
+    emAberto: cs.filter((c) => ["lead", "contato", "negociando"].includes(c.etapa)).length,
+    total,
+    ticket: fechados.length ? total / fechados.length : 0,
+    conversao: cs.length ? Math.round((fechados.length / cs.length) * 100) : 0,
+  };
+}
+function conversasVendedor(vendedorId, maxChats = 6, maxMsgs = 12) {
+  const insts = (db.waConfig.instancias || []).filter((i) => i.vendedorId === vendedorId).map((i) => i.instance);
+  return Object.values(db.waChats)
+    .filter((c) => insts.includes(c.instance))
+    .sort((a, b) => (b.atualizadoEm || 0) - (a.atualizadoEm || 0))
+    .slice(0, maxChats)
+    .map((c) => {
+      const msgs = c.mensagens.slice(-maxMsgs)
+        .map((m) => (m.role === "me" ? "Vendedor" : "Cliente") + ": " + String(m.content).slice(0, 200))
+        .join("\n");
+      return `Conversa com ${c.nome}:\n${msgs}`;
+    });
+}
+
+app.post("/api/ia/equipe", auth, gerenteOnly, async (req, res) => {
+  try {
+    const vendedores = db.users.filter((u) => u.role === "vendedor" && u.ativo);
+    const linhas = vendedores.map((v) => {
+      const s = statsVendedor(v.id);
+      return `- ${v.nome}: ${s.fechados} vendas, R$ ${s.total.toFixed(2)} vendido, ticket R$ ${s.ticket.toFixed(2)}, ${s.conversao}% conversão (${s.fechados}/${s.leads} leads), ${s.perdidos} perdidos, meta mensal R$ ${(Number(v.meta) || 0).toFixed(2)}`;
+    }).join("\n");
+    const amostras = [];
+    vendedores.slice(0, 6).forEach((v) => {
+      const cv = conversasVendedor(v.id, 1, 8);
+      if (cv[0]) amostras.push(`[${v.nome}] ${cv[0]}`);
+    });
+    const prompt = `Você é um gestor comercial sênior analisando a equipe de vendas da Escola Instructiva (cursos técnicos de eletrônica). Analise a EQUIPE como um todo com base nos dados.
+
+DESEMPENHO DOS VENDEDORES:
+${linhas || "Nenhum vendedor cadastrado."}
+
+AMOSTRA DE ATENDIMENTOS NO WHATSAPP:
+${amostras.join("\n\n") || "Sem conversas registradas ainda."}
+
+Responda SOMENTE em JSON puro, sem markdown, neste formato:
+{"resumo":"2 a 4 frases sobre o estado geral da equipe","pontos_fortes":["..."],"pontos_a_melhorar":["..."],"sugestoes":["3 a 5 sugestões práticas e específicas pra melhorar os resultados do time"]}
+Escreva em português brasileiro, tom direto e construtivo.`;
+    res.json(parseIA(await gemini(prompt)));
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.post("/api/ia/vendedor/:id", auth, async (req, res) => {
+  const v = db.users.find((u) => u.id === req.params.id);
+  if (!v) return res.status(404).json({ error: "Vendedor não encontrado" });
+  if (req.user.role !== "gerente" && req.user.id !== v.id)
+    return res.status(403).json({ error: "Sem acesso" });
+  try {
+    const s = statsVendedor(v.id);
+    const conv = conversasVendedor(v.id, 6, 12);
+    const prompt = `Você é um gestor comercial sênior avaliando UM vendedor da Escola Instructiva (cursos técnicos de eletrônica). Avalie tanto os RESULTADOS quanto a QUALIDADE DO ATENDIMENTO (tom, rapidez, educação, clareza, follow-up).
+
+VENDEDOR: ${v.nome}
+NÚMEROS: ${s.fechados} vendas fechadas, R$ ${s.total.toFixed(2)} vendido, ticket médio R$ ${s.ticket.toFixed(2)}, ${s.conversao}% de conversão (${s.fechados} de ${s.leads} leads), ${s.perdidos} perdidos, ${s.emAberto} em aberto. Meta mensal: R$ ${(Number(v.meta) || 0).toFixed(2)}.
+
+ATENDIMENTOS NO WHATSAPP:
+${conv.join("\n\n") || "Poucas conversas registradas pra avaliar o atendimento."}
+
+Responda SOMENTE em JSON puro, sem markdown, neste formato:
+{"resumo":"2 a 4 frases avaliando esse vendedor","pontos_fortes":["..."],"pontos_a_melhorar":["..."],"sugestoes":["3 a 5 sugestões práticas e específicas pra esse vendedor melhorar"]}
+Escreva em português brasileiro, tom direto e construtivo, sem ser ofensivo.`;
+    const out = parseIA(await gemini(prompt));
+    out.vendedor = v.nome;
+    res.json(out);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+/* ============================================================
    FRONTEND (build do Vite)
    ============================================================ */
 const dist = path.join(__dirname, "..", "dist");
