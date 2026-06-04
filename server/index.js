@@ -221,7 +221,7 @@ app.delete("/api/users/:id", auth, gerenteOnly, (req, res) => {
 /* ============================================================
    PIPELINE — CARDS
    ============================================================ */
-const ETAPAS = ["lead", "contato", "negociando", "fechou", "perdeu"];
+const ETAPAS = ["lead", "contato", "sem_resposta", "negociando", "fechou", "perdeu"];
 
 function podeVerCard(user, card) {
   if (user.role === "gerente") return true;
@@ -239,7 +239,7 @@ app.get("/api/cards", auth, (req, res) => {
 });
 
 app.post("/api/cards", auth, (req, res) => {
-  const { cliente, telefone, valorEstimado, responsavelId, etapa, obs } =
+  const { cliente, telefone, valorEstimado, responsavelId, etapa, obs, curso, origem } =
     req.body || {};
   if (!cliente || !cliente.trim())
     return res.status(400).json({ error: "Nome do cliente é obrigatório" });
@@ -254,6 +254,8 @@ app.post("/api/cards", auth, (req, res) => {
     valorFinal: 0,
     etapa: ETAPAS.includes(etapa) ? etapa : "lead",
     responsavelId: resp,
+    curso: (curso || "").trim(),
+    origem: (origem || "").trim(),
     obs: (obs || "").trim(),
     arquivado: false,
     fechadoEm: ETAPAS.includes(etapa) && etapa === "fechou" ? Date.now() : null,
@@ -279,6 +281,8 @@ app.put("/api/cards/:id", auth, (req, res) => {
     card.valorEstimado = Number(b.valorEstimado) || 0;
   if (b.valorFinal !== undefined) card.valorFinal = Number(b.valorFinal) || 0;
   if (b.obs !== undefined) card.obs = String(b.obs).trim();
+  if (b.curso !== undefined) card.curso = String(b.curso).trim();
+  if (b.origem !== undefined) card.origem = String(b.origem).trim();
   if (b.etapa !== undefined && ETAPAS.includes(b.etapa)) card.etapa = b.etapa;
   // registra/limpa a data de fechamento (pro dashboard filtrar por período)
   if (card.etapa === "fechou") {
@@ -305,6 +309,50 @@ app.delete("/api/cards/:id", auth, (req, res) => {
   card.atualizadoEm = Date.now();
   saveSoon();
   res.json({ ok: true });
+});
+
+// importação de leads em massa (planilha de números)
+app.post("/api/cards/import", auth, (req, res) => {
+  const { leads, origem, curso, responsavelId } = req.body || {};
+  if (!Array.isArray(leads) || leads.length === 0)
+    return res.status(400).json({ error: "Nenhum lead pra importar" });
+  let resp = req.user.id;
+  if (req.user.role === "gerente" && responsavelId) resp = responsavelId;
+  const agora = Date.now();
+  let criados = 0;
+  leads.slice(0, 5000).forEach((l) => {
+    const tel = String((l && l.telefone) || "").trim();
+    const nome = String((l && l.cliente) || "").trim() || tel || "Sem nome";
+    if (!tel && !(l && l.cliente)) return;
+    db.cards.push({
+      id: proximoId("c"),
+      cliente: nome,
+      telefone: tel,
+      valorEstimado: 0,
+      valorFinal: 0,
+      etapa: "lead",
+      responsavelId: resp,
+      curso: String((l && l.curso) || curso || "").trim(),
+      origem: String(origem || "").trim(),
+      obs: "",
+      arquivado: false,
+      fechadoEm: null,
+      criadoEm: agora,
+      atualizadoEm: agora,
+    });
+    criados++;
+  });
+  saveSoon();
+  res.json({ criados });
+});
+
+// lista enxuta de vendedores ativos (pra transferência — acessível a todos)
+app.get("/api/vendedores", auth, (req, res) => {
+  res.json(
+    db.users
+      .filter((u) => u.role === "vendedor" && u.ativo)
+      .map((u) => ({ id: u.id, nome: u.nome }))
+  );
 });
 
 /* ============================================================

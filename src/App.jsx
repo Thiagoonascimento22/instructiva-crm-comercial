@@ -40,6 +40,7 @@ const I = {
 const ETAPAS = [
   { id: "lead", nome: "Lead Novo", cor: "var(--lead)" },
   { id: "contato", nome: "Em Contato", cor: "var(--contato)" },
+  { id: "sem_resposta", nome: "Sem Resposta", cor: "#94a3b8" },
   { id: "negociando", nome: "Negociando", cor: "var(--negociando)" },
   { id: "fechou", nome: "Fechou", cor: "var(--fechou)" },
   { id: "perdeu", nome: "Perdeu", cor: "var(--perdeu)" },
@@ -62,6 +63,7 @@ export default function App() {
   const [booting, setBooting] = useState(true);
   const [user, setUser] = useState(null);
   const [view, setView] = useState("painel");
+  const [waTarget, setWaTarget] = useState(null);
   const [toast, setToast] = useState(null);
   const toastT = useRef(null);
 
@@ -133,8 +135,8 @@ export default function App() {
         </div>
         <div className="content">
           {view === "painel" && <Painel user={user} showToast={showToast} irParaPipeline={() => setView("pipeline")} />}
-          {view === "pipeline" && <Pipeline user={user} showToast={showToast} />}
-          {view === "whatsapp" && <WhatsApp user={user} showToast={showToast} />}
+          {view === "pipeline" && <Pipeline user={user} showToast={showToast} irParaWhatsApp={(numero, cliente) => { setWaTarget({ numero, cliente }); setView("whatsapp"); }} />}
+          {view === "whatsapp" && <WhatsApp user={user} showToast={showToast} target={waTarget} onTargetUsed={() => setWaTarget(null)} />}
           {view === "ia" && <PaginaIA user={user} showToast={showToast} />}
           {view === "equipe" && isGer && <Equipe showToast={showToast} meId={user.id} />}
           {view === "config" && <Config user={user} setUser={setUser} showToast={showToast} />}
@@ -239,7 +241,7 @@ function Onboarding({ user, onDone }) {
 }
 
 /* ============================ PIPELINE (KANBAN) ============================ */
-function Pipeline({ user, showToast }) {
+function Pipeline({ user, showToast, irParaWhatsApp }) {
   const isGer = user.role === "gerente";
   const [cards, setCards] = useState([]);
   const [users, setUsers] = useState([]);
@@ -249,6 +251,7 @@ function Pipeline({ user, showToast }) {
   const [dragId, setDragId] = useState(null);
   const [sel, setSel] = useState(null); // card aberto no drawer
   const [novo, setNovo] = useState(false); // modal novo lead
+  const [importar, setImportar] = useState(false); // modal importar lista
   const [fechar, setFechar] = useState(null); // { card } -> modal valor final
 
   const usersMap = useMemo(() => {
@@ -261,12 +264,9 @@ function Pipeline({ user, showToast }) {
   async function carregar() {
     setLoading(true);
     try {
-      const [cs] = await Promise.all([api.listCards(isGer ? filtro : null)]);
+      const cs = await api.listCards(isGer ? filtro : null);
       setCards(cs);
-      if (isGer && users.length === 0) {
-        const us = await api.listUsers();
-        setUsers(us);
-      }
+      if (users.length === 0) setUsers(await api.listVendedores());
     } catch (e) {
       showToast("✗ " + e.message);
     } finally { setLoading(false); }
@@ -315,14 +315,19 @@ function Pipeline({ user, showToast }) {
         {isGer ? (
           <select className="select" style={{ width: 230 }} value={filtro} onChange={(e) => setFiltro(e.target.value)}>
             <option value="todos">Todos os vendedores</option>
-            {users.filter((u) => u.ativo).map((u) => (
+            {users.map((u) => (
               <option key={u.id} value={u.id}>{u.nome}</option>
             ))}
           </select>
         ) : <div />}
-        <button className="btn btn-primary" onClick={() => setNovo(true)}>
-          <I.plus style={{ width: 16, height: 16 }} /> Novo lead
-        </button>
+        <div style={{ display: "flex", gap: 8 }}>
+          <button className="btn" onClick={() => setImportar(true)}>
+            <I.out style={{ width: 16, height: 16, transform: "rotate(180deg)" }} /> Importar lista
+          </button>
+          <button className="btn btn-primary" onClick={() => setNovo(true)}>
+            <I.plus style={{ width: 16, height: 16 }} /> Novo lead
+          </button>
+        </div>
       </div>
 
       {/* STATS */}
@@ -374,17 +379,19 @@ function Pipeline({ user, showToast }) {
                     onClick={() => setSel(c)}
                   >
                     <div className="nm">{c.cliente}</div>
+                    {c.curso && <div className="kcurso">{c.curso}</div>}
                     <div className={"val" + (c.etapa === "fechou" ? " win" : "")}>
                       {c.etapa === "fechou" ? fmtMoney(c.valorFinal) : fmtMoney(c.valorEstimado)}
                     </div>
+                    {c.origem && <span className="origem-tag">{c.origem}</span>}
                     <div className="meta">
                       {isGer && (
                         <span className="seller"><span className="mini-av">{iniciais(nomeResp(c.responsavelId))}</span>{nomeResp(c.responsavelId).split(" ")[0]}</span>
                       )}
                       {c.telefone && (
-                        <a className="wa-btn" title="Abrir no WhatsApp" href={`https://wa.me/${soDigitos(c.telefone)}`} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()}>
+                        <button className="wa-btn" title="Abrir conversa no sistema" onClick={(e) => { e.stopPropagation(); irParaWhatsApp && irParaWhatsApp(c.telefone, c.cliente); }}>
                           <I.wa style={{ width: 16, height: 16 }} />
-                        </a>
+                        </button>
                       )}
                     </div>
                   </div>
@@ -417,6 +424,16 @@ function Pipeline({ user, showToast }) {
         />
       )}
 
+      {importar && (
+        <ImportarLeads
+          isGer={isGer}
+          users={users}
+          meId={user.id}
+          onClose={() => setImportar(false)}
+          onImported={(n) => { setImportar(false); carregar(); showToast(`✓ ${n} lead${n === 1 ? "" : "s"} importado${n === 1 ? "" : "s"}`); }}
+        />
+      )}
+
       {fechar && (
         <FecharModal
           card={fechar.card}
@@ -433,6 +450,7 @@ function CardDrawer({ card, isGer, users, nomeResp, onClose, onSaved, onDeleted 
   const [f, setF] = useState({
     cliente: card.cliente, telefone: card.telefone, valorEstimado: card.valorEstimado,
     valorFinal: card.valorFinal, etapa: card.etapa, obs: card.obs, responsavelId: card.responsavelId,
+    curso: card.curso || "", origem: card.origem || "",
   });
   const [saving, setSaving] = useState(false);
   const set = (k, v) => setF((s) => ({ ...s, [k]: v }));
@@ -468,6 +486,16 @@ function CardDrawer({ card, isGer, users, nomeResp, onClose, onSaved, onDeleted 
           </div>
           <div className="row2">
             <div className="field">
+              <label>Curso de interesse</label>
+              <input className="input" value={f.curso} onChange={(e) => set("curso", e.target.value)} placeholder="Ex: Eletrônica" />
+            </div>
+            <div className="field">
+              <label>Origem do lead</label>
+              <input className="input" value={f.origem} onChange={(e) => set("origem", e.target.value)} placeholder="Ex: Lista Instagram" />
+            </div>
+          </div>
+          <div className="row2">
+            <div className="field">
               <label>Valor estimado (R$)</label>
               <input className="input mono" type="number" step="0.01" value={f.valorEstimado} onChange={(e) => set("valorEstimado", e.target.value)} />
             </div>
@@ -484,14 +512,12 @@ function CardDrawer({ card, isGer, users, nomeResp, onClose, onSaved, onDeleted 
               <input className="input mono" type="number" step="0.01" value={f.valorFinal} onChange={(e) => set("valorFinal", e.target.value)} />
             </div>
           )}
-          {isGer && (
-            <div className="field">
-              <label>Vendedor responsável</label>
-              <select className="select" value={f.responsavelId} onChange={(e) => set("responsavelId", e.target.value)}>
-                {users.filter((u) => u.ativo).map((u) => <option key={u.id} value={u.id}>{u.nome}</option>)}
-              </select>
-            </div>
-          )}
+          <div className="field">
+            <label>{isGer ? "Vendedor responsável" : "Transferir para"}</label>
+            <select className="select" value={f.responsavelId} onChange={(e) => set("responsavelId", e.target.value)}>
+              {users.map((u) => <option key={u.id} value={u.id}>{u.nome}</option>)}
+            </select>
+          </div>
           <div className="field">
             <label>Observações</label>
             <textarea className="textarea" value={f.obs} onChange={(e) => set("obs", e.target.value)} placeholder="Anotações sobre a negociação..." />
@@ -508,8 +534,13 @@ function CardDrawer({ card, isGer, users, nomeResp, onClose, onSaved, onDeleted 
 }
 
 /* ---------- NOVO LEAD ---------- */
-function NovoLead({ isGer, users, meId, onClose, onCreated }) {
-  const [f, setF] = useState({ cliente: "", telefone: "", valorEstimado: "", responsavelId: meId });
+function NovoLead({ isGer, users, meId, prefill, onClose, onCreated }) {
+  const [f, setF] = useState({
+    cliente: (prefill && prefill.cliente) || "",
+    telefone: (prefill && prefill.telefone) || "",
+    valorEstimado: "", curso: "", origem: (prefill && prefill.origem) || "",
+    responsavelId: meId,
+  });
   const [saving, setSaving] = useState(false);
   const set = (k, v) => setF((s) => ({ ...s, [k]: v }));
 
@@ -526,8 +557,8 @@ function NovoLead({ isGer, users, meId, onClose, onCreated }) {
     <div className="modal" onClick={(e) => e.target === e.currentTarget && onClose()}>
       <div className="modal-box">
         <div className="mh">
-          <h3>Novo lead</h3>
-          <p>Adicione um cliente ao topo do funil.</p>
+          <h3>{prefill ? "Cadastrar lead" : "Novo lead"}</h3>
+          <p>{prefill ? "Confirme os dados e escolha o curso de interesse." : "Adicione um cliente ao topo do funil."}</p>
         </div>
         <div className="mb">
           <div className="field">
@@ -538,6 +569,16 @@ function NovoLead({ isGer, users, meId, onClose, onCreated }) {
             <label>WhatsApp / Telefone</label>
             <input className="input" value={f.telefone} onChange={(e) => set("telefone", e.target.value)} placeholder="Ex: 55 44 99999-9999" />
           </div>
+          <div className="row2">
+            <div className="field">
+              <label>Curso de interesse</label>
+              <input className="input" value={f.curso} onChange={(e) => set("curso", e.target.value)} placeholder="Ex: Eletrônica" />
+            </div>
+            <div className="field">
+              <label>Origem</label>
+              <input className="input" value={f.origem} onChange={(e) => set("origem", e.target.value)} placeholder="Ex: WhatsApp" />
+            </div>
+          </div>
           <div className="field">
             <label>Valor estimado (R$)</label>
             <input className="input mono" type="number" step="0.01" value={f.valorEstimado} onChange={(e) => set("valorEstimado", e.target.value)} placeholder="0,00" />
@@ -546,7 +587,7 @@ function NovoLead({ isGer, users, meId, onClose, onCreated }) {
             <div className="field">
               <label>Vendedor responsável</label>
               <select className="select" value={f.responsavelId} onChange={(e) => set("responsavelId", e.target.value)}>
-                {users.filter((u) => u.ativo).map((u) => <option key={u.id} value={u.id}>{u.nome}</option>)}
+                {users.map((u) => <option key={u.id} value={u.id}>{u.nome}</option>)}
               </select>
             </div>
           )}
@@ -766,10 +807,11 @@ function Config({ user, setUser, showToast }) {
 /* ============================================================
    WHATSAPP
    ============================================================ */
-function WhatsApp({ user, showToast }) {
+function WhatsApp({ user, showToast, target, onTargetUsed }) {
   const isGer = user.role === "gerente";
   const [chats, setChats] = useState([]);
   const [usersMap, setUsersMap] = useState({});
+  const [usersArr, setUsersArr] = useState([]);
   const [instancias, setInstancias] = useState([]);
   const [minha, setMinha] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -781,10 +823,13 @@ function WhatsApp({ user, showToast }) {
   const [showCfg, setShowCfg] = useState(false);
   const [qrInst, setQrInst] = useState(null);
   const [nova, setNova] = useState(false);
+  const [novaNum, setNovaNum] = useState("");
+  const [novoLead, setNovoLead] = useState(null);
   const [enviando, setEnviando] = useState(false);
   const msgsEnd = useRef(null);
   const selRef = useRef(null);
   const filtroRef = useRef("todas");
+  const alvoRef = useRef(null);
   useEffect(() => { selRef.current = sel; }, [sel]);
   useEffect(() => { filtroRef.current = filtro; }, [filtro]);
 
@@ -801,6 +846,7 @@ function WhatsApp({ user, showToast }) {
       const [cfg, us] = await Promise.all([api.waConfig(), api.listUsers()]);
       setInstancias(cfg.instancias || []);
       const m = {}; us.forEach((u) => (m[u.id] = u)); setUsersMap(m);
+      setUsersArr(us.filter((u) => u.role === "vendedor" && u.ativo).map((u) => ({ id: u.id, nome: u.nome })));
     } catch (_) {}
   }
   async function initVendedor() {
@@ -843,14 +889,24 @@ function WhatsApp({ user, showToast }) {
     } catch (e) { showToast("✗ " + e.message); setTexto(t); }
     finally { setEnviando(false); }
   }
-  async function virarCard() {
+  function virarCard() {
     if (!chat) return;
-    const conv = chats.find((c) => c.id === chat.id);
-    const dados = { cliente: chat.nome, telefone: chat.numero };
-    if (isGer && conv && conv.vendedorId) dados.responsavelId = conv.vendedorId;
-    try { await api.createCard(dados); showToast("✓ Lead criado no Pipeline"); }
-    catch (e) { showToast("✗ " + e.message); }
+    setNovoLead({ cliente: chat.nome, telefone: chat.numero });
   }
+
+  // alvo vindo do botão de WhatsApp no card do pipeline
+  useEffect(() => {
+    if (!target || !target.numero) return;
+    if (alvoRef.current === target.numero) return;
+    if (loading) return;
+    alvoRef.current = target.numero;
+    const num = soDigitos(target.numero);
+    const achado = chats.find((c) => soDigitos(c.numero) === num);
+    if (achado) { abrir(achado.id); }
+    else { setNovaNum(num); setNova(true); }
+    onTargetUsed && onTargetUsed();
+    // eslint-disable-next-line
+  }, [target, loading, chats]);
 
   const filtrados = chats.filter((c) => {
     const q = busca.trim().toLowerCase();
@@ -947,7 +1003,8 @@ function WhatsApp({ user, showToast }) {
       </div>
 
       {qrInst && <QrModal instance={qrInst} onClose={() => setQrInst(null)} onConnected={() => { setQrInst(null); initVendedor(); showToast("🎉 WhatsApp conectado!"); }} />}
-      {nova && <NovaConversa isGer={isGer} instancias={instancias} minha={minha} onClose={() => setNova(false)} onCriada={(id) => { setNova(false); carregarChats(true).then(() => abrir(id)); }} />}
+      {nova && <NovaConversa isGer={isGer} instancias={instancias} minha={minha} numeroInicial={novaNum} onClose={() => { setNova(false); setNovaNum(""); }} onCriada={(id) => { setNova(false); setNovaNum(""); carregarChats(true).then(() => abrir(id)); }} />}
+      {novoLead && <NovoLead isGer={isGer} users={usersArr} meId={user.id} prefill={novoLead} onClose={() => setNovoLead(null)} onCreated={() => { setNovoLead(null); showToast("✓ Lead criado no Pipeline"); }} />}
     </div>
   );
 }
@@ -1110,9 +1167,9 @@ function QrModal({ instance, onClose, onConnected }) {
 }
 
 /* ---------- NOVA CONVERSA ---------- */
-function NovaConversa({ isGer, instancias, minha, onClose, onCriada }) {
+function NovaConversa({ isGer, instancias, minha, numeroInicial, onClose, onCriada }) {
   const [instance, setInstance] = useState(isGer ? (instancias[0]?.instance || "") : (minha?.instance || ""));
-  const [numero, setNumero] = useState("");
+  const [numero, setNumero] = useState(numeroInicial || "");
   const [texto, setTexto] = useState("");
   const [saving, setSaving] = useState(false);
 
@@ -1568,6 +1625,7 @@ function GraficoLinha({ dados }) {
 const ETAPA_INFO = [
   { k: "lead", label: "Lead", cor: "#64748b" },
   { k: "contato", label: "Em contato", cor: "#6366f1" },
+  { k: "sem_resposta", label: "Sem resposta", cor: "#94a3b8" },
   { k: "negociando", label: "Negociando", cor: "#f59e0b" },
   { k: "fechou", label: "Fechou", cor: "#10b981" },
   { k: "perdeu", label: "Perdeu", cor: "#ef4444" },
@@ -1866,6 +1924,89 @@ function PaginaIA({ user, showToast }) {
           {ind.res && <div className="ia-resultado-card"><div className="rc-h"><span className="rank-av">{iniciais(ind.res.vendedor || "")}</span>{ind.res.vendedor}</div><IAResultado res={ind.res} /></div>}
         </>
       )}
+    </div>
+  );
+}
+
+/* ============================================================
+   IMPORTAR LISTA DE LEADS
+   ============================================================ */
+function parseLeads(texto) {
+  const linhas = (texto || "").split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+  const out = [];
+  linhas.forEach((l, idx) => {
+    const temNumero = /\d{8,}/.test(l.replace(/\D/g, ""));
+    if (idx === 0 && !temNumero && /(nome|telefone|phone|whats|numero|n[uú]mero|celular|contato)/i.test(l)) return;
+    const partes = l.split(/[,;\t]+/).map((p) => p.trim()).filter(Boolean);
+    let tel = "", nome = "";
+    partes.forEach((p) => {
+      const dig = p.replace(/\D/g, "");
+      if (dig.length >= 8 && !tel) tel = dig;
+      else if (!nome && dig.length < 8) nome = p;
+    });
+    if (tel || nome) out.push({ cliente: nome, telefone: tel });
+  });
+  return out;
+}
+
+function ImportarLeads({ isGer, users, meId, onClose, onImported }) {
+  const [origem, setOrigem] = useState("");
+  const [curso, setCurso] = useState("");
+  const [responsavelId, setResponsavelId] = useState(meId);
+  const [texto, setTexto] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  function lerArquivo(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => setTexto((t) => (t ? t + "\n" : "") + String(reader.result));
+    reader.readAsText(file);
+    e.target.value = "";
+  }
+
+  const leads = parseLeads(texto);
+
+  async function importar() {
+    if (leads.length === 0 || !origem.trim()) return;
+    setSaving(true);
+    try {
+      const r = await api.importCards({ leads, origem, curso, responsavelId });
+      onImported(r.criados);
+    } catch (e) { alert(e.message); setSaving(false); }
+  }
+
+  return (
+    <div className="modal" onClick={(e) => e.target === e.currentTarget && onClose()}>
+      <div className="modal-box" style={{ maxWidth: 540 }}>
+        <div className="mh"><h3>Importar lista de leads</h3><p>Cole os números (um por linha) ou suba um CSV. Cada linha vira um lead novo no funil.</p></div>
+        <div className="mb">
+          <div className="row2">
+            <div className="field"><label>Origem / Tag *</label><input className="input" value={origem} onChange={(e) => setOrigem(e.target.value)} placeholder="Ex: Lista Instagram Junho" autoFocus /></div>
+            <div className="field"><label>Curso (opcional)</label><input className="input" value={curso} onChange={(e) => setCurso(e.target.value)} placeholder="Ex: Eletrônica" /></div>
+          </div>
+          {isGer && (
+            <div className="field"><label>Atribuir a</label>
+              <select className="select" value={responsavelId} onChange={(e) => setResponsavelId(e.target.value)}>
+                {users.map((u) => <option key={u.id} value={u.id}>{u.nome}</option>)}
+              </select>
+            </div>
+          )}
+          <div className="field">
+            <label>Números (um por linha — pode ser "Nome, telefone")</label>
+            <textarea className="textarea" style={{ minHeight: 130, fontFamily: "'JetBrains Mono', monospace", fontSize: 13 }} value={texto} onChange={(e) => setTexto(e.target.value)} placeholder={"João, 5544999998888\n5544988887777\nMaria; 44 90000-0000"} />
+          </div>
+          <label className="import-file">
+            <I.out style={{ width: 15, height: 15, transform: "rotate(180deg)" }} /> Subir arquivo CSV
+            <input type="file" accept=".csv,text/csv,text/plain" onChange={lerArquivo} hidden />
+          </label>
+          {leads.length > 0 && <div className="import-count">✓ {leads.length} número{leads.length === 1 ? "" : "s"} detectado{leads.length === 1 ? "" : "s"}</div>}
+        </div>
+        <div className="mf">
+          <button className="btn full" onClick={onClose}>Cancelar</button>
+          <button className="btn btn-primary full" onClick={importar} disabled={saving || leads.length === 0 || !origem.trim()}>{saving ? "Importando..." : `Importar ${leads.length || ""} leads`}</button>
+        </div>
+      </div>
     </div>
   );
 }
