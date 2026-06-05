@@ -89,11 +89,10 @@ export default function App() {
 
   const isGer = user.role === "gerente";
   const titulos = {
-    painel: { t: "Painel Comercial", s: "Visão geral das vendas e metas" },
-    pipeline: { t: "Pipeline de Vendas", s: "Arraste os cards conforme a negociação avança" },
-    whatsapp: { t: "WhatsApp", s: "Atenda seus leads sem sair do sistema" },
-    ia: { t: "Análise Inteligente", s: "A IA lê o desempenho e sugere melhorias" },
-    equipe: { t: "Equipe & Acessos", s: "Gerencie os vendedores e suas metas" },
+    painel: { t: "Monitoria de Atendimento", s: "Acompanhe a produtividade e a agilidade do time" },
+    whatsapp: { t: "WhatsApp", s: "Acompanhe as conversas dos atendentes" },
+    ia: { t: "Análise Inteligente", s: "A IA avalia a qualidade do atendimento" },
+    equipe: { t: "Equipe & Acessos", s: "Gerencie os atendentes e seus acessos" },
     config: { t: "Configurações", s: "Seus dados de acesso" },
   };
   const hora = new Date().getHours();
@@ -104,11 +103,10 @@ export default function App() {
       <aside className="sidebar">
         <div className="brand">
           <img src={LOGO_LIGHT} alt="Instructiva" />
-          <div className="tag">CRM Comercial</div>
+          <div className="tag">Monitoria de Atendimento</div>
         </div>
         <nav className="nav">
-          <NavBtn ic={I.dash} label="Painel" active={view === "painel"} onClick={() => setView("painel")} />
-          <NavBtn ic={I.pipe} label="Pipeline" active={view === "pipeline"} onClick={() => setView("pipeline")} />
+          <NavBtn ic={I.dash} label="Monitoria" active={view === "painel"} onClick={() => setView("painel")} />
           <NavBtn ic={I.wa} label="WhatsApp" active={view === "whatsapp"} onClick={() => setView("whatsapp")} />
           <NavBtn ic={I.spark} label="Análise IA" active={view === "ia"} onClick={() => setView("ia")} />
           {isGer && <NavBtn ic={I.team} label="Equipe & Acessos" active={view === "equipe"} onClick={() => setView("equipe")} />}
@@ -129,13 +127,12 @@ export default function App() {
       <main className="main">
         <div className="topbar">
           <div>
-            <div className="greet">{view === "pipeline" ? `${saud}, ${user.nome.split(" ")[0]} 👋` : titulos[view].t}</div>
+            <div className="greet">{view === "painel" ? `${saud}, ${user.nome.split(" ")[0]} 👋` : titulos[view].t}</div>
             <div className="sub">{titulos[view].s}</div>
           </div>
         </div>
         <div className="content">
-          {view === "painel" && <Painel user={user} showToast={showToast} irParaPipeline={() => setView("pipeline")} />}
-          {view === "pipeline" && <Pipeline user={user} showToast={showToast} irParaWhatsApp={(numero, cliente) => { setWaTarget({ numero, cliente }); setView("whatsapp"); }} />}
+          {view === "painel" && <Monitoria user={user} showToast={showToast} />}
           {view === "whatsapp" && <WhatsApp user={user} showToast={showToast} target={waTarget} onTargetUsed={() => setWaTarget(null)} />}
           {view === "ia" && <PaginaIA user={user} showToast={showToast} />}
           {view === "equipe" && isGer && <Equipe showToast={showToast} meId={user.id} />}
@@ -180,7 +177,7 @@ function Login({ onDone }) {
     <div className="login-wrap">
       <form className="login-card" onSubmit={entrar}>
         <img className="logo" src={LOGO_FULL} alt="Instructiva" />
-        <div className="ttl">CRM Comercial</div>
+        <div className="ttl">Monitoria de Atendimento</div>
         <h2>Entrar</h2>
         <p className="hi">Acesse com seu usuário e senha.</p>
         {err && <div className="err">{err}</div>}
@@ -723,7 +720,7 @@ function Equipe({ showToast, meId }) {
             <div className="avatar">{iniciais(u.nome)}</div>
             <div className="info">
               <div className="nm">{u.nome} {!u.ativo && <span className="tag-off">• desativado</span>}</div>
-              <div className="sub">@{u.login}{u.role === "vendedor" && u.meta > 0 ? ` · meta ${fmtMoney(u.meta)}` : ""}</div>
+              <div className="sub">@{u.login}{u.role === "gerente" ? " · gerente" : ""}</div>
             </div>
             <span className={"tag-role " + (u.role === "gerente" ? "ger" : "ven")}>{u.role === "gerente" ? "Gerente" : "Vendedor"}</span>
             <button className="btn btn-sm" onClick={() => setEditing(u)}>Editar</button>
@@ -794,18 +791,12 @@ function UserForm({ user, onClose, onSaved }) {
             <label>{novo ? "Senha" : "Nova senha (deixe vazio pra manter)"}</label>
             <input className="input" type="password" value={f.senha} onChange={(e) => set("senha", e.target.value)} placeholder="mínimo 3 caracteres" />
           </div>
-          <div className="row2">
-            <div className="field">
-              <label>Perfil</label>
-              <select className="select" value={f.role} onChange={(e) => set("role", e.target.value)}>
-                <option value="vendedor">Vendedor</option>
-                <option value="gerente">Gerente</option>
-              </select>
-            </div>
-            <div className="field">
-              <label>Meta mensal (R$)</label>
-              <input className="input mono" type="number" step="0.01" value={f.meta} onChange={(e) => set("meta", e.target.value)} />
-            </div>
+          <div className="field">
+            <label>Perfil</label>
+            <select className="select" value={f.role} onChange={(e) => set("role", e.target.value)}>
+              <option value="vendedor">Vendedor</option>
+              <option value="gerente">Gerente</option>
+            </select>
           </div>
           {!novo && (
             <label style={{ display: "flex", alignItems: "center", gap: 9, fontSize: 14, cursor: "pointer" }}>
@@ -1038,7 +1029,6 @@ function WhatsApp({ user, showToast, target, onTargetUsed }) {
                 <div className="nm">{chat.nome}</div>
                 <div className="num">{chat.numero}</div>
               </div>
-              <button className="btn btn-sm" onClick={virarCard}><I.pipe style={{ width: 14, height: 14 }} /> Virar card</button>
             </div>
             <div className="wa-msgs">
               {chat.mensagens.map((m, i) => (
@@ -1059,7 +1049,6 @@ function WhatsApp({ user, showToast, target, onTargetUsed }) {
 
       {qrInst && <QrModal instance={qrInst} onClose={() => setQrInst(null)} onConnected={() => { setQrInst(null); initVendedor(); showToast("🎉 WhatsApp conectado!"); }} />}
       {nova && <NovaConversa isGer={isGer} instancias={instancias} minha={minha} numeroInicial={novaNum} onClose={() => { setNova(false); setNovaNum(""); }} onCriada={(id) => { setNova(false); setNovaNum(""); carregarChats(true).then(() => abrir(id)); }} />}
-      {novoLead && <NovoLead isGer={isGer} users={usersArr} meId={user.id} prefill={novoLead} onClose={() => setNovoLead(null)} onCreated={() => { setNovoLead(null); showToast("✓ Lead criado no Pipeline"); }} />}
     </div>
   );
 }
@@ -1883,16 +1872,16 @@ function PaginaIA({ user, showToast }) {
   const isGer = user.role === "gerente";
   const [aba, setAba] = useState("equipe");
   const [users, setUsers] = useState([]);
-  const [cards, setCards] = useState([]);
+  const [mon, setMon] = useState(null);
   const [selVend, setSelVend] = useState("");
   const [eq, setEq] = useState({ loading: false, res: null, erro: "" });
   const [ind, setInd] = useState({ loading: false, res: null, erro: "" });
 
   async function carregar() {
     try {
-      setCards(await api.listCards());
+      setMon(await api.monitoria(0, Date.now()));
       if (isGer) {
-        const us = (await api.listUsers()).filter((u) => u.role === "vendedor" && u.ativo);
+        const us = await api.listVendedores();
         setUsers(us);
         if (us[0]) setSelVend(us[0].id);
       }
@@ -1900,10 +1889,7 @@ function PaginaIA({ user, showToast }) {
   }
   useEffect(() => { carregar(); /* eslint-disable-next-line */ }, []);
 
-  const ativos = cards.filter((c) => !c.arquivado);
-  const nFechou = ativos.filter((c) => c.etapa === "fechou").length;
-  const conv = ativos.length ? Math.round((nFechou / ativos.length) * 100) : 0;
-  const totalV = ativos.filter((c) => c.etapa === "fechou").reduce((s, c) => s + (Number(c.valorFinal) || 0), 0);
+  const m = (mon && mon.time) || {};
 
   async function gerarEquipe() {
     setEq({ loading: true, res: null, erro: "" });
@@ -1922,9 +1908,9 @@ function PaginaIA({ user, showToast }) {
       <div className="ia-page">
         <div className="ia-hero">
           <span className="ia-hero-badge"><I.spark style={{ width: 14, height: 14 }} /> Inteligência Artificial</span>
-          <h2>Análise do meu desempenho</h2>
-          <p>A IA olha seus números de vendas e o seu jeito de atender no WhatsApp (tom, rapidez, educação) e te dá uma leitura honesta com sugestões pra vender mais.</p>
-          <div className="ia-hero-stats"><span><b>{nFechou}</b> vendas</span><span className="sep">•</span><span><b>{fmtMoney(totalV)}</b> vendido</span><span className="sep">•</span><span><b>{conv}%</b> conversão</span></div>
+          <h2>Análise do meu atendimento</h2>
+          <p>A IA olha o seu atendimento no WhatsApp — rapidez nas respostas, clientes sem retorno, tom e educação — e te dá uma leitura honesta com sugestões pra melhorar.</p>
+          <div className="ia-hero-stats"><span><b>{m.conversas || 0}</b> atendimentos</span><span className="sep">•</span><span><b>{m.semResposta || 0}</b> sem resposta</span><span className="sep">•</span><span><b>{m.taxaResposta || 0}%</b> taxa de resposta</span></div>
           <button className="btn-hero" onClick={() => gerarIndividual(user.id)} disabled={ind.loading}><I.spark style={{ width: 17, height: 17 }} /> {ind.loading ? "Analisando..." : "Gerar minha análise"}</button>
         </div>
         {ind.loading && <div className="ia-resultado-card"><div className="ia-loading">A IA está lendo seus números e conversas... ✨</div></div>}
@@ -1946,9 +1932,9 @@ function PaginaIA({ user, showToast }) {
         <>
           <div className="ia-hero">
             <span className="ia-hero-badge"><I.spark style={{ width: 14, height: 14 }} /> Inteligência Artificial</span>
-            <h2>Relatório gerencial da equipe</h2>
-            <p>A IA analisa volume de vendas, conversão, metas e o padrão de atendimento de cada vendedor, gerando uma leitura geral e recomendações pra apresentar à diretoria.</p>
-            <div className="ia-hero-stats"><span><b>{nFechou}</b> vendas</span><span className="sep">•</span><span><b>{users.length}</b> vendedores</span><span className="sep">•</span><span><b>{conv}%</b> conversão</span></div>
+            <h2>Relatório de atendimento da equipe</h2>
+            <p>A IA analisa a velocidade das respostas, os clientes deixados sem retorno, o volume e o tom de cada atendente, gerando uma leitura geral e recomendações pra apresentar à diretoria.</p>
+            <div className="ia-hero-stats"><span><b>{m.conversas || 0}</b> atendimentos</span><span className="sep">•</span><span><b>{users.length}</b> vendedores</span><span className="sep">•</span><span><b>{m.taxaResposta || 0}%</b> taxa de resposta</span></div>
             <button className="btn-hero" onClick={gerarEquipe} disabled={eq.loading}><I.spark style={{ width: 17, height: 17 }} /> {eq.loading ? "Analisando..." : "Gerar análise da equipe"}</button>
           </div>
           {eq.loading && <div className="ia-resultado-card"><div className="ia-loading">A IA está analisando o time... ✨</div></div>}
@@ -2062,6 +2048,131 @@ function ImportarLeads({ isGer, users, meId, onClose, onImported }) {
           <button className="btn btn-primary full" onClick={importar} disabled={saving || leads.length === 0 || !origem.trim()}>{saving ? "Importando..." : `Importar ${leads.length || ""} leads`}</button>
         </div>
       </div>
+    </div>
+  );
+}
+
+/* ============================================================
+   MONITORIA DE ATENDIMENTO
+   ============================================================ */
+function fmtTempo(seg) {
+  if (!seg || seg <= 0) return "—";
+  if (seg < 60) return seg + "s";
+  if (seg < 3600) return Math.floor(seg / 60) + "min" + (seg % 60 ? " " + (seg % 60) + "s" : "");
+  return Math.floor(seg / 3600) + "h " + Math.floor((seg % 3600) / 60) + "min";
+}
+
+function Monitoria({ user, showToast }) {
+  const isGer = user.role === "gerente";
+  const [dados, setDados] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [preset, setPreset] = useState("mes");
+  const [de, setDe] = useState("");
+  const [ate, setAte] = useState("");
+
+  async function carregar(silencioso) {
+    if (!silencioso) setLoading(true);
+    const [ini, fim] = intervaloPeriodo(preset, de, ate);
+    try { setDados(await api.monitoria(ini, fim)); }
+    catch (e) { if (!silencioso) showToast("✗ " + e.message); }
+    finally { if (!silencioso) setLoading(false); }
+  }
+  useEffect(() => { carregar(false); /* eslint-disable-next-line */ }, [preset, de, ate]);
+  useEffect(() => {
+    if (preset === "custom") return;
+    const [i, f] = intervaloPeriodo(preset, "", "");
+    const iso = (t) => new Date(t).toISOString().slice(0, 10);
+    setDe(iso(preset === "tudo" ? Date.now() : i)); setAte(iso(f));
+    // eslint-disable-next-line
+  }, [preset]);
+
+  if (loading) return <div className="spin" />;
+  const time = (dados && dados.time) || {};
+  const vendedores = (dados && dados.vendedores) || [];
+  const ranked = [...vendedores].sort((a, b) => b.mensagensEnviadas - a.mensagensEnviadas);
+
+  const barrasMsg = ranked.slice(0, 8).map((v) => ({ label: (v.nome || "").split(" ")[0], valor: v.mensagensEnviadas }));
+  const barrasTmr = [...vendedores].filter((v) => v.tmrSeg > 0).sort((a, b) => a.tmrSeg - b.tmrSeg).slice(0, 8)
+    .map((v) => ({ label: (v.nome || "").split(" ")[0], valor: Math.round(v.tmrSeg / 60) || 1, rotulo: fmtTempo(v.tmrSeg), cor: "#f59e0b" }));
+
+  const filtroBar = (
+    <div className="filtro-bar">
+      <div className="seg">
+        {[["hoje", "Hoje"], ["semana", "Semana"], ["mes", "Mês"], ["tudo", "Tudo"]].map(([k, lbl]) => (
+          <button key={k} className={preset === k ? "on" : ""} onClick={() => setPreset(k)}>{lbl}</button>
+        ))}
+      </div>
+      <div className="filtro-datas">
+        <input type="date" value={de} onChange={(e) => { setDe(e.target.value); setPreset("custom"); }} />
+        até
+        <input type="date" value={ate} onChange={(e) => { setAte(e.target.value); setPreset("custom"); }} />
+      </div>
+    </div>
+  );
+
+  const vazio = time.conversas === 0;
+
+  return (
+    <div>
+      {filtroBar}
+      <div className="stats">
+        <StatIco ico={I.refresh} cor="#6366f1" val={fmtTempo(time.tmrSeg)} lab="Tempo médio de resposta (TMA)" />
+        <StatIco ico={I.wa} cor="#ef4444" val={time.semResposta || 0} lab="Conversas sem resposta" />
+        <StatIco ico={I.chat} cor="#10b981" val={time.conversas || 0} lab="Atendimentos no período" />
+        <StatIco ico={I.send} cor="#8b5cf6" val={time.mensagensEnviadas || 0} lab="Mensagens enviadas" />
+      </div>
+
+      <div className="comp-card" style={{ display: "flex", gap: 30, flexWrap: "wrap" }}>
+        <div className="mon-mini"><div className="lab">1ª resposta (média)</div><div className="num">{fmtTempo(time.primeiraSeg)}</div></div>
+        <div className="mon-mini"><div className="lab">Duração média do atendimento</div><div className="num">{fmtTempo(time.duracaoSeg)}</div></div>
+        <div className="mon-mini"><div className="lab">Taxa de resposta</div><div className="num">{time.taxaResposta || 0}%</div></div>
+        <div className="mon-mini"><div className="lab">Conversas atendidas</div><div className="num">{time.atendidas || 0} de {time.conversas || 0}</div></div>
+      </div>
+
+      {vazio ? (
+        <div className="panel"><div className="dash-empty">
+          Ainda não há conversas registradas neste período.<br />
+          Os números vão aparecer conforme os vendedores forem conectados em <b>WhatsApp → Configurar conexão</b> e começarem a atender. 📲
+        </div></div>
+      ) : (
+        <>
+          {isGer && (
+            <div className="charts-2">
+              <div className="panel"><div className="panel-h"><h3>Produtividade<span className="panel-sub">mensagens enviadas por vendedor</span></h3></div><div className="chart-body"><GraficoBarras dados={barrasMsg} /></div></div>
+              <div className="panel"><div className="panel-h"><h3>Tempo de resposta<span className="panel-sub">média por vendedor (min) — menor é melhor</span></h3></div><div className="chart-body"><GraficoBarras dados={barrasTmr} /></div></div>
+            </div>
+          )}
+
+          <div className="panel">
+            <div className="panel-h"><h3>Desempenho por vendedor</h3></div>
+            <div className="mon-tabela-wrap">
+              <table className="mon-tabela">
+                <thead>
+                  <tr>
+                    <th>Vendedor</th><th>Atend.</th><th>Atendidas</th><th>S/ resposta</th>
+                    <th>Msgs</th><th>TMA resposta</th><th>1ª resp.</th><th>Taxa</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {ranked.map((v) => (
+                    <tr key={v.id}>
+                      <td className="vend"><span className="rank-av" style={{ width: 26, height: 26, fontSize: 11 }}>{iniciais(v.nome)}</span>{v.nome}</td>
+                      <td>{v.conversas}</td>
+                      <td>{v.atendidas}</td>
+                      <td>{v.semResposta > 0 ? <span className="alerta">{v.semResposta}</span> : "0"}</td>
+                      <td>{v.mensagensEnviadas}</td>
+                      <td>{fmtTempo(v.tmrSeg)}</td>
+                      <td>{fmtTempo(v.primeiraSeg)}</td>
+                      <td>{v.taxaResposta}%</td>
+                    </tr>
+                  ))}
+                  {ranked.length === 0 && <tr><td colSpan={8} style={{ textAlign: "center", color: "var(--faint)", padding: 24 }}>Nenhum vendedor com atendimentos.</td></tr>}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </>
+      )}
     </div>
   );
 }

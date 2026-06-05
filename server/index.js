@@ -733,24 +733,71 @@ function parseIA(txt) {
     return { resumo: txt, pontosFortes: [], pontosMelhorar: [], sugestoes: [] };
   }
 }
-function statsVendedor(vendedorId) {
-  const cs = db.cards.filter((c) => !c.arquivado && c.responsavelId === vendedorId);
-  const fechados = cs.filter((c) => c.etapa === "fechou");
-  const total = fechados.reduce((s, c) => s + (Number(c.valorFinal) || 0), 0);
+function chatsDoVendedor(vendedorId) {
+  const insts = (db.waConfig.instancias || []).filter((i) => i.vendedorId === vendedorId).map((i) => i.instance);
+  return Object.values(db.waChats).filter((c) => insts.includes(c.instance));
+}
+function mediaSeg(arr) {
+  return arr.length ? Math.round(arr.reduce((a, b) => a + b, 0) / arr.length / 1000) : 0;
+}
+function metricasChat(chat, desde, ate) {
+  const msgs = (chat.mensagens || [])
+    .filter((m) => m.ts >= desde && m.ts <= ate)
+    .sort((a, b) => a.ts - b.ts);
+  if (msgs.length === 0) return null;
+  let resp = [], primeira = null, pend = null, temMe = false, temThem = false;
+  msgs.forEach((m) => {
+    if (m.role === "them") { temThem = true; if (pend === null) pend = m.ts; }
+    else { temMe = true; if (pend !== null) { const d = m.ts - pend; resp.push(d); if (primeira === null) primeira = d; pend = null; } }
+  });
   return {
-    leads: cs.length,
-    fechados: fechados.length,
-    perdidos: cs.filter((c) => c.etapa === "perdeu").length,
-    emAberto: cs.filter((c) => ["lead", "contato", "negociando"].includes(c.etapa)).length,
-    total,
-    ticket: fechados.length ? total / fechados.length : 0,
-    conversao: cs.length ? Math.round((fechados.length / cs.length) * 100) : 0,
+    enviadas: msgs.filter((m) => m.role === "me").length,
+    resp, primeira,
+    dur: msgs.length >= 2 ? msgs[msgs.length - 1].ts - msgs[0].ts : 0,
+    atendida: temMe,
+    semResposta: temThem && msgs[msgs.length - 1].role === "them",
   };
 }
+function agregaVendedor(vendedorId, desde, ate) {
+  let conversas = 0, atendidas = 0, semResp = 0, enviadas = 0;
+  let resp = [], primeiras = [], duracoes = [];
+  chatsDoVendedor(vendedorId).forEach((c) => {
+    const m = metricasChat(c, desde, ate);
+    if (!m) return;
+    conversas++;
+    if (m.atendida) atendidas++;
+    if (m.semResposta) semResp++;
+    enviadas += m.enviadas;
+    resp = resp.concat(m.resp);
+    if (m.primeira != null) primeiras.push(m.primeira);
+    if (m.dur > 0) duracoes.push(m.dur);
+  });
+  return {
+    conversas, atendidas, semResposta: semResp, mensagensEnviadas: enviadas,
+    tmrSeg: mediaSeg(resp), primeiraSeg: mediaSeg(primeiras), duracaoSeg: mediaSeg(duracoes),
+    taxaResposta: conversas ? Math.round((atendidas / conversas) * 100) : 0,
+  };
+}
+
+app.get("/api/monitoria", auth, (req, res) => {
+  const desde = req.query.desde ? Number(req.query.desde) : 0;
+  const ate = req.query.ate ? Number(req.query.ate) : Date.now();
+  let vendedores = db.users.filter((u) => u.role === "vendedor" && u.ativo);
+  if (req.user.role !== "gerente") vendedores = vendedores.filter((v) => v.id === req.user.id);
+  const out = vendedores.map((v) => ({ id: v.id, nome: v.nome, ...agregaVendedor(v.id, desde, ate) }));
+  const soma = (k) => out.reduce((s, x) => s + x[k], 0);
+  const mediaDe = (k) => { const c = out.filter((x) => x[k] > 0); return c.length ? Math.round(c.reduce((s, x) => s + x[k], 0) / c.length) : 0; };
+  const time = {
+    conversas: soma("conversas"), atendidas: soma("atendidas"),
+    semResposta: soma("semResposta"), mensagensEnviadas: soma("mensagensEnviadas"),
+    tmrSeg: mediaDe("tmrSeg"), primeiraSeg: mediaDe("primeiraSeg"), duracaoSeg: mediaDe("duracaoSeg"),
+  };
+  time.taxaResposta = time.conversas ? Math.round((time.atendidas / time.conversas) * 100) : 0;
+  res.json({ vendedores: out, time, desde, ate });
+});
+
 function conversasVendedor(vendedorId, maxChats = 6, maxMsgs = 12) {
-  const insts = (db.waConfig.instancias || []).filter((i) => i.vendedorId === vendedorId).map((i) => i.instance);
-  return Object.values(db.waChats)
-    .filter((c) => insts.includes(c.instance))
+  return chatsDoVendedor(vendedorId)
     .sort((a, b) => (b.atualizadoEm || 0) - (a.atualizadoEm || 0))
     .slice(0, maxChats)
     .map((c) => {
@@ -760,29 +807,35 @@ function conversasVendedor(vendedorId, maxChats = 6, maxMsgs = 12) {
       return `Conversa com ${c.nome}:\n${msgs}`;
     });
 }
+function fmtSegBR(seg) {
+  if (!seg) return "—";
+  if (seg < 60) return seg + "s";
+  if (seg < 3600) return Math.floor(seg / 60) + "min " + (seg % 60) + "s";
+  return Math.floor(seg / 3600) + "h " + Math.floor((seg % 3600) / 60) + "min";
+}
 
 app.post("/api/ia/equipe", auth, gerenteOnly, async (req, res) => {
   try {
     const vendedores = db.users.filter((u) => u.role === "vendedor" && u.ativo);
     const linhas = vendedores.map((v) => {
-      const s = statsVendedor(v.id);
-      return `- ${v.nome}: ${s.fechados} vendas, R$ ${s.total.toFixed(2)} vendido, ticket R$ ${s.ticket.toFixed(2)}, ${s.conversao}% conversão (${s.fechados}/${s.leads} leads), ${s.perdidos} perdidos, meta mensal R$ ${(Number(v.meta) || 0).toFixed(2)}`;
+      const s = agregaVendedor(v.id, 0, Date.now());
+      return `- ${v.nome}: ${s.conversas} conversas, ${s.atendidas} atendidas, ${s.semResposta} sem resposta, ${s.mensagensEnviadas} mensagens enviadas, tempo médio de resposta ${fmtSegBR(s.tmrSeg)}, 1ª resposta ${fmtSegBR(s.primeiraSeg)}, taxa de resposta ${s.taxaResposta}%`;
     }).join("\n");
     const amostras = [];
     vendedores.slice(0, 6).forEach((v) => {
       const cv = conversasVendedor(v.id, 1, 8);
       if (cv[0]) amostras.push(`[${v.nome}] ${cv[0]}`);
     });
-    const prompt = `Você é um gestor comercial sênior analisando a equipe de vendas da Escola Instructiva (cursos técnicos de eletrônica). Analise a EQUIPE como um todo com base nos dados.
+    const prompt = `Você é um supervisor de atendimento sênior monitorando a equipe da Escola Instructiva (cursos técnicos de eletrônica) que atende clientes pelo WhatsApp. Avalie a QUALIDADE E A PRODUTIVIDADE DO ATENDIMENTO da equipe (rapidez nas respostas, clientes deixados sem resposta, volume, tom e educação).
 
-DESEMPENHO DOS VENDEDORES:
+DESEMPENHO DE ATENDIMENTO DOS VENDEDORES:
 ${linhas || "Nenhum vendedor cadastrado."}
 
-AMOSTRA DE ATENDIMENTOS NO WHATSAPP:
+AMOSTRA DE CONVERSAS NO WHATSAPP:
 ${amostras.join("\n\n") || "Sem conversas registradas ainda."}
 
 Responda SOMENTE em JSON puro, sem markdown, neste formato:
-{"resumo":"2 a 4 frases sobre o estado geral da equipe","pontos_fortes":["..."],"pontos_a_melhorar":["..."],"sugestoes":["3 a 5 sugestões práticas e específicas pra melhorar os resultados do time"]}
+{"resumo":"2 a 4 frases sobre o atendimento da equipe","pontos_fortes":["..."],"pontos_a_melhorar":["..."],"sugestoes":["3 a 5 sugestões práticas pra melhorar a velocidade, a cobertura e a qualidade do atendimento"]}
 Escreva em português brasileiro, tom direto e construtivo.`;
     res.json(parseIA(await chamarIA(prompt)));
   } catch (e) {
@@ -796,18 +849,18 @@ app.post("/api/ia/vendedor/:id", auth, async (req, res) => {
   if (req.user.role !== "gerente" && req.user.id !== v.id)
     return res.status(403).json({ error: "Sem acesso" });
   try {
-    const s = statsVendedor(v.id);
+    const s = agregaVendedor(v.id, 0, Date.now());
     const conv = conversasVendedor(v.id, 6, 12);
-    const prompt = `Você é um gestor comercial sênior avaliando UM vendedor da Escola Instructiva (cursos técnicos de eletrônica). Avalie tanto os RESULTADOS quanto a QUALIDADE DO ATENDIMENTO (tom, rapidez, educação, clareza, follow-up).
+    const prompt = `Você é um supervisor de atendimento sênior avaliando UM atendente da Escola Instructiva (cursos técnicos de eletrônica) que atende clientes pelo WhatsApp. Avalie a QUALIDADE e a PRODUTIVIDADE do atendimento (rapidez de resposta, clientes sem resposta, volume, tom, educação, clareza, follow-up).
 
-VENDEDOR: ${v.nome}
-NÚMEROS: ${s.fechados} vendas fechadas, R$ ${s.total.toFixed(2)} vendido, ticket médio R$ ${s.ticket.toFixed(2)}, ${s.conversao}% de conversão (${s.fechados} de ${s.leads} leads), ${s.perdidos} perdidos, ${s.emAberto} em aberto. Meta mensal: R$ ${(Number(v.meta) || 0).toFixed(2)}.
+ATENDENTE: ${v.nome}
+NÚMEROS: ${s.conversas} conversas, ${s.atendidas} atendidas, ${s.semResposta} sem resposta, ${s.mensagensEnviadas} mensagens enviadas, tempo médio de resposta ${fmtSegBR(s.tmrSeg)}, tempo da 1ª resposta ${fmtSegBR(s.primeiraSeg)}, taxa de resposta ${s.taxaResposta}%.
 
-ATENDIMENTOS NO WHATSAPP:
+CONVERSAS NO WHATSAPP:
 ${conv.join("\n\n") || "Poucas conversas registradas pra avaliar o atendimento."}
 
 Responda SOMENTE em JSON puro, sem markdown, neste formato:
-{"resumo":"2 a 4 frases avaliando esse vendedor","pontos_fortes":["..."],"pontos_a_melhorar":["..."],"sugestoes":["3 a 5 sugestões práticas e específicas pra esse vendedor melhorar"]}
+{"resumo":"2 a 4 frases avaliando o atendimento dessa pessoa","pontos_fortes":["..."],"pontos_a_melhorar":["..."],"sugestoes":["3 a 5 sugestões práticas e específicas pra essa pessoa melhorar o atendimento"]}
 Escreva em português brasileiro, tom direto e construtivo, sem ser ofensivo.`;
     const out = parseIA(await chamarIA(prompt));
     out.vendedor = v.nome;

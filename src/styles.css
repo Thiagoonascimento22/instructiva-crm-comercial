@@ -1653,3 +1653,28 @@ textarea {
   font-size: 12px; font-weight: 800; color: #fff;
 }
 .kcheck.on { background: var(--indigo); border-color: var(--indigo); }
+
+/* ============================================================
+   MONITORIA
+   ============================================================ */
+.mon-mini { }
+.mon-mini .lab { font-size: 12.5px; color: var(--muted); }
+.mon-mini .num { font-size: 19px; font-weight: 800; font-family: "Sora", sans-serif; color: var(--text); margin-top: 2px; letter-spacing: -0.01em; }
+.mon-tabela-wrap { overflow-x: auto; }
+.mon-tabela { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+.mon-tabela thead th {
+  text-align: left;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--faint);
+  font-weight: 700;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--line);
+  white-space: nowrap;
+}
+.mon-tabela tbody td { padding: 12px 14px; border-bottom: 1px solid var(--line); color: var(--text); white-space: nowrap; font-family: "JetBrains Mono", monospace; }
+.mon-tabela tbody tr:last-child td { border-bottom: none; }
+.mon-tabela tbody tr:hover { background: rgba(99, 102, 241, 0.04); }
+.mon-tabela td.vend { display: flex; align-items: center; gap: 10px; font-family: "Plus Jakarta Sans", sans-serif; font-weight: 700; }
+.mon-tabela .alerta { color: #dc2626; font-weight: 800; background: rgba(239, 68, 68, 0.12); padding: 2px 9px; border-radius: 8px; }

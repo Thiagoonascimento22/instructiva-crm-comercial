@@ -67,4 +67,7 @@ export const api = {
   // IA
   iaEquipe: () => req("POST", "/api/ia/equipe"),
   iaVendedor: (id) => req("POST", "/api/ia/vendedor/" + id),
+
+  // Monitoria
+  monitoria: (desde, ate) => req("GET", `/api/monitoria?desde=${desde || 0}&ate=${ate || Date.now()}`),
 };
