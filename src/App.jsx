@@ -41,7 +41,7 @@ const I = {
 const ETAPAS = [
   { id: "lead", nome: "Lead Novo", cor: "var(--lead)" },
   { id: "contato", nome: "Em Contato", cor: "var(--contato)" },
-  { id: "sem_resposta", nome: "Sem Resposta", cor: "#94a3b8" },
+  { id: "sem_resposta", nome: "Sem Resposta", cor: "#aab2c7" },
   { id: "negociando", nome: "Negociando", cor: "var(--negociando)" },
   { id: "fechou", nome: "Fechou", cor: "var(--fechou)" },
   { id: "perdeu", nome: "Perdeu", cor: "var(--perdeu)" },
@@ -177,7 +177,7 @@ function Login({ onDone }) {
   return (
     <div className="login-wrap">
       <form className="login-card" onSubmit={entrar}>
-        <img className="logo" src={LOGO_FULL} alt="Instructiva" />
+        <img className="logo" src={LOGO_LIGHT} alt="Instructiva" />
         <div className="ttl">Monitoria de Atendimento</div>
         <h2>Entrar</h2>
         <p className="hi">Acesse com seu usuário e senha.</p>
@@ -218,7 +218,7 @@ function Onboarding({ user, onDone }) {
   return (
     <div className="login-wrap">
       <form className="login-card" onSubmit={salvar}>
-        <img className="logo" src={LOGO_FULL} alt="Instructiva" />
+        <img className="logo" src={LOGO_LIGHT} alt="Instructiva" />
         <div className="ttl">Primeiro acesso</div>
         <h2>Seja bem-vindo(a)! 🎉</h2>
         <p className="hi">Confirme seu nome e defina uma senha sua.</p>
@@ -1608,7 +1608,7 @@ function GraficoBarras({ dados }) {
   if (!tem) return <div className="chart-empty">Sem vendas no período pra mostrar.</div>;
   return (
     <svg viewBox={`0 0 ${W} ${H}`} className="chart-svg" preserveAspectRatio="xMidYMid meet">
-      <defs><linearGradient id="gradBar" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#8b5cf6" /><stop offset="100%" stopColor="#6366f1" /></linearGradient></defs>
+      <defs><linearGradient id="gradBar" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#c08bff" /><stop offset="100%" stopColor="#8b7bff" /></linearGradient></defs>
       {Array.from({ length: ticks + 1 }).map((_, i) => {
         const y = padT + (chartH / ticks) * i;
         return <g key={i}><line x1={axisW} y1={y} x2={W - 6} y2={y} stroke="var(--line)" strokeDasharray="3 4" /><text x={axisW - 6} y={y + 3} className="chart-axis" textAnchor="end">{Math.round(max - (max / ticks) * i)}</text></g>;
@@ -1663,14 +1663,14 @@ function GraficoLinha({ dados }) {
   const passo = Math.max(1, Math.ceil(n / 7));
   return (
     <svg viewBox={`0 0 ${W} ${H}`} className="chart-svg" preserveAspectRatio="xMidYMid meet">
-      <defs><linearGradient id="gradArea" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#6366f1" stopOpacity="0.32" /><stop offset="100%" stopColor="#6366f1" stopOpacity="0" /></linearGradient></defs>
+      <defs><linearGradient id="gradArea" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#8b7bff" stopOpacity="0.32" /><stop offset="100%" stopColor="#8b7bff" stopOpacity="0" /></linearGradient></defs>
       {Array.from({ length: ticks + 1 }).map((_, i) => {
         const yy = padT + (innerH / ticks) * i;
         return <g key={i}><line x1={padL} y1={yy} x2={W - padR} y2={yy} stroke="var(--line)" strokeDasharray="3 4" /><text x={padL - 6} y={yy + 3} className="chart-axis" textAnchor="end">{Math.round(max - (max / ticks) * i)}</text></g>;
       })}
       {n > 1 && <polygon points={`${padL},${padT + innerH} ${pts} ${x(n - 1)},${padT + innerH}`} fill="url(#gradArea)" />}
-      {n > 1 && <polyline points={pts} fill="none" stroke="#6366f1" strokeWidth="2.5" strokeLinejoin="round" strokeLinecap="round" />}
-      {dados.map((d, i) => <circle key={i} cx={x(i)} cy={y(d.valor)} r="3.4" fill="#fff" stroke="#6366f1" strokeWidth="2" />)}
+      {n > 1 && <polyline points={pts} fill="none" stroke="#8b7bff" strokeWidth="2.5" strokeLinejoin="round" strokeLinecap="round" />}
+      {dados.map((d, i) => <circle key={i} cx={x(i)} cy={y(d.valor)} r="3.4" fill="#fff" stroke="#8b7bff" strokeWidth="2" />)}
       {dados.map((d, i) => (i % passo === 0 || i === n - 1) ? <text key={i} x={x(i)} y={H - 8} className="chart-label" textAnchor="middle">{d.label}</text> : null)}
     </svg>
   );
@@ -1724,8 +1724,8 @@ function GraficoEvolucao({ dados, fmtY }) {
   return (
     <svg viewBox={`0 0 ${W} ${H}`} className="evo-svg" preserveAspectRatio="xMidYMid meet">
       <defs>
-        <linearGradient id="evoFill" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#6366f1" stopOpacity="0.26" /><stop offset="100%" stopColor="#6366f1" stopOpacity="0" /></linearGradient>
-        <linearGradient id="evoLine" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stopColor="#6366f1" /><stop offset="100%" stopColor="#8b5cf6" /></linearGradient>
+        <linearGradient id="evoFill" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#8b7bff" stopOpacity="0.26" /><stop offset="100%" stopColor="#8b7bff" stopOpacity="0" /></linearGradient>
+        <linearGradient id="evoLine" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stopColor="#8b7bff" /><stop offset="100%" stopColor="#c08bff" /></linearGradient>
       </defs>
       {Array.from({ length: ticks + 1 }).map((_, i) => {
         const yy = padT + (innerH / ticks) * i;
@@ -1737,15 +1737,15 @@ function GraficoEvolucao({ dados, fmtY }) {
       {pts.map(([px, py], i) => (
         <g key={i}>
           <title>{dados[i].label}: {fmt(dados[i].valor)}</title>
-          {i === last && <circle cx={px} cy={py} r="11" fill="#6366f1" opacity="0.16" />}
-          <circle cx={px} cy={py} r={i === last ? 6 : 4} fill="#fff" stroke="#6366f1" strokeWidth={i === last ? 3 : 2.4} />
+          {i === last && <circle cx={px} cy={py} r="11" fill="#8b7bff" opacity="0.16" />}
+          <circle cx={px} cy={py} r={i === last ? 6 : 4} fill="#fff" stroke="#8b7bff" strokeWidth={i === last ? 3 : 2.4} />
         </g>
       ))}
       {n >= 1 && (() => {
         const [px, py] = pts[last]; const txt = fmt(dados[last].valor);
         const w = Math.max(34, txt.length * 8.5 + 16);
         const bx = Math.min(W - padR - w, Math.max(padL, px - w / 2)); const by = Math.max(4, py - 34);
-        return <g><rect x={bx} y={by} width={w} height={22} rx={7} fill="#6366f1" /><text x={bx + w / 2} y={by + 15} className="evo-badge" textAnchor="middle">{txt}</text></g>;
+        return <g><rect x={bx} y={by} width={w} height={22} rx={7} fill="#8b7bff" /><text x={bx + w / 2} y={by + 15} className="evo-badge" textAnchor="middle">{txt}</text></g>;
       })()}
       {dados.map((d, i) => (i % passo === 0 || i === last) ? <text key={i} x={X(i)} y={H - 12} className="evo-xlabel" textAnchor={i === last ? "end" : i === 0 ? "start" : "middle"}>{d.label}</text> : null)}
     </svg>
@@ -1757,11 +1757,11 @@ function GraficoEvolucao({ dados, fmtY }) {
    ============================================================ */
 const ETAPA_INFO = [
   { k: "lead", label: "Lead", cor: "#64748b" },
-  { k: "contato", label: "Em contato", cor: "#6366f1" },
-  { k: "sem_resposta", label: "Sem resposta", cor: "#94a3b8" },
-  { k: "negociando", label: "Negociando", cor: "#f59e0b" },
-  { k: "fechou", label: "Fechou", cor: "#10b981" },
-  { k: "perdeu", label: "Perdeu", cor: "#ef4444" },
+  { k: "contato", label: "Em contato", cor: "#8b7bff" },
+  { k: "sem_resposta", label: "Sem resposta", cor: "#aab2c7" },
+  { k: "negociando", label: "Negociando", cor: "#ffb547" },
+  { k: "fechou", label: "Fechou", cor: "#34e3b0" },
+  { k: "perdeu", label: "Perdeu", cor: "#ff5d73" },
 ];
 
 function Painel({ user, showToast, irParaPipeline }) {
@@ -1849,10 +1849,10 @@ function Painel({ user, showToast, irParaPipeline }) {
       <div>
         {filtroBar}
         <div className="stats">
-          <StatIco ico={I.cash} cor="#10b981" val={fmtMoney(totalVendido)} money lab="Vendido no período" />
-          <StatIco ico={I.check} cor="#6366f1" val={nVendas} lab="Vendas fechadas" />
-          <StatIco ico={I.cash} cor="#f59e0b" val={fmtMoney(ticket)} money lab="Ticket médio" />
-          <StatIco ico={I.target} cor="#8b5cf6" val={conversao + "%"} lab="Conversão" />
+          <StatIco ico={I.cash} cor="#34e3b0" val={fmtMoney(totalVendido)} money lab="Vendido no período" />
+          <StatIco ico={I.check} cor="#8b7bff" val={nVendas} lab="Vendas fechadas" />
+          <StatIco ico={I.cash} cor="#ffb547" val={fmtMoney(ticket)} money lab="Ticket médio" />
+          <StatIco ico={I.target} cor="#c08bff" val={conversao + "%"} lab="Conversão" />
         </div>
         <div className="comp-card">
           <div className="comp-info"><div className="lab">Minha meta do mês</div><div className="num">{fmtMoney(vendidoMes)} / {meta > 0 ? fmtMoney(meta) : "—"}</div></div>
@@ -1898,10 +1898,10 @@ function Painel({ user, showToast, irParaPipeline }) {
     <div>
       {filtroBar}
       <div className="stats">
-        <StatIco ico={I.cash} cor="#10b981" val={fmtMoney(totalVendido)} money lab="Total vendido" />
-        <StatIco ico={I.check} cor="#6366f1" val={nVendas} lab="Vendas fechadas" />
-        <StatIco ico={I.cash} cor="#f59e0b" val={fmtMoney(ticket)} money lab="Ticket médio" />
-        <StatIco ico={I.target} cor="#8b5cf6" val={conversao + "%"} lab="Conversão" />
+        <StatIco ico={I.cash} cor="#34e3b0" val={fmtMoney(totalVendido)} money lab="Total vendido" />
+        <StatIco ico={I.check} cor="#8b7bff" val={nVendas} lab="Vendas fechadas" />
+        <StatIco ico={I.cash} cor="#ffb547" val={fmtMoney(ticket)} money lab="Ticket médio" />
+        <StatIco ico={I.target} cor="#c08bff" val={conversao + "%"} lab="Conversão" />
       </div>
 
       {somaMetas > 0 && (
@@ -2198,7 +2198,7 @@ function Monitoria({ user, showToast }) {
   const ranked = [...vendedores].sort((a, b) => b.mensagensEnviadas - a.mensagensEnviadas);
   const barrasMsg = ranked.slice(0, 8).map((v) => ({ label: (v.nome || "").split(" ")[0], valor: v.mensagensEnviadas }));
   const barrasTmr = [...vendedores].filter((v) => v.tmrSeg > 0).sort((a, b) => a.tmrSeg - b.tmrSeg).slice(0, 8)
-    .map((v) => ({ label: (v.nome || "").split(" ")[0], valor: Math.round(v.tmrSeg / 60) || 1, rotulo: fmtTempo(v.tmrSeg), cor: "#f59e0b" }));
+    .map((v) => ({ label: (v.nome || "").split(" ")[0], valor: Math.round(v.tmrSeg / 60) || 1, rotulo: fmtTempo(v.tmrSeg), cor: "#ffb547" }));
 
   const topo = (
     <div className="mon-topo">
@@ -2239,10 +2239,10 @@ function Monitoria({ user, showToast }) {
     <div>
       {topo}
       <div className="stats">
-        <StatIco ico={I.refresh} cor="#6366f1" val={fmtTempo(time.tmrSeg)} lab="Tempo médio de resposta (TMA)" />
-        <StatIco ico={I.wa} cor="#ef4444" val={time.semResposta || 0} lab="Conversas sem resposta" />
-        <StatIco ico={I.chat} cor="#10b981" val={time.conversas || 0} lab="Atendimentos no período" />
-        <StatIco ico={I.send} cor="#8b5cf6" val={time.mensagensEnviadas || 0} lab="Mensagens enviadas" />
+        <StatIco ico={I.refresh} cor="#8b7bff" val={fmtTempo(time.tmrSeg)} lab="Tempo médio de resposta (TMA)" />
+        <StatIco ico={I.wa} cor="#ff5d73" val={time.semResposta || 0} lab="Conversas sem resposta" />
+        <StatIco ico={I.chat} cor="#34e3b0" val={time.conversas || 0} lab="Atendimentos no período" />
+        <StatIco ico={I.send} cor="#c08bff" val={time.mensagensEnviadas || 0} lab="Mensagens enviadas" />
       </div>
       <div className="mon-strip">
         <div className="mon-mini"><div className="lab">1ª resposta (média)</div><div className="num">{fmtTempo(time.primeiraSeg)}</div></div>
@@ -2309,10 +2309,10 @@ function PainelIndividual({ info: d, evo, isGer, onVoltar }) {
       </div>
 
       <div className="stats">
-        <StatIco ico={I.refresh} cor="#6366f1" val={fmtTempo(d.tmrSeg)} lab="Tempo médio de resposta (TMA)" />
-        <StatIco ico={I.wa} cor="#ef4444" val={d.semResposta || 0} lab="Conversas sem resposta" />
-        <StatIco ico={I.chat} cor="#10b981" val={d.conversas || 0} lab="Atendimentos no período" />
-        <StatIco ico={I.send} cor="#8b5cf6" val={d.mensagensEnviadas || 0} lab="Mensagens enviadas" />
+        <StatIco ico={I.refresh} cor="#8b7bff" val={fmtTempo(d.tmrSeg)} lab="Tempo médio de resposta (TMA)" />
+        <StatIco ico={I.wa} cor="#ff5d73" val={d.semResposta || 0} lab="Conversas sem resposta" />
+        <StatIco ico={I.chat} cor="#34e3b0" val={d.conversas || 0} lab="Atendimentos no período" />
+        <StatIco ico={I.send} cor="#c08bff" val={d.mensagensEnviadas || 0} lab="Mensagens enviadas" />
       </div>
       <div className="mon-strip">
         <div className="mon-mini"><div className="lab">1ª resposta (média)</div><div className="num">{fmtTempo(d.primeiraSeg)}</div></div>
