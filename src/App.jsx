@@ -4,6 +4,7 @@ import { LOGO_FULL, LOGO_LIGHT } from "./logos.js";
 
 /* ============================ ÍCONES ============================ */
 const I = {
+  eye: (p) => (<svg {...p} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></svg>),
   pipe: (p) => (
     <svg {...p} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="6" height="14" rx="1"/><rect x="9.5" y="3" width="6" height="9" rx="1"/><rect x="16" y="3" width="5" height="6" rx="1"/></svg>
   ),
@@ -711,16 +712,16 @@ function Equipe({ showToast, meId }) {
   return (
     <>
       <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 16 }}>
-        <button className="btn btn-primary" onClick={() => setEditing({})}><I.plus style={{ width: 16, height: 16 }} /> Novo vendedor</button>
+        <button className="btn btn-primary" onClick={() => setEditing({})}><I.plus style={{ width: 16, height: 16 }} /> Adicionar</button>
       </div>
       <div className="panel">
-        <div className="panel-h"><h3>Equipe ({users.length})</h3></div>
+        <div className="panel-h"><h3>Equipe ({users.length})<span className="panel-sub">vendedores são monitorados; gerentes acessam o sistema</span></h3></div>
         {users.map((u) => (
           <div className="urow" key={u.id}>
             <div className="avatar">{iniciais(u.nome)}</div>
             <div className="info">
               <div className="nm">{u.nome} {!u.ativo && <span className="tag-off">• desativado</span>}</div>
-              <div className="sub">@{u.login}{u.role === "gerente" ? " · gerente" : ""}</div>
+              <div className="sub">{u.role === "gerente" ? "@" + u.login + " · acessa o sistema" : "vendedor monitorado no WhatsApp"}</div>
             </div>
             <span className={"tag-role " + (u.role === "gerente" ? "ger" : "ven")}>{u.role === "gerente" ? "Gerente" : "Vendedor"}</span>
             <button className="btn btn-sm" onClick={() => setEditing(u)}>Editar</button>
@@ -736,7 +737,7 @@ function Equipe({ showToast, meId }) {
           onSaved={(u, novo) => {
             setUsers((l) => (novo ? [...l, u] : l.map((x) => (x.id === u.id ? u : x))));
             setEditing(null);
-            showToast(novo ? "✓ Vendedor criado" : "✓ Atualizado");
+            showToast(novo ? "✓ Cadastrado" : "✓ Atualizado");
           }}
         />
       )}
@@ -747,21 +748,26 @@ function Equipe({ showToast, meId }) {
 function UserForm({ user, onClose, onSaved }) {
   const novo = !user;
   const [f, setF] = useState({
-    nome: user?.nome || "", login: user?.login || "", senha: "",
-    role: user?.role || "vendedor", meta: user?.meta || 0, ativo: user ? user.ativo : true,
+    nome: user?.nome || "", login: "", senha: "",
+    role: user?.role || "vendedor", ativo: user ? user.ativo : true,
   });
   const [saving, setSaving] = useState(false);
   const set = (k, v) => setF((s) => ({ ...s, [k]: v }));
+  const ehGerente = f.role === "gerente";
 
   async function salvar() {
-    if (!f.nome.trim() || (novo && (!f.login.trim() || !f.senha))) { alert("Preencha nome, login e senha."); return; }
+    if (!f.nome.trim()) { alert("Informe o nome."); return; }
+    if (novo && ehGerente && (!f.login.trim() || !f.senha)) { alert("Gerente precisa de login e senha."); return; }
     setSaving(true);
     try {
       if (novo) {
-        const u = await api.createUser(f);
+        const dados = ehGerente
+          ? { nome: f.nome, role: "gerente", login: f.login, senha: f.senha }
+          : { nome: f.nome, role: "vendedor" };
+        const u = await api.createUser(dados);
         onSaved(u, true);
       } else {
-        const dados = { nome: f.nome, role: f.role, meta: f.meta, ativo: f.ativo };
+        const dados = { nome: f.nome, role: f.role, ativo: f.ativo };
         if (f.senha) dados.senha = f.senha;
         const u = await api.updateUser(user.id, dados);
         onSaved(u, false);
@@ -773,35 +779,37 @@ function UserForm({ user, onClose, onSaved }) {
     <div className="modal" onClick={(e) => e.target === e.currentTarget && onClose()}>
       <div className="modal-box">
         <div className="mh">
-          <h3>{novo ? "Novo vendedor" : "Editar acesso"}</h3>
-          <p>{novo ? "Crie o login do vendedor." : "Atualize os dados do acesso."}</p>
+          <h3>{novo ? "Adicionar pessoa" : "Editar"}</h3>
+          <p>{ehGerente ? "Gerentes acessam o sistema de monitoria." : "Vendedores são monitorados, não acessam o sistema."}</p>
         </div>
         <div className="mb">
+          <div className="field">
+            <label>Perfil</label>
+            <select className="select" value={f.role} onChange={(e) => set("role", e.target.value)}>
+              <option value="vendedor">Vendedor (monitorado)</option>
+              <option value="gerente">Gerente (acessa o sistema)</option>
+            </select>
+          </div>
           <div className="field">
             <label>Nome</label>
             <input className="input" value={f.nome} onChange={(e) => set("nome", e.target.value)} autoFocus />
           </div>
-          {novo && (
+          {ehGerente && novo && (
             <div className="field">
               <label>Login (usuário)</label>
-              <input className="input" value={f.login} onChange={(e) => set("login", e.target.value)} placeholder="ex: maria" />
+              <input className="input" value={f.login} onChange={(e) => set("login", e.target.value)} placeholder="ex: thalia" />
             </div>
           )}
-          <div className="field">
-            <label>{novo ? "Senha" : "Nova senha (deixe vazio pra manter)"}</label>
-            <input className="input" type="password" value={f.senha} onChange={(e) => set("senha", e.target.value)} placeholder="mínimo 3 caracteres" />
-          </div>
-          <div className="field">
-            <label>Perfil</label>
-            <select className="select" value={f.role} onChange={(e) => set("role", e.target.value)}>
-              <option value="vendedor">Vendedor</option>
-              <option value="gerente">Gerente</option>
-            </select>
-          </div>
+          {ehGerente && (
+            <div className="field">
+              <label>{novo ? "Senha" : "Nova senha (deixe vazio pra manter)"}</label>
+              <input className="input" type="password" value={f.senha} onChange={(e) => set("senha", e.target.value)} placeholder="mínimo 3 caracteres" />
+            </div>
+          )}
           {!novo && (
             <label style={{ display: "flex", alignItems: "center", gap: 9, fontSize: 14, cursor: "pointer" }}>
               <input type="checkbox" checked={f.ativo} onChange={(e) => set("ativo", e.target.checked)} style={{ width: 17, height: 17 }} />
-              Acesso ativo
+              Ativo
             </label>
           )}
         </div>
@@ -993,7 +1001,6 @@ function WhatsApp({ user, showToast, target, onTargetUsed }) {
           )}
         </div>
         <div style={{ display: "flex", gap: 8 }}>
-          <button className="btn" onClick={() => setNova(true)}><I.plus style={{ width: 15, height: 15 }} /> Nova conversa</button>
           {isGer && <button className="btn" onClick={() => setShowCfg(true)}><I.cog style={{ width: 15, height: 15 }} /> Configurar conexão</button>}
         </div>
       </div>
@@ -1039,16 +1046,14 @@ function WhatsApp({ user, showToast, target, onTargetUsed }) {
               ))}
               <div ref={msgsEnd} />
             </div>
-            <div className="wa-input">
-              <input value={texto} onChange={(e) => setTexto(e.target.value)} onKeyDown={(e) => e.key === "Enter" && enviar()} placeholder="Escreva uma mensagem..." />
-              <button className="wa-send" onClick={enviar} disabled={enviando || !texto.trim()}><I.send style={{ width: 19, height: 19 }} /></button>
+            <div className="wa-readonly">
+              <I.eye style={{ width: 15, height: 15 }} /> Monitoria — somente leitura. Quem responde é o vendedor, pelo WhatsApp dele.
             </div>
           </div>
         )}
       </div>
 
       {qrInst && <QrModal instance={qrInst} onClose={() => setQrInst(null)} onConnected={() => { setQrInst(null); initVendedor(); showToast("🎉 WhatsApp conectado!"); }} />}
-      {nova && <NovaConversa isGer={isGer} instancias={instancias} minha={minha} numeroInicial={novaNum} onClose={() => { setNova(false); setNovaNum(""); }} onCriada={(id) => { setNova(false); setNovaNum(""); carregarChats(true).then(() => abrir(id)); }} />}
     </div>
   );
 }
@@ -2241,7 +2246,6 @@ function Monitoria({ user, showToast }) {
       </div>
       <div className="mon-strip">
         <div className="mon-mini"><div className="lab">1ª resposta (média)</div><div className="num">{fmtTempo(time.primeiraSeg)}</div></div>
-        <div className="mon-mini"><div className="lab">Duração média do atendimento</div><div className="num">{fmtTempo(time.duracaoSeg)}</div></div>
         <div className="mon-mini"><div className="lab">Taxa de resposta</div><div className="num">{time.taxaResposta || 0}%</div></div>
         <div className="mon-mini"><div className="lab">Conversas atendidas</div><div className="num">{time.atendidas || 0} de {time.conversas || 0}</div></div>
       </div>
@@ -2312,7 +2316,6 @@ function PainelIndividual({ info: d, evo, isGer, onVoltar }) {
       </div>
       <div className="mon-strip">
         <div className="mon-mini"><div className="lab">1ª resposta (média)</div><div className="num">{fmtTempo(d.primeiraSeg)}</div></div>
-        <div className="mon-mini"><div className="lab">Duração média do atendimento</div><div className="num">{fmtTempo(d.duracaoSeg)}</div></div>
         <div className="mon-mini"><div className="lab">Taxa de resposta</div><div className="num">{d.taxaResposta || 0}%</div></div>
         <div className="mon-mini"><div className="lab">Conversas atendidas</div><div className="num">{d.atendidas || 0} de {d.conversas || 0}</div></div>
       </div>

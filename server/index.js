@@ -150,6 +150,8 @@ app.post("/api/login", (req, res) => {
     return res.status(401).json({ error: "Login ou senha incorretos" });
   if (!user.ativo)
     return res.status(403).json({ error: "Usuário desativado" });
+  if (user.role !== "gerente")
+    return res.status(403).json({ error: "Apenas a gerência acessa o sistema de monitoria." });
   user.token = novoToken();
   saveSoon();
   res.json({ token: user.token, user: semSenha(user) });
@@ -174,18 +176,22 @@ app.get("/api/users", auth, gerenteOnly, (req, res) => {
 });
 
 app.post("/api/users", auth, gerenteOnly, (req, res) => {
-  const { nome, login, senha, role, meta } = req.body || {};
-  if (!nome || !login || !senha)
-    return res.status(400).json({ error: "Nome, login e senha são obrigatórios" });
-  if (db.users.some((u) => u.login.toLowerCase() === login.toLowerCase()))
+  const { nome, login, senha, role } = req.body || {};
+  if (!nome || !nome.trim())
+    return res.status(400).json({ error: "Informe o nome" });
+  const ehGerente = role === "gerente";
+  if (ehGerente && (!login || !senha))
+    return res.status(400).json({ error: "Gerente precisa de login e senha" });
+  const id = proximoId("u");
+  const loginFinal = ehGerente ? login.trim() : "vend-" + id;
+  if (db.users.some((u) => u.login.toLowerCase() === loginFinal.toLowerCase()))
     return res.status(400).json({ error: "Já existe alguém com esse login" });
   const novo = {
-    id: proximoId("u"),
+    id,
     nome: nome.trim(),
-    login: login.trim(),
-    senha,
-    role: role === "gerente" ? "gerente" : "vendedor",
-    meta: Number(meta) || 0,
+    login: loginFinal,
+    senha: ehGerente ? senha : crypto.randomBytes(8).toString("hex"),
+    role: ehGerente ? "gerente" : "vendedor",
     ativo: true,
     token: null,
     criadoEm: Date.now(),
