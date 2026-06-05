@@ -39,6 +39,52 @@ function novoToken() {
   return crypto.randomBytes(18).toString("hex");
 }
 
+// Horário de atendimento por dia da semana (0=Dom ... 6=Sáb)
+function horarioPadrao() {
+  const dias = {};
+  for (let d = 0; d <= 6; d++) {
+    dias[d] = {
+      on: d >= 1 && d <= 5, // Seg-Sex ligados por padrão
+      inicio: "08:00",
+      fim: "18:00",
+      almocoIni: "",
+      almocoFim: "",
+    };
+  }
+  return { enabled: false, dias };
+}
+// Converte qualquer formato (antigo array, ou faltando dias) pro formato por dia
+function normalizaHorario(h) {
+  const base = horarioPadrao();
+  if (!h || typeof h !== "object") return base;
+  base.enabled = !!h.enabled;
+  if (h.dias && !Array.isArray(h.dias) && typeof h.dias === "object") {
+    for (let d = 0; d <= 6; d++) {
+      const x = h.dias[d] || h.dias[String(d)] || {};
+      base.dias[d] = {
+        on: !!x.on,
+        inicio: typeof x.inicio === "string" && x.inicio ? x.inicio : "08:00",
+        fim: typeof x.fim === "string" && x.fim ? x.fim : "18:00",
+        almocoIni: typeof x.almocoIni === "string" ? x.almocoIni : "",
+        almocoFim: typeof x.almocoFim === "string" ? x.almocoFim : "",
+      };
+    }
+  } else {
+    // formato antigo: { dias:[1,2,3,4,5], inicio, fim, almocoIni, almocoFim }
+    const ativos = Array.isArray(h.dias) ? h.dias.map(Number) : [1, 2, 3, 4, 5];
+    for (let d = 0; d <= 6; d++) {
+      base.dias[d] = {
+        on: ativos.includes(d),
+        inicio: typeof h.inicio === "string" && h.inicio ? h.inicio : "08:00",
+        fim: typeof h.fim === "string" && h.fim ? h.fim : "18:00",
+        almocoIni: typeof h.almocoIni === "string" ? h.almocoIni : "",
+        almocoFim: typeof h.almocoFim === "string" ? h.almocoFim : "",
+      };
+    }
+  }
+  return base;
+}
+
 function dbVazio() {
   return {
     users: [
@@ -62,7 +108,7 @@ function dbVazio() {
       publicUrl: "",
       webhookToken: crypto.randomBytes(12).toString("hex"),
       instancias: [], // [{ instance, vendedorId }]
-      horario: { enabled: false, dias: [1, 2, 3, 4, 5], inicio: "08:00", fim: "18:00", almocoIni: "", almocoFim: "" },
+      horario: horarioPadrao(),
     },
     waChats: {}, // { "instance::numero": { ...conversa } }
     seq: 1,
@@ -84,7 +130,8 @@ function loadDB() {
       if (!db.waConfig.webhookToken)
         db.waConfig.webhookToken = crypto.randomBytes(12).toString("hex");
       if (!Array.isArray(db.waConfig.instancias)) db.waConfig.instancias = [];
-      if (!db.waConfig.horario) db.waConfig.horario = dbVazio().waConfig.horario;
+      if (!db.waConfig.horario) db.waConfig.horario = horarioPadrao();
+      else db.waConfig.horario = normalizaHorario(db.waConfig.horario);
       if (!db.waChats || typeof db.waChats !== "object") db.waChats = {};
       // migração: chats que só têm mensagem enviada (sem resposta do lead) tinham o
       // nome do vendedor por engano — troca pelo número até o lead responder
@@ -571,17 +618,9 @@ app.put("/api/wa/config", auth, gerenteOnly, async (req, res) => {
   res.json({ ok: true, webhookUrl: webhookUrl() });
 });
 
-app.get("/api/horario", auth, (req, res) => res.json(db.waConfig.horario || dbVazio().waConfig.horario));
+app.get("/api/horario", auth, (req, res) => res.json(normalizaHorario(db.waConfig.horario)));
 app.put("/api/horario", auth, gerenteOnly, (req, res) => {
-  const h = req.body || {};
-  db.waConfig.horario = {
-    enabled: !!h.enabled,
-    dias: Array.isArray(h.dias) ? h.dias.map(Number).filter((d) => d >= 0 && d <= 6) : [1, 2, 3, 4, 5],
-    inicio: typeof h.inicio === "string" && h.inicio ? h.inicio : "08:00",
-    fim: typeof h.fim === "string" && h.fim ? h.fim : "18:00",
-    almocoIni: typeof h.almocoIni === "string" ? h.almocoIni : "",
-    almocoFim: typeof h.almocoFim === "string" ? h.almocoFim : "",
-  };
+  db.waConfig.horario = normalizaHorario(req.body || {});
   saveSoon();
   res.json({ ok: true, horario: db.waConfig.horario });
 });
@@ -607,15 +646,35 @@ app.get("/api/wa/chats", auth, (req, res) => {
   if (req.user.role === "gerente" && req.query.instance && req.query.instance !== "todas") {
     chats = chats.filter((c) => c.instance === req.query.instance);
   }
-  chats.sort((a, b) => (b.atualizadoEm || 0) - (a.atualizadoEm || 0));
-  res.json(
-    chats.map((c) => ({
+  const q = String(req.query.q || "").trim().toLowerCase();
+  const qDig = q.replace(/\D/g, "");
+  const agora = Date.now();
+  let itens = chats.map((c) => {
+    const ult = c.mensagens.length ? c.mensagens[c.mensagens.length - 1] : null;
+    const aguardando = !!(ult && ult.role === "them");
+    let trecho = "";
+    if (q) {
+      const nomeOk = (c.nome || "").toLowerCase().includes(q);
+      const numOk = qDig && (c.numero || "").replace(/\D/g, "").includes(qDig);
+      if (!nomeOk && !numOk) {
+        const m = [...c.mensagens].reverse().find((mm) => String(mm.content || "").toLowerCase().includes(q));
+        if (!m) return null; // não bate em nome, número nem mensagem
+        trecho = String(m.content).slice(0, 120);
+      }
+    }
+    return {
       id: c.id, instance: c.instance, numero: c.numero, nome: c.nome,
       naoLidas: c.naoLidas || 0, atualizadoEm: c.atualizadoEm,
-      ultima: c.mensagens.length ? c.mensagens[c.mensagens.length - 1].content : "",
+      ultima: ult ? ult.content : "",
+      ultimaDe: ult ? ult.role : "",
+      aguardando,
+      esperaSeg: aguardando ? Math.round(decorridoUtilMs(ult.ts, agora) / 1000) : 0,
       vendedorId: vendedorDaInstancia(c.instance),
-    }))
-  );
+      trecho,
+    };
+  }).filter(Boolean);
+  itens.sort((a, b) => (b.atualizadoEm || 0) - (a.atualizadoEm || 0));
+  res.json(itens);
 });
 
 /* ---- abrir conversa (marca como lida) ---- */
@@ -840,28 +899,30 @@ function mediaSeg(arr) {
 // tempo (em ms) entre dois instantes contando SÓ o horário de atendimento configurado
 function decorridoUtilMs(de, ate) {
   const h = (db.waConfig && db.waConfig.horario) || null;
-  if (!h || !h.enabled || ate <= de) return Math.max(0, ate - de);
+  if (!h || !h.enabled || !h.dias || ate <= de) return Math.max(0, ate - de);
   const hm = (s) => { const [a, b] = String(s || "0:0").split(":").map(Number); return (a || 0) * 60 + (b || 0); };
-  const ini = hm(h.inicio), fim = hm(h.fim);
-  const temAlmoco = h.almocoIni && h.almocoFim;
-  const aIni = temAlmoco ? hm(h.almocoIni) : 0, aFim = temAlmoco ? hm(h.almocoFim) : 0;
-  const dias = Array.isArray(h.dias) && h.dias.length ? h.dias : [1, 2, 3, 4, 5];
   let total = 0;
   const cur = new Date(de);
   while (cur.getTime() < ate) {
-    if (dias.includes(cur.getDay()) && fim > ini) {
-      const base = new Date(cur); base.setHours(0, 0, 0, 0);
-      const winA = base.getTime() + ini * 60000;
-      const winB = base.getTime() + fim * 60000;
-      const a = Math.max(de, winA), b = Math.min(ate, winB);
-      if (b > a) {
-        let dur = b - a;
-        if (temAlmoco && aFim > aIni) {
-          const la = Math.max(a, base.getTime() + aIni * 60000);
-          const lb = Math.min(b, base.getTime() + aFim * 60000);
-          if (lb > la) dur -= (lb - la);
+    const cfg = h.dias[cur.getDay()] || h.dias[String(cur.getDay())];
+    if (cfg && cfg.on) {
+      const ini = hm(cfg.inicio), fim = hm(cfg.fim);
+      if (fim > ini) {
+        const base = new Date(cur); base.setHours(0, 0, 0, 0);
+        const a = Math.max(de, base.getTime() + ini * 60000);
+        const b = Math.min(ate, base.getTime() + fim * 60000);
+        if (b > a) {
+          let dur = b - a;
+          if (cfg.almocoIni && cfg.almocoFim) {
+            const aIni = hm(cfg.almocoIni), aFim = hm(cfg.almocoFim);
+            if (aFim > aIni) {
+              const la = Math.max(a, base.getTime() + aIni * 60000);
+              const lb = Math.min(b, base.getTime() + aFim * 60000);
+              if (lb > la) dur -= (lb - la);
+            }
+          }
+          total += dur;
         }
-        total += dur;
       }
     }
     cur.setHours(24, 0, 0, 0); // pula pro próximo dia 00:00

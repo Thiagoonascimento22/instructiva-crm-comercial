@@ -2083,3 +2083,51 @@ h1, h2, h3, h4, .topbar .greet, .panel-h h3, .login-card .ttl, .login-card h2, .
   font: inherit; font-size: 13px; padding: 6px 11px; border-radius: 10px;
   background: var(--input-bg); border: 1px solid var(--line); color: var(--text);
 }
+
+/* tags na conversa (vendedor + aguardando) */
+.wa-conv .conv-tags { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 3px; }
+.wa-conv .wait-tag {
+  font-size: 10.5px; font-weight: 700; color: var(--coral);
+  background: rgba(255,93,115,0.14); border-radius: 999px; padding: 2px 8px; white-space: nowrap;
+}
+/* chip "aguardando" na barra */
+.wait-chip { display: inline-flex; align-items: center; gap: 4px; }
+.wait-chip.on { background: var(--coral); border-color: var(--coral); color: #fff; }
+
+/* ===== Horário de atendimento por dia ===== */
+.hr-head, .hr-row {
+  display: grid;
+  grid-template-columns: 130px 1fr 1fr 1fr 1fr 120px;
+  gap: 10px; align-items: center;
+}
+.hr-head {
+  font-size: 11px; font-weight: 700; color: var(--faint);
+  text-transform: uppercase; letter-spacing: .04em;
+  padding: 0 2px 8px; border-bottom: 1px solid var(--linha); margin-bottom: 8px;
+}
+.hr-head i { font-style: normal; text-transform: none; font-weight: 400; }
+.hr-head-day { padding-left: 2px; }
+.hr-row { padding: 6px 0; }
+.hr-row + .hr-row { border-top: 1px solid var(--linha); }
+.hr-row.off { opacity: .55; }
+.hr-day { display: flex; align-items: center; gap: 8px; font-weight: 600; font-size: 14px; cursor: pointer; }
+.hr-day input { width: 17px; height: 17px; cursor: pointer; }
+.hr-row .input { padding: 8px 10px; }
+.hr-row .input:disabled { background: var(--card-2, var(--fundo)); color: var(--faint); cursor: not-allowed; }
+.hr-copy {
+  font-size: 11.5px; font-weight: 600; color: var(--laranja);
+  background: transparent; border: 1px solid var(--linha); border-radius: 8px;
+  padding: 7px 8px; cursor: pointer; white-space: nowrap; transition: .15s;
+}
+.hr-copy:hover:not(:disabled) { background: rgba(247,148,30,.10); border-color: var(--laranja); }
+.hr-copy:disabled { opacity: .4; cursor: not-allowed; }
+
+@media (max-width: 760px) {
+  .hr-head { display: none; }
+  .hr-row {
+    grid-template-columns: 1fr 1fr; gap: 8px 10px;
+    padding: 12px 0;
+  }
+  .hr-day { grid-column: 1 / -1; }
+  .hr-copy { grid-column: 1 / -1; }
+}

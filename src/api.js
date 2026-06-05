@@ -53,8 +53,8 @@ export const api = {
   waConfig: () => req("GET", "/api/wa/config"),
   waSetConfig: (dados) => req("PUT", "/api/wa/config", dados),
   waMinha: () => req("GET", "/api/wa/minha"),
-  waChats: (instance) =>
-    req("GET", "/api/wa/chats" + (instance ? "?instance=" + instance : "")),
+  waChats: (instance, q) =>
+    req("GET", "/api/wa/chats" + (instance || q ? "?" + [instance ? "instance=" + encodeURIComponent(instance) : "", q ? "q=" + encodeURIComponent(q) : ""].filter(Boolean).join("&") : "")),
   waChat: (id) => req("GET", "/api/wa/chats/" + id),
   waSend: (id, texto) => req("POST", "/api/wa/chats/" + id + "/send", { texto }),
   waIniciar: (dados) => req("POST", "/api/wa/iniciar", dados),

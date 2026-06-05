@@ -72,6 +72,14 @@ function horaCurta(ts) {
 }
 function inicioDoDia(t) { const x = new Date(t); x.setHours(0, 0, 0, 0); return x; }
 function dataInputHoje() { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; }
+// tempo de espera curto: 45s, 12min, 2h10, 3d
+function fmtEspera(seg) {
+  seg = Math.max(0, Math.round(seg || 0));
+  if (seg < 60) return seg + "s";
+  if (seg < 3600) return Math.floor(seg / 60) + "min";
+  if (seg < 86400) { const h = Math.floor(seg / 3600), m = Math.floor((seg % 3600) / 60); return m ? `${h}h${String(m).padStart(2, "0")}` : `${h}h`; }
+  return Math.floor(seg / 86400) + "d";
+}
 
 /* ============================ APP ============================ */
 export default function App() {
@@ -861,7 +869,7 @@ function Config({ user, setUser, showToast }) {
   const isGer = user.role === "gerente";
   const [h, setH] = useState(null);
   const [savingH, setSavingH] = useState(false);
-  useEffect(() => { if (isGer) api.horario().then(setH).catch(() => {}); /* eslint-disable-next-line */ }, []);
+  useEffect(() => { if (isGer) api.horario().then((x) => setH(normHor(x))).catch(() => {}); /* eslint-disable-next-line */ }, []);
 
   async function salvar() {
     setSaving(true);
@@ -874,13 +882,36 @@ function Config({ user, setUser, showToast }) {
       showToast("✓ Dados atualizados");
     } catch (e) { showToast("✗ " + e.message); } finally { setSaving(false); }
   }
-  function toggleDia(d) { setH((x) => ({ ...x, dias: x.dias.includes(d) ? x.dias.filter((y) => y !== d) : [...x.dias, d].sort((a, b) => a - b) })); }
+  // garante formato por dia mesmo se vier algo antigo/incompleto
+  function normHor(x) {
+    x = x || {};
+    const dias = {};
+    const velho = x.dias && !Array.isArray(x.dias) ? null : (Array.isArray(x.dias) ? x.dias.map(Number) : [1, 2, 3, 4, 5]);
+    for (let d = 0; d <= 6; d++) {
+      const c = (x.dias && !Array.isArray(x.dias)) ? (x.dias[d] || x.dias[String(d)] || {}) : {};
+      dias[d] = velho
+        ? { on: velho.includes(d), inicio: x.inicio || "08:00", fim: x.fim || "18:00", almocoIni: x.almocoIni || "", almocoFim: x.almocoFim || "" }
+        : { on: !!c.on, inicio: c.inicio || "08:00", fim: c.fim || "18:00", almocoIni: c.almocoIni || "", almocoFim: c.almocoFim || "" };
+    }
+    return { enabled: !!x.enabled, dias };
+  }
+  function setDia(d, k, v) { setH((x) => ({ ...x, dias: { ...x.dias, [d]: { ...x.dias[d], [k]: v } } })); }
+  function copiarPraTodos(src) {
+    setH((x) => {
+      const b = x.dias[src];
+      const dias = {};
+      for (let d = 0; d <= 6; d++) dias[d] = { ...x.dias[d], inicio: b.inicio, fim: b.fim, almocoIni: b.almocoIni, almocoFim: b.almocoFim };
+      return { ...x, dias };
+    });
+    showToast("✓ Horário copiado pra todos os dias");
+  }
   async function salvarHorario() {
     setSavingH(true);
-    try { const r = await api.setHorario(h); setH(r.horario); showToast("✓ Horário de atendimento salvo"); }
+    try { const r = await api.setHorario(h); setH(normHor(r.horario)); showToast("✓ Horário de atendimento salvo"); }
     catch (e) { showToast("✗ " + e.message); } finally { setSavingH(false); }
   }
-  const DIAS = [["Dom", 0], ["Seg", 1], ["Ter", 2], ["Qua", 3], ["Qui", 4], ["Sex", 5], ["Sáb", 6]];
+  // ordem comercial: Seg primeiro, Dom por último
+  const DIAS = [["Segunda", 1], ["Terça", 2], ["Quarta", 3], ["Quinta", 4], ["Sexta", 5], ["Sábado", 6], ["Domingo", 0]];
 
   return (
     <div style={{ maxWidth: 560 }}>
@@ -912,34 +943,32 @@ function Config({ user, setUser, showToast }) {
             </label>
 
             <div style={{ opacity: h.enabled ? 1 : 0.45, pointerEvents: h.enabled ? "auto" : "none", marginTop: 16 }}>
-              <div className="field">
-                <label>Dias de atendimento</label>
-                <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                  {DIAS.map(([lbl, d]) => (
-                    <button key={d} type="button" className={"chip" + (h.dias.includes(d) ? " on" : "")} onClick={() => toggleDia(d)}>{lbl}</button>
-                  ))}
-                </div>
+              <div className="hr-head">
+                <span className="hr-head-day">Dia</span>
+                <span>Abre</span><span>Fecha</span>
+                <span>Almoço início <i>(opcional)</i></span><span>Almoço fim</span>
+                <span></span>
               </div>
-              <div style={{ display: "flex", gap: 14, flexWrap: "wrap" }}>
-                <div className="field" style={{ flex: 1, minWidth: 130 }}>
-                  <label>Abre</label>
-                  <input className="input" type="time" value={h.inicio} onChange={(e) => setH({ ...h, inicio: e.target.value })} />
-                </div>
-                <div className="field" style={{ flex: 1, minWidth: 130 }}>
-                  <label>Fecha</label>
-                  <input className="input" type="time" value={h.fim} onChange={(e) => setH({ ...h, fim: e.target.value })} />
-                </div>
-              </div>
-              <div style={{ display: "flex", gap: 14, flexWrap: "wrap" }}>
-                <div className="field" style={{ flex: 1, minWidth: 130 }}>
-                  <label>Almoço — início <span style={{ color: "var(--faint)", fontWeight: 400 }}>(opcional)</span></label>
-                  <input className="input" type="time" value={h.almocoIni} onChange={(e) => setH({ ...h, almocoIni: e.target.value })} />
-                </div>
-                <div className="field" style={{ flex: 1, minWidth: 130 }}>
-                  <label>Almoço — fim</label>
-                  <input className="input" type="time" value={h.almocoFim} onChange={(e) => setH({ ...h, almocoFim: e.target.value })} />
-                </div>
-              </div>
+              {DIAS.map(([lbl, d]) => {
+                const cfg = h.dias[d];
+                const on = cfg.on;
+                return (
+                  <div key={d} className={"hr-row" + (on ? "" : " off")}>
+                    <label className="hr-day">
+                      <input type="checkbox" checked={on} onChange={(e) => setDia(d, "on", e.target.checked)} />
+                      <span>{lbl}</span>
+                    </label>
+                    <input className="input" type="time" value={cfg.inicio} disabled={!on} onChange={(e) => setDia(d, "inicio", e.target.value)} />
+                    <input className="input" type="time" value={cfg.fim} disabled={!on} onChange={(e) => setDia(d, "fim", e.target.value)} />
+                    <input className="input" type="time" value={cfg.almocoIni} disabled={!on} onChange={(e) => setDia(d, "almocoIni", e.target.value)} />
+                    <input className="input" type="time" value={cfg.almocoFim} disabled={!on} onChange={(e) => setDia(d, "almocoFim", e.target.value)} />
+                    <button type="button" className="hr-copy" disabled={!on} title="Copiar estes horários pra todos os dias" onClick={() => copiarPraTodos(d)}>copiar p/ todos</button>
+                  </div>
+                );
+              })}
+              <p style={{ fontSize: 12, color: "var(--faint)", marginTop: 10 }}>
+                Desmarque um dia pra não contar nele (ex.: domingo). Deixe o almoço vazio se não quiser descontar.
+              </p>
             </div>
             <button className="btn btn-primary" onClick={salvarHorario} disabled={savingH} style={{ marginTop: 6 }}>{savingH ? "Salvando..." : "Salvar horário"}</button>
           </div>
@@ -964,6 +993,7 @@ function WhatsApp({ user, showToast, target, onTargetUsed }) {
   const [chat, setChat] = useState(null);
   const [texto, setTexto] = useState("");
   const [busca, setBusca] = useState("");
+  const [soAguardando, setSoAguardando] = useState(false);
   const [filtro, setFiltro] = useState("todas");
   const [showCfg, setShowCfg] = useState(false);
   const [qrInst, setQrInst] = useState(null);
@@ -975,13 +1005,15 @@ function WhatsApp({ user, showToast, target, onTargetUsed }) {
   const selRef = useRef(null);
   const filtroRef = useRef("todas");
   const alvoRef = useRef(null);
+  const buscaRef = useRef("");
   useEffect(() => { selRef.current = sel; }, [sel]);
   useEffect(() => { filtroRef.current = filtro; }, [filtro]);
+  useEffect(() => { buscaRef.current = busca; }, [busca]);
 
   async function carregarChats(silencioso) {
     if (!silencioso) setLoading(true);
     try {
-      const cs = await api.waChats(null);
+      const cs = await api.waChats(null, buscaRef.current.trim());
       setChats(cs);
     } catch (e) { if (!silencioso) showToast("✗ " + e.message); }
     finally { if (!silencioso) setLoading(false); }
@@ -1014,6 +1046,12 @@ function WhatsApp({ user, showToast, target, onTargetUsed }) {
   }, []);
 
   useEffect(() => { if (msgsEnd.current) msgsEnd.current.scrollIntoView({ block: "end" }); }, [chat]);
+  // busca no servidor (nome, número ou conteúdo das mensagens) com debounce
+  useEffect(() => {
+    const t = setTimeout(() => { carregarChats(true); }, 350);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line
+  }, [busca]);
 
   async function abrir(id) {
     setSel(id); selRef.current = id;
@@ -1059,18 +1097,15 @@ function WhatsApp({ user, showToast, target, onTargetUsed }) {
     [usersArr]
   );
 
-  const filtrados = chats.filter((c) => {
-    const q = busca.trim().toLowerCase();
-    if (q) {
-      // busca é global: acha o lead mesmo com um vendedor filtrado
-      const qDig = q.replace(/\D/g, "");
-      const porNome = (c.nome || "").toLowerCase().includes(q);
-      const porNumero = qDig && (c.numero || "").replace(/\D/g, "").includes(qDig);
-      return porNome || porNumero;
-    }
-    if (isGer && filtro !== "todas" && c.vendedorId !== filtro) return false;
+  const buscando = busca.trim().length > 0;
+  const aguardandoCount = chats.filter((c) => c.aguardando).length;
+  let filtrados = chats.filter((c) => {
+    if (soAguardando && !c.aguardando) return false;
+    // a busca já vem filtrada do servidor; o filtro de vendedor só vale fora da busca
+    if (!buscando && isGer && filtro !== "todas" && c.vendedorId !== filtro) return false;
     return true;
   });
+  if (soAguardando) filtrados = [...filtrados].sort((a, b) => (b.esperaSeg || 0) - (a.esperaSeg || 0));
 
   if (loading) return <div className="spin" />;
 
@@ -1103,6 +1138,14 @@ function WhatsApp({ user, showToast, target, onTargetUsed }) {
           {!isGer && minha && minha.estado === "open" && (
             <span style={{ fontSize: 13, color: "var(--fechou)", fontWeight: 600, display: "flex", alignItems: "center", gap: 6 }}><span className="wa-dot on" /> WhatsApp conectado</span>
           )}
+          <button
+            type="button"
+            className={"chip wait-chip" + (soAguardando ? " on" : "")}
+            onClick={() => setSoAguardando((v) => !v)}
+            title="Mostrar só quem está esperando resposta"
+          >
+            ⏳ Aguardando{aguardandoCount ? ` (${aguardandoCount})` : ""}
+          </button>
         </div>
         <div style={{ display: "flex", gap: 8 }}>
           {isGer && <button className="btn" onClick={() => setShowCfg(true)}><I.cog style={{ width: 15, height: 15 }} /> Configurar conexão</button>}
@@ -1121,8 +1164,11 @@ function WhatsApp({ user, showToast, target, onTargetUsed }) {
                 <div className="av">{iniciais(c.nome)}</div>
                 <div className="mid">
                   <div className="nm">{c.nome}</div>
-                  <div className="last">{c.ultima}</div>
-                  {isGer && c.vendedorId && <div className="seller-tag">{usersMap[c.vendedorId]?.nome || ""}</div>}
+                  <div className="last">{c.trecho ? <>🔎 {c.trecho}</> : c.ultima}</div>
+                  <div className="conv-tags">
+                    {isGer && c.vendedorId && <span className="seller-tag">{usersMap[c.vendedorId]?.nome || ""}</span>}
+                    {c.aguardando && <span className="wait-tag">⏳ aguardando há {fmtEspera(c.esperaSeg)}</span>}
+                  </div>
                 </div>
                 <div className="wa-meta">
                   <div className="wa-time">{horaCurta(c.atualizadoEm)}</div>
