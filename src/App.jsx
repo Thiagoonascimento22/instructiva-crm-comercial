@@ -4,6 +4,8 @@ import { LOGO_FULL, LOGO_LIGHT } from "./logos.js";
 
 /* ============================ ÍCONES ============================ */
 const I = {
+  sun: (p) => (<svg {...p} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M6.3 17.7l-1.4 1.4M19.1 4.9l-1.4 1.4"/></svg>),
+  moon: (p) => (<svg {...p} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>),
   eye: (p) => (<svg {...p} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></svg>),
   pipe: (p) => (
     <svg {...p} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="6" height="14" rx="1"/><rect x="9.5" y="3" width="6" height="9" rx="1"/><rect x="16" y="3" width="5" height="6" rx="1"/></svg>
@@ -67,6 +69,17 @@ export default function App() {
   const [waTarget, setWaTarget] = useState(null);
   const [toast, setToast] = useState(null);
   const toastT = useRef(null);
+  const [theme, setTheme] = useState(() =>
+    (typeof document !== "undefined" && document.documentElement.getAttribute("data-theme")) || "light"
+  );
+  function toggleTheme() {
+    setTheme((t) => {
+      const n = t === "dark" ? "light" : "dark";
+      if (typeof document !== "undefined") document.documentElement.setAttribute("data-theme", n);
+      try { localStorage.setItem("instructiva_theme", n); } catch (e) {}
+      return n;
+    });
+  }
 
   useEffect(() => {
     if (!getToken()) { setBooting(false); return; }
@@ -103,7 +116,7 @@ export default function App() {
     <div className="shell">
       <aside className="sidebar">
         <div className="brand">
-          <img src={LOGO_LIGHT} alt="Instructiva" />
+          <img src={theme === "dark" ? LOGO_LIGHT : LOGO_FULL} alt="Instructiva" />
           <div className="tag">Monitoria de Atendimento</div>
         </div>
         <nav className="nav">
@@ -121,6 +134,10 @@ export default function App() {
               <div className="rl">{isGer ? "Gerente comercial" : "Vendedor"}</div>
             </div>
           </div>
+          <button className="theme-toggle" onClick={toggleTheme}>
+            {theme === "dark" ? <I.sun className="ico" /> : <I.moon className="ico" />}
+            <span>{theme === "dark" ? "Modo claro" : "Modo escuro"}</span>
+          </button>
           <button className="logout" onClick={logout}>Sair</button>
         </div>
       </aside>
@@ -157,6 +174,7 @@ function NavBtn({ ic: Ico, label, active, onClick }) {
 
 /* ============================ LOGIN ============================ */
 function Login({ onDone }) {
+  const dark = typeof document !== "undefined" && document.documentElement.getAttribute("data-theme") === "dark";
   const [login, setLogin] = useState("");
   const [senha, setSenha] = useState("");
   const [err, setErr] = useState("");
@@ -177,7 +195,7 @@ function Login({ onDone }) {
   return (
     <div className="login-wrap">
       <form className="login-card" onSubmit={entrar}>
-        <img className="logo" src={LOGO_LIGHT} alt="Instructiva" />
+        <img className="logo" src={dark ? LOGO_LIGHT : LOGO_FULL} alt="Instructiva" />
         <div className="ttl">Monitoria de Atendimento</div>
         <h2>Entrar</h2>
         <p className="hi">Acesse com seu usuário e senha.</p>
@@ -200,6 +218,7 @@ function Login({ onDone }) {
 
 /* ============================ ONBOARDING ============================ */
 function Onboarding({ user, onDone }) {
+  const dark = typeof document !== "undefined" && document.documentElement.getAttribute("data-theme") === "dark";
   const [nome, setNome] = useState(user.nome === "Gerente Comercial" ? "" : user.nome);
   const [senha, setSenha] = useState("");
   const [loading, setLoading] = useState(false);
@@ -218,7 +237,7 @@ function Onboarding({ user, onDone }) {
   return (
     <div className="login-wrap">
       <form className="login-card" onSubmit={salvar}>
-        <img className="logo" src={LOGO_LIGHT} alt="Instructiva" />
+        <img className="logo" src={dark ? LOGO_LIGHT : LOGO_FULL} alt="Instructiva" />
         <div className="ttl">Primeiro acesso</div>
         <h2>Seja bem-vindo(a)! 🎉</h2>
         <p className="hi">Confirme seu nome e defina uma senha sua.</p>
