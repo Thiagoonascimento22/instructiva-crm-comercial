@@ -58,8 +58,7 @@ function iniciais(nome) {
   return ((p[0]?.[0] || "") + (p[1]?.[0] || "")).toUpperCase() || "?";
 }
 const soDigitos = (s) => (s || "").replace(/\D/g, "");
-const limpaInst = (s) =>
-  (s || "").trim().toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9_-]/g, "");
+const limpaInst = (s) => (s || "").trim();
 
 /* ============================ APP ============================ */
 export default function App() {
@@ -1090,54 +1089,58 @@ function WhatsAppConfig({ onVoltar, showToast }) {
   const [users, setUsers] = useState([]);
   const [url, setUrl] = useState("");
   const [apiKey, setApiKey] = useState("");
-  const [rows, setRows] = useState([]);
-  const [status, setStatus] = useState({});
+  const [rows, setRows] = useState([]); // [{instance, vendedorId, numero, profileName, estado, descoberta}]
   const [saving, setSaving] = useState(false);
+  const [carregandoEvo, setCarregandoEvo] = useState(true);
+  const [erroEvo, setErroEvo] = useState("");
   const [qrInst, setQrInst] = useState(null);
 
   async function carregar() {
     const [c, us] = await Promise.all([api.waConfig(), api.listUsers()]);
     setCfg(c); setUrl(c.url || "");
-    setRows((c.instancias || []).map((i) => ({ ...i })));
     setUsers(us.filter((u) => u.ativo));
-    (c.instancias || []).forEach(async (i) => {
-      try { const s = await api.waStatus(i.instance); setStatus((st) => ({ ...st, [i.instance]: s.estado })); } catch (_) {}
-    });
+    await montar(c.instancias || []);
   }
-  useEffect(() => { carregar(); }, []);
+  async function montar(salvas) {
+    const mapV = {}; salvas.forEach((i) => { mapV[i.instance] = i.vendedorId || ""; });
+    setCarregandoEvo(true); setErroEvo("");
+    let desc = [];
+    try { desc = await api.waInstanciasEvolution(); }
+    catch (e) { setErroEvo(e.message || "Não consegui buscar os WhatsApps do Evolution."); }
+    setCarregandoEvo(false);
+    const linhas = desc.map((d) => ({
+      instance: d.instance, vendedorId: mapV[d.instance] || "",
+      numero: d.numero || "", profileName: d.profileName || "", estado: d.estado || "close", descoberta: true,
+    }));
+    const nomes = new Set(desc.map((d) => d.instance));
+    salvas.forEach((i) => { if (!nomes.has(i.instance)) linhas.push({ instance: i.instance, vendedorId: i.vendedorId || "", numero: "", profileName: "", estado: "close", descoberta: false }); });
+    setRows(linhas);
+  }
+  useEffect(() => { carregar(); /* eslint-disable-next-line */ }, []);
 
-  const addRow = () => setRows((r) => [...r, { instance: "", vendedorId: users[0]?.id || null }]);
-  const setRow = (i, k, v) => setRows((r) => r.map((x, j) => (j === i ? { ...x, [k]: v } : x)));
+  const setRow = (idx, k, v) => setRows((r) => r.map((x, j) => (j === idx ? { ...x, [k]: v } : x)));
+  const addManual = () => setRows((r) => [...r, { instance: "", vendedorId: "", numero: "", profileName: "", estado: "close", descoberta: false }]);
 
   async function salvar() {
-    const nomes = rows.map((r) => limpaInst((r.instance || "").trim())).filter(Boolean);
-    if (new Set(nomes).size !== nomes.length) {
-      showToast("✗ Tem dois números com o mesmo nome. Cada número precisa de um nome diferente (ex: com-maria e com-maria-2).");
-      return;
-    }
+    const monit = rows.filter((r) => (r.instance || "").trim() && r.vendedorId);
+    const nomes = monit.map((r) => r.instance.trim());
+    if (new Set(nomes).size !== nomes.length) { showToast("✗ Tem instâncias repetidas."); return; }
     setSaving(true);
     try {
-      const dados = { url, publicUrl: window.location.origin, instancias: rows.filter((r) => r.instance.trim()) };
+      const dados = { url, publicUrl: window.location.origin, instancias: monit.map((r) => ({ instance: r.instance.trim(), vendedorId: r.vendedorId })) };
       if (apiKey) dados.apiKey = apiKey;
       await api.waSetConfig(dados);
       setApiKey("");
-      showToast("✓ Conexão salva");
+      showToast(`✓ Salvo! ${monit.length} WhatsApp(s) sendo monitorado(s).`);
       carregar();
     } catch (e) { showToast("✗ " + e.message); } finally { setSaving(false); }
   }
-  async function desconectar(inst) {
-    if (!confirm(`Desconectar o WhatsApp "${inst}"?`)) return;
-    try { await api.waLogout(inst); setStatus((s) => ({ ...s, [inst]: "close" })); showToast("✓ Desconectado"); } catch (e) { showToast("✗ " + e.message); }
-  }
-  async function excluir(inst) {
-    if (!confirm(`Excluir a instância "${inst}"? Isso apaga as conversas dela.`)) return;
-    try { await api.waDeleteInstance(inst); setRows((r) => r.filter((x) => x.instance !== inst)); showToast("✓ Instância excluída"); } catch (e) { showToast("✗ " + e.message); }
-  }
 
   if (!cfg) return <div className="spin" />;
+  const monitCount = rows.filter((r) => r.vendedorId).length;
 
   return (
-    <div style={{ maxWidth: 720 }}>
+    <div style={{ maxWidth: 820 }}>
       <button className="btn btn-sm" onClick={onVoltar} style={{ marginBottom: 16 }}>← Voltar pras conversas</button>
 
       <div className="panel" style={{ marginBottom: 18 }}>
@@ -1157,38 +1160,56 @@ function WhatsAppConfig({ onVoltar, showToast }) {
       <div className="panel">
         <div className="panel-h">
           <h3>WhatsApps dos vendedores</h3>
-          <button className="btn btn-sm" onClick={addRow}><I.plus style={{ width: 14, height: 14 }} /> Adicionar</button>
+          <div style={{ display: "flex", gap: 8 }}>
+            <button className="btn btn-sm" onClick={() => montar(cfg.instancias || [])} disabled={carregandoEvo}><I.refresh style={{ width: 14, height: 14 }} /> {carregandoEvo ? "Buscando..." : "Recarregar"}</button>
+            <button className="btn btn-sm" onClick={addManual}><I.plus style={{ width: 14, height: 14 }} /> Manual</button>
+          </div>
         </div>
         <div style={{ padding: "6px 22px 18px" }}>
-          {rows.length === 0 && <p style={{ color: "var(--muted)", fontSize: 13, padding: "14px 0" }}>Nenhum WhatsApp cadastrado. Clique em "Adicionar".</p>}
-          {rows.map((r, i) => {
-            const on = status[r.instance] === "open";
+          <p style={{ fontSize: 13, color: "var(--muted)", margin: "6px 0 14px" }}>
+            Aqui aparecem os WhatsApps que a equipe já conectou. Escolha o <b>vendedor</b> de cada um pra ele ser monitorado. Os de outros sistemas, deixe em <b>"— não monitorar —"</b>.
+          </p>
+
+          {erroEvo && <div className="info-box" style={{ borderColor: "var(--coral)" }}>⚠️ {erroEvo} Confira a URL e a chave aí em cima.</div>}
+          {carregandoEvo && <div className="spin" />}
+          {!carregandoEvo && rows.length === 0 && !erroEvo && <p style={{ color: "var(--muted)", fontSize: 13, padding: "14px 0" }}>Nenhum WhatsApp encontrado no Evolution.</p>}
+
+          {!carregandoEvo && rows.map((r, i) => {
+            const on = r.estado === "open";
+            const conn = r.estado === "connecting";
             return (
-              <div className="wa-inst-row" key={i}>
-                <span className={"wa-dot " + (on ? "on" : "off")} title={on ? "conectado" : "desconectado"} />
-                <input className="input" style={{ flex: "1 1 130px" }} value={r.instance} onChange={(e) => setRow(i, "instance", e.target.value)} placeholder="nome (ex: com-maria)" />
-                <select className="select" style={{ flex: "1 1 150px" }} value={r.vendedorId || ""} onChange={(e) => setRow(i, "vendedorId", e.target.value)}>
-                  <option value="">— vendedor —</option>
+              <div className="wa-inst-row" key={r.instance || ("m" + i)}>
+                <span className={"wa-dot " + (on ? "on" : "off")} title={on ? "conectado" : conn ? "conectando" : "desconectado"} />
+                <div style={{ flex: "1 1 210px", minWidth: 0 }}>
+                  {r.descoberta ? (
+                    <>
+                      <div style={{ fontWeight: 600, fontSize: 13.5, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{r.profileName || r.instance}</div>
+                      <div style={{ fontSize: 11.5, color: "var(--muted)" }}>{r.instance}{r.numero ? " · " + r.numero : ""} · {on ? "conectado" : conn ? "conectando" : "desconectado"}</div>
+                    </>
+                  ) : (
+                    <input className="input" value={r.instance} onChange={(e) => setRow(i, "instance", e.target.value)} placeholder="nome exato da instância" />
+                  )}
+                </div>
+                <select className="select" style={{ flex: "1 1 160px" }} value={r.vendedorId || ""} onChange={(e) => setRow(i, "vendedorId", e.target.value)}>
+                  <option value="">— não monitorar —</option>
                   {users.map((u) => <option key={u.id} value={u.id}>{u.nome}</option>)}
                 </select>
-                {on
-                  ? <button className="btn btn-sm btn-danger" onClick={() => desconectar(r.instance)}><I.power style={{ width: 14, height: 14 }} /> Desconectar</button>
-                  : <button className="btn btn-sm" onClick={() => setQrInst(limpaInst(r.instance))}>Conectar</button>}
-                <button className="x-btn" onClick={() => excluir(r.instance)} title="Excluir"><I.trash style={{ width: 15, height: 15 }} /></button>
+                {!on && <button className="btn btn-sm" onClick={() => setQrInst((r.instance || "").trim())} disabled={!(r.instance || "").trim()}>Conectar</button>}
               </div>
             );
           })}
+
           <div style={{ marginTop: 16, display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
-            <button className="btn btn-primary" onClick={salvar} disabled={saving}>{saving ? "Salvando..." : "Salvar conexão"}</button>
-            <span style={{ fontSize: 12.5, color: "var(--muted)" }}>Salve antes de conectar, pra vincular cada número ao vendedor.</span>
+            <button className="btn btn-primary" onClick={salvar} disabled={saving}>{saving ? "Salvando..." : `Salvar (${monitCount} monitorado${monitCount === 1 ? "" : "s"})`}</button>
+            <span style={{ fontSize: 12.5, color: "var(--muted)" }}>Eu religo o webhook de cada um automaticamente ao salvar.</span>
           </div>
           <div className="info-box">
-            💡 Vendedor com 2 chips? Adicione <b>duas linhas</b> apontando pro mesmo vendedor, cada uma com um <b>nome diferente</b> (ex: <code>com-maria</code> e <code>com-maria-2</code>). Os atendimentos dos dois números somam automaticamente no painel.
+            💡 Vendedor com 2 números? É só escolher o <b>mesmo vendedor</b> em duas instâncias — os atendimentos somam no painel.
           </div>
         </div>
       </div>
 
-      {qrInst && <QrModal instance={qrInst} onClose={() => setQrInst(null)} onConnected={() => { setStatus((s) => ({ ...s, [qrInst]: "open" })); setQrInst(null); showToast("🎉 Conectado!"); }} />}
+      {qrInst && <QrModal instance={qrInst} onClose={() => setQrInst(null)} onConnected={() => { setQrInst(null); showToast("🎉 Conectado!"); montar(cfg.instancias || []); }} />}
     </div>
   );
 }

@@ -404,10 +404,8 @@ function instanciaLimpa(nome) {
 function instanciasDoUser(user) {
   const insts = db.waConfig.instancias || [];
   if (user.role === "gerente") {
-    // gerente: todas as cadastradas + as que aparecem em conversas
-    const set = new Set(insts.map((i) => i.instance));
-    Object.values(db.waChats).forEach((c) => set.add(c.instance));
-    return [...set];
+    // gerente vê só os WhatsApps vinculados a um vendedor (os monitorados de propósito)
+    return insts.filter((i) => i.vendedorId).map((i) => i.instance);
   }
   return insts.filter((i) => i.vendedorId === user.id).map((i) => i.instance);
 }
@@ -419,11 +417,21 @@ async function evo(method, caminho, body) {
   const cfg = db.waConfig;
   if (!cfg.url || !cfg.apiKey) throw new Error("Conexão Evolution não configurada");
   const base = cfg.url.replace(/\/+$/, "");
-  const res = await fetch(base + caminho, {
-    method,
-    headers: { "Content-Type": "application/json", apikey: cfg.apiKey },
-    body: body ? JSON.stringify(body) : undefined,
-  });
+  const ctrl = new AbortController();
+  const tm = setTimeout(() => ctrl.abort(), 15000);
+  let res;
+  try {
+    res = await fetch(base + caminho, {
+      method,
+      headers: { "Content-Type": "application/json", apikey: cfg.apiKey },
+      body: body ? JSON.stringify(body) : undefined,
+      signal: ctrl.signal,
+    });
+  } catch (e) {
+    throw new Error(e.name === "AbortError" ? "Evolution não respondeu (timeout)" : "Não consegui falar com a Evolution: " + e.message);
+  } finally {
+    clearTimeout(tm);
+  }
   let data = null;
   try { data = await res.json(); } catch (_) {}
   if (!res.ok) {
@@ -527,7 +535,7 @@ app.get("/api/wa/config", auth, gerenteOnly, (req, res) => {
     webhookUrl: webhookUrl(),
   });
 });
-app.put("/api/wa/config", auth, gerenteOnly, (req, res) => {
+app.put("/api/wa/config", auth, gerenteOnly, async (req, res) => {
   const { url, apiKey, publicUrl, instancias } = req.body || {};
   if (url !== undefined) db.waConfig.url = String(url).trim();
   if (apiKey) db.waConfig.apiKey = String(apiKey).trim();
@@ -535,9 +543,11 @@ app.put("/api/wa/config", auth, gerenteOnly, (req, res) => {
   if (Array.isArray(instancias)) {
     db.waConfig.instancias = instancias
       .filter((i) => i && i.instance)
-      .map((i) => ({ instance: instanciaLimpa(i.instance), vendedorId: i.vendedorId || null }));
+      .map((i) => ({ instance: String(i.instance).trim(), vendedorId: i.vendedorId || null }));
   }
   saveSoon();
+  // religa o webhook de cada monitorado em background (não trava o salvar)
+  (db.waConfig.instancias || []).forEach((i) => { configurarWebhook(i.instance).catch(() => {}); });
   res.json({ ok: true, webhookUrl: webhookUrl() });
 });
 
@@ -637,7 +647,7 @@ app.post("/api/wa/iniciar", auth, async (req, res) => {
 /* ---- criar instância + QR (gerente, ou vendedor pra própria) ---- */
 app.post("/api/wa/connect", auth, async (req, res) => {
   let { instance, publicUrl } = req.body || {};
-  instance = instanciaLimpa(instance);
+  instance = String(instance || "").trim();
   if (!instance) return res.status(400).json({ error: "Informe o nome da instância" });
   // permissão: gerente conecta qualquer uma; vendedor só a dele
   if (req.user.role !== "gerente") {
@@ -672,6 +682,30 @@ app.post("/api/wa/connect", auth, async (req, res) => {
       qr = ex.qr; pairing = ex.pairing;
     }
     res.json({ qr, pairingCode: pairing });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// lista TODAS as instâncias que existem no Evolution (pra gerente escolher quais monitorar)
+app.get("/api/wa/instancias-evolution", auth, gerenteOnly, async (req, res) => {
+  try {
+    const r = await evo("GET", `/instance/fetchInstances`);
+    const arr = Array.isArray(r) ? r : (r && Array.isArray(r.instances) ? r.instances : []);
+    const lista = arr
+      .map((it) => {
+        const inst = it.instance || it;
+        const instance = it.name || inst.instanceName || inst.name || "";
+        const estado = it.connectionStatus || inst.connectionStatus || inst.status || inst.state || "close";
+        const ownerJid = it.ownerJid || inst.ownerJid || inst.owner || "";
+        const numero = it.number || (ownerJid ? String(ownerJid).split("@")[0] : "");
+        const profileName = it.profileName || inst.profileName || "";
+        return { instance, estado, numero, profileName };
+      })
+      .filter((x) => x.instance);
+    // conectados primeiro, depois ordem alfabética
+    lista.sort((a, b) => (b.estado === "open") - (a.estado === "open") || a.instance.localeCompare(b.instance));
+    res.json(lista);
   } catch (e) {
     res.status(500).json({ error: e.message });
   }

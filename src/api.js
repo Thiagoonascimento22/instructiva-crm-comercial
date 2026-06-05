@@ -61,6 +61,7 @@ export const api = {
   waConnect: (instance) =>
     req("POST", "/api/wa/connect", { instance, publicUrl: window.location.origin }),
   waStatus: (instance) => req("GET", "/api/wa/status/" + instance),
+  waInstanciasEvolution: () => req("GET", "/api/wa/instancias-evolution"),
   waLogout: (instance) => req("POST", "/api/wa/logout/" + instance),
   waDeleteInstance: (instance) => req("DELETE", "/api/wa/instance/" + instance),
 
