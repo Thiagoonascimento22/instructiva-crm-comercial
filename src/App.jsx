@@ -993,13 +993,12 @@ function WhatsApp({ user, showToast, target, onTargetUsed }) {
     // eslint-disable-next-line
   }, [target, loading, chats]);
 
-  const vendedoresWA = useMemo(() => {
-    const seen = {}; const arr = [];
-    instancias.forEach((i) => {
-      if (i.vendedorId && !seen[i.vendedorId]) { seen[i.vendedorId] = 1; arr.push({ id: i.vendedorId, nome: usersMap[i.vendedorId]?.nome || i.instance }); }
-    });
-    return arr;
-  }, [instancias, usersMap]);
+  // vendedores vêm de quem está CADASTRADO no Monitoria (Equipe & Acessos),
+  // não das instâncias do Evolution (que é compartilhado com outros sistemas)
+  const vendedoresWA = useMemo(
+    () => [...usersArr].sort((a, b) => (a.nome || "").localeCompare(b.nome || "", "pt-BR")),
+    [usersArr]
+  );
 
   const filtrados = chats.filter((c) => {
     if (isGer && filtro !== "todas" && c.vendedorId !== filtro) return false;
