@@ -1121,6 +1121,17 @@ function WhatsAppConfig({ onVoltar, showToast }) {
   const setRow = (idx, k, v) => setRows((r) => r.map((x, j) => (j === idx ? { ...x, [k]: v } : x)));
   const addManual = () => setRows((r) => [...r, { instance: "", vendedorId: "", numero: "", profileName: "", estado: "close", descoberta: false }]);
 
+  async function excluir(r, idx) {
+    const inst = (r.instance || "").trim();
+    if (!inst || !r.descoberta) { setRows((rs) => rs.filter((_, j) => j !== idx)); return; }
+    if (!confirm(`Excluir a instância "${inst}" do Evolution?\n\nIsso desconecta e apaga esse WhatsApp de vez. Se ele for usado por outro sistema, vai parar de funcionar lá também.`)) return;
+    try {
+      await api.waDeleteInstance(inst);
+      setRows((rs) => rs.filter((_, j) => j !== idx));
+      showToast("✓ Instância excluída");
+    } catch (e) { showToast("✗ " + e.message); }
+  }
+
   async function salvar() {
     const monit = rows.filter((r) => (r.instance || "").trim() && r.vendedorId);
     const nomes = monit.map((r) => r.instance.trim());
@@ -1192,6 +1203,7 @@ function WhatsAppConfig({ onVoltar, showToast }) {
                   {users.map((u) => <option key={u.id} value={u.id}>{u.nome}</option>)}
                 </select>
                 {!on && <button className="btn btn-sm" onClick={() => setQrInst((r.instance || "").trim())} disabled={!(r.instance || "").trim()}>Conectar</button>}
+                <button className="x-btn" onClick={() => excluir(r, i)} title="Excluir do Evolution"><I.trash style={{ width: 15, height: 15 }} /></button>
               </div>
             );
           })}

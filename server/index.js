@@ -435,7 +435,12 @@ async function evo(method, caminho, body) {
   let data = null;
   try { data = await res.json(); } catch (_) {}
   if (!res.ok) {
-    const msg = (data && (data.message || data.error)) || "Erro Evolution " + res.status;
+    let msg;
+    if (data && data.response && data.response.message) {
+      msg = data.response.message; // Evolution põe a mensagem real aqui (ex: "name already in use")
+    } else {
+      msg = (data && (data.message || data.error)) || "Erro Evolution " + res.status;
+    }
     throw new Error(Array.isArray(msg) ? msg.join("; ") : String(msg));
   }
   return data;
