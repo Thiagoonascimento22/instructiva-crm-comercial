@@ -66,8 +66,8 @@ export const api = {
   waDeleteInstance: (instance) => req("DELETE", "/api/wa/instance/" + instance),
 
   // IA
-  iaEquipe: () => req("POST", "/api/ia/equipe"),
-  iaVendedor: (id) => req("POST", "/api/ia/vendedor/" + id),
+  iaEquipe: (desde, ate) => req("POST", "/api/ia/equipe", { desde: desde || 0, ate: ate || Date.now() }),
+  iaVendedor: (id, desde, ate) => req("POST", "/api/ia/vendedor/" + id, { desde: desde || 0, ate: ate || Date.now() }),
 
   // Monitoria
   monitoria: (desde, ate) => req("GET", `/api/monitoria?desde=${desde || 0}&ate=${ate || Date.now()}`),

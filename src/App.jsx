@@ -60,6 +60,19 @@ function iniciais(nome) {
 const soDigitos = (s) => (s || "").replace(/\D/g, "");
 const limpaInst = (s) => (s || "").trim();
 
+// hora estilo WhatsApp: hoje -> HH:MM, ontem -> "ontem", senão -> DD/MM
+function horaCurta(ts) {
+  if (!ts) return "";
+  const d = new Date(ts), now = new Date();
+  if (d.toDateString() === now.toDateString()) return d.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+  const ontem = new Date(now); ontem.setDate(now.getDate() - 1);
+  if (d.toDateString() === ontem.toDateString()) return "ontem";
+  const mesmoAno = d.getFullYear() === now.getFullYear();
+  return d.toLocaleDateString("pt-BR", mesmoAno ? { day: "2-digit", month: "2-digit" } : { day: "2-digit", month: "2-digit", year: "2-digit" });
+}
+function inicioDoDia(t) { const x = new Date(t); x.setHours(0, 0, 0, 0); return x; }
+function dataInputHoje() { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; }
+
 /* ============================ APP ============================ */
 export default function App() {
   const [booting, setBooting] = useState(true);
@@ -1045,7 +1058,10 @@ function WhatsApp({ user, showToast, target, onTargetUsed }) {
                   <div className="last">{c.ultima}</div>
                   {isGer && c.vendedorId && <div className="seller-tag">{usersMap[c.vendedorId]?.nome || ""}</div>}
                 </div>
-                {c.naoLidas > 0 && <div className="wa-badge">{c.naoLidas}</div>}
+                <div className="wa-meta">
+                  <div className="wa-time">{horaCurta(c.atualizadoEm)}</div>
+                  {c.naoLidas > 0 && <div className="wa-badge">{c.naoLidas}</div>}
+                </div>
               </div>
             ))}
           </div>
@@ -2032,29 +2048,58 @@ function PaginaIA({ user, showToast }) {
   const [selVend, setSelVend] = useState("");
   const [eq, setEq] = useState({ loading: false, res: null, erro: "" });
   const [ind, setInd] = useState({ loading: false, res: null, erro: "" });
+  const [periodo, setPeriodo] = useState({ desde: 0, ate: Date.now(), key: "tudo", label: "todo o histórico" });
+  const [dataEsp, setDataEsp] = useState(dataInputHoje());
 
-  async function carregar() {
-    try {
-      setMon(await api.monitoria(0, Date.now()));
-      if (isGer) {
-        const us = await api.listVendedores();
-        setUsers(us);
-        if (us[0]) setSelVend(us[0].id);
-      }
-    } catch (_) {}
+  async function carregarUsers() {
+    if (!isGer) return;
+    try { const us = await api.listVendedores(); setUsers(us); if (us[0]) setSelVend(us[0].id); } catch (_) {}
   }
-  useEffect(() => { carregar(); /* eslint-disable-next-line */ }, []);
+  useEffect(() => { carregarUsers(); /* eslint-disable-next-line */ }, []);
+  // recarrega as métricas e limpa análises antigas quando muda o período
+  useEffect(() => {
+    (async () => { try { setMon(await api.monitoria(periodo.desde, periodo.ate)); } catch (_) {} })();
+    setEq({ loading: false, res: null, erro: "" });
+    setInd({ loading: false, res: null, erro: "" });
+    // eslint-disable-next-line
+  }, [periodo.desde, periodo.ate]);
+
+  function aplicarPreset(key) {
+    const now = Date.now();
+    if (key === "hoje") setPeriodo({ desde: inicioDoDia(now).getTime(), ate: now, key, label: "hoje" });
+    else if (key === "ontem") { const ini = inicioDoDia(now); ini.setDate(ini.getDate() - 1); setPeriodo({ desde: ini.getTime(), ate: inicioDoDia(now).getTime() - 1, key, label: "ontem" }); }
+    else if (key === "7d") { const ini = inicioDoDia(now); ini.setDate(ini.getDate() - 6); setPeriodo({ desde: ini.getTime(), ate: now, key, label: "últimos 7 dias" }); }
+    else if (key === "30d") { const ini = inicioDoDia(now); ini.setDate(ini.getDate() - 29); setPeriodo({ desde: ini.getTime(), ate: now, key, label: "últimos 30 dias" }); }
+    else setPeriodo({ desde: 0, ate: now, key: "tudo", label: "todo o histórico" });
+  }
+  function aplicarData(str) {
+    setDataEsp(str);
+    if (!str) return;
+    const [y, mo, da] = str.split("-").map(Number);
+    const ini = new Date(y, mo - 1, da, 0, 0, 0, 0);
+    const fim = new Date(y, mo - 1, da, 23, 59, 59, 999);
+    setPeriodo({ desde: ini.getTime(), ate: fim.getTime(), key: "data", label: str.split("-").reverse().join("/") });
+  }
+  const periodoBar = (
+    <div className="ia-periodo">
+      <span className="lbl">Período:</span>
+      {[["hoje", "Hoje"], ["ontem", "Ontem"], ["7d", "7 dias"], ["30d", "30 dias"], ["tudo", "Tudo"]].map(([k, l]) => (
+        <button key={k} className={"chip" + (periodo.key === k ? " on" : "")} onClick={() => aplicarPreset(k)}>{l}</button>
+      ))}
+      <input type="date" className="input-date" value={dataEsp} max={dataInputHoje()} onChange={(e) => aplicarData(e.target.value)} />
+    </div>
+  );
 
   const m = (mon && mon.time) || {};
 
   async function gerarEquipe() {
     setEq({ loading: true, res: null, erro: "" });
-    try { setEq({ loading: false, res: await api.iaEquipe(), erro: "" }); }
+    try { setEq({ loading: false, res: await api.iaEquipe(periodo.desde, periodo.ate), erro: "" }); }
     catch (e) { setEq({ loading: false, res: null, erro: e.message }); }
   }
   async function gerarIndividual(id) {
     setInd({ loading: true, res: null, erro: "" });
-    try { setInd({ loading: false, res: await api.iaVendedor(id), erro: "" }); }
+    try { setInd({ loading: false, res: await api.iaVendedor(id, periodo.desde, periodo.ate), erro: "" }); }
     catch (e) { setInd({ loading: false, res: null, erro: e.message }); }
   }
 
@@ -2062,10 +2107,11 @@ function PaginaIA({ user, showToast }) {
   if (!isGer) {
     return (
       <div className="ia-page">
+        {periodoBar}
         <div className="ia-hero">
           <span className="ia-hero-badge"><I.spark style={{ width: 14, height: 14 }} /> Inteligência Artificial</span>
           <h2>Análise do meu atendimento</h2>
-          <p>A IA olha o seu atendimento no WhatsApp — rapidez nas respostas, clientes sem retorno, tom e educação — e te dá uma leitura honesta com sugestões pra melhorar.</p>
+          <p>A IA olha o seu atendimento no WhatsApp — rapidez nas respostas, clientes sem retorno, tom e educação — e te dá uma leitura honesta com sugestões pra melhorar. <b>Período: {periodo.label}.</b></p>
           <div className="ia-hero-stats"><span><b>{m.conversas || 0}</b> atendimentos</span><span className="sep">•</span><span><b>{m.semResposta || 0}</b> sem resposta</span><span className="sep">•</span><span><b>{m.taxaResposta || 0}%</b> taxa de resposta</span></div>
           <button className="btn-hero" onClick={() => gerarIndividual(user.id)} disabled={ind.loading}><I.spark style={{ width: 17, height: 17 }} /> {ind.loading ? "Analisando..." : "Gerar minha análise"}</button>
         </div>
@@ -2084,12 +2130,14 @@ function PaginaIA({ user, showToast }) {
         <button className={aba === "individual" ? "on" : ""} onClick={() => setAba("individual")}><I.team /> Vendedor específico</button>
       </div>
 
+      {periodoBar}
+
       {aba === "equipe" && (
         <>
           <div className="ia-hero">
             <span className="ia-hero-badge"><I.spark style={{ width: 14, height: 14 }} /> Inteligência Artificial</span>
             <h2>Relatório de atendimento da equipe</h2>
-            <p>A IA analisa a velocidade das respostas, os clientes deixados sem retorno, o volume e o tom de cada atendente, gerando uma leitura geral e recomendações pra apresentar à diretoria.</p>
+            <p>A IA analisa a velocidade das respostas, os clientes deixados sem retorno, o volume e o tom de cada atendente, gerando uma leitura geral e recomendações pra apresentar à diretoria. <b>Período: {periodo.label}.</b></p>
             <div className="ia-hero-stats"><span><b>{m.conversas || 0}</b> atendimentos</span><span className="sep">•</span><span><b>{users.length}</b> vendedores</span><span className="sep">•</span><span><b>{m.taxaResposta || 0}%</b> taxa de resposta</span></div>
             <button className="btn-hero" onClick={gerarEquipe} disabled={eq.loading}><I.spark style={{ width: 17, height: 17 }} /> {eq.loading ? "Analisando..." : "Gerar análise da equipe"}</button>
           </div>
@@ -2112,7 +2160,7 @@ function PaginaIA({ user, showToast }) {
             <div className="ia-hero">
               <span className="ia-hero-badge"><I.spark style={{ width: 14, height: 14 }} /> Inteligência Artificial</span>
               <h2>Avaliação individual</h2>
-              <p>Análise dos resultados e da qualidade do atendimento de <b>{(users.find((u) => u.id === selVend) || {}).nome}</b>, com pontos fortes, pontos a melhorar e sugestões específicas.</p>
+              <p>Análise dos resultados e da qualidade do atendimento de <b>{(users.find((u) => u.id === selVend) || {}).nome}</b>, com pontos fortes, pontos a melhorar e sugestões específicas. <b>Período: {periodo.label}.</b></p>
               <button className="btn-hero" onClick={() => gerarIndividual(selVend)} disabled={ind.loading}><I.spark style={{ width: 17, height: 17 }} /> {ind.loading ? "Analisando..." : "Gerar análise do vendedor"}</button>
             </div>
           )}

@@ -2064,3 +2064,22 @@ h1, h2, h3, h4, .topbar .greet, .panel-h h3, .login-card .ttl, .login-card h2, .
 .wa-conn.sel { border-color: var(--brand); background: rgba(255,122,26,0.12); }
 .wa-conn .cn { font-size: 13px; font-weight: 600; }
 .wa-conn .cs { font-size: 11.5px; color: var(--muted); }
+
+/* horário + badge na lista de conversas */
+.wa-conv .wa-meta { margin-left: auto; display: flex; flex-direction: column; align-items: flex-end; gap: 5px; padding-left: 6px; flex-shrink: 0; }
+.wa-conv .wa-time { font-size: 11px; color: var(--faint); white-space: nowrap; }
+
+/* período da análise de IA */
+.ia-periodo { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; }
+.ia-periodo .lbl { font-size: 13px; color: var(--muted); font-weight: 600; }
+.ia-periodo .chip {
+  font: inherit; font-size: 13px; padding: 6px 13px; border-radius: 999px; cursor: pointer;
+  background: var(--glass); border: 1px solid var(--glass-border); color: var(--text);
+  transition: border-color .15s, background .15s;
+}
+.ia-periodo .chip:hover { border-color: rgba(255,122,26,0.45); }
+.ia-periodo .chip.on { background: var(--brand); border-color: var(--brand); color: #fff; font-weight: 600; }
+.ia-periodo .input-date {
+  font: inherit; font-size: 13px; padding: 6px 11px; border-radius: 10px;
+  background: var(--input-bg); border: 1px solid var(--line); color: var(--text);
+}

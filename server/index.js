@@ -940,16 +940,27 @@ app.get("/api/monitoria/evolucao", auth, (req, res) => {
   res.json({ dias: out, desde: startDay.getTime(), ate });
 });
 
-function conversasVendedor(vendedorId, maxChats = 6, maxMsgs = 12) {
+function conversasVendedor(vendedorId, maxChats = 6, maxMsgs = 12, desde = 0, ate = Date.now()) {
   return chatsDoVendedor(vendedorId)
-    .sort((a, b) => (b.atualizadoEm || 0) - (a.atualizadoEm || 0))
-    .slice(0, maxChats)
     .map((c) => {
-      const msgs = c.mensagens.slice(-maxMsgs)
+      const msgs = (c.mensagens || []).filter((m) => m.ts >= desde && m.ts <= ate);
+      return { c, msgs, ultimo: msgs.length ? msgs[msgs.length - 1].ts : 0 };
+    })
+    .filter((x) => x.msgs.length > 0)
+    .sort((a, b) => b.ultimo - a.ultimo)
+    .slice(0, maxChats)
+    .map(({ c, msgs }) => {
+      const txt = msgs.slice(-maxMsgs)
         .map((m) => (m.role === "me" ? "Vendedor" : "Cliente") + ": " + String(m.content).slice(0, 200))
         .join("\n");
-      return `Conversa com ${c.nome}:\n${msgs}`;
+      return `Conversa com ${c.nome}:\n${txt}`;
     });
+}
+function textoPeriodo(desde, ate) {
+  if (!desde || desde <= 0) return "todo o histórico";
+  const fmt = (t) => new Date(t).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric" });
+  const di = fmt(desde), df = fmt(ate);
+  return di === df ? `o dia ${di}` : `${di} até ${df}`;
 }
 function fmtSegBR(seg) {
   if (!seg) return "—";
@@ -960,26 +971,31 @@ function fmtSegBR(seg) {
 
 app.post("/api/ia/equipe", auth, gerenteOnly, async (req, res) => {
   try {
+    const desde = req.body && req.body.desde ? Number(req.body.desde) : 0;
+    const ate = req.body && req.body.ate ? Number(req.body.ate) : Date.now();
+    const periodoTxt = textoPeriodo(desde, ate);
     const vendedores = db.users.filter((u) => u.role === "vendedor" && u.ativo);
     const linhas = vendedores.map((v) => {
-      const s = agregaVendedor(v.id, 0, Date.now());
+      const s = agregaVendedor(v.id, desde, ate);
       return `- ${v.nome}: ${s.conversas} conversas, ${s.atendidas} atendidas, ${s.semResposta} sem resposta, ${s.mensagensEnviadas} mensagens enviadas, tempo médio de resposta ${fmtSegBR(s.tmrSeg)}, 1ª resposta ${fmtSegBR(s.primeiraSeg)}, taxa de resposta ${s.taxaResposta}%`;
     }).join("\n");
     const amostras = [];
     vendedores.slice(0, 6).forEach((v) => {
-      const cv = conversasVendedor(v.id, 1, 8);
+      const cv = conversasVendedor(v.id, 1, 8, desde, ate);
       if (cv[0]) amostras.push(`[${v.nome}] ${cv[0]}`);
     });
     const prompt = `Você é um supervisor de atendimento sênior monitorando a equipe da Escola Instructiva (cursos técnicos de eletrônica) que atende clientes pelo WhatsApp. Avalie a QUALIDADE E A PRODUTIVIDADE DO ATENDIMENTO da equipe (rapidez nas respostas, clientes deixados sem resposta, volume, tom e educação).
 
-DESEMPENHO DE ATENDIMENTO DOS VENDEDORES:
+PERÍODO ANALISADO: ${periodoTxt}.
+
+DESEMPENHO DE ATENDIMENTO DOS VENDEDORES (somente nesse período):
 ${linhas || "Nenhum vendedor cadastrado."}
 
-AMOSTRA DE CONVERSAS NO WHATSAPP:
-${amostras.join("\n\n") || "Sem conversas registradas ainda."}
+AMOSTRA DE CONVERSAS NO WHATSAPP (desse período):
+${amostras.join("\n\n") || "Sem conversas registradas nesse período."}
 
 Responda SOMENTE em JSON puro, sem markdown, neste formato:
-{"resumo":"2 a 4 frases sobre o atendimento da equipe","pontos_fortes":["..."],"pontos_a_melhorar":["..."],"sugestoes":["3 a 5 sugestões práticas pra melhorar a velocidade, a cobertura e a qualidade do atendimento"]}
+{"resumo":"2 a 4 frases sobre o atendimento da equipe nesse período","pontos_fortes":["..."],"pontos_a_melhorar":["..."],"sugestoes":["3 a 5 sugestões práticas pra melhorar a velocidade, a cobertura e a qualidade do atendimento"]}
 Escreva em português brasileiro, tom direto e construtivo.`;
     res.json(parseIA(await chamarIA(prompt)));
   } catch (e) {
@@ -993,18 +1009,22 @@ app.post("/api/ia/vendedor/:id", auth, async (req, res) => {
   if (req.user.role !== "gerente" && req.user.id !== v.id)
     return res.status(403).json({ error: "Sem acesso" });
   try {
-    const s = agregaVendedor(v.id, 0, Date.now());
-    const conv = conversasVendedor(v.id, 6, 12);
+    const desde = req.body && req.body.desde ? Number(req.body.desde) : 0;
+    const ate = req.body && req.body.ate ? Number(req.body.ate) : Date.now();
+    const periodoTxt = textoPeriodo(desde, ate);
+    const s = agregaVendedor(v.id, desde, ate);
+    const conv = conversasVendedor(v.id, 6, 12, desde, ate);
     const prompt = `Você é um supervisor de atendimento sênior avaliando UM atendente da Escola Instructiva (cursos técnicos de eletrônica) que atende clientes pelo WhatsApp. Avalie a QUALIDADE e a PRODUTIVIDADE do atendimento (rapidez de resposta, clientes sem resposta, volume, tom, educação, clareza, follow-up).
 
+PERÍODO ANALISADO: ${periodoTxt}.
 ATENDENTE: ${v.nome}
-NÚMEROS: ${s.conversas} conversas, ${s.atendidas} atendidas, ${s.semResposta} sem resposta, ${s.mensagensEnviadas} mensagens enviadas, tempo médio de resposta ${fmtSegBR(s.tmrSeg)}, tempo da 1ª resposta ${fmtSegBR(s.primeiraSeg)}, taxa de resposta ${s.taxaResposta}%.
+NÚMEROS (somente nesse período): ${s.conversas} conversas, ${s.atendidas} atendidas, ${s.semResposta} sem resposta, ${s.mensagensEnviadas} mensagens enviadas, tempo médio de resposta ${fmtSegBR(s.tmrSeg)}, tempo da 1ª resposta ${fmtSegBR(s.primeiraSeg)}, taxa de resposta ${s.taxaResposta}%.
 
-CONVERSAS NO WHATSAPP:
-${conv.join("\n\n") || "Poucas conversas registradas pra avaliar o atendimento."}
+CONVERSAS NO WHATSAPP (desse período):
+${conv.join("\n\n") || "Poucas conversas registradas nesse período pra avaliar o atendimento."}
 
 Responda SOMENTE em JSON puro, sem markdown, neste formato:
-{"resumo":"2 a 4 frases avaliando o atendimento dessa pessoa","pontos_fortes":["..."],"pontos_a_melhorar":["..."],"sugestoes":["3 a 5 sugestões práticas e específicas pra essa pessoa melhorar o atendimento"]}
+{"resumo":"2 a 4 frases avaliando o atendimento dessa pessoa nesse período","pontos_fortes":["..."],"pontos_a_melhorar":["..."],"sugestoes":["3 a 5 sugestões práticas e específicas pra essa pessoa melhorar o atendimento"]}
 Escreva em português brasileiro, tom direto e construtivo, sem ser ofensivo.`;
     const out = parseIA(await chamarIA(prompt));
     out.vendedor = v.nome;
