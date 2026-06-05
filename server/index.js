@@ -796,6 +796,61 @@ app.get("/api/monitoria", auth, (req, res) => {
   res.json({ vendedores: out, time, desde, ate });
 });
 
+app.get("/api/monitoria/vendedor/:id", auth, (req, res) => {
+  const v = db.users.find((u) => u.id === req.params.id);
+  if (!v) return res.status(404).json({ error: "Vendedor não encontrado" });
+  if (req.user.role !== "gerente" && req.user.id !== v.id)
+    return res.status(403).json({ error: "Sem acesso" });
+  const desde = req.query.desde ? Number(req.query.desde) : 0;
+  const ate = req.query.ate ? Number(req.query.ate) : Date.now();
+  const lista = chatsDoVendedor(v.id).map((c) => {
+    const m = metricasChat(c, desde, ate);
+    if (!m) return null;
+    const msgsP = (c.mensagens || []).filter((x) => x.ts >= desde && x.ts <= ate).sort((a, b) => a.ts - b.ts);
+    const ult = msgsP[msgsP.length - 1];
+    return {
+      id: c.id, numero: c.numero, nome: c.nome,
+      nMsgs: msgsP.length, enviadas: m.enviadas, atendida: m.atendida, semResposta: m.semResposta,
+      tmrSeg: mediaSeg(m.resp), primeiraSeg: m.primeira != null ? Math.round(m.primeira / 1000) : 0,
+      ultimoTs: ult ? ult.ts : 0, ultimaMsg: ult ? String(ult.content).slice(0, 90) : "", ultimaDe: ult ? ult.role : "",
+    };
+  }).filter(Boolean).sort((a, b) => b.ultimoTs - a.ultimoTs);
+  res.json({ id: v.id, nome: v.nome, ...agregaVendedor(v.id, desde, ate), lista });
+});
+
+app.get("/api/monitoria/evolucao", auth, (req, res) => {
+  const DAY = 86400000;
+  let desde = req.query.desde ? Number(req.query.desde) : 0;
+  const ate = req.query.ate ? Number(req.query.ate) : Date.now();
+  if (!desde || ate - desde > 62 * DAY) desde = ate - 62 * DAY;
+  let ids;
+  if (req.user.role === "gerente")
+    ids = req.query.vendedorId ? [req.query.vendedorId] : db.users.filter((u) => u.role === "vendedor" && u.ativo).map((u) => u.id);
+  else ids = [req.user.id];
+  const keyOf = (ts) => { const d = new Date(ts); return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0"); };
+  const labelOf = (ts) => { const d = new Date(ts); return String(d.getDate()).padStart(2, "0") + "/" + String(d.getMonth() + 1).padStart(2, "0"); };
+  const dias = {};
+  const ensure = (ts) => { const k = keyOf(ts); if (!dias[k]) dias[k] = { conv: new Set(), msgs: 0, resp: [] }; return dias[k]; };
+  ids.forEach((id) => chatsDoVendedor(id).forEach((c) => {
+    const msgs = (c.mensagens || []).filter((m) => m.ts >= desde && m.ts <= ate).sort((a, b) => a.ts - b.ts);
+    let pend = null;
+    msgs.forEach((m) => {
+      const b = ensure(m.ts);
+      b.conv.add(c.id);
+      if (m.role === "them") { if (pend === null) pend = m.ts; }
+      else { b.msgs++; if (pend !== null) { b.resp.push(m.ts - pend); pend = null; } }
+    });
+  }));
+  const startDay = new Date(desde); startDay.setHours(0, 0, 0, 0);
+  const endDay = new Date(ate); endDay.setHours(0, 0, 0, 0);
+  const out = [];
+  for (let t = startDay.getTime(); t <= endDay.getTime() + 1; t += DAY) {
+    const d = dias[keyOf(t)];
+    out.push({ label: labelOf(t), atendimentos: d ? d.conv.size : 0, mensagens: d ? d.msgs : 0, tmrSeg: d ? mediaSeg(d.resp) : 0 });
+  }
+  res.json({ dias: out, desde: startDay.getTime(), ate });
+});
+
 function conversasVendedor(vendedorId, maxChats = 6, maxMsgs = 12) {
   return chatsDoVendedor(vendedorId)
     .sort((a, b) => (b.atualizadoEm || 0) - (a.atualizadoEm || 0))

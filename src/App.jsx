@@ -1079,6 +1079,11 @@ function WhatsAppConfig({ onVoltar, showToast }) {
   const setRow = (i, k, v) => setRows((r) => r.map((x, j) => (j === i ? { ...x, [k]: v } : x)));
 
   async function salvar() {
+    const nomes = rows.map((r) => limpaInst((r.instance || "").trim())).filter(Boolean);
+    if (new Set(nomes).size !== nomes.length) {
+      showToast("✗ Tem dois números com o mesmo nome. Cada número precisa de um nome diferente (ex: com-maria e com-maria-2).");
+      return;
+    }
     setSaving(true);
     try {
       const dados = { url, publicUrl: window.location.origin, instancias: rows.filter((r) => r.instance.trim()) };
@@ -1145,6 +1150,9 @@ function WhatsAppConfig({ onVoltar, showToast }) {
           <div style={{ marginTop: 16, display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
             <button className="btn btn-primary" onClick={salvar} disabled={saving}>{saving ? "Salvando..." : "Salvar conexão"}</button>
             <span style={{ fontSize: 12.5, color: "var(--muted)" }}>Salve antes de conectar, pra vincular cada número ao vendedor.</span>
+          </div>
+          <div className="info-box">
+            💡 Vendedor com 2 chips? Adicione <b>duas linhas</b> apontando pro mesmo vendedor, cada uma com um <b>nome diferente</b> (ex: <code>com-maria</code> e <code>com-maria-2</code>). Os atendimentos dos dois números somam automaticamente no painel.
           </div>
         </div>
       </div>
@@ -2065,16 +2073,21 @@ function fmtTempo(seg) {
 function Monitoria({ user, showToast }) {
   const isGer = user.role === "gerente";
   const [dados, setDados] = useState(null);
+  const [evo, setEvo] = useState([]);
+  const [evoMetrica, setEvoMetrica] = useState("atendimentos");
   const [loading, setLoading] = useState(true);
   const [preset, setPreset] = useState("mes");
   const [de, setDe] = useState("");
   const [ate, setAte] = useState("");
+  const [detVend, setDetVend] = useState(null);
 
   async function carregar(silencioso) {
     if (!silencioso) setLoading(true);
     const [ini, fim] = intervaloPeriodo(preset, de, ate);
-    try { setDados(await api.monitoria(ini, fim)); }
-    catch (e) { if (!silencioso) showToast("✗ " + e.message); }
+    try {
+      const [m, ev] = await Promise.all([api.monitoria(ini, fim), api.monitoriaEvolucao(ini, fim)]);
+      setDados(m); setEvo(ev.dias || []);
+    } catch (e) { if (!silencioso) showToast("✗ " + e.message); }
     finally { if (!silencioso) setLoading(false); }
   }
   useEffect(() => { carregar(false); /* eslint-disable-next-line */ }, [preset, de, ate]);
@@ -2087,6 +2100,7 @@ function Monitoria({ user, showToast }) {
   }, [preset]);
 
   if (loading) return <div className="spin" />;
+  const [pIni, pFim] = intervaloPeriodo(preset, de, ate);
   const time = (dados && dados.time) || {};
   const vendedores = (dados && dados.vendedores) || [];
   const ranked = [...vendedores].sort((a, b) => b.mensagensEnviadas - a.mensagensEnviadas);
@@ -2094,6 +2108,7 @@ function Monitoria({ user, showToast }) {
   const barrasMsg = ranked.slice(0, 8).map((v) => ({ label: (v.nome || "").split(" ")[0], valor: v.mensagensEnviadas }));
   const barrasTmr = [...vendedores].filter((v) => v.tmrSeg > 0).sort((a, b) => a.tmrSeg - b.tmrSeg).slice(0, 8)
     .map((v) => ({ label: (v.nome || "").split(" ")[0], valor: Math.round(v.tmrSeg / 60) || 1, rotulo: fmtTempo(v.tmrSeg), cor: "#f59e0b" }));
+  const serieEvo = (evo || []).map((d) => ({ label: d.label, valor: evoMetrica === "tmr" ? d.tmrSeg : d[evoMetrica] }));
 
   const filtroBar = (
     <div className="filtro-bar">
@@ -2132,10 +2147,22 @@ function Monitoria({ user, showToast }) {
       {vazio ? (
         <div className="panel"><div className="dash-empty">
           Ainda não há conversas registradas neste período.<br />
-          Os números vão aparecer conforme os vendedores forem conectados em <b>WhatsApp → Configurar conexão</b> e começarem a atender. 📲
+          Os números vão aparecer conforme os vendedores forem conectados em <b>WhatsApp → Configurar conexão</b> e começarem a atender.
         </div></div>
       ) : (
         <>
+          <div className="panel">
+            <div className="panel-h">
+              <h3>Evolução por dia<span className="panel-sub">acompanhe se o atendimento melhora ou piora</span></h3>
+              <div className="seg seg-sm">
+                {[["atendimentos", "Atendimentos"], ["mensagens", "Mensagens"], ["tmr", "Tempo de resposta"]].map(([k, lbl]) => (
+                  <button key={k} className={evoMetrica === k ? "on" : ""} onClick={() => setEvoMetrica(k)}>{lbl}</button>
+                ))}
+              </div>
+            </div>
+            <div className="chart-body"><GraficoLinha dados={serieEvo} /></div>
+          </div>
+
           {isGer && (
             <div className="charts-2">
               <div className="panel"><div className="panel-h"><h3>Produtividade<span className="panel-sub">mensagens enviadas por vendedor</span></h3></div><div className="chart-body"><GraficoBarras dados={barrasMsg} /></div></div>
@@ -2144,18 +2171,18 @@ function Monitoria({ user, showToast }) {
           )}
 
           <div className="panel">
-            <div className="panel-h"><h3>Desempenho por vendedor</h3></div>
+            <div className="panel-h"><h3>Desempenho por vendedor<span className="panel-sub">clique num vendedor pra ver o detalhe</span></h3></div>
             <div className="mon-tabela-wrap">
               <table className="mon-tabela">
                 <thead>
                   <tr>
                     <th>Vendedor</th><th>Atend.</th><th>Atendidas</th><th>S/ resposta</th>
-                    <th>Msgs</th><th>TMA resposta</th><th>1ª resp.</th><th>Taxa</th>
+                    <th>Msgs</th><th>TMA resposta</th><th>1ª resp.</th><th>Taxa</th><th></th>
                   </tr>
                 </thead>
                 <tbody>
                   {ranked.map((v) => (
-                    <tr key={v.id}>
+                    <tr key={v.id} className="clicavel" onClick={() => setDetVend(v.id)}>
                       <td className="vend"><span className="rank-av" style={{ width: 26, height: 26, fontSize: 11 }}>{iniciais(v.nome)}</span>{v.nome}</td>
                       <td>{v.conversas}</td>
                       <td>{v.atendidas}</td>
@@ -2164,15 +2191,90 @@ function Monitoria({ user, showToast }) {
                       <td>{fmtTempo(v.tmrSeg)}</td>
                       <td>{fmtTempo(v.primeiraSeg)}</td>
                       <td>{v.taxaResposta}%</td>
+                      <td className="chev">›</td>
                     </tr>
                   ))}
-                  {ranked.length === 0 && <tr><td colSpan={8} style={{ textAlign: "center", color: "var(--faint)", padding: 24 }}>Nenhum vendedor com atendimentos.</td></tr>}
+                  {ranked.length === 0 && <tr><td colSpan={9} style={{ textAlign: "center", color: "var(--faint)", padding: 24 }}>Nenhum vendedor com atendimentos.</td></tr>}
                 </tbody>
               </table>
             </div>
           </div>
         </>
       )}
+
+      {detVend && <VendedorDetalhe vendedorId={detVend} desde={pIni} ate={pFim} onClose={() => setDetVend(null)} showToast={showToast} />}
     </div>
   );
+}
+
+function VendedorDetalhe({ vendedorId, desde, ate, onClose, showToast }) {
+  const [d, setD] = useState(null);
+  const [evo, setEvo] = useState([]);
+  useEffect(() => {
+    (async () => {
+      try {
+        const [det, ev] = await Promise.all([
+          api.monitoriaVendedor(vendedorId, desde, ate),
+          api.monitoriaEvolucao(desde, ate, vendedorId),
+        ]);
+        setD(det); setEvo(ev.dias || []);
+      } catch (e) { showToast("✗ " + e.message); onClose(); }
+    })();
+    // eslint-disable-next-line
+  }, [vendedorId]);
+
+  return (
+    <div className="modal" onClick={(e) => e.target === e.currentTarget && onClose()}>
+      <div className="modal-box" style={{ maxWidth: 660 }}>
+        {!d ? <div style={{ padding: 50 }}><div className="spin" /></div> : (
+          <>
+            <div className="mh">
+              <h3><span className="rank-av" style={{ width: 30, height: 30, fontSize: 12, marginRight: 10, verticalAlign: "middle" }}>{iniciais(d.nome)}</span>{d.nome}</h3>
+              <p>Detalhe do atendimento no período selecionado</p>
+            </div>
+            <div className="mb">
+              <div className="det-kpis">
+                <div className="det-k"><div className="lab">TMA resposta</div><div className="num">{fmtTempo(d.tmrSeg)}</div></div>
+                <div className="det-k"><div className="lab">1ª resposta</div><div className="num">{fmtTempo(d.primeiraSeg)}</div></div>
+                <div className="det-k"><div className="lab">Atendimentos</div><div className="num">{d.conversas}</div></div>
+                <div className="det-k"><div className="lab">Sem resposta</div><div className={"num" + (d.semResposta > 0 ? " red" : "")}>{d.semResposta}</div></div>
+                <div className="det-k"><div className="lab">Mensagens</div><div className="num">{d.mensagensEnviadas}</div></div>
+                <div className="det-k"><div className="lab">Taxa de resposta</div><div className="num">{d.taxaResposta}%</div></div>
+              </div>
+
+              {serieValida(evo) && (
+                <div className="det-bloco">
+                  <div className="det-sub">Atendimentos por dia</div>
+                  <div className="chart-body" style={{ padding: 0 }}><GraficoLinha dados={evo.map((x) => ({ label: x.label, valor: x.atendimentos }))} /></div>
+                </div>
+              )}
+
+              <div className="det-sub" style={{ marginTop: 18 }}>Conversas ({d.conversas})</div>
+              <div className="det-conv">
+                {(!d.lista || d.lista.length === 0) && <div className="dash-empty" style={{ padding: 18 }}>Nenhuma conversa no período.</div>}
+                {(d.lista || []).map((c) => (
+                  <div className="det-conv-row" key={c.id}>
+                    <span className="rank-av" style={{ width: 30, height: 30, fontSize: 11, flexShrink: 0 }}>{iniciais(c.nome)}</span>
+                    <div className="cc">
+                      <div className="nm">{c.nome} <span className="num">{c.numero}</span></div>
+                      <div className="last">{c.ultimaDe === "me" ? "Você: " : ""}{c.ultimaMsg || "—"}</div>
+                    </div>
+                    <div className="cc-meta">
+                      {c.semResposta ? <span className="badge red">sem resposta</span> : c.atendida ? <span className="badge green">respondida</span> : <span className="badge">só recebida</span>}
+                      {c.tmrSeg > 0 && <span className="t">resp. {fmtTempo(c.tmrSeg)}</span>}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div className="mf"><button className="btn full" onClick={onClose}>Fechar</button></div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function serieValida(evo) {
+  return (evo || []).filter((d) => d.atendimentos > 0).length >= 2;
 }
