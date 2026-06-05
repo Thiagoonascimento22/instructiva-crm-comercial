@@ -1752,3 +1752,13 @@ textarea {
 .modal-box .mb { flex: 1; min-height: 0; overflow-y: auto; }
 .mon-tabela.compacta thead th { padding: 9px 12px; }
 .mon-tabela.compacta tbody td { padding: 9px 12px; font-size: 13px; }
+
+/* topo da monitoria: filtro de período + seletor de vendedor */
+.mon-topo { display: flex; justify-content: space-between; align-items: center; gap: 14px; flex-wrap: wrap; margin-bottom: 22px; }
+.mon-topo .filtro-bar { margin-bottom: 0; }
+.mon-vend-sel { width: 250px; max-width: 100%; flex-shrink: 0; font-weight: 600; }
+
+/* cabeçalho da visão individual */
+.ind-head { display: flex; align-items: center; gap: 14px; margin-bottom: 18px; flex-wrap: wrap; }
+.ind-nome { display: flex; align-items: center; gap: 11px; font-family: "Sora", sans-serif; font-weight: 800; font-size: 19px; letter-spacing: -0.01em; color: var(--text); }
+@media (max-width: 720px) { .mon-vend-sel { width: 100%; } }

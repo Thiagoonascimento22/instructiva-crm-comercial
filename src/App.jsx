@@ -2149,21 +2149,20 @@ function fmtTempo(seg) {
 function Monitoria({ user, showToast }) {
   const isGer = user.role === "gerente";
   const [dados, setDados] = useState(null);
-  const [evo, setEvo] = useState([]);
-  const [evoMetrica, setEvoMetrica] = useState("atendimentos");
   const [loading, setLoading] = useState(true);
   const [preset, setPreset] = useState("mes");
   const [de, setDe] = useState("");
   const [ate, setAte] = useState("");
-  const [detVend, setDetVend] = useState(null);
+  const [vendFiltro, setVendFiltro] = useState(isGer ? "" : user.id);
+  const [det, setDet] = useState(null);
+
+  const alvo = isGer ? vendFiltro : user.id;
 
   async function carregar(silencioso) {
     if (!silencioso) setLoading(true);
     const [ini, fim] = intervaloPeriodo(preset, de, ate);
-    try {
-      const [m, ev] = await Promise.all([api.monitoria(ini, fim), api.monitoriaEvolucao(ini, fim)]);
-      setDados(m); setEvo(ev.dias || []);
-    } catch (e) { if (!silencioso) showToast("✗ " + e.message); }
+    try { setDados(await api.monitoria(ini, fim)); }
+    catch (e) { if (!silencioso) showToast("✗ " + e.message); }
     finally { if (!silencioso) setLoading(false); }
   }
   useEffect(() => { carregar(false); /* eslint-disable-next-line */ }, [preset, de, ate]);
@@ -2174,45 +2173,72 @@ function Monitoria({ user, showToast }) {
     setDe(iso(preset === "tudo" ? Date.now() : i)); setAte(iso(f));
     // eslint-disable-next-line
   }, [preset]);
+  useEffect(() => {
+    if (!alvo) { setDet(null); return; }
+    let cancel = false;
+    (async () => {
+      const [ini, fim] = intervaloPeriodo(preset, de, ate);
+      try {
+        const [info, ev] = await Promise.all([api.monitoriaVendedor(alvo, ini, fim), api.monitoriaEvolucao(ini, fim, alvo)]);
+        if (!cancel) setDet({ info, evo: ev.dias || [] });
+      } catch (e) { if (!cancel) showToast("✗ " + e.message); }
+    })();
+    return () => { cancel = true; };
+    // eslint-disable-next-line
+  }, [alvo, preset, de, ate]);
 
   if (loading) return <div className="spin" />;
-  const [pIni, pFim] = intervaloPeriodo(preset, de, ate);
   const time = (dados && dados.time) || {};
   const vendedores = (dados && dados.vendedores) || [];
   const ranked = [...vendedores].sort((a, b) => b.mensagensEnviadas - a.mensagensEnviadas);
-
   const barrasMsg = ranked.slice(0, 8).map((v) => ({ label: (v.nome || "").split(" ")[0], valor: v.mensagensEnviadas }));
   const barrasTmr = [...vendedores].filter((v) => v.tmrSeg > 0).sort((a, b) => a.tmrSeg - b.tmrSeg).slice(0, 8)
     .map((v) => ({ label: (v.nome || "").split(" ")[0], valor: Math.round(v.tmrSeg / 60) || 1, rotulo: fmtTempo(v.tmrSeg), cor: "#f59e0b" }));
-  const serieEvo = (evo || []).map((d) => ({ label: d.label, valor: evoMetrica === "tmr" ? d.tmrSeg : d[evoMetrica] }));
 
-  const filtroBar = (
-    <div className="filtro-bar">
-      <div className="seg">
-        {[["hoje", "Hoje"], ["semana", "Semana"], ["mes", "Mês"], ["tudo", "Tudo"]].map(([k, lbl]) => (
-          <button key={k} className={preset === k ? "on" : ""} onClick={() => setPreset(k)}>{lbl}</button>
-        ))}
+  const topo = (
+    <div className="mon-topo">
+      <div className="filtro-bar">
+        <div className="seg">
+          {[["hoje", "Hoje"], ["semana", "Semana"], ["mes", "Mês"], ["tudo", "Tudo"]].map(([k, lbl]) => (
+            <button key={k} className={preset === k ? "on" : ""} onClick={() => setPreset(k)}>{lbl}</button>
+          ))}
+        </div>
+        <div className="filtro-datas">
+          <input type="date" value={de} onChange={(e) => { setDe(e.target.value); setPreset("custom"); }} />
+          até
+          <input type="date" value={ate} onChange={(e) => { setAte(e.target.value); setPreset("custom"); }} />
+        </div>
       </div>
-      <div className="filtro-datas">
-        <input type="date" value={de} onChange={(e) => { setDe(e.target.value); setPreset("custom"); }} />
-        até
-        <input type="date" value={ate} onChange={(e) => { setAte(e.target.value); setPreset("custom"); }} />
-      </div>
+      {isGer && (
+        <select className="select mon-vend-sel" value={vendFiltro} onChange={(e) => setVendFiltro(e.target.value)}>
+          <option value="">Todos os vendedores</option>
+          {[...vendedores].sort((a, b) => a.nome.localeCompare(b.nome)).map((v) => <option key={v.id} value={v.id}>{v.nome}</option>)}
+        </select>
+      )}
     </div>
   );
 
-  const vazio = time.conversas === 0;
+  // ===== VISÃO INDIVIDUAL (um vendedor) =====
+  if (alvo) {
+    return (
+      <div>
+        {topo}
+        {det ? <PainelIndividual info={det.info} evo={det.evo} isGer={isGer} onVoltar={() => setVendFiltro("")} /> : <div className="spin" />}
+      </div>
+    );
+  }
 
+  // ===== VISÃO DO TIME (todos) =====
+  const vazio = time.conversas === 0;
   return (
     <div>
-      {filtroBar}
+      {topo}
       <div className="stats">
         <StatIco ico={I.refresh} cor="#6366f1" val={fmtTempo(time.tmrSeg)} lab="Tempo médio de resposta (TMA)" />
         <StatIco ico={I.wa} cor="#ef4444" val={time.semResposta || 0} lab="Conversas sem resposta" />
         <StatIco ico={I.chat} cor="#10b981" val={time.conversas || 0} lab="Atendimentos no período" />
         <StatIco ico={I.send} cor="#8b5cf6" val={time.mensagensEnviadas || 0} lab="Mensagens enviadas" />
       </div>
-
       <div className="mon-strip">
         <div className="mon-mini"><div className="lab">1ª resposta (média)</div><div className="num">{fmtTempo(time.primeiraSeg)}</div></div>
         <div className="mon-mini"><div className="lab">Duração média do atendimento</div><div className="num">{fmtTempo(time.duracaoSeg)}</div></div>
@@ -2227,18 +2253,6 @@ function Monitoria({ user, showToast }) {
         </div></div>
       ) : (
         <>
-          <div className="panel">
-            <div className="panel-h">
-              <h3>Evolução por dia<span className="panel-sub">acompanhe se o atendimento melhora ou piora</span></h3>
-              <div className="seg seg-sm">
-                {[["atendimentos", "Atendimentos"], ["mensagens", "Mensagens"], ["tmr", "Tempo de resposta"]].map(([k, lbl]) => (
-                  <button key={k} className={evoMetrica === k ? "on" : ""} onClick={() => setEvoMetrica(k)}>{lbl}</button>
-                ))}
-              </div>
-            </div>
-            <div className="chart-body"><GraficoEvolucao dados={serieEvo} fmtY={evoMetrica === "tmr" ? fmtTempo : null} /></div>
-          </div>
-
           {isGer && (
             <div className="charts-2">
               <div className="panel"><div className="panel-h"><h3>Produtividade<span className="panel-sub">mensagens enviadas por vendedor</span></h3></div><div className="chart-body"><GraficoBarras dados={barrasMsg} /></div></div>
@@ -2247,7 +2261,7 @@ function Monitoria({ user, showToast }) {
           )}
 
           <div className="panel">
-            <div className="panel-h"><h3>Desempenho por vendedor<span className="panel-sub">clique num vendedor pra ver o detalhe</span></h3></div>
+            <div className="panel-h"><h3>Desempenho por vendedor<span className="panel-sub">clique num vendedor pra ver só ele</span></h3></div>
             <div className="mon-tabela-wrap">
               <table className="mon-tabela">
                 <thead>
@@ -2258,7 +2272,7 @@ function Monitoria({ user, showToast }) {
                 </thead>
                 <tbody>
                   {ranked.map((v) => (
-                    <tr key={v.id} className="clicavel" onClick={() => setDetVend(v.id)}>
+                    <tr key={v.id} className="clicavel" onClick={() => isGer && setVendFiltro(v.id)}>
                       <td className="vend"><span className="rank-av" style={{ width: 26, height: 26, fontSize: 11 }}>{iniciais(v.nome)}</span>{v.nome}</td>
                       <td>{v.conversas}</td>
                       <td>{v.atendidas}</td>
@@ -2277,106 +2291,69 @@ function Monitoria({ user, showToast }) {
           </div>
         </>
       )}
-
-      {detVend && <VendedorDetalhe vendedorId={detVend} desde={pIni} ate={pFim} onClose={() => setDetVend(null)} showToast={showToast} />}
     </div>
   );
 }
 
-function VendedorDetalhe({ vendedorId, desde, ate, onClose, showToast }) {
-  const [d, setD] = useState(null);
-  const [evo, setEvo] = useState([]);
-  useEffect(() => {
-    (async () => {
-      try {
-        const [det, ev] = await Promise.all([
-          api.monitoriaVendedor(vendedorId, desde, ate),
-          api.monitoriaEvolucao(desde, ate, vendedorId),
-        ]);
-        setD(det); setEvo(ev.dias || []);
-      } catch (e) { showToast("✗ " + e.message); onClose(); }
-    })();
-    // eslint-disable-next-line
-  }, [vendedorId]);
-
+function PainelIndividual({ info: d, evo, isGer, onVoltar }) {
+  const ativos = (evo || []).filter((x) => x.atendimentos > 0 || x.mensagens > 0);
   return (
-    <div className="modal" onClick={(e) => e.target === e.currentTarget && onClose()}>
-      <div className="modal-box" style={{ maxWidth: 660 }}>
-        {!d ? <div style={{ padding: 50 }}><div className="spin" /></div> : (
-          <>
-            <div className="mh">
-              <h3><span className="rank-av" style={{ width: 30, height: 30, fontSize: 12, marginRight: 10, verticalAlign: "middle" }}>{iniciais(d.nome)}</span>{d.nome}</h3>
-              <p>Detalhe do atendimento no período selecionado</p>
-            </div>
-            <div className="mb">
-              <div className="det-kpis">
-                <div className="det-k"><div className="lab">TMA resposta</div><div className="num">{fmtTempo(d.tmrSeg)}</div></div>
-                <div className="det-k"><div className="lab">1ª resposta</div><div className="num">{fmtTempo(d.primeiraSeg)}</div></div>
-                <div className="det-k"><div className="lab">Atendimentos</div><div className="num">{d.conversas}</div></div>
-                <div className="det-k"><div className="lab">Sem resposta</div><div className={"num" + (d.semResposta > 0 ? " red" : "")}>{d.semResposta}</div></div>
-                <div className="det-k"><div className="lab">Mensagens</div><div className="num">{d.mensagensEnviadas}</div></div>
-                <div className="det-k"><div className="lab">Taxa de resposta</div><div className="num">{d.taxaResposta}%</div></div>
-              </div>
+    <div>
+      <div className="ind-head">
+        {isGer && <button className="btn btn-sm" onClick={onVoltar}>← Todos os vendedores</button>}
+        <div className="ind-nome"><span className="rank-av" style={{ width: 30, height: 30, fontSize: 12 }}>{iniciais(d.nome)}</span>{d.nome}</div>
+      </div>
 
-              {serieValida(evo) && (
-                <div className="det-bloco">
-                  <div className="det-sub">Atendimentos por dia</div>
-                  <div className="chart-body" style={{ padding: 0 }}><GraficoEvolucao dados={evo.map((x) => ({ label: x.label, valor: x.atendimentos }))} /></div>
-                </div>
-              )}
+      <div className="stats">
+        <StatIco ico={I.refresh} cor="#6366f1" val={fmtTempo(d.tmrSeg)} lab="Tempo médio de resposta (TMA)" />
+        <StatIco ico={I.wa} cor="#ef4444" val={d.semResposta || 0} lab="Conversas sem resposta" />
+        <StatIco ico={I.chat} cor="#10b981" val={d.conversas || 0} lab="Atendimentos no período" />
+        <StatIco ico={I.send} cor="#8b5cf6" val={d.mensagensEnviadas || 0} lab="Mensagens enviadas" />
+      </div>
+      <div className="mon-strip">
+        <div className="mon-mini"><div className="lab">1ª resposta (média)</div><div className="num">{fmtTempo(d.primeiraSeg)}</div></div>
+        <div className="mon-mini"><div className="lab">Duração média do atendimento</div><div className="num">{fmtTempo(d.duracaoSeg)}</div></div>
+        <div className="mon-mini"><div className="lab">Taxa de resposta</div><div className="num">{d.taxaResposta || 0}%</div></div>
+        <div className="mon-mini"><div className="lab">Conversas atendidas</div><div className="num">{d.atendidas || 0} de {d.conversas || 0}</div></div>
+      </div>
 
-              {(() => {
-                const ativos = (evo || []).filter((x) => x.atendimentos > 0 || x.mensagens > 0);
-                if (ativos.length === 0) return null;
-                return (
-                  <div className="det-bloco">
-                    <div className="det-sub">Números por dia</div>
-                    <div className="mon-tabela-wrap">
-                      <table className="mon-tabela compacta">
-                        <thead><tr><th>Dia</th><th>Atend.</th><th>Msgs</th><th>TMA resp.</th><th>1ª resp.</th></tr></thead>
-                        <tbody>
-                          {[...ativos].reverse().map((x) => (
-                            <tr key={x.label}>
-                              <td>{x.label}</td>
-                              <td>{x.atendimentos}</td>
-                              <td>{x.mensagens}</td>
-                              <td>{fmtTempo(x.tmrSeg)}</td>
-                              <td>{fmtTempo(x.primeiraSeg)}</td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
-                );
-              })()}
-
-              <div className="det-sub" style={{ marginTop: 18 }}>Conversas ({d.conversas})</div>
-              <div className="det-conv">
-                {(!d.lista || d.lista.length === 0) && <div className="dash-empty" style={{ padding: 18 }}>Nenhuma conversa no período.</div>}
-                {(d.lista || []).map((c) => (
-                  <div className="det-conv-row" key={c.id}>
-                    <span className="rank-av" style={{ width: 30, height: 30, fontSize: 11, flexShrink: 0 }}>{iniciais(c.nome)}</span>
-                    <div className="cc">
-                      <div className="nm">{c.nome} <span className="num">{c.numero}</span></div>
-                      <div className="last">{c.ultimaDe === "me" ? "Você: " : ""}{c.ultimaMsg || "—"}</div>
-                    </div>
-                    <div className="cc-meta">
-                      {c.semResposta ? <span className="badge red">sem resposta</span> : c.atendida ? <span className="badge green">respondida</span> : <span className="badge">só recebida</span>}
-                      {c.tmrSeg > 0 && <span className="t">resp. {fmtTempo(c.tmrSeg)}</span>}
-                    </div>
-                  </div>
+      {ativos.length > 0 && (
+        <div className="panel">
+          <div className="panel-h"><h3>Números por dia</h3></div>
+          <div className="mon-tabela-wrap">
+            <table className="mon-tabela">
+              <thead><tr><th>Dia</th><th>Atend.</th><th>Atendidas</th><th>Msgs</th><th>TMA resposta</th><th>1ª resp.</th></tr></thead>
+              <tbody>
+                {[...ativos].reverse().map((x) => (
+                  <tr key={x.label}>
+                    <td>{x.label}</td><td>{x.atendimentos}</td><td>{x.atendidas}</td><td>{x.mensagens}</td><td>{fmtTempo(x.tmrSeg)}</td><td>{fmtTempo(x.primeiraSeg)}</td>
+                  </tr>
                 ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      <div className="panel">
+        <div className="panel-h"><h3>Conversas<span className="panel-sub">{d.conversas} no período</span></h3></div>
+        <div className="det-conv" style={{ padding: 18, maxHeight: "none" }}>
+          {(!d.lista || d.lista.length === 0) && <div className="dash-empty" style={{ padding: 18 }}>Nenhuma conversa no período.</div>}
+          {(d.lista || []).map((c) => (
+            <div className="det-conv-row" key={c.id}>
+              <span className="rank-av" style={{ width: 30, height: 30, fontSize: 11, flexShrink: 0 }}>{iniciais(c.nome)}</span>
+              <div className="cc">
+                <div className="nm">{c.nome} <span className="num">{c.numero}</span></div>
+                <div className="last">{c.ultimaDe === "me" ? "Você: " : ""}{c.ultimaMsg || "—"}</div>
+              </div>
+              <div className="cc-meta">
+                {c.semResposta ? <span className="badge red">sem resposta</span> : c.atendida ? <span className="badge green">respondida</span> : <span className="badge">só recebida</span>}
+                {c.tmrSeg > 0 && <span className="t">resp. {fmtTempo(c.tmrSeg)}</span>}
               </div>
             </div>
-            <div className="mf"><button className="btn full" onClick={onClose}>Fechar</button></div>
-          </>
-        )}
+          ))}
+        </div>
       </div>
     </div>
   );
-}
-
-function serieValida(evo) {
-  return (evo || []).filter((d) => d.atendimentos > 0).length >= 2;
 }
