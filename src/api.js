@@ -70,6 +70,8 @@ export const api = {
   iaVendedor: (id, desde, ate) => req("POST", "/api/ia/vendedor/" + id, { desde: desde || 0, ate: ate || Date.now() }),
 
   // Monitoria
+  horario: () => req("GET", "/api/horario"),
+  setHorario: (h) => req("PUT", "/api/horario", h),
   monitoria: (desde, ate) => req("GET", `/api/monitoria?desde=${desde || 0}&ate=${ate || Date.now()}`),
   monitoriaVendedor: (id, desde, ate) => req("GET", `/api/monitoria/vendedor/${id}?desde=${desde || 0}&ate=${ate || Date.now()}`),
   monitoriaEvolucao: (desde, ate, vendedorId) => req("GET", `/api/monitoria/evolucao?desde=${desde || 0}&ate=${ate || Date.now()}${vendedorId ? "&vendedorId=" + vendedorId : ""}`),

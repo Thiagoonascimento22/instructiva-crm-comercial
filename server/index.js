@@ -4,6 +4,9 @@ import path from "path";
 import crypto from "crypto";
 import { fileURLToPath } from "url";
 
+// horário comercial / dias da semana são calculados no fuso de Brasília
+process.env.TZ = process.env.TZ || "America/Sao_Paulo";
+
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
 app.use(express.json({ limit: "25mb" }));
@@ -59,6 +62,7 @@ function dbVazio() {
       publicUrl: "",
       webhookToken: crypto.randomBytes(12).toString("hex"),
       instancias: [], // [{ instance, vendedorId }]
+      horario: { enabled: false, dias: [1, 2, 3, 4, 5], inicio: "08:00", fim: "18:00", almocoIni: "", almocoFim: "" },
     },
     waChats: {}, // { "instance::numero": { ...conversa } }
     seq: 1,
@@ -80,6 +84,7 @@ function loadDB() {
       if (!db.waConfig.webhookToken)
         db.waConfig.webhookToken = crypto.randomBytes(12).toString("hex");
       if (!Array.isArray(db.waConfig.instancias)) db.waConfig.instancias = [];
+      if (!db.waConfig.horario) db.waConfig.horario = dbVazio().waConfig.horario;
       if (!db.waChats || typeof db.waChats !== "object") db.waChats = {};
       // migração: chats que só têm mensagem enviada (sem resposta do lead) tinham o
       // nome do vendedor por engano — troca pelo número até o lead responder
@@ -511,12 +516,15 @@ app.post("/api/wa/webhook/:token", (req, res) => {
     if (!texto) return res.json({ ok: true });
 
     const id = `${instance}::${numero}`;
+    // hora REAL da mensagem (Evolution manda em segundos); cai pra agora se faltar
+    let ts = Number(data.messageTimestamp || (data.key && data.key.timestamp) || 0) * 1000;
+    if (!ts || isNaN(ts) || ts > Date.now() + 60000) ts = Date.now();
     let chat = db.waChats[id];
     if (!chat) {
       chat = {
         id, instance, numero,
         nome: (!fromMe && data.pushName) ? data.pushName : numero,
-        mensagens: [], naoLidas: 0, atualizadoEm: Date.now(),
+        mensagens: [], naoLidas: 0, atualizadoEm: ts,
       };
       db.waChats[id] = chat;
     }
@@ -524,11 +532,11 @@ app.post("/api/wa/webhook/:token", (req, res) => {
     chat.mensagens.push({
       role: fromMe ? "me" : "them",
       content: texto,
-      ts: Date.now(),
+      ts,
     });
     if (chat.mensagens.length > 300) chat.mensagens = chat.mensagens.slice(-300);
     if (!fromMe) chat.naoLidas = (chat.naoLidas || 0) + 1;
-    chat.atualizadoEm = Date.now();
+    chat.atualizadoEm = ts;
     saveSoon();
     res.json({ ok: true });
   } catch (e) {
@@ -561,6 +569,21 @@ app.put("/api/wa/config", auth, gerenteOnly, async (req, res) => {
   // religa o webhook de cada monitorado em background (não trava o salvar)
   (db.waConfig.instancias || []).forEach((i) => { configurarWebhook(i.instance).catch(() => {}); });
   res.json({ ok: true, webhookUrl: webhookUrl() });
+});
+
+app.get("/api/horario", auth, (req, res) => res.json(db.waConfig.horario || dbVazio().waConfig.horario));
+app.put("/api/horario", auth, gerenteOnly, (req, res) => {
+  const h = req.body || {};
+  db.waConfig.horario = {
+    enabled: !!h.enabled,
+    dias: Array.isArray(h.dias) ? h.dias.map(Number).filter((d) => d >= 0 && d <= 6) : [1, 2, 3, 4, 5],
+    inicio: typeof h.inicio === "string" && h.inicio ? h.inicio : "08:00",
+    fim: typeof h.fim === "string" && h.fim ? h.fim : "18:00",
+    almocoIni: typeof h.almocoIni === "string" ? h.almocoIni : "",
+    almocoFim: typeof h.almocoFim === "string" ? h.almocoFim : "",
+  };
+  saveSoon();
+  res.json({ ok: true, horario: db.waConfig.horario });
 });
 
 /* ---- minha instância (vendedor conecta o próprio) ---- */
@@ -814,6 +837,37 @@ function chatsDoVendedor(vendedorId) {
 function mediaSeg(arr) {
   return arr.length ? Math.round(arr.reduce((a, b) => a + b, 0) / arr.length / 1000) : 0;
 }
+// tempo (em ms) entre dois instantes contando SÓ o horário de atendimento configurado
+function decorridoUtilMs(de, ate) {
+  const h = (db.waConfig && db.waConfig.horario) || null;
+  if (!h || !h.enabled || ate <= de) return Math.max(0, ate - de);
+  const hm = (s) => { const [a, b] = String(s || "0:0").split(":").map(Number); return (a || 0) * 60 + (b || 0); };
+  const ini = hm(h.inicio), fim = hm(h.fim);
+  const temAlmoco = h.almocoIni && h.almocoFim;
+  const aIni = temAlmoco ? hm(h.almocoIni) : 0, aFim = temAlmoco ? hm(h.almocoFim) : 0;
+  const dias = Array.isArray(h.dias) && h.dias.length ? h.dias : [1, 2, 3, 4, 5];
+  let total = 0;
+  const cur = new Date(de);
+  while (cur.getTime() < ate) {
+    if (dias.includes(cur.getDay()) && fim > ini) {
+      const base = new Date(cur); base.setHours(0, 0, 0, 0);
+      const winA = base.getTime() + ini * 60000;
+      const winB = base.getTime() + fim * 60000;
+      const a = Math.max(de, winA), b = Math.min(ate, winB);
+      if (b > a) {
+        let dur = b - a;
+        if (temAlmoco && aFim > aIni) {
+          const la = Math.max(a, base.getTime() + aIni * 60000);
+          const lb = Math.min(b, base.getTime() + aFim * 60000);
+          if (lb > la) dur -= (lb - la);
+        }
+        total += dur;
+      }
+    }
+    cur.setHours(24, 0, 0, 0); // pula pro próximo dia 00:00
+  }
+  return total;
+}
 function metricasChat(chat, desde, ate) {
   const msgs = (chat.mensagens || [])
     .filter((m) => m.ts >= desde && m.ts <= ate)
@@ -822,7 +876,7 @@ function metricasChat(chat, desde, ate) {
   let resp = [], primeira = null, pend = null, temMe = false, temThem = false;
   msgs.forEach((m) => {
     if (m.role === "them") { temThem = true; if (pend === null) pend = m.ts; }
-    else { temMe = true; if (pend !== null) { const d = m.ts - pend; resp.push(d); if (primeira === null) primeira = d; pend = null; } }
+    else { temMe = true; if (pend !== null) { const d = decorridoUtilMs(pend, m.ts); resp.push(d); if (primeira === null) primeira = d; pend = null; } }
   });
   return {
     enviadas: msgs.filter((m) => m.role === "me").length,
@@ -915,7 +969,7 @@ app.get("/api/monitoria/evolucao", auth, (req, res) => {
       else {
         b.msgs++; b.atendidas.add(c.id);
         if (pend !== null) {
-          const delta = m.ts - pend;
+          const delta = decorridoUtilMs(pend, m.ts);
           b.resp.push(delta);
           if (!primeiraFeita) { b.primeiras.push(delta); primeiraFeita = true; }
           pend = null;

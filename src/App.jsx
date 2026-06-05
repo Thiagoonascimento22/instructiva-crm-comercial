@@ -858,6 +858,10 @@ function Config({ user, setUser, showToast }) {
   const [nome, setNome] = useState(user.nome);
   const [senha, setSenha] = useState("");
   const [saving, setSaving] = useState(false);
+  const isGer = user.role === "gerente";
+  const [h, setH] = useState(null);
+  const [savingH, setSavingH] = useState(false);
+  useEffect(() => { if (isGer) api.horario().then(setH).catch(() => {}); /* eslint-disable-next-line */ }, []);
 
   async function salvar() {
     setSaving(true);
@@ -870,21 +874,77 @@ function Config({ user, setUser, showToast }) {
       showToast("✓ Dados atualizados");
     } catch (e) { showToast("✗ " + e.message); } finally { setSaving(false); }
   }
+  function toggleDia(d) { setH((x) => ({ ...x, dias: x.dias.includes(d) ? x.dias.filter((y) => y !== d) : [...x.dias, d].sort((a, b) => a - b) })); }
+  async function salvarHorario() {
+    setSavingH(true);
+    try { const r = await api.setHorario(h); setH(r.horario); showToast("✓ Horário de atendimento salvo"); }
+    catch (e) { showToast("✗ " + e.message); } finally { setSavingH(false); }
+  }
+  const DIAS = [["Dom", 0], ["Seg", 1], ["Ter", 2], ["Qua", 3], ["Qui", 4], ["Sex", 5], ["Sáb", 6]];
 
   return (
-    <div className="panel" style={{ maxWidth: 520 }}>
-      <div className="panel-h"><h3>Meus dados</h3></div>
-      <div style={{ padding: 22 }}>
-        <div className="field">
-          <label>Nome</label>
-          <input className="input" value={nome} onChange={(e) => setNome(e.target.value)} />
+    <div style={{ maxWidth: 560 }}>
+      <div className="panel" style={{ marginBottom: 18 }}>
+        <div className="panel-h"><h3>Meus dados</h3></div>
+        <div style={{ padding: 22 }}>
+          <div className="field">
+            <label>Nome</label>
+            <input className="input" value={nome} onChange={(e) => setNome(e.target.value)} />
+          </div>
+          <div className="field">
+            <label>Nova senha (deixe vazio pra manter)</label>
+            <input className="input" type="password" value={senha} onChange={(e) => setSenha(e.target.value)} placeholder="••••••••" />
+          </div>
+          <button className="btn btn-primary" onClick={salvar} disabled={saving}>{saving ? "Salvando..." : "Salvar alterações"}</button>
         </div>
-        <div className="field">
-          <label>Nova senha (deixe vazio pra manter)</label>
-          <input className="input" type="password" value={senha} onChange={(e) => setSenha(e.target.value)} placeholder="••••••••" />
-        </div>
-        <button className="btn btn-primary" onClick={salvar} disabled={saving}>{saving ? "Salvando..." : "Salvar alterações"}</button>
       </div>
+
+      {isGer && h && (
+        <div className="panel">
+          <div className="panel-h"><h3>Horário de atendimento</h3></div>
+          <div style={{ padding: 22 }}>
+            <p style={{ fontSize: 13, color: "var(--muted)", marginTop: 0 }}>
+              Quando ligado, o tempo de resposta (TMA e 1ª resposta) conta <b>só o horário comercial</b> — madrugada, almoço e fim de semana deixam de inflar os números.
+            </p>
+            <label style={{ display: "flex", alignItems: "center", gap: 9, fontSize: 14, fontWeight: 600, cursor: "pointer" }}>
+              <input type="checkbox" checked={h.enabled} onChange={(e) => setH({ ...h, enabled: e.target.checked })} style={{ width: 17, height: 17 }} />
+              Contar só o horário de atendimento
+            </label>
+
+            <div style={{ opacity: h.enabled ? 1 : 0.45, pointerEvents: h.enabled ? "auto" : "none", marginTop: 16 }}>
+              <div className="field">
+                <label>Dias de atendimento</label>
+                <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                  {DIAS.map(([lbl, d]) => (
+                    <button key={d} type="button" className={"chip" + (h.dias.includes(d) ? " on" : "")} onClick={() => toggleDia(d)}>{lbl}</button>
+                  ))}
+                </div>
+              </div>
+              <div style={{ display: "flex", gap: 14, flexWrap: "wrap" }}>
+                <div className="field" style={{ flex: 1, minWidth: 130 }}>
+                  <label>Abre</label>
+                  <input className="input" type="time" value={h.inicio} onChange={(e) => setH({ ...h, inicio: e.target.value })} />
+                </div>
+                <div className="field" style={{ flex: 1, minWidth: 130 }}>
+                  <label>Fecha</label>
+                  <input className="input" type="time" value={h.fim} onChange={(e) => setH({ ...h, fim: e.target.value })} />
+                </div>
+              </div>
+              <div style={{ display: "flex", gap: 14, flexWrap: "wrap" }}>
+                <div className="field" style={{ flex: 1, minWidth: 130 }}>
+                  <label>Almoço — início <span style={{ color: "var(--faint)", fontWeight: 400 }}>(opcional)</span></label>
+                  <input className="input" type="time" value={h.almocoIni} onChange={(e) => setH({ ...h, almocoIni: e.target.value })} />
+                </div>
+                <div className="field" style={{ flex: 1, minWidth: 130 }}>
+                  <label>Almoço — fim</label>
+                  <input className="input" type="time" value={h.almocoFim} onChange={(e) => setH({ ...h, almocoFim: e.target.value })} />
+                </div>
+              </div>
+            </div>
+            <button className="btn btn-primary" onClick={salvarHorario} disabled={savingH} style={{ marginTop: 6 }}>{savingH ? "Salvando..." : "Salvar horário"}</button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
