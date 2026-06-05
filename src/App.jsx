@@ -893,7 +893,6 @@ function WhatsApp({ user, showToast, target, onTargetUsed }) {
   const [texto, setTexto] = useState("");
   const [busca, setBusca] = useState("");
   const [filtro, setFiltro] = useState("todas");
-  const [conexoes, setConexoes] = useState({});
   const [showCfg, setShowCfg] = useState(false);
   const [qrInst, setQrInst] = useState(null);
   const [nova, setNova] = useState(false);
@@ -904,7 +903,6 @@ function WhatsApp({ user, showToast, target, onTargetUsed }) {
   const selRef = useRef(null);
   const filtroRef = useRef("todas");
   const alvoRef = useRef(null);
-  const instanciasRef = useRef([]);
   useEffect(() => { selRef.current = sel; }, [sel]);
   useEffect(() => { filtroRef.current = filtro; }, [filtro]);
 
@@ -916,22 +914,12 @@ function WhatsApp({ user, showToast, target, onTargetUsed }) {
     } catch (e) { if (!silencioso) showToast("✗ " + e.message); }
     finally { if (!silencioso) setLoading(false); }
   }
-  async function carregarStatus(insts) {
-    const lista = insts || instancias;
-    const sts = {};
-    await Promise.all(lista.map(async (i) => {
-      try { const s = await api.waStatus(i.instance); sts[i.instance] = s.estado; } catch (_) { sts[i.instance] = "desconhecido"; }
-    }));
-    setConexoes(sts);
-  }
   async function initGerente() {
     try {
       const [cfg, us] = await Promise.all([api.waConfig(), api.listUsers()]);
       setInstancias(cfg.instancias || []);
-      instanciasRef.current = cfg.instancias || [];
       const m = {}; us.forEach((u) => (m[u.id] = u)); setUsersMap(m);
       setUsersArr(us.filter((u) => u.role === "vendedor" && u.ativo).map((u) => ({ id: u.id, nome: u.nome })));
-      carregarStatus(cfg.instancias || []);
     } catch (_) {}
   }
   async function initVendedor() {
@@ -945,7 +933,6 @@ function WhatsApp({ user, showToast, target, onTargetUsed }) {
     })();
     const t = setInterval(async () => {
       await carregarChats(true);
-      if (isGer && instanciasRef.current.length) carregarStatus(instanciasRef.current);
       if (selRef.current) {
         try { setChat(await api.waChat(selRef.current)); } catch (_) {}
       }
@@ -1043,28 +1030,6 @@ function WhatsApp({ user, showToast, target, onTargetUsed }) {
           {isGer && <button className="btn" onClick={() => setShowCfg(true)}><I.cog style={{ width: 15, height: 15 }} /> Configurar conexão</button>}
         </div>
       </div>
-
-      {isGer && instancias.length > 0 && (
-        <div className="wa-conns">
-          {instancias.map((i) => {
-            const est = conexoes[i.instance];
-            const on = est === "open";
-            return (
-              <button
-                type="button"
-                className={"wa-conn" + (on ? " on" : "") + (filtro === i.vendedorId ? " sel" : "")}
-                key={i.instance}
-                onClick={() => setFiltro(filtro === i.vendedorId ? "todas" : (i.vendedorId || "todas"))}
-                title="Ver conversas deste vendedor"
-              >
-                <span className={"wa-dot " + (on ? "on" : "off")} />
-                <span className="cn">{usersMap[i.vendedorId]?.nome || i.instance}</span>
-                <span className="cs">{on ? "conectado" : est === undefined || est === "desconhecido" ? "verificando…" : "desconectado"}</span>
-              </button>
-            );
-          })}
-        </div>
-      )}
 
       <div className="wa-grid">
         <div className="wa-list">
