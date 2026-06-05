@@ -432,6 +432,16 @@ async function evo(method, caminho, body) {
   }
   return data;
 }
+// extrai o QR (base64) e o pairingCode de qualquer formato que a Evolution devolva
+function extrairQR(r) {
+  if (!r) return { qr: null, pairing: null };
+  const q = r.qrcode || r.qr || {};
+  let qr = r.base64 || q.base64 || null;
+  if (!qr && typeof q === "string" && q.startsWith("data:")) qr = q;
+  if (qr && !String(qr).startsWith("data:")) qr = "data:image/png;base64," + qr;
+  const pairing = r.pairingCode || q.pairingCode || null;
+  return { qr, pairing };
+}
 function webhookUrl() {
   const base = (db.waConfig.publicUrl || "").replace(/\/+$/, "");
   return base ? `${base}/api/wa/webhook/${db.waConfig.webhookToken}` : "";
@@ -640,20 +650,28 @@ app.post("/api/wa/connect", auth, async (req, res) => {
     saveSoon();
   }
   try {
-    // cria a instância (se já existir, a Evolution dá erro — então tentamos só conectar)
+    let qr = null, pairing = null;
+    // 1) tenta criar — instância NOVA já devolve o QR aqui mesmo
     try {
-      await evo("POST", `/instance/create`, {
+      const cr = await evo("POST", `/instance/create`, {
         instanceName: instance,
         integration: "WHATSAPP-BAILEYS",
         qrcode: true,
       });
+      const ex = extrairQR(cr);
+      qr = ex.qr; pairing = ex.pairing;
     } catch (e) {
-      // provavelmente já existe — segue pro connect
+      // se já existe, tudo bem (segue pro connect). Qualquer outro erro real, mostra.
+      if (!/in use|already|exists|já está em uso/i.test(e.message)) throw e;
     }
     await configurarWebhook(instance);
-    const r = await evo("GET", `/instance/connect/${instance}`);
-    const base64 = r.base64 || (r.qrcode && r.qrcode.base64) || null;
-    res.json({ qr: base64, pairingCode: r.pairingCode || null });
+    // 2) se ainda não tem QR (instância já existia), pede pelo connect
+    if (!qr) {
+      const r = await evo("GET", `/instance/connect/${instance}`);
+      const ex = extrairQR(r);
+      qr = ex.qr; pairing = ex.pairing;
+    }
+    res.json({ qr, pairingCode: pairing });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
@@ -662,7 +680,11 @@ app.post("/api/wa/connect", auth, async (req, res) => {
 app.get("/api/wa/status/:instance", auth, async (req, res) => {
   try {
     const r = await evo("GET", `/instance/connectionState/${req.params.instance}`);
-    res.json({ estado: (r && r.instance && r.instance.state) || "close" });
+    const estado =
+      (r && r.instance && (r.instance.state || r.instance.connectionStatus)) ||
+      (r && (r.state || r.status)) ||
+      "close";
+    res.json({ estado });
   } catch (e) {
     res.json({ estado: "desconhecido" });
   }

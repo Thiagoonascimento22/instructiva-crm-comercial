@@ -2049,3 +2049,18 @@ h1, h2, h3, h4, .topbar .greet, .panel-h h3, .login-card .ttl, .login-card h2, .
 .toast { background: #16172a; color: #fff; border: 1px solid rgba(255,255,255,0.12); }
 .kcheck { background: var(--surface-2); color: var(--text); border: 1px solid var(--glass-border); }
 .kcheck.on { background: var(--mint); color: #fff; border: none; }
+
+/* ---------- faixa de conexões (WhatsApp) ---------- */
+.wa-conns { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; }
+.wa-conn {
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 7px 13px; border-radius: 999px;
+  background: var(--glass); border: 1px solid var(--glass-border);
+  -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px);
+  color: var(--text); font: inherit; cursor: pointer;
+  transition: border-color .15s ease, background .15s ease, transform .12s ease;
+}
+.wa-conn:hover { transform: translateY(-1px); border-color: rgba(255,122,26,0.45); }
+.wa-conn.sel { border-color: var(--brand); background: rgba(255,122,26,0.12); }
+.wa-conn .cn { font-size: 13px; font-weight: 600; }
+.wa-conn .cs { font-size: 11.5px; color: var(--muted); }
