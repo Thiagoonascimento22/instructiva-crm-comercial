@@ -1000,10 +1000,16 @@ function WhatsApp({ user, showToast, target, onTargetUsed }) {
   );
 
   const filtrados = chats.filter((c) => {
-    if (isGer && filtro !== "todas" && c.vendedorId !== filtro) return false;
     const q = busca.trim().toLowerCase();
-    if (!q) return true;
-    return (c.nome || "").toLowerCase().includes(q) || (c.numero || "").includes(q);
+    if (q) {
+      // busca é global: acha o lead mesmo com um vendedor filtrado
+      const qDig = q.replace(/\D/g, "");
+      const porNome = (c.nome || "").toLowerCase().includes(q);
+      const porNumero = qDig && (c.numero || "").replace(/\D/g, "").includes(qDig);
+      return porNome || porNumero;
+    }
+    if (isGer && filtro !== "todas" && c.vendedorId !== filtro) return false;
+    return true;
   });
 
   if (loading) return <div className="spin" />;
@@ -1046,7 +1052,7 @@ function WhatsApp({ user, showToast, target, onTargetUsed }) {
       <div className="wa-grid">
         <div className="wa-list">
           <div className="wa-list-h">
-            <div className="wa-search"><input value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Buscar conversa..." /></div>
+            <div className="wa-search"><input value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Buscar lead por nome ou número..." /></div>
           </div>
           <div className="wa-list-scroll">
             {filtrados.length === 0 && <div style={{ padding: 30, textAlign: "center", color: "var(--faint)", fontSize: 13 }}>Nenhuma conversa ainda.</div>}
