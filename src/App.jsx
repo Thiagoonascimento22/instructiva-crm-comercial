@@ -1160,10 +1160,7 @@ function WhatsAppConfig({ onVoltar, showToast }) {
       <div className="panel">
         <div className="panel-h">
           <h3>WhatsApps dos vendedores</h3>
-          <div style={{ display: "flex", gap: 8 }}>
-            <button className="btn btn-sm" onClick={() => montar(cfg.instancias || [])} disabled={carregandoEvo}><I.refresh style={{ width: 14, height: 14 }} /> {carregandoEvo ? "Buscando..." : "Recarregar"}</button>
-            <button className="btn btn-sm" onClick={addManual}><I.plus style={{ width: 14, height: 14 }} /> Manual</button>
-          </div>
+          <button className="btn btn-sm" onClick={() => montar(cfg.instancias || [])} disabled={carregandoEvo}><I.refresh style={{ width: 14, height: 14 }} /> {carregandoEvo ? "Buscando..." : "Recarregar"}</button>
         </div>
         <div style={{ padding: "6px 22px 18px" }}>
           <p style={{ fontSize: 13, color: "var(--muted)", margin: "6px 0 14px" }}>
@@ -1187,7 +1184,7 @@ function WhatsAppConfig({ onVoltar, showToast }) {
                       <div style={{ fontSize: 11.5, color: "var(--muted)" }}>{r.instance}{r.numero ? " · " + r.numero : ""} · {on ? "conectado" : conn ? "conectando" : "desconectado"}</div>
                     </>
                   ) : (
-                    <input className="input" value={r.instance} onChange={(e) => setRow(i, "instance", e.target.value)} placeholder="nome exato da instância" />
+                    <input className="input" value={r.instance} onChange={(e) => setRow(i, "instance", e.target.value)} placeholder="nome do número novo (ex: lucas-2)" />
                   )}
                 </div>
                 <select className="select" style={{ flex: "1 1 160px" }} value={r.vendedorId || ""} onChange={(e) => setRow(i, "vendedorId", e.target.value)}>
@@ -1199,17 +1196,28 @@ function WhatsAppConfig({ onVoltar, showToast }) {
             );
           })}
 
+          {!carregandoEvo && (
+            <button className="btn" onClick={addManual} style={{ marginTop: 12 }}>
+              <I.plus style={{ width: 15, height: 15 }} /> Conectar outro número (gera QR)
+            </button>
+          )}
+
           <div style={{ marginTop: 16, display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
             <button className="btn btn-primary" onClick={salvar} disabled={saving}>{saving ? "Salvando..." : `Salvar (${monitCount} monitorado${monitCount === 1 ? "" : "s"})`}</button>
             <span style={{ fontSize: 12.5, color: "var(--muted)" }}>Eu religo o webhook de cada um automaticamente ao salvar.</span>
           </div>
           <div className="info-box">
-            💡 Vendedor com 2 números? É só escolher o <b>mesmo vendedor</b> em duas instâncias — os atendimentos somam no painel.
+            💡 <b>Mesmo vendedor com 2 números?</b> Não precisa criar outro usuário. Se o número <b>já está na lista</b> acima, é só escolher o <b>mesmo vendedor</b> nele. Se for um número <b>novo</b>, clique em <b>"Conectar outro número"</b>, dê um nome (ex: <code>lucas-2</code>), escolha o <b>mesmo vendedor</b> e conecte pelo QR. Os atendimentos dos dois números somam no painel daquele vendedor.
           </div>
         </div>
       </div>
 
-      {qrInst && <QrModal instance={qrInst} onClose={() => setQrInst(null)} onConnected={() => { setQrInst(null); showToast("🎉 Conectado!"); montar(cfg.instancias || []); }} />}
+      {qrInst && <QrModal instance={qrInst} onClose={() => setQrInst(null)} onConnected={() => {
+        const inst = qrInst;
+        setQrInst(null);
+        showToast("🎉 Conectado! Confira o vendedor e clique em Salvar.");
+        setRows((rs) => rs.map((r) => (r.instance === inst ? { ...r, estado: "open", descoberta: true } : r)));
+      }} />}
     </div>
   );
 }
