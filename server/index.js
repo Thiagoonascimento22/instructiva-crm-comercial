@@ -81,6 +81,13 @@ function loadDB() {
         db.waConfig.webhookToken = crypto.randomBytes(12).toString("hex");
       if (!Array.isArray(db.waConfig.instancias)) db.waConfig.instancias = [];
       if (!db.waChats || typeof db.waChats !== "object") db.waChats = {};
+      // migração: chats que só têm mensagem enviada (sem resposta do lead) tinham o
+      // nome do vendedor por engano — troca pelo número até o lead responder
+      Object.values(db.waChats).forEach((c) => {
+        if (!c || !Array.isArray(c.mensagens)) return;
+        const temEntrada = c.mensagens.some((m) => m.role === "them");
+        if (!temEntrada && c.nome !== c.numero) c.nome = c.numero;
+      });
       db.users.forEach((u) => {
         if (typeof u.meta !== "number") u.meta = 0;
         if (typeof u.ativo !== "boolean") u.ativo = true;
@@ -508,7 +515,7 @@ app.post("/api/wa/webhook/:token", (req, res) => {
     if (!chat) {
       chat = {
         id, instance, numero,
-        nome: data.pushName || numero,
+        nome: (!fromMe && data.pushName) ? data.pushName : numero,
         mensagens: [], naoLidas: 0, atualizadoEm: Date.now(),
       };
       db.waChats[id] = chat;
