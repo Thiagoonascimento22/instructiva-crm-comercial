@@ -1671,6 +1671,82 @@ function GraficoLinha({ dados }) {
   );
 }
 
+function nice1(v) {
+  const p = Math.pow(10, Math.floor(Math.log10(v || 1)));
+  const f = (v || 1) / p;
+  const n = f <= 1 ? 1 : f <= 1.5 ? 1.5 : f <= 2 ? 2 : f <= 3 ? 3 : f <= 4 ? 4 : f <= 5 ? 5 : f <= 6 ? 6 : f <= 8 ? 8 : 10;
+  return n * p;
+}
+function escalaEvo(dados, fmtY) {
+  const max = Math.max(1, ...dados.map((d) => d.valor));
+  if (!fmtY && dados.every((d) => Number.isInteger(d.valor))) {
+    const step = Math.max(1, Math.ceil(max / 4));
+    return { niceMax: step * 4, step, ticks: 4 };
+  }
+  const nm = nice1(max);
+  return { niceMax: nm, step: nm / 4, ticks: 4 };
+}
+function pathMonotone(pts) {
+  const n = pts.length;
+  if (n < 2) return n ? `M ${pts[0][0]},${pts[0][1]}` : "";
+  const xs = pts.map((p) => p[0]), ys = pts.map((p) => p[1]);
+  const dx = [], dy = [], m = [];
+  for (let i = 0; i < n - 1; i++) { dx[i] = xs[i + 1] - xs[i]; dy[i] = ys[i + 1] - ys[i]; m[i] = dy[i] / (dx[i] || 1); }
+  const s = []; s[0] = m[0]; s[n - 1] = m[n - 2];
+  for (let i = 1; i < n - 1; i++) {
+    if (m[i - 1] * m[i] <= 0) s[i] = 0;
+    else { const c = Math.min(Math.abs(m[i - 1]), Math.abs(m[i])); s[i] = Math.sign(m[i - 1]) * Math.min(Math.abs((m[i - 1] + m[i]) / 2), 3 * c); }
+  }
+  let d = `M ${xs[0]},${ys[0]}`;
+  for (let i = 0; i < n - 1; i++)
+    d += ` C ${xs[i] + dx[i] / 3},${ys[i] + s[i] * dx[i] / 3} ${xs[i + 1] - dx[i] / 3},${ys[i + 1] - s[i + 1] * dx[i] / 3} ${xs[i + 1]},${ys[i + 1]}`;
+  return d;
+}
+
+function GraficoEvolucao({ dados, fmtY }) {
+  const fmt = fmtY || ((v) => String(Math.round(v)));
+  const W = 920, H = 300, padL = 58, padR = 30, padT = 24, padB = 42;
+  const n = dados.length;
+  const { niceMax, step, ticks } = escalaEvo(dados, fmtY);
+  const innerW = W - padL - padR, innerH = H - padT - padB;
+  const X = (i) => padL + (n <= 1 ? innerW / 2 : (innerW / (n - 1)) * i);
+  const Y = (v) => padT + innerH - (v / niceMax) * innerH;
+  const pts = dados.map((d, i) => [X(i), Y(d.valor)]);
+  const line = pathMonotone(pts);
+  const area = n >= 2 ? `${line} L ${X(n - 1)},${padT + innerH} L ${X(0)},${padT + innerH} Z` : "";
+  const passo = Math.max(1, Math.ceil(n / 8));
+  const last = n - 1;
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} className="evo-svg" preserveAspectRatio="xMidYMid meet">
+      <defs>
+        <linearGradient id="evoFill" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#6366f1" stopOpacity="0.26" /><stop offset="100%" stopColor="#6366f1" stopOpacity="0" /></linearGradient>
+        <linearGradient id="evoLine" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stopColor="#6366f1" /><stop offset="100%" stopColor="#8b5cf6" /></linearGradient>
+      </defs>
+      {Array.from({ length: ticks + 1 }).map((_, i) => {
+        const yy = padT + (innerH / ticks) * i;
+        const v = niceMax - step * i;
+        return <g key={i}><line x1={padL} y1={yy} x2={W - padR} y2={yy} stroke="var(--line)" strokeWidth="1" strokeDasharray={i === ticks ? "0" : "2 7"} opacity={i === ticks ? 1 : 0.7} /><text x={padL - 12} y={yy + 4} className="evo-ylabel" textAnchor="end">{Math.abs(v) < 1e-9 ? "0" : fmt(v)}</text></g>;
+      })}
+      {area && <path d={area} fill="url(#evoFill)" />}
+      {n >= 2 && <path d={line} fill="none" stroke="url(#evoLine)" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />}
+      {pts.map(([px, py], i) => (
+        <g key={i}>
+          <title>{dados[i].label}: {fmt(dados[i].valor)}</title>
+          {i === last && <circle cx={px} cy={py} r="11" fill="#6366f1" opacity="0.16" />}
+          <circle cx={px} cy={py} r={i === last ? 6 : 4} fill="#fff" stroke="#6366f1" strokeWidth={i === last ? 3 : 2.4} />
+        </g>
+      ))}
+      {n >= 1 && (() => {
+        const [px, py] = pts[last]; const txt = fmt(dados[last].valor);
+        const w = Math.max(34, txt.length * 8.5 + 16);
+        const bx = Math.min(W - padR - w, Math.max(padL, px - w / 2)); const by = Math.max(4, py - 34);
+        return <g><rect x={bx} y={by} width={w} height={22} rx={7} fill="#6366f1" /><text x={bx + w / 2} y={by + 15} className="evo-badge" textAnchor="middle">{txt}</text></g>;
+      })()}
+      {dados.map((d, i) => (i % passo === 0 || i === last) ? <text key={i} x={X(i)} y={H - 12} className="evo-xlabel" textAnchor={i === last ? "end" : i === 0 ? "start" : "middle"}>{d.label}</text> : null)}
+    </svg>
+  );
+}
+
 /* ============================================================
    PAINEL v2
    ============================================================ */
@@ -2137,7 +2213,7 @@ function Monitoria({ user, showToast }) {
         <StatIco ico={I.send} cor="#8b5cf6" val={time.mensagensEnviadas || 0} lab="Mensagens enviadas" />
       </div>
 
-      <div className="comp-card" style={{ display: "flex", gap: 30, flexWrap: "wrap" }}>
+      <div className="mon-strip">
         <div className="mon-mini"><div className="lab">1ª resposta (média)</div><div className="num">{fmtTempo(time.primeiraSeg)}</div></div>
         <div className="mon-mini"><div className="lab">Duração média do atendimento</div><div className="num">{fmtTempo(time.duracaoSeg)}</div></div>
         <div className="mon-mini"><div className="lab">Taxa de resposta</div><div className="num">{time.taxaResposta || 0}%</div></div>
@@ -2160,7 +2236,7 @@ function Monitoria({ user, showToast }) {
                 ))}
               </div>
             </div>
-            <div className="chart-body"><GraficoLinha dados={serieEvo} /></div>
+            <div className="chart-body"><GraficoEvolucao dados={serieEvo} fmtY={evoMetrica === "tmr" ? fmtTempo : null} /></div>
           </div>
 
           {isGer && (
@@ -2245,9 +2321,35 @@ function VendedorDetalhe({ vendedorId, desde, ate, onClose, showToast }) {
               {serieValida(evo) && (
                 <div className="det-bloco">
                   <div className="det-sub">Atendimentos por dia</div>
-                  <div className="chart-body" style={{ padding: 0 }}><GraficoLinha dados={evo.map((x) => ({ label: x.label, valor: x.atendimentos }))} /></div>
+                  <div className="chart-body" style={{ padding: 0 }}><GraficoEvolucao dados={evo.map((x) => ({ label: x.label, valor: x.atendimentos }))} /></div>
                 </div>
               )}
+
+              {(() => {
+                const ativos = (evo || []).filter((x) => x.atendimentos > 0 || x.mensagens > 0);
+                if (ativos.length === 0) return null;
+                return (
+                  <div className="det-bloco">
+                    <div className="det-sub">Números por dia</div>
+                    <div className="mon-tabela-wrap">
+                      <table className="mon-tabela compacta">
+                        <thead><tr><th>Dia</th><th>Atend.</th><th>Msgs</th><th>TMA resp.</th><th>1ª resp.</th></tr></thead>
+                        <tbody>
+                          {[...ativos].reverse().map((x) => (
+                            <tr key={x.label}>
+                              <td>{x.label}</td>
+                              <td>{x.atendimentos}</td>
+                              <td>{x.mensagens}</td>
+                              <td>{fmtTempo(x.tmrSeg)}</td>
+                              <td>{fmtTempo(x.primeiraSeg)}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                );
+              })()}
 
               <div className="det-sub" style={{ marginTop: 18 }}>Conversas ({d.conversas})</div>
               <div className="det-conv">

@@ -1708,3 +1708,47 @@ textarea {
 .info-box code { background: rgba(99, 102, 241, 0.12); padding: 1px 6px; border-radius: 6px; font-size: 12px; font-family: "JetBrains Mono", monospace; }
 
 @media (max-width: 560px) { .det-kpis { grid-template-columns: repeat(2, 1fr); } }
+
+/* ============================================================
+   MONITORIA — polimento visual
+   ============================================================ */
+.stat { transition: transform .16s ease, box-shadow .16s ease, border-color .16s ease; }
+.stat:hover { transform: translateY(-2px); box-shadow: 0 10px 28px rgba(17, 17, 40, 0.09); border-color: rgba(99, 102, 241, 0.25); }
+.stats { gap: 16px; }
+.stat-ico { gap: 16px; }
+.stat-ico .badge { width: 52px; height: 52px; border-radius: 16px; }
+.stat-ico .badge svg { width: 24px; height: 24px; }
+.stat-ico .info .val { font-size: 30px; }
+
+/* faixa de métricas secundárias */
+.mon-strip {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  box-shadow: var(--shadow-sm);
+  padding: 20px 8px;
+  margin-bottom: 22px;
+}
+.mon-strip .mon-mini { padding: 2px 24px; border-right: 1px solid var(--line); }
+.mon-strip .mon-mini:last-child { border-right: none; }
+.mon-strip .mon-mini .lab { font-size: 12px; color: var(--muted); font-weight: 500; }
+.mon-strip .mon-mini .num { font-size: 21px; font-weight: 800; font-family: "Sora", sans-serif; color: var(--text); margin-top: 5px; letter-spacing: -0.01em; }
+@media (max-width: 720px) { .mon-strip { grid-template-columns: repeat(2, 1fr); row-gap: 18px; } .mon-strip .mon-mini:nth-child(2) { border-right: none; } }
+
+/* gráfico de evolução */
+.evo-svg { width: 100%; height: auto; display: block; }
+.evo-ylabel { font-size: 13px; fill: var(--faint); font-family: "JetBrains Mono", monospace; }
+.evo-xlabel { font-size: 13.5px; fill: var(--muted); font-weight: 600; }
+.evo-badge { font-size: 12.5px; fill: #fff; font-weight: 700; font-family: "JetBrains Mono", monospace; }
+
+/* tabela: deixa o header e a leitura mais leves */
+.mon-tabela tbody tr.clicavel { transition: background .12s ease; }
+
+/* modal rola quando fica grande (detalhe do vendedor) */
+.modal-box { max-height: calc(100vh - 40px); display: flex; flex-direction: column; }
+.modal-box .mh, .modal-box .mf { flex-shrink: 0; }
+.modal-box .mb { flex: 1; min-height: 0; overflow-y: auto; }
+.mon-tabela.compacta thead th { padding: 9px 12px; }
+.mon-tabela.compacta tbody td { padding: 9px 12px; font-size: 13px; }

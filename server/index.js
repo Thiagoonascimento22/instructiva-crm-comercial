@@ -830,15 +830,23 @@ app.get("/api/monitoria/evolucao", auth, (req, res) => {
   const keyOf = (ts) => { const d = new Date(ts); return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0"); };
   const labelOf = (ts) => { const d = new Date(ts); return String(d.getDate()).padStart(2, "0") + "/" + String(d.getMonth() + 1).padStart(2, "0"); };
   const dias = {};
-  const ensure = (ts) => { const k = keyOf(ts); if (!dias[k]) dias[k] = { conv: new Set(), msgs: 0, resp: [] }; return dias[k]; };
+  const ensure = (ts) => { const k = keyOf(ts); if (!dias[k]) dias[k] = { conv: new Set(), atendidas: new Set(), msgs: 0, resp: [], primeiras: [] }; return dias[k]; };
   ids.forEach((id) => chatsDoVendedor(id).forEach((c) => {
     const msgs = (c.mensagens || []).filter((m) => m.ts >= desde && m.ts <= ate).sort((a, b) => a.ts - b.ts);
-    let pend = null;
+    let pend = null, primeiraFeita = false;
     msgs.forEach((m) => {
       const b = ensure(m.ts);
       b.conv.add(c.id);
       if (m.role === "them") { if (pend === null) pend = m.ts; }
-      else { b.msgs++; if (pend !== null) { b.resp.push(m.ts - pend); pend = null; } }
+      else {
+        b.msgs++; b.atendidas.add(c.id);
+        if (pend !== null) {
+          const delta = m.ts - pend;
+          b.resp.push(delta);
+          if (!primeiraFeita) { b.primeiras.push(delta); primeiraFeita = true; }
+          pend = null;
+        }
+      }
     });
   }));
   const startDay = new Date(desde); startDay.setHours(0, 0, 0, 0);
@@ -846,7 +854,14 @@ app.get("/api/monitoria/evolucao", auth, (req, res) => {
   const out = [];
   for (let t = startDay.getTime(); t <= endDay.getTime() + 1; t += DAY) {
     const d = dias[keyOf(t)];
-    out.push({ label: labelOf(t), atendimentos: d ? d.conv.size : 0, mensagens: d ? d.msgs : 0, tmrSeg: d ? mediaSeg(d.resp) : 0 });
+    out.push({
+      label: labelOf(t),
+      atendimentos: d ? d.conv.size : 0,
+      atendidas: d ? d.atendidas.size : 0,
+      mensagens: d ? d.msgs : 0,
+      tmrSeg: d ? mediaSeg(d.resp) : 0,
+      primeiraSeg: d ? mediaSeg(d.primeiras) : 0,
+    });
   }
   res.json({ dias: out, desde: startDay.getTime(), ate });
 });
