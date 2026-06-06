@@ -15,6 +15,24 @@ app.use(express.json({ limit: "25mb" }));
    BANCO EM ARQUIVO JSON (com espera do volume do Railway)
    ============================================================ */
 const DB_PATH = process.env.DB_PATH || "/data/crm.json";
+const MEDIA_DIR = path.join(path.dirname(DB_PATH), "media");
+function garantirPastaMidia() {
+  try { fs.mkdirSync(MEDIA_DIR, { recursive: true }); } catch (_) {}
+}
+// nome de arquivo seguro a partir do id da mensagem
+function nomeArquivo(mid) { return String(mid || "").replace(/[^a-zA-Z0-9_-]/g, "_").slice(0, 120); }
+function extDeMime(m) {
+  m = String(m || "").toLowerCase();
+  if (m.includes("ogg")) return "ogg";
+  if (m.includes("mpeg") || m.includes("mp3")) return "mp3";
+  if (m.includes("mp4") || m.includes("m4a")) return m.includes("audio") ? "m4a" : "mp4";
+  if (m.includes("png")) return "png";
+  if (m.includes("webp")) return "webp";
+  if (m.includes("gif")) return "gif";
+  if (m.includes("jpeg") || m.includes("jpg")) return "jpg";
+  if (m.includes("pdf")) return "pdf";
+  return "bin";
+}
 
 async function aguardarVolume() {
   const dir = path.dirname(DB_PATH);
@@ -552,15 +570,20 @@ app.post("/api/wa/webhook/:token", (req, res) => {
     const numero = jid.split("@")[0];
     const fromMe = !!key.fromMe;
     const msg = data.message || {};
-    const texto =
-      msg.conversation ||
-      (msg.extendedTextMessage && msg.extendedTextMessage.text) ||
-      (msg.imageMessage && "[imagem]") ||
-      (msg.audioMessage && "[áudio]") ||
-      (msg.documentMessage && "[documento]") ||
-      (msg.videoMessage && "[vídeo]") ||
-      "";
-    if (!texto) return res.json({ ok: true });
+    // ---- detecta tipo de mídia ----
+    let tipo = "text", mimetype = "", filename = "", caption = "", label = "";
+    let docMsg = msg.documentMessage;
+    if (!docMsg && msg.documentWithCaptionMessage && msg.documentWithCaptionMessage.message)
+      docMsg = msg.documentWithCaptionMessage.message.documentMessage;
+    if (msg.audioMessage) { tipo = "audio"; mimetype = msg.audioMessage.mimetype || "audio/ogg"; label = "🎤 Áudio"; }
+    else if (msg.imageMessage) { tipo = "image"; mimetype = msg.imageMessage.mimetype || "image/jpeg"; caption = msg.imageMessage.caption || ""; label = "📷 Foto"; }
+    else if (msg.videoMessage) { tipo = "video"; mimetype = msg.videoMessage.mimetype || "video/mp4"; caption = msg.videoMessage.caption || ""; label = "🎬 Vídeo"; }
+    else if (docMsg) { tipo = "document"; mimetype = docMsg.mimetype || "application/octet-stream"; filename = docMsg.fileName || "documento"; caption = docMsg.caption || ""; label = "📄 " + filename; }
+    else if (msg.stickerMessage) { tipo = "sticker"; mimetype = msg.stickerMessage.mimetype || "image/webp"; label = "Figurinha"; }
+
+    const textoSimples = msg.conversation || (msg.extendedTextMessage && msg.extendedTextMessage.text) || "";
+    const content = tipo === "text" ? textoSimples : (caption || label);
+    if (tipo === "text" && !textoSimples) return res.json({ ok: true }); // nada aproveitável
 
     const id = `${instance}::${numero}`;
     // hora REAL da mensagem (Evolution manda em segundos); cai pra agora se faltar
@@ -576,11 +599,29 @@ app.post("/api/wa/webhook/:token", (req, res) => {
       db.waChats[id] = chat;
     }
     if (!fromMe && data.pushName) chat.nome = data.pushName;
-    chat.mensagens.push({
-      role: fromMe ? "me" : "them",
-      content: texto,
-      ts,
-    });
+
+    const novaMsg = { role: fromMe ? "me" : "them", content, ts };
+    if (tipo !== "text") {
+      const mid = key.id || crypto.randomBytes(8).toString("hex");
+      novaMsg.tipo = tipo;
+      novaMsg.mimetype = mimetype;
+      novaMsg.mid = mid;
+      novaMsg.keyMidia = { remoteJid: jid, id: key.id || "", fromMe };
+      if (filename) novaMsg.filename = filename;
+      if (caption) novaMsg.caption = caption;
+      // tenta achar o base64 já no webhook (webhookBase64:true)
+      const inline = (data.message && data.message.base64) || b.base64 || data.base64 ||
+        (msg.audioMessage && msg.audioMessage.base64) || (msg.imageMessage && msg.imageMessage.base64) ||
+        (msg.videoMessage && msg.videoMessage.base64) || (docMsg && docMsg.base64) || "";
+      if (inline) {
+        try {
+          const fname = nomeArquivo(mid) + "." + extDeMime(mimetype);
+          fs.writeFileSync(path.join(MEDIA_DIR, fname), Buffer.from(String(inline), "base64"));
+          novaMsg.arquivo = fname;
+        } catch (e) { console.error("Falha ao salvar mídia inline:", e.message); }
+      }
+    }
+    chat.mensagens.push(novaMsg);
     if (chat.mensagens.length > 300) chat.mensagens = chat.mensagens.slice(-300);
     if (!fromMe) chat.naoLidas = (chat.naoLidas || 0) + 1;
     chat.atualizadoEm = ts;
@@ -687,6 +728,53 @@ app.get("/api/wa/chats/:id", auth, (req, res) => {
   chat.naoLidas = 0;
   saveSoon();
   res.json(chat);
+});
+
+/* ---- servir mídia (áudio / imagem / vídeo / documento) ---- */
+app.get("/api/wa/midia/:chatId/:mid", auth, async (req, res) => {
+  const chat = db.waChats[req.params.chatId];
+  if (!chat) return res.status(404).json({ error: "Conversa não encontrada" });
+  const permitidas = new Set(instanciasDoUser(req.user));
+  if (!permitidas.has(chat.instance)) return res.status(403).json({ error: "Sem acesso" });
+  const m = (chat.mensagens || []).find((x) => x.mid === req.params.mid);
+  if (!m || !m.tipo || m.tipo === "text") return res.status(404).json({ error: "Mídia não encontrada" });
+
+  function enviarArquivo() {
+    const fp = path.join(MEDIA_DIR, m.arquivo);
+    if (!fs.existsSync(fp)) return false;
+    res.setHeader("Content-Type", m.mimetype || "application/octet-stream");
+    res.setHeader("Cache-Control", "private, max-age=86400");
+    if (m.tipo === "document" && m.filename)
+      res.setHeader("Content-Disposition", `inline; filename="${encodeURIComponent(m.filename)}"`);
+    fs.createReadStream(fp).pipe(res);
+    return true;
+  }
+  // já baixado antes?
+  if (m.arquivo && enviarArquivo()) return;
+  // senão, busca o base64 na Evolution sob demanda e guarda em disco
+  try {
+    // formatos de body variam entre versões da Evolution — tenta os dois
+    let r = null, ultimoErro = "";
+    for (const body of [{ message: { key: m.keyMidia } }, { key: m.keyMidia }]) {
+      try {
+        const resp = await evo("POST", `/chat/getBase64FromMediaMessage/${chat.instance}`, body);
+        if (resp && (resp.base64 || (resp.media && resp.media.base64))) { r = resp; break; }
+      } catch (e) { ultimoErro = e.message; }
+    }
+    const base64 = r && (r.base64 || (r.media && r.media.base64));
+    if (!base64) return res.status(502).json({ error: ultimoErro || "Evolution não retornou a mídia" });
+    const mime = (r && r.mimetype) || m.mimetype || "application/octet-stream";
+    const buf = Buffer.from(String(base64), "base64");
+    const fname = nomeArquivo(m.mid) + "." + extDeMime(mime);
+    try { fs.writeFileSync(path.join(MEDIA_DIR, fname), buf); m.arquivo = fname; m.mimetype = mime; saveSoon(); } catch (_) {}
+    res.setHeader("Content-Type", mime);
+    res.setHeader("Cache-Control", "private, max-age=86400");
+    if (m.tipo === "document" && m.filename)
+      res.setHeader("Content-Disposition", `inline; filename="${encodeURIComponent(m.filename)}"`);
+    return res.end(buf);
+  } catch (e) {
+    return res.status(502).json({ error: "Não consegui baixar a mídia: " + e.message });
+  }
 });
 
 /* ---- enviar mensagem ---- */
@@ -1192,6 +1280,7 @@ function resetAdminSeNecessario() {
    ============================================================ */
 const PORT = process.env.PORT || 3000;
 aguardarVolume().then(() => {
+  garantirPastaMidia();
   loadDB();
   resetAdminSeNecessario();
   app.listen(PORT, () => console.log("✓ CRM Comercial rodando na porta", PORT));

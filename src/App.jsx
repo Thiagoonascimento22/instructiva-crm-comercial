@@ -979,6 +979,40 @@ function Config({ user, setUser, showToast }) {
 }
 
 /* ============================================================
+   MÍDIA (áudio / imagem / vídeo / documento dentro da conversa)
+   ============================================================ */
+function rotuloMidia(t) { return t === "audio" ? "áudio" : t === "image" ? "foto" : t === "video" ? "vídeo" : t === "sticker" ? "figurinha" : "arquivo"; }
+function MidiaMsg({ chatId, m }) {
+  const [url, setUrl] = useState(null);
+  const [erro, setErro] = useState(false);
+  const [carregando, setCarregando] = useState(true);
+  const [tent, setTent] = useState(0);
+  useEffect(() => {
+    let vivo = true, local = null;
+    setCarregando(true); setErro(false);
+    api.midiaBlob(chatId, m.mid)
+      .then((u) => { if (!vivo) { URL.revokeObjectURL(u); return; } local = u; setUrl(u); setCarregando(false); })
+      .catch(() => { if (vivo) { setErro(true); setCarregando(false); } });
+    return () => { vivo = false; if (local) URL.revokeObjectURL(local); };
+  }, [chatId, m.mid, tent]);
+
+  if (carregando) return <div className="midia-load">⏳ carregando {rotuloMidia(m.tipo)}…</div>;
+  if (erro || !url) return <button type="button" className="midia-erro" onClick={() => setTent((x) => x + 1)}>⚠️ não consegui carregar — tentar de novo</button>;
+  if (m.tipo === "audio") return <audio className="midia-audio" controls preload="metadata" src={url} />;
+  if (m.tipo === "image") return <a href={url} target="_blank" rel="noreferrer"><img className="midia-img" src={url} alt="imagem" /></a>;
+  if (m.tipo === "sticker") return <img className="midia-sticker" src={url} alt="figurinha" />;
+  if (m.tipo === "video") return <video className="midia-video" controls preload="metadata" src={url} />;
+  if (m.tipo === "document") return (
+    <a className="midia-doc" href={url} download={m.filename || "documento"}>
+      <span className="midia-doc-ic">📄</span>
+      <span className="midia-doc-nome">{m.filename || "documento"}</span>
+      <span className="midia-doc-baixar">baixar</span>
+    </a>
+  );
+  return null;
+}
+
+/* ============================================================
    WHATSAPP
    ============================================================ */
 function WhatsApp({ user, showToast, target, onTargetUsed }) {
@@ -1192,8 +1226,13 @@ function WhatsApp({ user, showToast, target, onTargetUsed }) {
             </div>
             <div className="wa-msgs">
               {chat.mensagens.map((m, i) => (
-                <div key={i} className={"wa-bubble " + (m.role === "me" ? "me" : "them")}>
-                  {m.content}
+                <div key={i} className={"wa-bubble " + (m.role === "me" ? "me" : "them") + (m.tipo && m.tipo !== "text" ? " com-midia" : "")}>
+                  {m.tipo && m.tipo !== "text" ? (
+                    <>
+                      <MidiaMsg chatId={chat.id} m={m} />
+                      {m.caption ? <div className="midia-cap">{m.caption}</div> : null}
+                    </>
+                  ) : m.content}
                   <span className="t">{new Date(m.ts).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}</span>
                 </div>
               ))}

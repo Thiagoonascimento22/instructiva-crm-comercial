@@ -56,6 +56,13 @@ export const api = {
   waChats: (instance, q) =>
     req("GET", "/api/wa/chats" + (instance || q ? "?" + [instance ? "instance=" + encodeURIComponent(instance) : "", q ? "q=" + encodeURIComponent(q) : ""].filter(Boolean).join("&") : "")),
   waChat: (id) => req("GET", "/api/wa/chats/" + id),
+  midiaUrl: (chatId, mid) => "/api/wa/midia/" + encodeURIComponent(chatId) + "/" + encodeURIComponent(mid),
+  midiaBlob: async (chatId, mid) => {
+    const t = getToken();
+    const res = await fetch(api.midiaUrl(chatId, mid), { headers: t ? { Authorization: "Bearer " + t } : {} });
+    if (!res.ok) { let e = "Erro " + res.status; try { const j = await res.json(); e = j.error || e; } catch (_) {} throw new Error(e); }
+    return URL.createObjectURL(await res.blob());
+  },
   waSend: (id, texto) => req("POST", "/api/wa/chats/" + id + "/send", { texto }),
   waIniciar: (dados) => req("POST", "/api/wa/iniciar", dados),
   waConnect: (instance) =>

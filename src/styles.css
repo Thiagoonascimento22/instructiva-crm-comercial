@@ -2131,3 +2131,28 @@ h1, h2, h3, h4, .topbar .greet, .panel-h h3, .login-card .ttl, .login-card h2, .
   .hr-day { grid-column: 1 / -1; }
   .hr-copy { grid-column: 1 / -1; }
 }
+
+/* ===== Mídia nas conversas ===== */
+.wa-bubble.com-midia { padding: 6px; }
+.midia-load, .midia-erro {
+  font-size: 12.5px; color: var(--muted); padding: 8px 10px;
+  background: var(--card-2, rgba(0,0,0,.04)); border-radius: 10px; min-width: 150px;
+}
+.midia-erro { color: var(--coral); border: 1px solid var(--linha); background: transparent; cursor: pointer; text-align: left; }
+.midia-audio { display: block; width: 260px; max-width: 60vw; height: 40px; }
+.midia-img { display: block; max-width: 260px; max-height: 320px; border-radius: 10px; cursor: zoom-in; }
+.midia-sticker { display: block; width: 120px; height: 120px; object-fit: contain; }
+.midia-video { display: block; max-width: 300px; max-height: 360px; border-radius: 10px; background: #000; }
+.midia-cap { margin-top: 5px; font-size: 14px; line-height: 1.35; }
+.midia-doc {
+  display: flex; align-items: center; gap: 10px; text-decoration: none;
+  padding: 10px 12px; min-width: 200px; max-width: 280px;
+  background: var(--card-2, rgba(0,0,0,.05)); border: 1px solid var(--linha); border-radius: 10px;
+}
+.midia-doc-ic { font-size: 22px; flex: none; }
+.midia-doc-nome { flex: 1; min-width: 0; font-size: 13px; font-weight: 600; color: var(--texto);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.midia-doc-baixar { font-size: 11.5px; font-weight: 700; color: var(--laranja); flex: none; }
+.wa-bubble.me .midia-doc { background: rgba(255,255,255,.18); border-color: rgba(255,255,255,.25); }
+.wa-bubble.me .midia-doc-nome { color: #fff; }
+.wa-bubble.me .midia-doc-baixar { color: #ffe; }
