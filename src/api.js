@@ -64,6 +64,8 @@ export const api = {
     return URL.createObjectURL(await res.blob());
   },
   waSend: (id, texto) => req("POST", "/api/wa/chats/" + id + "/send", { texto }),
+  waEncerrar: (id, encerrar) => req("POST", "/api/wa/chats/" + id + "/encerrar", { encerrar }),
+  nps: (desde, ate) => req("GET", `/api/nps?desde=${desde || 0}&ate=${ate || Date.now()}`),
   waIniciar: (dados) => req("POST", "/api/wa/iniciar", dados),
   waConnect: (instance) =>
     req("POST", "/api/wa/connect", { instance, publicUrl: window.location.origin }),

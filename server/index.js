@@ -536,6 +536,35 @@ function webhookUrl() {
   const base = (db.waConfig.publicUrl || "").replace(/\/+$/, "");
   return base ? `${base}/api/wa/webhook/${db.waConfig.webhookToken}` : "";
 }
+
+/* ===== Pesquisa de satisfação / encerramento automático ===== */
+const MARCADOR_PESQUISA = "pesquisa de satisfacao"; // detecta a pesquisa que o vendedor envia
+const TEXTO_ENCERRAMENTO =
+  "Seu atendimento está sendo finalizado neste momento.\n" +
+  "Agradecemos pelo contato e pela confiança. Caso tenha alguma dúvida ou precise de novo suporte, nossa equipe estará à disposição para ajudar.\n" +
+  "Tenha um excelente dia!";
+function semAcento(s) { return String(s || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, ""); }
+// lê a nota (1 a 5) por número OU palavra; null se não der pra classificar com segurança
+function parseNota(texto) {
+  const t = semAcento(texto);
+  const num = t.match(/\b([1-5])\b/);
+  if (num) return Number(num[1]);
+  const mapa = [
+    [/(\b10\b|\bdez\b|muito ?bo[ma]|excelent|otim|perfeit|maravilh|adorei|super ?bo[ma])/, 5],
+    [/(muito ?ruim|pessim|horrivel|terrivel|horroros|detestei|odiei)/, 1],
+    [/(bo[ma]|gostei|legal|massa|show|satisfeit|aprovad|recomend)/, 4],
+    [/(ruim|frac[ao]|insatisfeit|decepcion|reprovad)/, 2],
+    [/(regular|normal|medi[ao]|mais ?ou ?menos|razoavel|aceitavel|\bok\b)/, 3],
+  ];
+  for (const [re, nota] of mapa) if (re.test(t)) return nota;
+  return null;
+}
+// envia texto pelo número do vendedor (fire-and-forget; o eco do webhook é deduplicado)
+async function enviarTexto(instance, numero, texto) {
+  try { await evo("POST", `/message/sendText/${instance}`, { number: numero, text: texto }); }
+  catch (e) { console.error("Falha ao enviar texto automático:", e.message); }
+}
+
 async function configurarWebhook(instance) {
   const url = webhookUrl();
   if (!url) return;
@@ -621,10 +650,46 @@ app.post("/api/wa/webhook/:token", (req, res) => {
         } catch (e) { console.error("Falha ao salvar mídia inline:", e.message); }
       }
     }
+    // dedup: eco da própria mensagem que enviamos (mesmo texto "me" empurrado há poucos segundos)
+    if (fromMe && tipo === "text") {
+      const agora = Date.now();
+      const dup = chat.mensagens.slice(-6).some(
+        (x) => x.role === "me" && x.content === content && Math.abs((x.ts || 0) - agora) < 15000
+      );
+      if (dup) { chat.atualizadoEm = ts; saveSoon(); return res.json({ ok: true }); }
+    }
+
     chat.mensagens.push(novaMsg);
     if (chat.mensagens.length > 300) chat.mensagens = chat.mensagens.slice(-300);
     if (!fromMe) chat.naoLidas = (chat.naoLidas || 0) + 1;
     chat.atualizadoEm = ts;
+
+    // ----- Pesquisa de satisfação / encerramento automático -----
+    if (fromMe && tipo === "text" && semAcento(textoSimples).includes(MARCADOR_PESQUISA)) {
+      // vendedor enviou a pesquisa -> arma a espera da nota
+      chat.aguardandoNota = true;
+      chat.encerrado = false;
+    } else if (!fromMe && chat.aguardandoNota) {
+      // lead respondeu a pesquisa -> registra nota, encerra e dispara o agradecimento
+      chat.nota = parseNota(textoSimples); // 1..5 ou null
+      chat.notaTexto = textoSimples;
+      chat.notaEm = ts;
+      chat.aguardandoNota = false;
+      chat.encerrado = true;
+      chat.encerradoEm = ts;
+      chat.encerradoMotivo = "pesquisa";
+      chat.naoLidas = 0;
+      // empurra o agradecimento já (síncrono) e dispara o envio real em background
+      const fecho = { role: "me", content: TEXTO_ENCERRAMENTO, ts: Date.now(), auto: true };
+      chat.mensagens.push(fecho);
+      if (chat.mensagens.length > 300) chat.mensagens = chat.mensagens.slice(-300);
+      chat.atualizadoEm = fecho.ts;
+      enviarTexto(chat.instance, chat.numero, TEXTO_ENCERRAMENTO);
+    } else if (!fromMe && chat.encerrado) {
+      // lead voltou a escrever depois de encerrado -> reabre
+      chat.encerrado = false;
+    }
+
     saveSoon();
     res.json({ ok: true });
   } catch (e) {
@@ -692,7 +757,7 @@ app.get("/api/wa/chats", auth, (req, res) => {
   const agora = Date.now();
   let itens = chats.map((c) => {
     const ult = c.mensagens.length ? c.mensagens[c.mensagens.length - 1] : null;
-    const aguardando = !!(ult && ult.role === "them");
+    const aguardando = !!(ult && ult.role === "them") && !c.encerrado;
     let trecho = "";
     if (q) {
       const nomeOk = (c.nome || "").toLowerCase().includes(q);
@@ -712,6 +777,8 @@ app.get("/api/wa/chats", auth, (req, res) => {
       esperaSeg: aguardando ? Math.round(decorridoUtilMs(ult.ts, agora) / 1000) : 0,
       vendedorId: vendedorDaInstancia(c.instance),
       trecho,
+      encerrado: !!c.encerrado,
+      nota: c.nota != null ? c.nota : null,
     };
   }).filter(Boolean);
   itens.sort((a, b) => (b.atualizadoEm || 0) - (a.atualizadoEm || 0));
@@ -798,6 +865,20 @@ app.post("/api/wa/chats/:id/send", auth, async (req, res) => {
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
+});
+
+/* ---- encerrar / reabrir atendimento (manual, pelo gerente) ---- */
+app.post("/api/wa/chats/:id/encerrar", auth, (req, res) => {
+  const chat = db.waChats[req.params.id];
+  if (!chat) return res.status(404).json({ error: "Conversa não encontrada" });
+  const permitidas = new Set(instanciasDoUser(req.user));
+  if (!permitidas.has(chat.instance)) return res.status(403).json({ error: "Sem acesso a essa conversa" });
+  const encerrar = req.body && req.body.encerrar !== false; // default true
+  chat.encerrado = !!encerrar;
+  chat.aguardandoNota = false;
+  if (encerrar) { chat.encerradoEm = Date.now(); chat.encerradoMotivo = "manual"; }
+  saveSoon();
+  res.json({ ok: true, encerrado: chat.encerrado });
 });
 
 /* ---- iniciar nova conversa (manda 1ª mensagem pra um número) ---- */
@@ -984,6 +1065,70 @@ function chatsDoVendedor(vendedorId) {
 function mediaSeg(arr) {
   return arr.length ? Math.round(arr.reduce((a, b) => a + b, 0) / arr.length / 1000) : 0;
 }
+
+/* ===== NPS / Satisfação (notas 1 a 5 da pesquisa) ===== */
+function statsNotas(chats, desde, ate) {
+  const dist = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
+  let soma = 0, n = 0;
+  chats.forEach((c) => {
+    if (c.nota != null && c.notaEm >= desde && c.notaEm <= ate) {
+      const nt = Math.round(c.nota);
+      if (nt >= 1 && nt <= 5) { dist[nt]++; soma += nt; n++; }
+    }
+  });
+  return { respostas: n, media: n ? Math.round((soma / n) * 10) / 10 : 0, dist };
+}
+// resumo de satisfação de um vendedor (pra alimentar a IA)
+function textoNPS(vendedorId, desde, ate) {
+  const s = statsNotas(chatsDoVendedor(vendedorId), desde, ate);
+  if (!s.respostas) return "sem respostas de pesquisa de satisfação nesse período";
+  const d = s.dist;
+  return `nota média ${s.media}/5 em ${s.respostas} ${s.respostas === 1 ? "resposta" : "respostas"} (5★:${d[5]} 4★:${d[4]} 3★:${d[3]} 2★:${d[2]} 1★:${d[1]})`;
+}
+function comentariosNPS(vendedorId, desde, ate, max = 6) {
+  return chatsDoVendedor(vendedorId)
+    .filter((c) => c.nota != null && c.notaEm >= desde && c.notaEm <= ate && String(c.notaTexto || "").trim())
+    .sort((a, b) => (b.notaEm || 0) - (a.notaEm || 0))
+    .slice(0, max)
+    .map((c) => `nota ${c.nota}: "${String(c.notaTexto).slice(0, 120)}"`);
+}
+app.get("/api/nps", auth, gerenteOnly, (req, res) => {
+  const desde = req.query.desde ? Number(req.query.desde) : 0;
+  const ate = req.query.ate ? Number(req.query.ate) : Date.now();
+  const vendedores = db.users.filter((u) => u.role === "vendedor" && u.ativo);
+  const mapeadas = new Set((db.waConfig.instancias || []).filter((i) => i.vendedorId).map((i) => i.instance));
+
+  const porVendedor = vendedores
+    .map((v) => ({ id: v.id, nome: v.nome, ...statsNotas(chatsDoVendedor(v.id), desde, ate) }))
+    .filter((v) => v.respostas > 0)
+    .sort((a, b) => b.media - a.media || b.respostas - a.respostas);
+
+  const distGeral = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
+  let somaG = 0, nG = 0;
+  const avaliacoes = [];
+  Object.values(db.waChats).forEach((c) => {
+    if (!mapeadas.has(c.instance)) return;
+    if (c.nota == null || !(c.notaEm >= desde && c.notaEm <= ate)) return;
+    const nt = Math.round(c.nota);
+    if (!(nt >= 1 && nt <= 5)) return;
+    distGeral[nt]++; somaG += nt; nG++;
+    const vId = vendedorDaInstancia(c.instance);
+    const v = vendedores.find((x) => x.id === vId);
+    avaliacoes.push({
+      id: c.id, numero: c.numero, nome: c.nome,
+      vendedorId: vId, vendedorNome: v ? v.nome : "—",
+      nota: c.nota, notaEm: c.notaEm, notaTexto: String(c.notaTexto || "").slice(0, 160),
+    });
+  });
+  avaliacoes.sort((a, b) => (b.notaEm || 0) - (a.notaEm || 0));
+
+  res.json({
+    desde, ate,
+    geral: { respostas: nG, media: nG ? Math.round((somaG / nG) * 10) / 10 : 0, dist: distGeral },
+    vendedores: porVendedor,
+    avaliacoes: avaliacoes.slice(0, 100),
+  });
+});
 // tempo (em ms) entre dois instantes contando SÓ o horário de atendimento configurado
 function decorridoUtilMs(de, ate) {
   const h = (db.waConfig && db.waConfig.horario) || null;
@@ -1032,7 +1177,7 @@ function metricasChat(chat, desde, ate) {
     resp, primeira,
     dur: msgs.length >= 2 ? msgs[msgs.length - 1].ts - msgs[0].ts : 0,
     atendida: temMe,
-    semResposta: temThem && msgs[msgs.length - 1].role === "them",
+    semResposta: temThem && msgs[msgs.length - 1].role === "them" && !chat.encerrado,
   };
 }
 function agregaVendedor(vendedorId, desde, ate) {
@@ -1180,14 +1325,14 @@ app.post("/api/ia/equipe", auth, gerenteOnly, async (req, res) => {
     const vendedores = db.users.filter((u) => u.role === "vendedor" && u.ativo);
     const linhas = vendedores.map((v) => {
       const s = agregaVendedor(v.id, desde, ate);
-      return `- ${v.nome}: ${s.conversas} conversas, ${s.atendidas} atendidas, ${s.semResposta} sem resposta, ${s.mensagensEnviadas} mensagens enviadas, tempo médio de resposta ${fmtSegBR(s.tmrSeg)}, 1ª resposta ${fmtSegBR(s.primeiraSeg)}, taxa de resposta ${s.taxaResposta}%`;
+      return `- ${v.nome}: ${s.conversas} conversas, ${s.atendidas} atendidas, ${s.semResposta} sem resposta, ${s.mensagensEnviadas} mensagens enviadas, tempo médio de resposta ${fmtSegBR(s.tmrSeg)}, 1ª resposta ${fmtSegBR(s.primeiraSeg)}, taxa de resposta ${s.taxaResposta}% | satisfação: ${textoNPS(v.id, desde, ate)}`;
     }).join("\n");
     const amostras = [];
     vendedores.slice(0, 6).forEach((v) => {
       const cv = conversasVendedor(v.id, 1, 8, desde, ate);
       if (cv[0]) amostras.push(`[${v.nome}] ${cv[0]}`);
     });
-    const prompt = `Você é um supervisor de atendimento sênior monitorando a equipe da Escola Instructiva (cursos técnicos de eletrônica) que atende clientes pelo WhatsApp. Avalie a QUALIDADE E A PRODUTIVIDADE DO ATENDIMENTO da equipe (rapidez nas respostas, clientes deixados sem resposta, volume, tom e educação).
+    const prompt = `Você é um supervisor de atendimento sênior monitorando a equipe da Escola Instructiva (cursos técnicos de eletrônica) que atende clientes pelo WhatsApp. Avalie a QUALIDADE E A PRODUTIVIDADE DO ATENDIMENTO da equipe (rapidez nas respostas, clientes deixados sem resposta, volume, tom e educação) e também a SATISFAÇÃO DOS CLIENTES (notas da pesquisa, de 1 a 5).
 
 PERÍODO ANALISADO: ${periodoTxt}.
 
@@ -1217,17 +1362,19 @@ app.post("/api/ia/vendedor/:id", auth, async (req, res) => {
     const periodoTxt = textoPeriodo(desde, ate);
     const s = agregaVendedor(v.id, desde, ate);
     const conv = conversasVendedor(v.id, 6, 12, desde, ate);
-    const prompt = `Você é um supervisor de atendimento sênior avaliando UM atendente da Escola Instructiva (cursos técnicos de eletrônica) que atende clientes pelo WhatsApp. Avalie a QUALIDADE e a PRODUTIVIDADE do atendimento (rapidez de resposta, clientes sem resposta, volume, tom, educação, clareza, follow-up).
+    const coment = comentariosNPS(v.id, desde, ate);
+    const prompt = `Você é um supervisor de atendimento sênior avaliando UM atendente da Escola Instructiva (cursos técnicos de eletrônica) que atende clientes pelo WhatsApp. Avalie a QUALIDADE e a PRODUTIVIDADE do atendimento (rapidez de resposta, clientes sem resposta, volume, tom, educação, clareza, follow-up) e também a SATISFAÇÃO DOS CLIENTES (notas da pesquisa, de 1 a 5, e o que escreveram).
 
 PERÍODO ANALISADO: ${periodoTxt}.
 ATENDENTE: ${v.nome}
 NÚMEROS (somente nesse período): ${s.conversas} conversas, ${s.atendidas} atendidas, ${s.semResposta} sem resposta, ${s.mensagensEnviadas} mensagens enviadas, tempo médio de resposta ${fmtSegBR(s.tmrSeg)}, tempo da 1ª resposta ${fmtSegBR(s.primeiraSeg)}, taxa de resposta ${s.taxaResposta}%.
+SATISFAÇÃO (pesquisa de 1 a 5 nesse período): ${textoNPS(v.id, desde, ate)}.${coment.length ? "\nComentários dos clientes na pesquisa:\n" + coment.join("\n") : ""}
 
 CONVERSAS NO WHATSAPP (desse período):
 ${conv.join("\n\n") || "Poucas conversas registradas nesse período pra avaliar o atendimento."}
 
 Responda SOMENTE em JSON puro, sem markdown, neste formato:
-{"resumo":"2 a 4 frases avaliando o atendimento dessa pessoa nesse período","pontos_fortes":["..."],"pontos_a_melhorar":["..."],"sugestoes":["3 a 5 sugestões práticas e específicas pra essa pessoa melhorar o atendimento"]}
+{"resumo":"2 a 4 frases avaliando o atendimento dessa pessoa nesse período, levando em conta também a satisfação dos clientes","pontos_fortes":["..."],"pontos_a_melhorar":["..."],"sugestoes":["3 a 5 sugestões práticas e específicas pra essa pessoa melhorar o atendimento e a satisfação"]}
 Escreva em português brasileiro, tom direto e construtivo, sem ser ofensivo.`;
     const out = parseIA(await chamarIA(prompt));
     out.vendedor = v.nome;

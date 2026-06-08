@@ -36,6 +36,7 @@ const I = {
   trend: (p) => (<svg {...p} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M16 7h6v6"/><path d="m22 7-8.5 8.5-5-5L2 17"/></svg>),
   users: (p) => (<svg {...p} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>),
   spark: (p) => (<svg {...p} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3v4M12 17v4M3 12h4M17 12h4M5.6 5.6l2.8 2.8M15.6 15.6l2.8 2.8M18.4 5.6l-2.8 2.8M8.4 15.6l-2.8 2.8"/></svg>),
+  estrela: (p) => (<svg {...p} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2.5l2.9 6 6.6.9-4.8 4.6 1.2 6.5L12 18.9 6.1 21l1.2-6.5L2.5 9.9l6.6-.9z"/></svg>),
   funnel: (p) => (<svg {...p} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M3 4h18l-7 8v7l-4-2v-5z"/></svg>),
 };
 
@@ -126,6 +127,7 @@ export default function App() {
     painel: { t: "Monitoria de Atendimento", s: "Acompanhe a produtividade e a agilidade do time" },
     whatsapp: { t: "WhatsApp", s: "Acompanhe as conversas dos atendentes" },
     ia: { t: "Análise Inteligente", s: "A IA avalia a qualidade do atendimento" },
+    nps: { t: "NPS / Satisfação", s: "Notas da pesquisa, por vendedor e período" },
     equipe: { t: "Equipe & Acessos", s: "Gerencie os atendentes e seus acessos" },
     config: { t: "Configurações", s: "Seus dados de acesso" },
   };
@@ -143,6 +145,7 @@ export default function App() {
           <NavBtn ic={I.dash} label="Monitoria" active={view === "painel"} onClick={() => setView("painel")} />
           <NavBtn ic={I.wa} label="WhatsApp" active={view === "whatsapp"} onClick={() => setView("whatsapp")} />
           <NavBtn ic={I.spark} label="Análise IA" active={view === "ia"} onClick={() => setView("ia")} />
+          {isGer && <NavBtn ic={I.estrela} label="NPS" active={view === "nps"} onClick={() => setView("nps")} />}
           {isGer && <NavBtn ic={I.team} label="Equipe & Acessos" active={view === "equipe"} onClick={() => setView("equipe")} />}
           <NavBtn ic={I.cog} label="Configurações" active={view === "config"} onClick={() => setView("config")} />
         </nav>
@@ -173,6 +176,7 @@ export default function App() {
           {view === "painel" && <Monitoria user={user} showToast={showToast} />}
           {view === "whatsapp" && <WhatsApp user={user} showToast={showToast} target={waTarget} onTargetUsed={() => setWaTarget(null)} />}
           {view === "ia" && <PaginaIA user={user} showToast={showToast} />}
+          {view === "nps" && isGer && <PaginaNPS showToast={showToast} />}
           {view === "equipe" && isGer && <Equipe showToast={showToast} meId={user.id} />}
           {view === "config" && <Config user={user} setUser={setUser} showToast={showToast} />}
         </div>
@@ -1109,6 +1113,15 @@ function WhatsApp({ user, showToast, target, onTargetUsed }) {
     if (!chat) return;
     setNovoLead({ cliente: chat.nome, telefone: chat.numero });
   }
+  async function encerrarAtual(encerrar) {
+    if (!sel) return;
+    try {
+      await api.waEncerrar(sel, encerrar);
+      setChat((c) => (c ? { ...c, encerrado: encerrar } : c));
+      setChats((cs) => cs.map((x) => (x.id === sel ? { ...x, encerrado: encerrar, aguardando: encerrar ? false : x.aguardando } : x)));
+      showToast(encerrar ? "✓ Atendimento encerrado" : "✓ Atendimento reaberto");
+    } catch (e) { showToast("✗ " + e.message); }
+  }
 
   // alvo vindo do botão de WhatsApp no card do pipeline
   useEffect(() => {
@@ -1202,6 +1215,8 @@ function WhatsApp({ user, showToast, target, onTargetUsed }) {
                   <div className="conv-tags">
                     {isGer && c.vendedorId && <span className="seller-tag">{usersMap[c.vendedorId]?.nome || ""}</span>}
                     {c.aguardando && <span className="wait-tag">⏳ aguardando há {fmtEspera(c.esperaSeg)}</span>}
+                    {c.encerrado && <span className="enc-tag-sm">✓ encerrado</span>}
+                    {c.nota != null && <span className="nota-tag-sm">⭐ {c.nota}</span>}
                   </div>
                 </div>
                 <div className="wa-meta">
@@ -1223,6 +1238,15 @@ function WhatsApp({ user, showToast, target, onTargetUsed }) {
                 <div className="nm">{chat.nome}</div>
                 <div className="num">{chat.numero}</div>
               </div>
+              {chat.nota != null && <span className="nota-badge" title="Nota da pesquisa de satisfação">⭐ {chat.nota}/5</span>}
+              {chat.encerrado ? (
+                <div className="enc-acao">
+                  <span className="enc-tag">✓ Encerrado</span>
+                  <button type="button" className="btn-link" onClick={() => encerrarAtual(false)}>Reabrir</button>
+                </div>
+              ) : (
+                <button type="button" className="btn-encerrar" onClick={() => encerrarAtual(true)}>Encerrar atendimento</button>
+              )}
             </div>
             <div className="wa-msgs">
               {chat.mensagens.map((m, i) => (
@@ -2191,6 +2215,142 @@ function StatIco({ ico: Ico, cor, val, money, lab }) {
 /* ============================================================
    PÁGINA ANÁLISE IA
    ============================================================ */
+/* ============================================================
+   NPS / SATISFAÇÃO
+   ============================================================ */
+function Estrelas({ n }) {
+  const cheias = Math.round(n || 0);
+  return <span className="estrelas">{[1, 2, 3, 4, 5].map((i) => <span key={i} className={i <= cheias ? "on" : ""}>★</span>)}</span>;
+}
+function DistBar({ dist }) {
+  const max = Math.max(1, ...[1, 2, 3, 4, 5].map((k) => dist[k] || 0));
+  return (
+    <div className="dist">
+      {[5, 4, 3, 2, 1].map((k) => {
+        const v = dist[k] || 0;
+        return (
+          <div key={k} className="dist-row">
+            <span className="dist-lbl">{k}★</span>
+            <div className="dist-track"><div className={"dist-fill n" + k} style={{ width: (v / max * 100) + "%" }} /></div>
+            <span className="dist-n">{v}</span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+function fmtDataHora(ts) {
+  const d = new Date(ts);
+  return d.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" }) + " " + d.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+}
+function PaginaNPS({ showToast }) {
+  const agoraInit = Date.now();
+  const ini30 = inicioDoDia(new Date(agoraInit)); ini30.setDate(ini30.getDate() - 29);
+  const [periodo, setPeriodo] = useState({ desde: ini30.getTime(), ate: agoraInit, key: "30d", label: "últimos 30 dias" });
+  const [dataEsp, setDataEsp] = useState("");
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  function aplicarPreset(key) {
+    const now = Date.now(); setDataEsp("");
+    if (key === "hoje") setPeriodo({ desde: inicioDoDia(now).getTime(), ate: now, key, label: "hoje" });
+    else if (key === "7d") { const ini = inicioDoDia(now); ini.setDate(ini.getDate() - 6); setPeriodo({ desde: ini.getTime(), ate: now, key, label: "últimos 7 dias" }); }
+    else if (key === "30d") { const ini = inicioDoDia(now); ini.setDate(ini.getDate() - 29); setPeriodo({ desde: ini.getTime(), ate: now, key, label: "últimos 30 dias" }); }
+    else setPeriodo({ desde: 0, ate: now, key: "tudo", label: "todo o histórico" });
+  }
+  function aplicarData(str) {
+    setDataEsp(str); if (!str) return;
+    const [y, mo, da] = str.split("-").map(Number);
+    setPeriodo({ desde: new Date(y, mo - 1, da, 0, 0, 0, 0).getTime(), ate: new Date(y, mo - 1, da, 23, 59, 59, 999).getTime(), key: "data", label: str.split("-").reverse().join("/") });
+  }
+  useEffect(() => {
+    let vivo = true; setLoading(true);
+    api.nps(periodo.desde, periodo.ate)
+      .then((d) => { if (vivo) { setData(d); setLoading(false); } })
+      .catch((e) => { if (vivo) { setLoading(false); showToast("✗ " + e.message); } });
+    return () => { vivo = false; };
+    // eslint-disable-next-line
+  }, [periodo.desde, periodo.ate]);
+
+  const periodoBar = (
+    <div className="ia-periodo">
+      <span className="lbl">Período:</span>
+      {[["hoje", "Hoje"], ["7d", "7 dias"], ["30d", "30 dias"], ["tudo", "Tudo"]].map(([k, l]) => (
+        <button key={k} className={"chip" + (periodo.key === k ? " on" : "")} onClick={() => aplicarPreset(k)}>{l}</button>
+      ))}
+      <input type="date" className="input-date" value={dataEsp} max={dataInputHoje()} onChange={(e) => aplicarData(e.target.value)} />
+    </div>
+  );
+
+  const g = data && data.geral;
+  const positivas = g && g.respostas ? Math.round(((g.dist[4] + g.dist[5]) / g.respostas) * 100) : 0;
+
+  return (
+    <div className="nps-page">
+      {periodoBar}
+      {loading && <div className="nps-card"><div className="ia-loading">Carregando avaliações... ⭐</div></div>}
+      {!loading && data && g.respostas === 0 && (
+        <div className="nps-card nps-vazio">
+          <div className="big">⭐</div>
+          <h3>Nenhuma avaliação em {periodo.label}</h3>
+          <p>As notas aparecem aqui quando os leads respondem à pesquisa de satisfação que o vendedor envia no fim do atendimento.</p>
+        </div>
+      )}
+      {!loading && data && g.respostas > 0 && (
+        <>
+          <div className="nps-top">
+            <div className="nps-card nps-geral">
+              <span className="nps-cap">Nota média — {periodo.label}</span>
+              <div className="nps-media">{g.media.toFixed(1)}<small>/5</small></div>
+              <Estrelas n={g.media} />
+              <div className="nps-sub">{g.respostas} {g.respostas === 1 ? "avaliação" : "avaliações"} · {positivas}% positivas (4-5)</div>
+            </div>
+            <div className="nps-card nps-dist">
+              <span className="nps-cap">Distribuição das notas</span>
+              <DistBar dist={g.dist} />
+            </div>
+          </div>
+
+          <div className="nps-card">
+            <div className="panel-h"><h3>Por vendedor</h3></div>
+            <div className="nps-vends">
+              {data.vendedores.map((v, i) => {
+                const pos = v.respostas ? Math.round(((v.dist[4] + v.dist[5]) / v.respostas) * 100) : 0;
+                return (
+                  <div key={v.id} className="nps-vend">
+                    <div className="nps-vend-rank">{i + 1}</div>
+                    <div className="nps-vend-info">
+                      <div className="nps-vend-nome">{v.nome}</div>
+                      <div className="nps-vend-meta"><Estrelas n={v.media} /> <b>{v.media.toFixed(1)}</b> · {v.respostas} {v.respostas === 1 ? "nota" : "notas"} · {pos}% positivas</div>
+                    </div>
+                    <div className="nps-vend-mini"><DistBar dist={v.dist} /></div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          <div className="nps-card">
+            <div className="panel-h"><h3>Últimas avaliações</h3></div>
+            <div className="nps-aval">
+              {data.avaliacoes.map((a) => (
+                <div key={a.id + a.notaEm} className="nps-aval-row">
+                  <span className={"nps-nota n" + Math.round(a.nota)}>⭐ {a.nota}</span>
+                  <div className="nps-aval-info">
+                    <div className="nps-aval-top"><b>{a.nome}</b> <span className="nps-aval-vend">· {a.vendedorNome}</span></div>
+                    {a.notaTexto && <div className="nps-aval-txt">"{a.notaTexto}"</div>}
+                  </div>
+                  <span className="nps-aval-data">{fmtDataHora(a.notaEm)}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 function PaginaIA({ user, showToast }) {
   const isGer = user.role === "gerente";
   const [aba, setAba] = useState("equipe");
