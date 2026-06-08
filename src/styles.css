@@ -2240,3 +2240,12 @@ h1, h2, h3, h4, .topbar .greet, .panel-h h3, .login-card .ttl, .login-card h2, .
   .nps-vend { grid-template-columns: 26px 1fr; }
   .nps-vend-mini { grid-column: 1 / -1; }
 }
+
+/* dropdown de vendedor na barra do NPS */
+.nps-vsel {
+  margin-left: auto; padding: 7px 12px; border-radius: 999px;
+  border: 1px solid var(--linha); background: var(--card); color: var(--texto);
+  font-size: 13px; font-weight: 600; cursor: pointer; max-width: 220px;
+}
+.nps-vsel:focus { outline: none; border-color: var(--laranja); }
+@media (max-width: 760px) { .nps-vsel { margin-left: 0; width: 100%; } }

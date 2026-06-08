@@ -1096,9 +1096,17 @@ app.get("/api/nps", auth, gerenteOnly, (req, res) => {
   const desde = req.query.desde ? Number(req.query.desde) : 0;
   const ate = req.query.ate ? Number(req.query.ate) : Date.now();
   const vendedores = db.users.filter((u) => u.role === "vendedor" && u.ativo);
-  const mapeadas = new Set((db.waConfig.instancias || []).filter((i) => i.vendedorId).map((i) => i.instance));
+  const filtroId = req.query.vendedorId || "";
+  const alvo = filtroId ? vendedores.filter((v) => v.id === filtroId) : vendedores;
+  // instâncias consideradas: todas mapeadas, ou só as do vendedor filtrado
+  const mapeadas = new Set();
+  (db.waConfig.instancias || []).forEach((i) => {
+    if (!i.vendedorId) return;
+    if (filtroId && i.vendedorId !== filtroId) return;
+    mapeadas.add(i.instance);
+  });
 
-  const porVendedor = vendedores
+  const porVendedor = alvo
     .map((v) => ({ id: v.id, nome: v.nome, ...statsNotas(chatsDoVendedor(v.id), desde, ate) }))
     .filter((v) => v.respostas > 0)
     .sort((a, b) => b.media - a.media || b.respostas - a.respostas);
@@ -1123,10 +1131,11 @@ app.get("/api/nps", auth, gerenteOnly, (req, res) => {
   avaliacoes.sort((a, b) => (b.notaEm || 0) - (a.notaEm || 0));
 
   res.json({
-    desde, ate,
+    desde, ate, filtroId,
     geral: { respostas: nG, media: nG ? Math.round((somaG / nG) * 10) / 10 : 0, dist: distGeral },
     vendedores: porVendedor,
     avaliacoes: avaliacoes.slice(0, 100),
+    vendedoresLista: vendedores.map((v) => ({ id: v.id, nome: v.nome })),
   });
 });
 // tempo (em ms) entre dois instantes contando SÓ o horário de atendimento configurado

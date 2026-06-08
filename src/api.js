@@ -65,7 +65,7 @@ export const api = {
   },
   waSend: (id, texto) => req("POST", "/api/wa/chats/" + id + "/send", { texto }),
   waEncerrar: (id, encerrar) => req("POST", "/api/wa/chats/" + id + "/encerrar", { encerrar }),
-  nps: (desde, ate) => req("GET", `/api/nps?desde=${desde || 0}&ate=${ate || Date.now()}`),
+  nps: (desde, ate, vendedorId) => req("GET", `/api/nps?desde=${desde || 0}&ate=${ate || Date.now()}` + (vendedorId ? `&vendedorId=${encodeURIComponent(vendedorId)}` : "")),
   waIniciar: (dados) => req("POST", "/api/wa/iniciar", dados),
   waConnect: (instance) =>
     req("POST", "/api/wa/connect", { instance, publicUrl: window.location.origin }),

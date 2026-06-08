@@ -2248,6 +2248,7 @@ function PaginaNPS({ showToast }) {
   const ini30 = inicioDoDia(new Date(agoraInit)); ini30.setDate(ini30.getDate() - 29);
   const [periodo, setPeriodo] = useState({ desde: ini30.getTime(), ate: agoraInit, key: "30d", label: "últimos 30 dias" });
   const [dataEsp, setDataEsp] = useState("");
+  const [vendId, setVendId] = useState("");
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
 
@@ -2265,12 +2266,12 @@ function PaginaNPS({ showToast }) {
   }
   useEffect(() => {
     let vivo = true; setLoading(true);
-    api.nps(periodo.desde, periodo.ate)
+    api.nps(periodo.desde, periodo.ate, vendId)
       .then((d) => { if (vivo) { setData(d); setLoading(false); } })
       .catch((e) => { if (vivo) { setLoading(false); showToast("✗ " + e.message); } });
     return () => { vivo = false; };
     // eslint-disable-next-line
-  }, [periodo.desde, periodo.ate]);
+  }, [periodo.desde, periodo.ate, vendId]);
 
   const periodoBar = (
     <div className="ia-periodo">
@@ -2279,8 +2280,15 @@ function PaginaNPS({ showToast }) {
         <button key={k} className={"chip" + (periodo.key === k ? " on" : "")} onClick={() => aplicarPreset(k)}>{l}</button>
       ))}
       <input type="date" className="input-date" value={dataEsp} max={dataInputHoje()} onChange={(e) => aplicarData(e.target.value)} />
+      <select className="nps-vsel" value={vendId} onChange={(e) => setVendId(e.target.value)}>
+        <option value="">Todos os vendedores</option>
+        {(data && data.vendedoresLista ? data.vendedoresLista : []).map((v) => (
+          <option key={v.id} value={v.id}>{v.nome}</option>
+        ))}
+      </select>
     </div>
   );
+  const vendNome = vendId && data && data.vendedoresLista ? (data.vendedoresLista.find((v) => v.id === vendId) || {}).nome : "";
 
   const g = data && data.geral;
   const positivas = g && g.respostas ? Math.round(((g.dist[4] + g.dist[5]) / g.respostas) * 100) : 0;
@@ -2292,7 +2300,7 @@ function PaginaNPS({ showToast }) {
       {!loading && data && g.respostas === 0 && (
         <div className="nps-card nps-vazio">
           <div className="big">⭐</div>
-          <h3>Nenhuma avaliação em {periodo.label}</h3>
+          <h3>Nenhuma avaliação{vendNome ? " de " + vendNome : ""} em {periodo.label}</h3>
           <p>As notas aparecem aqui quando os leads respondem à pesquisa de satisfação que o vendedor envia no fim do atendimento.</p>
         </div>
       )}
@@ -2300,7 +2308,7 @@ function PaginaNPS({ showToast }) {
         <>
           <div className="nps-top">
             <div className="nps-card nps-geral">
-              <span className="nps-cap">Nota média — {periodo.label}</span>
+              <span className="nps-cap">Nota média — {vendNome ? vendNome + " · " : ""}{periodo.label}</span>
               <div className="nps-media">{g.media.toFixed(1)}<small>/5</small></div>
               <Estrelas n={g.media} />
               <div className="nps-sub">{g.respostas} {g.respostas === 1 ? "avaliação" : "avaliações"} · {positivas}% positivas (4-5)</div>
@@ -2311,6 +2319,7 @@ function PaginaNPS({ showToast }) {
             </div>
           </div>
 
+          {!vendId && (
           <div className="nps-card">
             <div className="panel-h"><h3>Por vendedor</h3></div>
             <div className="nps-vends">
@@ -2329,6 +2338,7 @@ function PaginaNPS({ showToast }) {
               })}
             </div>
           </div>
+          )}
 
           <div className="nps-card">
             <div className="panel-h"><h3>Últimas avaliações</h3></div>
