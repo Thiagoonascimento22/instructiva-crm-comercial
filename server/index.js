@@ -167,6 +167,7 @@ function loadDB() {
       db.users.forEach((u) => {
         if (typeof u.meta !== "number") u.meta = 0;
         if (typeof u.ativo !== "boolean") u.ativo = true;
+        if (typeof u.podeResponder !== "boolean") u.podeResponder = false;
       });
       console.log(
         `Banco carregado. Usuários: ${db.users.length} | Cards: ${db.cards.length}`
@@ -287,6 +288,7 @@ app.post("/api/users", auth, gerenteOnly, (req, res) => {
     senha: precisaAcesso ? senha : (senha && senha.length >= 3 ? senha : crypto.randomBytes(8).toString("hex")),
     role: roleFinal,
     ativo: true,
+    podeResponder: roleFinal === "vendedor" ? !!req.body.podeResponder : false,
     token: null,
     criadoEm: Date.now(),
   };
@@ -298,7 +300,7 @@ app.post("/api/users", auth, gerenteOnly, (req, res) => {
 app.put("/api/users/:id", auth, gerenteOnly, (req, res) => {
   const u = db.users.find((x) => x.id === req.params.id);
   if (!u) return res.status(404).json({ error: "Usuário não encontrado" });
-  const { nome, login, senha, role, meta, ativo } = req.body || {};
+  const { nome, login, senha, role, meta, ativo, podeResponder } = req.body || {};
   if (nome && nome.trim()) u.nome = nome.trim();
   if (login && login.trim()) {
     const l = login.trim();
@@ -310,6 +312,7 @@ app.put("/api/users/:id", auth, gerenteOnly, (req, res) => {
   if (role) u.role = ["gerente", "suporte", "vendedor"].includes(role) ? role : u.role;
   if (meta !== undefined) u.meta = Number(meta) || 0;
   if (ativo !== undefined) u.ativo = !!ativo;
+  if (podeResponder !== undefined) u.podeResponder = !!podeResponder;
   saveSoon();
   res.json(semSenha(u));
 });
@@ -990,6 +993,8 @@ app.post("/api/wa/chats/:id/send", auth, async (req, res) => {
   const permitidas = new Set(instanciasDoUser(req.user));
   if (!permitidas.has(chat.instance))
     return res.status(403).json({ error: "Sem acesso a essa conversa" });
+  if (req.user.role === "vendedor" && !req.user.podeResponder)
+    return res.status(403).json({ error: "Você não tem permissão para responder pelo painel" });
   const texto = (req.body && req.body.texto) || "";
   if (!texto.trim()) return res.status(400).json({ error: "Mensagem vazia" });
   try {

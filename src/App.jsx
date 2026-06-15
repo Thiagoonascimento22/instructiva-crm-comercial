@@ -805,6 +805,7 @@ function UserForm({ user, onClose, onSaved }) {
   const [f, setF] = useState({
     nome: user?.nome || "", login: user?.login || "", senha: "",
     role: user?.role || "vendedor", ativo: user ? user.ativo : true,
+    podeResponder: user?.podeResponder || false,
   });
   const [saving, setSaving] = useState(false);
   const set = (k, v) => setF((s) => ({ ...s, [k]: v }));
@@ -819,12 +820,14 @@ function UserForm({ user, onClose, onSaved }) {
         const dados = { nome: f.nome, role: f.role };
         if (f.login.trim()) dados.login = f.login.trim();
         if (f.senha) dados.senha = f.senha;
+        if (f.role === "vendedor") dados.podeResponder = f.podeResponder;
         const u = await api.createUser(dados);
         onSaved(u, true);
       } else {
         const dados = { nome: f.nome, role: f.role, ativo: f.ativo };
         if (f.login.trim() && f.login.trim() !== (user.login || "")) dados.login = f.login.trim();
         if (f.senha) dados.senha = f.senha;
+        if (f.role === "vendedor") dados.podeResponder = f.podeResponder;
         const u = await api.updateUser(user.id, dados);
         onSaved(u, false);
       }
@@ -859,6 +862,12 @@ function UserForm({ user, onClose, onSaved }) {
             <label>{novo ? (precisaAcesso ? "Senha" : "Senha de acesso") : "Nova senha (vazio = manter)"}</label>
             <input className="input" type="password" value={f.senha} onChange={(e) => set("senha", e.target.value)} placeholder="mínimo 3 caracteres" />
           </div>
+          {f.role === "vendedor" && (
+            <label style={{ display: "flex", alignItems: "flex-start", gap: 9, fontSize: 14, cursor: "pointer", padding: "4px 0" }}>
+              <input type="checkbox" checked={f.podeResponder} onChange={(e) => set("podeResponder", e.target.checked)} style={{ width: 17, height: 17, marginTop: 2, flexShrink: 0 }} />
+              <span>Pode responder pelo painel <span style={{ color: "var(--faint)", fontWeight: 400 }}>— libera ele a enviar mensagens pelo sistema (senão, fica só monitoria)</span></span>
+            </label>
+          )}
           {!novo && (
             <label style={{ display: "flex", alignItems: "center", gap: 9, fontSize: 14, cursor: "pointer" }}>
               <input type="checkbox" checked={f.ativo} onChange={(e) => set("ativo", e.target.checked)} style={{ width: 17, height: 17 }} />
@@ -1029,6 +1038,8 @@ function MidiaMsg({ chatId, m }) {
 /* ============================================================
    WHATSAPP
    ============================================================ */
+const EMOJIS = ["😀","😅","😂","🙂","😉","😍","😎","🤝","👍","👏","🙏","🔥","✅","❌","⚠️","💰","📌","📎","🎉","❤️","🤔","😅","😢","😡","👋","💪","📞","📲","🕐","🙌","✨","😊"];
+
 function WhatsApp({ user, showToast, target, onTargetUsed }) {
   const isGer = user.role === "gerente";
   const [chats, setChats] = useState([]);
@@ -1052,6 +1063,7 @@ function WhatsApp({ user, showToast, target, onTargetUsed }) {
   const [pedindoSuporte, setPedindoSuporte] = useState(false);
   const [minhasSol, setMinhasSol] = useState([]);
   const [verSol, setVerSol] = useState(false);
+  const [showEmoji, setShowEmoji] = useState(false);
   const msgsEnd = useRef(null);
   const selRef = useRef(null);
   const filtroRef = useRef("todas");
@@ -1166,6 +1178,7 @@ function WhatsApp({ user, showToast, target, onTargetUsed }) {
   const buscando = busca.trim().length > 0;
   const aguardandoCount = chats.filter((c) => c.aguardando).length;
   const badgeSol = minhasSol.filter((s) => s.status === "resolvida" && !s.resolvidoVisto).length;
+  const podeResponder = !isGer && !!user.podeResponder;
   let filtrados = chats.filter((c) => {
     if (soAguardando && !c.aguardando) return false;
     // a busca já vem filtrada do servidor; o filtro de vendedor só vale fora da busca
@@ -1293,9 +1306,32 @@ function WhatsApp({ user, showToast, target, onTargetUsed }) {
               ))}
               <div ref={msgsEnd} />
             </div>
-            <div className="wa-readonly">
-              <I.eye style={{ width: 15, height: 15 }} /> Monitoria — somente leitura. Quem responde é o vendedor, pelo WhatsApp dele.
-            </div>
+            {podeResponder ? (
+              <div className="wa-compose">
+                {showEmoji && (
+                  <div className="wa-emoji-pop">
+                    {EMOJIS.map((e, i) => (
+                      <button type="button" key={e + i} className="wa-emoji" onClick={() => setTexto((t) => t + e)}>{e}</button>
+                    ))}
+                  </div>
+                )}
+                <button type="button" className="wa-comp-emoji" onClick={() => setShowEmoji((v) => !v)} title="Emojis">😊</button>
+                <input
+                  className="wa-comp-input"
+                  value={texto}
+                  onChange={(e) => setTexto(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); enviar(); setShowEmoji(false); } }}
+                  placeholder="Escreva uma mensagem..."
+                />
+                <button type="button" className="wa-comp-send" onClick={() => { enviar(); setShowEmoji(false); }} disabled={enviando || !texto.trim()} title="Enviar">
+                  <I.send style={{ width: 17, height: 17 }} />
+                </button>
+              </div>
+            ) : (
+              <div className="wa-readonly">
+                <I.eye style={{ width: 15, height: 15 }} /> Monitoria — somente leitura. Quem responde é o vendedor, pelo WhatsApp dele.
+              </div>
+            )}
           </div>
         )}
       </div>
