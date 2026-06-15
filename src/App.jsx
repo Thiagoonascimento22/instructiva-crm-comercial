@@ -1040,6 +1040,7 @@ function WhatsApp({ user, showToast, target, onTargetUsed }) {
   const [novaNum, setNovaNum] = useState("");
   const [novoLead, setNovoLead] = useState(null);
   const [enviando, setEnviando] = useState(false);
+  const [pedindoSuporte, setPedindoSuporte] = useState(false);
   const msgsEnd = useRef(null);
   const selRef = useRef(null);
   const filtroRef = useRef("todas");
@@ -1240,6 +1241,7 @@ function WhatsApp({ user, showToast, target, onTargetUsed }) {
                 <div className="num">{chat.numero}</div>
               </div>
               {chat.nota != null && <span className="nota-badge" title="Nota da pesquisa de satisfação">⭐ {chat.nota}/5</span>}
+              {!isGer && <button type="button" className="btn-suporte" onClick={() => setPedindoSuporte(true)} title="Pedir ajuda do suporte para este atendimento"><I.suporte style={{ width: 14, height: 14 }} /> Solicitar suporte</button>}
               {chat.encerrado ? (
                 <div className="enc-acao">
                   <span className="enc-tag">✓ Encerrado</span>
@@ -1271,6 +1273,13 @@ function WhatsApp({ user, showToast, target, onTargetUsed }) {
       </div>
 
       {qrInst && <QrModal instance={qrInst} onClose={() => setQrInst(null)} onConnected={() => { setQrInst(null); initVendedor(); showToast("🎉 WhatsApp conectado!"); }} />}
+      {pedindoSuporte && chat && (
+        <SolicitacaoForm
+          defaults={{ cliente: chat.nome, numero: chat.numero }}
+          onClose={() => setPedindoSuporte(false)}
+          onSaved={() => { setPedindoSuporte(false); showToast("✓ Solicitação enviada ao suporte"); }}
+        />
+      )}
     </div>
   );
 }
@@ -2669,7 +2678,7 @@ function Monitoria({ user, showToast }) {
     return (
       <div>
         {topo}
-        {det ? <PainelIndividual info={det.info} evo={det.evo} nps={det.nps} isGer={isGer} showToast={showToast} onVoltar={() => setVendFiltro("")} /> : <div className="spin" />}
+        {det ? <PainelIndividual info={det.info} evo={det.evo} nps={det.nps} isGer={isGer} onVoltar={() => setVendFiltro("")} /> : <div className="spin" />}
       </div>
     );
   }
@@ -2740,59 +2749,14 @@ function Monitoria({ user, showToast }) {
   );
 }
 
-function PainelIndividual({ info: d, evo, nps, isGer, showToast, onVoltar }) {
+function PainelIndividual({ info: d, evo, nps, isGer, onVoltar }) {
   const ativos = (evo || []).filter((x) => x.atendimentos > 0 || x.mensagens > 0);
-  const [pedindo, setPedindo] = useState(false);
-  const [minhas, setMinhas] = useState(null);
-  useEffect(() => {
-    if (isGer) { setMinhas(null); return; }
-    api.solicitacoes().then(setMinhas).catch(() => setMinhas([]));
-  }, [isGer]);
   return (
     <div>
       <div className="ind-head">
         {isGer && <button className="btn btn-sm" onClick={onVoltar}>← Todos os vendedores</button>}
         <div className="ind-nome"><span className="rank-av" style={{ width: 30, height: 30, fontSize: 12 }}>{iniciais(d.nome)}</span>{d.nome}</div>
       </div>
-
-      {!isGer && (
-        <div className="sup-card">
-          <div>
-            <div className="sup-card-t">Precisa de ajuda no atendimento?</div>
-            <div className="sup-card-s">Abra uma solicitação que o suporte recebe na hora.</div>
-          </div>
-          <button className="btn btn-primary" onClick={() => setPedindo(true)}><I.suporte style={{ width: 16, height: 16 }} /> Pedir ajuda ao suporte</button>
-        </div>
-      )}
-
-      {!isGer && minhas && minhas.length > 0 && (
-        <div className="panel">
-          <div className="panel-h"><h3>Minhas solicitações<span className="panel-sub">acompanhe o status dos seus pedidos</span></h3></div>
-          <div className="sol-list">
-            {minhas.slice(0, 8).map((s) => (
-              <div className="sol-row" key={s.id}>
-                <span className={"sol-st " + s.status}>{rotuloStatus(s.status)}</span>
-                <div className="sol-info">
-                  <div className="sol-desc">{s.descricao}</div>
-                  <div className="sol-meta">{s.cliente ? "Cliente: " + s.cliente + " · " : ""}{fmtDataHora(s.criadoEm)}</div>
-                </div>
-                <span className={"sol-urg " + s.urgencia}>{s.urgencia}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {pedindo && (
-        <SolicitacaoForm
-          onClose={() => setPedindo(false)}
-          onSaved={(nova) => {
-            setPedindo(false);
-            setMinhas((l) => [nova, ...(l || [])]);
-            showToast && showToast("✓ Solicitação enviada ao suporte");
-          }}
-        />
-      )}
 
       <div className="stats">
         <StatIco ico={I.refresh} cor="#8b7bff" val={fmtTempo(d.tmrSeg)} lab="Tempo médio de resposta (TMA)" />
@@ -2880,8 +2844,8 @@ function rotuloStatus(s) {
   return s === "aberta" ? "Aberta" : s === "andamento" ? "Em andamento" : "Resolvida";
 }
 
-function SolicitacaoForm({ onClose, onSaved }) {
-  const [f, setF] = useState({ descricao: "", cliente: "", numero: "", urgencia: "normal" });
+function SolicitacaoForm({ onClose, onSaved, defaults }) {
+  const [f, setF] = useState({ descricao: "", cliente: (defaults && defaults.cliente) || "", numero: (defaults && defaults.numero) || "", urgencia: "normal" });
   const [saving, setSaving] = useState(false);
   const set = (k, v) => setF((s) => ({ ...s, [k]: v }));
   async function salvar() {
@@ -2894,8 +2858,8 @@ function SolicitacaoForm({ onClose, onSaved }) {
     <div className="modal" onClick={(e) => e.target === e.currentTarget && onClose()}>
       <div className="modal-box">
         <div className="mh">
-          <h3>Pedir ajuda ao suporte</h3>
-          <p>Descreva o que está acontecendo. O suporte recebe sua solicitação na hora.</p>
+          <h3>Solicitar suporte</h3>
+          <p>Descreva o que está acontecendo nesse atendimento. O suporte recebe sua solicitação na hora.</p>
         </div>
         <div className="mb">
           <div className="field">
