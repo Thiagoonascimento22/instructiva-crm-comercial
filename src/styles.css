@@ -2332,3 +2332,36 @@ h1, h2, h3, h4, .topbar .greet, .panel-h h3, .login-card .ttl, .login-card h2, .
 @keyframes wa-pulse { 0%, 100% { opacity: 1; } 50% { opacity: .25; } }
 .wa-ico-btn { flex: none; width: 38px; height: 38px; border: none; background: transparent; color: var(--muted); cursor: pointer; border-radius: 50%; display: flex; align-items: center; justify-content: center; transition: .15s; }
 .wa-ico-btn:hover { background: var(--nav-hover); color: var(--text); }
+
+/* ===================== Filtro segmentado do WhatsApp ===================== */
+.wa-filtros { display: inline-flex; gap: 3px; padding: 4px; background: var(--nav-hover); border-radius: 12px; }
+.wa-filtro { display: inline-flex; align-items: center; gap: 6px; padding: 7px 15px; border: none; background: transparent; color: var(--muted); font-size: 13px; font-weight: 600; border-radius: 9px; cursor: pointer; transition: all .15s; font-family: inherit; white-space: nowrap; }
+.wa-filtro:hover { color: var(--text); }
+.wa-filtro.on { background: var(--card); color: var(--brand); box-shadow: 0 1px 3px rgba(0,0,0,.12); }
+.wa-filtro-cnt { background: var(--brand); color: #fff; font-size: 11px; font-weight: 700; min-width: 18px; height: 18px; border-radius: 9px; display: inline-flex; align-items: center; justify-content: center; padding: 0 5px; }
+
+/* badge na aba da sidebar */
+.nav-badge { margin-left: auto; background: var(--brand); color: #fff; font-size: 11px; font-weight: 700; min-width: 18px; height: 18px; border-radius: 9px; display: inline-flex; align-items: center; justify-content: center; padding: 0 5px; flex: none; }
+.nav button.active .nav-badge { background: #fff; color: var(--brand); }
+
+/* ===================== Página Minhas solicitações ===================== */
+.msol-page { max-width: 760px; }
+.msol-sec { margin-bottom: 24px; }
+.msol-sec-tit { font-size: 12px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; margin-bottom: 11px; display: flex; align-items: center; gap: 8px; }
+.msol-sec-n { background: var(--nav-hover); color: var(--text); font-size: 12px; font-weight: 700; min-width: 20px; height: 20px; border-radius: 10px; display: inline-flex; align-items: center; justify-content: center; padding: 0 6px; }
+.msol-card { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 16px 18px; margin-bottom: 10px; box-shadow: 0 1px 3px rgba(0,0,0,.03); }
+.msol-top { display: flex; align-items: center; gap: 8px; margin-bottom: 9px; flex-wrap: wrap; }
+.msol-st { font-size: 11px; font-weight: 700; padding: 3px 11px; border-radius: 20px; }
+.msol-st.ab { color: #b45309; background: rgba(245,158,11,.16); }
+.msol-st.and { color: var(--brand); background: rgba(255,122,26,.14); }
+.msol-st.ok { color: #15803d; background: rgba(34,197,94,.16); }
+.msol-urg { font-size: 11px; font-weight: 600; padding: 3px 10px; border-radius: 20px; text-transform: capitalize; color: var(--muted); background: var(--nav-hover); }
+.msol-urg.alta { color: #dc2626; background: rgba(239,68,68,.14); }
+.msol-data { margin-left: auto; font-size: 12px; color: var(--faint); }
+.msol-desc { font-size: 15px; color: var(--text); line-height: 1.5; margin-bottom: 7px; }
+.msol-cliente { font-size: 13px; color: var(--muted); }
+.msol-resp { margin-top: 11px; background: rgba(34,197,94,.08); border: 1px solid rgba(34,197,94,.25); border-radius: 10px; padding: 10px 12px; font-size: 13.5px; color: var(--text); }
+.msol-resp b { color: #15803d; }
+.msol-vazio { text-align: center; padding: 70px 20px; color: var(--muted); display: flex; flex-direction: column; align-items: center; gap: 10px; }
+.msol-vazio-t { font-size: 16px; font-weight: 600; color: var(--text); }
+.msol-vazio-s { font-size: 13.5px; color: var(--muted); max-width: 360px; }

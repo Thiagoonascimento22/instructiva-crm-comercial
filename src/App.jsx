@@ -92,6 +92,8 @@ export default function App() {
   const [user, setUser] = useState(null);
   const [view, setView] = useState("painel");
   const [waTarget, setWaTarget] = useState(null);
+  const [minhasSol, setMinhasSol] = useState([]);
+  const carregarMinhasSol = () => { api.solicitacoes().then(setMinhasSol).catch(() => {}); };
   const [toast, setToast] = useState(null);
   const toastT = useRef(null);
   const [theme, setTheme] = useState(() =>
@@ -118,6 +120,14 @@ export default function App() {
     if (user.role === "suporte") setView("solicitacoes");
   }, [user]);
 
+  useEffect(() => {
+    if (!user || user.role === "gerente" || user.role === "suporte") return;
+    carregarMinhasSol();
+    const t = setInterval(carregarMinhasSol, 8000);
+    return () => clearInterval(t);
+    // eslint-disable-next-line
+  }, [user]);
+
   function showToast(msg) {
     setToast(msg);
     clearTimeout(toastT.current);
@@ -135,9 +145,11 @@ export default function App() {
 
   const isGer = user.role === "gerente";
   const isSuporte = user.role === "suporte";
+  const badgeSol = minhasSol.filter((s) => s.status === "resolvida" && !s.resolvidoVisto).length;
   const titulos = {
     painel: { t: "Monitoria de Atendimento", s: "Acompanhe a produtividade e a agilidade do time" },
     whatsapp: { t: "WhatsApp", s: "Acompanhe as conversas dos atendentes" },
+    minhasSolicitacoes: { t: "Minhas solicitações", s: "Acompanhe seus pedidos ao suporte" },
     ia: { t: "Análise Inteligente", s: "A IA avalia a qualidade do atendimento" },
     nps: { t: "NPS / Satisfação", s: "Notas da pesquisa, por vendedor e período" },
     solicitacoes: { t: "Solicitações de suporte", s: "Pedidos de ajuda dos vendedores e análise" },
@@ -157,6 +169,7 @@ export default function App() {
         <nav className="nav">
           {!isSuporte && <NavBtn ic={I.dash} label={isGer ? "Monitoria" : "Meu Painel"} active={view === "painel"} onClick={() => setView("painel")} />}
           {!isSuporte && <NavBtn ic={I.wa} label="WhatsApp" active={view === "whatsapp"} onClick={() => setView("whatsapp")} />}
+          {!isGer && !isSuporte && <NavBtn ic={I.suporte} label="Minhas solicitações" active={view === "minhasSolicitacoes"} badge={badgeSol} onClick={() => setView("minhasSolicitacoes")} />}
           {isGer && <NavBtn ic={I.spark} label="Análise IA" active={view === "ia"} onClick={() => setView("ia")} />}
           {isGer && <NavBtn ic={I.estrela} label="NPS" active={view === "nps"} onClick={() => setView("nps")} />}
           {(isGer || isSuporte) && <NavBtn ic={I.suporte} label="Solicitações" active={view === "solicitacoes"} onClick={() => setView("solicitacoes")} />}
@@ -188,7 +201,8 @@ export default function App() {
         </div>
         <div className="content">
           {view === "painel" && !isSuporte && <Monitoria user={user} showToast={showToast} />}
-          {view === "whatsapp" && !isSuporte && <WhatsApp user={user} showToast={showToast} target={waTarget} onTargetUsed={() => setWaTarget(null)} />}
+          {view === "whatsapp" && !isSuporte && <WhatsApp user={user} showToast={showToast} target={waTarget} onTargetUsed={() => setWaTarget(null)} recarregarSol={carregarMinhasSol} />}
+          {view === "minhasSolicitacoes" && !isGer && !isSuporte && <PaginaMinhasSolicitacoes itens={minhasSol} recarregar={carregarMinhasSol} />}
           {view === "ia" && isGer && <PaginaIA user={user} showToast={showToast} />}
           {view === "nps" && isGer && <PaginaNPS showToast={showToast} />}
           {view === "solicitacoes" && (isGer || isSuporte) && <PaginaSolicitacoes showToast={showToast} readonly={isGer} />}
@@ -202,11 +216,12 @@ export default function App() {
   );
 }
 
-function NavBtn({ ic: Ico, label, active, onClick }) {
+function NavBtn({ ic: Ico, label, active, onClick, badge }) {
   return (
     <button className={active ? "active" : ""} onClick={onClick}>
       <Ico className="ico" />
       <span>{label}</span>
+      {badge > 0 && <span className="nav-badge">{badge}</span>}
     </button>
   );
 }
@@ -1043,7 +1058,7 @@ function MidiaMsg({ chatId, m }) {
    ============================================================ */
 const EMOJIS = ["😀","😅","😂","🙂","😉","😍","😎","🤝","👍","👏","🙏","🔥","✅","❌","⚠️","💰","📌","📎","🎉","❤️","🤔","😅","😢","😡","👋","💪","📞","📲","🕐","🙌","✨","😊"];
 
-function WhatsApp({ user, showToast, target, onTargetUsed }) {
+function WhatsApp({ user, showToast, target, onTargetUsed, recarregarSol }) {
   const isGer = user.role === "gerente";
   const [chats, setChats] = useState([]);
   const [usersMap, setUsersMap] = useState({});
@@ -1064,8 +1079,6 @@ function WhatsApp({ user, showToast, target, onTargetUsed }) {
   const [novoLead, setNovoLead] = useState(null);
   const [enviando, setEnviando] = useState(false);
   const [pedindoSuporte, setPedindoSuporte] = useState(false);
-  const [minhasSol, setMinhasSol] = useState([]);
-  const [verSol, setVerSol] = useState(false);
   const [showEmoji, setShowEmoji] = useState(false);
   const [verArquivadas, setVerArquivadas] = useState(false);
   const [gravando, setGravando] = useState(false);
@@ -1106,20 +1119,14 @@ function WhatsApp({ user, showToast, target, onTargetUsed }) {
   async function initVendedor() {
     try { setMinha(await api.waMinha()); } catch (_) {}
   }
-  async function carregarMinhasSol() {
-    if (isGer) return;
-    try { setMinhasSol(await api.solicitacoes()); } catch (_) {}
-  }
 
   useEffect(() => {
     (async () => {
       if (isGer) await initGerente(); else await initVendedor();
       await carregarChats(false);
-      carregarMinhasSol();
     })();
     const t = setInterval(async () => {
       await carregarChats(true);
-      if (!isGer) carregarMinhasSol();
       if (selRef.current) {
         try { setChat(await api.waChat(selRef.current)); } catch (_) {}
       }
@@ -1179,6 +1186,16 @@ function WhatsApp({ user, showToast, target, onTargetUsed }) {
       .then((cs) => setChats(cs))
       .catch((e) => showToast("✗ " + e.message))
       .finally(() => setLoading(false));
+  }
+
+  function escolherFiltro(f) {
+    if (f === "arquivadas") {
+      setSoAguardando(false);
+      if (!verArquivadas) toggleArquivadas();
+    } else {
+      setSoAguardando(f === "aguardando");
+      if (verArquivadas) toggleArquivadas();
+    }
   }
 
   async function arquivarConversa() {
@@ -1302,7 +1319,7 @@ function WhatsApp({ user, showToast, target, onTargetUsed }) {
 
   const buscando = busca.trim().length > 0;
   const aguardandoCount = chats.filter((c) => c.aguardando).length;
-  const badgeSol = minhasSol.filter((s) => s.status === "resolvida" && !s.resolvidoVisto).length;
+  const filtroAtivo = verArquivadas ? "arquivadas" : soAguardando ? "aguardando" : "ativas";
   const podeResponder = !isGer && !!user.podeResponder;
   let filtrados = chats.filter((c) => {
     if (soAguardando && !c.aguardando) return false;
@@ -1343,32 +1360,15 @@ function WhatsApp({ user, showToast, target, onTargetUsed }) {
           {!isGer && minha && minha.estado === "open" && (
             <span style={{ fontSize: 13, color: "var(--fechou)", fontWeight: 600, display: "flex", alignItems: "center", gap: 6 }}><span className="wa-dot on" /> WhatsApp conectado</span>
           )}
-          <button
-            type="button"
-            className={"chip wait-chip" + (soAguardando ? " on" : "")}
-            onClick={() => setSoAguardando((v) => !v)}
-            title="Mostrar só quem está esperando resposta"
-          >
-            ⏳ Aguardando{aguardandoCount ? ` (${aguardandoCount})` : ""}
-          </button>
-          <button
-            type="button"
-            className={"chip" + (verArquivadas ? " on" : "")}
-            onClick={toggleArquivadas}
-            title="Ver conversas arquivadas"
-          >
-            <I.arquivar style={{ width: 14, height: 14 }} /> Arquivadas
-          </button>
-          {!isGer && (
-            <button
-              type="button"
-              className={"chip sol-chip" + (badgeSol ? " on-alert" : "")}
-              onClick={() => { setVerSol(true); api.marcarSolicitacoesVistas().then(carregarMinhasSol).catch(() => {}); }}
-              title="Ver minhas solicitações ao suporte"
-            >
-              <I.suporte style={{ width: 13, height: 13 }} /> Minhas solicitações{badgeSol ? ` (${badgeSol})` : ""}
+          <div className="wa-filtros">
+            <button type="button" className={"wa-filtro" + (filtroAtivo === "ativas" ? " on" : "")} onClick={() => escolherFiltro("ativas")}>Ativas</button>
+            <button type="button" className={"wa-filtro" + (filtroAtivo === "aguardando" ? " on" : "")} onClick={() => escolherFiltro("aguardando")}>
+              Aguardando{aguardandoCount ? <span className="wa-filtro-cnt">{aguardandoCount}</span> : null}
             </button>
-          )}
+            <button type="button" className={"wa-filtro" + (filtroAtivo === "arquivadas" ? " on" : "")} onClick={() => escolherFiltro("arquivadas")}>
+              <I.arquivar style={{ width: 13, height: 13 }} /> Arquivadas
+            </button>
+          </div>
         </div>
         <div style={{ display: "flex", gap: 8 }}>
           {isGer && <button className="btn" onClick={() => setShowCfg(true)}><I.cog style={{ width: 15, height: 15 }} /> Configurar conexão</button>}
@@ -1495,10 +1495,9 @@ function WhatsApp({ user, showToast, target, onTargetUsed }) {
         <SolicitacaoForm
           defaults={{ cliente: chat.nome, numero: chat.numero }}
           onClose={() => setPedindoSuporte(false)}
-          onSaved={() => { setPedindoSuporte(false); showToast("✓ Solicitação enviada ao suporte"); carregarMinhasSol(); }}
+          onSaved={() => { setPedindoSuporte(false); showToast("✓ Encaminhado para o suporte"); recarregarSol && recarregarSol(); }}
         />
       )}
-      {verSol && <MinhasSolicitacoesModal itens={minhasSol} onClose={() => setVerSol(false)} />}
     </div>
   );
 }
@@ -3258,36 +3257,62 @@ function SolicitacaoRow({ s, onMudar, readonly }) {
   );
 }
 
-function MinhasSolicitacoesModal({ itens, onClose }) {
-  return (
-    <div className="modal" onClick={(e) => e.target === e.currentTarget && onClose()}>
-      <div className="modal-box">
-        <div className="mh">
-          <h3>Minhas solicitações</h3>
-          <p>Acompanhe o status dos seus pedidos ao suporte.</p>
+function PaginaMinhasSolicitacoes({ itens, recarregar }) {
+  useEffect(() => {
+    api.marcarSolicitacoesVistas().then(recarregar).catch(() => {});
+    // eslint-disable-next-line
+  }, []);
+  const lista = itens || [];
+  const ativas = lista.filter((s) => s.status !== "resolvida");
+  const resolvidas = lista.filter((s) => s.status === "resolvida");
+
+  const stInfo = (st) =>
+    st === "resolvida" ? { txt: "Resolvida", cls: "ok" } :
+    st === "andamento" ? { txt: "Em atendimento", cls: "and" } :
+    { txt: "Aguardando", cls: "ab" };
+
+  const card = (s) => {
+    const st = stInfo(s.status);
+    return (
+      <div className="msol-card" key={s.id}>
+        <div className="msol-top">
+          <span className={"msol-st " + st.cls}>{st.txt}</span>
+          <span className={"msol-urg " + s.urgencia}>{s.urgencia}</span>
+          <span className="msol-data">{fmtDataHora(s.criadoEm)}</span>
         </div>
-        <div className="mb" style={{ maxHeight: "60vh", overflowY: "auto" }}>
-          {(!itens || itens.length === 0) && <div className="dash-empty">Você ainda não abriu nenhuma solicitação.</div>}
-          <div className="sol-list">
-            {(itens || []).map((s) => (
-              <div className="sol-row big" key={s.id}>
-                <div className="sol-info">
-                  <div className="sol-top">
-                    <span className={"sol-st " + s.status}>{rotuloStatus(s.status)}</span>
-                    <span className={"sol-urg " + s.urgencia}>{s.urgencia}</span>
-                  </div>
-                  <div className="sol-desc">{s.descricao}</div>
-                  <div className="sol-meta">{s.cliente ? "Cliente: " + s.cliente + " · " : ""}{fmtDataHora(s.criadoEm)}</div>
-                  {s.status === "resolvida" && (
-                    <div className="sol-resp">{s.resposta ? <><b>✓ Suporte respondeu:</b> {s.resposta}</> : <b>✓ Resolvido pelo suporte</b>}</div>
-                  )}
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-        <div className="mf"><button className="btn btn-primary full" onClick={onClose}>Fechar</button></div>
+        <div className="msol-desc">{s.descricao}</div>
+        {s.cliente ? <div className="msol-cliente">Cliente: <b>{s.cliente}</b>{s.numero ? " · " + s.numero : ""}</div> : null}
+        {s.status === "resolvida" && (
+          <div className="msol-resp">{s.resposta ? <><b>Resposta do suporte:</b> {s.resposta}</> : <b>✓ Resolvido pelo suporte</b>}</div>
+        )}
       </div>
+    );
+  };
+
+  return (
+    <div className="msol-page">
+      {lista.length === 0 ? (
+        <div className="msol-vazio">
+          <I.suporte style={{ width: 42, height: 42, opacity: 0.35 }} />
+          <div className="msol-vazio-t">Você ainda não encaminhou nenhuma solicitação</div>
+          <div className="msol-vazio-s">Abra uma conversa no WhatsApp e clique em <b>"Encaminhar pro suporte"</b>.</div>
+        </div>
+      ) : (
+        <>
+          {ativas.length > 0 && (
+            <div className="msol-sec">
+              <div className="msol-sec-tit">Em aberto <span className="msol-sec-n">{ativas.length}</span></div>
+              {ativas.map(card)}
+            </div>
+          )}
+          {resolvidas.length > 0 && (
+            <div className="msol-sec">
+              <div className="msol-sec-tit">Resolvidas <span className="msol-sec-n">{resolvidas.length}</span></div>
+              {resolvidas.map(card)}
+            </div>
+          )}
+        </>
+      )}
     </div>
   );
 }
