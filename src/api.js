@@ -53,9 +53,14 @@ export const api = {
   waConfig: () => req("GET", "/api/wa/config"),
   waSetConfig: (dados) => req("PUT", "/api/wa/config", dados),
   waMinha: () => req("GET", "/api/wa/minha"),
-  waChats: (instance, q) =>
-    req("GET", "/api/wa/chats" + (instance || q ? "?" + [instance ? "instance=" + encodeURIComponent(instance) : "", q ? "q=" + encodeURIComponent(q) : ""].filter(Boolean).join("&") : "")),
+  waChats: (instance, q, arquivadas) =>
+    req("GET", "/api/wa/chats" + (() => {
+      const p = [instance ? "instance=" + encodeURIComponent(instance) : "", q ? "q=" + encodeURIComponent(q) : "", arquivadas ? "arquivadas=1" : ""].filter(Boolean);
+      return p.length ? "?" + p.join("&") : "";
+    })()),
   waChat: (id) => req("GET", "/api/wa/chats/" + id),
+  waSendMidia: (id, dados) => req("POST", "/api/wa/chats/" + id + "/send-midia", dados),
+  waArquivar: (id, arquivar) => req("POST", "/api/wa/chats/" + id + "/arquivar", { arquivar }),
   midiaUrl: (chatId, mid) => "/api/wa/midia/" + encodeURIComponent(chatId) + "/" + encodeURIComponent(mid),
   midiaBlob: async (chatId, mid) => {
     const t = getToken();

@@ -38,6 +38,9 @@ const I = {
   spark: (p) => (<svg {...p} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3v4M12 17v4M3 12h4M17 12h4M5.6 5.6l2.8 2.8M15.6 15.6l2.8 2.8M18.4 5.6l-2.8 2.8M8.4 15.6l-2.8 2.8"/></svg>),
   estrela: (p) => (<svg {...p} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2.5l2.9 6 6.6.9-4.8 4.6 1.2 6.5L12 18.9 6.1 21l1.2-6.5L2.5 9.9l6.6-.9z"/></svg>),
   suporte: (p) => (<svg {...p} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3.6"/><path d="M5.6 5.6l3.9 3.9M14.5 14.5l3.9 3.9M18.4 5.6l-3.9 3.9M9.5 14.5l-3.9 3.9"/></svg>),
+  clip: (p) => (<svg {...p} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M21.4 11.05 12.25 20.2a5 5 0 0 1-7.07-7.07l9.19-9.19a3 3 0 0 1 4.24 4.24l-9.2 9.19a1 1 0 0 1-1.41-1.41l8.49-8.49"/></svg>),
+  mic: (p) => (<svg {...p} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="2" width="6" height="11" rx="3"/><path d="M5 10a7 7 0 0 0 14 0M12 17v4"/></svg>),
+  arquivar: (p) => (<svg {...p} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="4" rx="1"/><path d="M5 8v11a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8"/><path d="M10 12h4"/></svg>),
   funnel: (p) => (<svg {...p} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M3 4h18l-7 8v7l-4-2v-5z"/></svg>),
 };
 
@@ -1064,6 +1067,17 @@ function WhatsApp({ user, showToast, target, onTargetUsed }) {
   const [minhasSol, setMinhasSol] = useState([]);
   const [verSol, setVerSol] = useState(false);
   const [showEmoji, setShowEmoji] = useState(false);
+  const [verArquivadas, setVerArquivadas] = useState(false);
+  const [gravando, setGravando] = useState(false);
+  const [gravSeg, setGravSeg] = useState(0);
+  const [enviandoMidia, setEnviandoMidia] = useState(false);
+  const arqRef = useRef(false);
+  const fileRef = useRef(null);
+  const recRef = useRef(null);
+  const chunksRef = useRef([]);
+  const streamRef = useRef(null);
+  const gravTimerRef = useRef(null);
+  useEffect(() => { arqRef.current = verArquivadas; }, [verArquivadas]);
   const msgsEnd = useRef(null);
   const selRef = useRef(null);
   const filtroRef = useRef("todas");
@@ -1076,7 +1090,7 @@ function WhatsApp({ user, showToast, target, onTargetUsed }) {
   async function carregarChats(silencioso) {
     if (!silencioso) setLoading(true);
     try {
-      const cs = await api.waChats(null, buscaRef.current.trim());
+      const cs = await api.waChats(null, buscaRef.current.trim(), arqRef.current);
       setChats(cs);
     } catch (e) { if (!silencioso) showToast("✗ " + e.message); }
     finally { if (!silencioso) setLoading(false); }
@@ -1154,6 +1168,117 @@ function WhatsApp({ user, showToast, target, onTargetUsed }) {
     } catch (e) { showToast("✗ " + e.message); }
   }
 
+  function fecharConversa() { setSel(null); setChat(null); selRef.current = null; setShowEmoji(false); }
+
+  function toggleArquivadas() {
+    const novo = !verArquivadas;
+    setVerArquivadas(novo); arqRef.current = novo;
+    fecharConversa();
+    setLoading(true);
+    api.waChats(null, buscaRef.current.trim(), novo)
+      .then((cs) => setChats(cs))
+      .catch((e) => showToast("✗ " + e.message))
+      .finally(() => setLoading(false));
+  }
+
+  async function arquivarConversa() {
+    if (!sel) return;
+    const arquivar = !verArquivadas; // lista normal arquiva; lista de arquivadas desarquiva
+    try {
+      await api.waArquivar(sel, arquivar);
+      setChats((cs) => cs.filter((x) => x.id !== sel));
+      fecharConversa();
+      showToast(arquivar ? "✓ Conversa arquivada" : "✓ Conversa desarquivada");
+    } catch (e) { showToast("✗ " + e.message); }
+  }
+
+  function lerBase64(file) {
+    return new Promise((resolve, reject) => {
+      const r = new FileReader();
+      r.onload = () => resolve(String(r.result));
+      r.onerror = () => reject(new Error("Não consegui ler o arquivo"));
+      r.readAsDataURL(file);
+    });
+  }
+
+  async function onArquivoSelecionado(e) {
+    const file = e.target.files && e.target.files[0];
+    e.target.value = "";
+    if (!file || !sel) return;
+    if (file.size > 16 * 1024 * 1024) { showToast("✗ Arquivo muito grande (máx. 16MB)"); return; }
+    const tipo = file.type.startsWith("image/") ? "image" : file.type.startsWith("video/") ? "video" : "document";
+    setEnviandoMidia(true);
+    try {
+      const dataUrl = await lerBase64(file);
+      const r = await api.waSendMidia(sel, { tipo, base64: dataUrl, mimetype: file.type, filename: file.name });
+      if (r && r.msg) setChat((c) => (c ? { ...c, mensagens: [...c.mensagens, r.msg] } : c));
+      carregarChats(true);
+    } catch (err) { showToast("✗ " + err.message); }
+    finally { setEnviandoMidia(false); }
+  }
+
+  function pararStream() {
+    if (gravTimerRef.current) { clearInterval(gravTimerRef.current); gravTimerRef.current = null; }
+    if (streamRef.current) { try { streamRef.current.getTracks().forEach((t) => t.stop()); } catch (_) {} streamRef.current = null; }
+  }
+
+  async function iniciarGravacao() {
+    if (!sel) return;
+    if (!navigator.mediaDevices || !window.MediaRecorder) { showToast("✗ Seu navegador não permite gravar áudio aqui"); return; }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      streamRef.current = stream;
+      const mr = new MediaRecorder(stream);
+      chunksRef.current = [];
+      mr.ondataavailable = (ev) => { if (ev.data && ev.data.size) chunksRef.current.push(ev.data); };
+      recRef.current = mr;
+      mr.start();
+      setGravando(true); setGravSeg(0);
+      gravTimerRef.current = setInterval(() => setGravSeg((s) => s + 1), 1000);
+    } catch (_) { showToast("✗ Não consegui acessar o microfone"); pararStream(); }
+  }
+
+  function cancelarGravacao() {
+    const mr = recRef.current;
+    if (mr && mr.state !== "inactive") { mr.onstop = null; try { mr.stop(); } catch (_) {} }
+    recRef.current = null; chunksRef.current = [];
+    pararStream(); setGravando(false); setGravSeg(0);
+  }
+
+  function pararEnviarGravacao() {
+    const mr = recRef.current;
+    if (!mr) { setGravando(false); return; }
+    const alvo = sel;
+    mr.onstop = async () => {
+      pararStream(); setGravando(false);
+      const blob = new Blob(chunksRef.current, { type: mr.mimeType || "audio/webm" });
+      chunksRef.current = []; recRef.current = null;
+      if (!blob.size || !alvo) { setGravSeg(0); return; }
+      setEnviandoMidia(true);
+      try {
+        const dataUrl = await lerBase64(blob);
+        const r = await api.waSendMidia(alvo, { tipo: "audio", base64: dataUrl, mimetype: blob.type || "audio/webm", filename: "audio.ogg" });
+        if (r && r.msg) setChat((c) => (c ? { ...c, mensagens: [...c.mensagens, r.msg] } : c));
+        carregarChats(true);
+      } catch (err) { showToast("✗ " + err.message); }
+      finally { setEnviandoMidia(false); setGravSeg(0); }
+    };
+    try { mr.stop(); } catch (_) { setGravando(false); }
+  }
+
+  // ESC fecha a conversa (igual WhatsApp)
+  useEffect(() => {
+    function onKey(e) {
+      if (e.key !== "Escape") return;
+      if (showEmoji) { setShowEmoji(false); return; }
+      if (gravando) { cancelarGravacao(); return; }
+      if (selRef.current) fecharConversa();
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+    // eslint-disable-next-line
+  }, [showEmoji, gravando]);
+
   // alvo vindo do botão de WhatsApp no card do pipeline
   useEffect(() => {
     if (!target || !target.numero) return;
@@ -1226,6 +1351,14 @@ function WhatsApp({ user, showToast, target, onTargetUsed }) {
           >
             ⏳ Aguardando{aguardandoCount ? ` (${aguardandoCount})` : ""}
           </button>
+          <button
+            type="button"
+            className={"chip" + (verArquivadas ? " on" : "")}
+            onClick={toggleArquivadas}
+            title="Ver conversas arquivadas"
+          >
+            <I.arquivar style={{ width: 14, height: 14 }} /> Arquivadas
+          </button>
           {!isGer && (
             <button
               type="button"
@@ -1291,6 +1424,12 @@ function WhatsApp({ user, showToast, target, onTargetUsed }) {
               ) : (
                 <button type="button" className="btn-encerrar" onClick={() => encerrarAtual(true)}>Encerrar atendimento</button>
               )}
+              <button type="button" className="wa-ico-btn" onClick={arquivarConversa} title={verArquivadas ? "Desarquivar conversa" : "Arquivar conversa"}>
+                <I.arquivar style={{ width: 18, height: 18 }} />
+              </button>
+              <button type="button" className="wa-ico-btn" onClick={fecharConversa} title="Fechar (Esc)">
+                <I.x style={{ width: 18, height: 18 }} />
+              </button>
             </div>
             <div className="wa-msgs">
               {chat.mensagens.map((m, i) => (
@@ -1307,26 +1446,41 @@ function WhatsApp({ user, showToast, target, onTargetUsed }) {
               <div ref={msgsEnd} />
             </div>
             {podeResponder ? (
-              <div className="wa-compose">
-                {showEmoji && (
-                  <div className="wa-emoji-pop">
-                    {EMOJIS.map((e, i) => (
-                      <button type="button" key={e + i} className="wa-emoji" onClick={() => setTexto((t) => t + e)}>{e}</button>
-                    ))}
-                  </div>
-                )}
-                <button type="button" className="wa-comp-emoji" onClick={() => setShowEmoji((v) => !v)} title="Emojis">😊</button>
-                <input
-                  className="wa-comp-input"
-                  value={texto}
-                  onChange={(e) => setTexto(e.target.value)}
-                  onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); enviar(); setShowEmoji(false); } }}
-                  placeholder="Escreva uma mensagem..."
-                />
-                <button type="button" className="wa-comp-send" onClick={() => { enviar(); setShowEmoji(false); }} disabled={enviando || !texto.trim()} title="Enviar">
-                  <I.send style={{ width: 17, height: 17 }} />
-                </button>
-              </div>
+              gravando ? (
+                <div className="wa-compose wa-gravando">
+                  <button type="button" className="wa-grav-cancel" onClick={cancelarGravacao} title="Cancelar gravação"><I.trash style={{ width: 18, height: 18 }} /></button>
+                  <span className="wa-grav-dot" />
+                  <span className="wa-grav-time">Gravando… {Math.floor(gravSeg / 60)}:{String(gravSeg % 60).padStart(2, "0")}</span>
+                  <div style={{ flex: 1 }} />
+                  <button type="button" className="wa-comp-send" onClick={pararEnviarGravacao} title="Enviar áudio"><I.send style={{ width: 17, height: 17 }} /></button>
+                </div>
+              ) : (
+                <div className="wa-compose">
+                  {showEmoji && (
+                    <div className="wa-emoji-pop">
+                      {EMOJIS.map((e, i) => (
+                        <button type="button" key={e + i} className="wa-emoji" onClick={() => setTexto((t) => t + e)}>{e}</button>
+                      ))}
+                    </div>
+                  )}
+                  <input ref={fileRef} type="file" hidden onChange={onArquivoSelecionado} accept="image/*,video/*,application/pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.zip" />
+                  <button type="button" className="wa-comp-ico" onClick={() => fileRef.current && fileRef.current.click()} disabled={enviandoMidia} title="Anexar arquivo"><I.clip style={{ width: 20, height: 20 }} /></button>
+                  <button type="button" className="wa-comp-ico" onClick={() => setShowEmoji((v) => !v)} title="Emojis">😊</button>
+                  <input
+                    className="wa-comp-input"
+                    value={texto}
+                    onChange={(e) => setTexto(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); enviar(); setShowEmoji(false); } }}
+                    placeholder={enviandoMidia ? "Enviando…" : "Escreva uma mensagem..."}
+                    disabled={enviandoMidia}
+                  />
+                  {texto.trim() ? (
+                    <button type="button" className="wa-comp-send" onClick={() => { enviar(); setShowEmoji(false); }} disabled={enviando} title="Enviar"><I.send style={{ width: 17, height: 17 }} /></button>
+                  ) : (
+                    <button type="button" className="wa-comp-send wa-comp-mic" onClick={iniciarGravacao} disabled={enviandoMidia} title="Gravar áudio"><I.mic style={{ width: 18, height: 18 }} /></button>
+                  )}
+                </div>
+              )
             ) : (
               <div className="wa-readonly">
                 <I.eye style={{ width: 15, height: 15 }} /> Monitoria — somente leitura. Quem responde é o vendedor, pelo WhatsApp dele.

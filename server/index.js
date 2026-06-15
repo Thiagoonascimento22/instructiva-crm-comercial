@@ -890,7 +890,8 @@ app.get("/api/wa/minha", auth, async (req, res) => {
 /* ---- listar conversas (escopo por instância) ---- */
 app.get("/api/wa/chats", auth, (req, res) => {
   const permitidas = new Set(instanciasDoUser(req.user));
-  let chats = Object.values(db.waChats).filter((c) => permitidas.has(c.instance));
+  const verArquivadas = req.query.arquivadas === "1";
+  let chats = Object.values(db.waChats).filter((c) => permitidas.has(c.instance) && (verArquivadas ? !!c.arquivada : !c.arquivada));
   if (req.user.role === "gerente" && req.query.instance && req.query.instance !== "todas") {
     chats = chats.filter((c) => c.instance === req.query.instance);
   }
@@ -920,6 +921,7 @@ app.get("/api/wa/chats", auth, (req, res) => {
       vendedorId: vendedorDaInstancia(c.instance),
       trecho,
       encerrado: !!c.encerrado,
+      arquivada: !!c.arquivada,
       nota: c.nota != null ? c.nota : null,
     };
   }).filter(Boolean);
@@ -1009,6 +1011,66 @@ app.post("/api/wa/chats/:id/send", auth, async (req, res) => {
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
+});
+
+/* ---- enviar mídia (imagem / documento / vídeo / áudio) ---- */
+app.post("/api/wa/chats/:id/send-midia", auth, async (req, res) => {
+  const chat = db.waChats[req.params.id];
+  if (!chat) return res.status(404).json({ error: "Conversa não encontrada" });
+  const permitidas = new Set(instanciasDoUser(req.user));
+  if (!permitidas.has(chat.instance))
+    return res.status(403).json({ error: "Sem acesso a essa conversa" });
+  if (req.user.role === "vendedor" && !req.user.podeResponder)
+    return res.status(403).json({ error: "Você não tem permissão para responder pelo painel" });
+  const { tipo, base64, mimetype, filename, caption } = req.body || {};
+  if (!["image", "video", "document", "audio"].includes(tipo))
+    return res.status(400).json({ error: "Tipo de mídia inválido" });
+  const b64 = String(base64 || "").replace(/^data:[^;]+;base64,/, "");
+  if (!b64) return res.status(400).json({ error: "Arquivo vazio" });
+  try {
+    if (tipo === "audio") {
+      await evo("POST", `/message/sendWhatsAppAudio/${chat.instance}`, {
+        number: chat.numero,
+        audio: b64,
+      });
+    } else {
+      await evo("POST", `/message/sendMedia/${chat.instance}`, {
+        number: chat.numero,
+        mediatype: tipo,
+        mimetype: mimetype || "application/octet-stream",
+        media: b64,
+        fileName: filename || "arquivo." + extDeMime(mimetype),
+        caption: caption || "",
+      });
+    }
+    const mid = "snd_" + crypto.randomBytes(6).toString("hex");
+    const ext = extDeMime(mimetype || (tipo === "audio" ? "audio/ogg" : ""));
+    const fname = nomeArquivo(mid) + "." + ext;
+    try { fs.writeFileSync(path.join(MEDIA_DIR, fname), Buffer.from(b64, "base64")); } catch (_) {}
+    const msg = {
+      role: "me", tipo, mid, arquivo: fname,
+      mimetype: mimetype || "", filename: filename || "",
+      caption: caption || "", ts: Date.now(),
+    };
+    chat.mensagens.push(msg);
+    chat.atualizadoEm = Date.now();
+    saveSoon();
+    res.json({ ok: true, msg });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+/* ---- arquivar / desarquivar conversa ---- */
+app.post("/api/wa/chats/:id/arquivar", auth, (req, res) => {
+  const chat = db.waChats[req.params.id];
+  if (!chat) return res.status(404).json({ error: "Conversa não encontrada" });
+  const permitidas = new Set(instanciasDoUser(req.user));
+  if (!permitidas.has(chat.instance))
+    return res.status(403).json({ error: "Sem acesso a essa conversa" });
+  chat.arquivada = !!(req.body && req.body.arquivar);
+  saveSoon();
+  res.json({ ok: true, arquivada: chat.arquivada });
 });
 
 /* ---- encerrar / reabrir atendimento (manual, pelo gerente) ---- */
