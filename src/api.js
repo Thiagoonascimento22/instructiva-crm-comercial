@@ -84,4 +84,11 @@ export const api = {
   monitoria: (desde, ate) => req("GET", `/api/monitoria?desde=${desde || 0}&ate=${ate || Date.now()}`),
   monitoriaVendedor: (id, desde, ate) => req("GET", `/api/monitoria/vendedor/${id}?desde=${desde || 0}&ate=${ate || Date.now()}`),
   monitoriaEvolucao: (desde, ate, vendedorId) => req("GET", `/api/monitoria/evolucao?desde=${desde || 0}&ate=${ate || Date.now()}${vendedorId ? "&vendedorId=" + vendedorId : ""}`),
+
+  // Solicitações de suporte
+  solicitacoes: (status) => req("GET", "/api/solicitacoes" + (status ? "?status=" + encodeURIComponent(status) : "")),
+  criarSolicitacao: (dados) => req("POST", "/api/solicitacoes", dados),
+  statusSolicitacao: (id, status) => req("PATCH", "/api/solicitacoes/" + id, { status }),
+  solicitacoesRelatorio: (desde, ate) => req("GET", `/api/solicitacoes/relatorio?desde=${desde || 0}&ate=${ate || Date.now()}`),
+  solicitacoesIA: (desde, ate) => req("GET", `/api/solicitacoes/ia?desde=${desde || 0}&ate=${ate || Date.now()}`),
 };

@@ -2255,3 +2255,39 @@ h1, h2, h3, h4, .topbar .greet, .panel-h h3, .login-card .ttl, .login-card h2, .
 .ind-nps-media { display: flex; flex-direction: column; align-items: flex-start; }
 .ind-nps-aval { padding: 0 18px 14px; }
 @media (max-width: 760px) { .ind-nps { grid-template-columns: 1fr; } }
+
+/* ===================== Solicitações de suporte ===================== */
+.sup-card { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap;
+  background: var(--card); border: 1px solid var(--line); border-radius: var(--r); padding: 16px 18px; margin-bottom: 18px; }
+.sup-card-t { font-weight: 700; font-size: 15px; color: var(--text); }
+.sup-card-s { font-size: 13px; color: var(--muted); margin-top: 2px; }
+
+.sol-list { display: flex; flex-direction: column; }
+.sol-row { display: flex; align-items: center; gap: 12px; padding: 12px; border-bottom: 1px solid var(--line); }
+.sol-row:last-child { border-bottom: none; }
+.sol-row.big { align-items: flex-start; }
+.sol-info { flex: 1; min-width: 0; }
+.sol-top { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 5px; }
+.sol-desc { font-size: 14px; color: var(--text); line-height: 1.45; word-break: break-word; }
+.sol-meta { font-size: 12px; color: var(--muted); margin-top: 3px; }
+.sol-quem { font-size: 13px; color: var(--text); }
+
+.sol-st { font-size: 10.5px; font-weight: 700; padding: 3px 9px; border-radius: 7px; white-space: nowrap; }
+.sol-st.aberta { background: rgba(245, 158, 11, 0.15); color: var(--laranja); }
+.sol-st.andamento { background: rgba(59, 130, 246, 0.15); color: var(--indigo); }
+.sol-st.resolvida { background: rgba(16, 185, 129, 0.15); color: var(--mint); }
+
+.sol-urg { font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: 6px; text-transform: capitalize; white-space: nowrap; }
+.sol-urg.baixa { background: var(--line); color: var(--muted); }
+.sol-urg.normal { background: rgba(99, 102, 241, 0.13); color: var(--indigo); }
+.sol-urg.alta { background: rgba(239, 68, 68, 0.15); color: var(--coral); }
+
+.sol-acoes { display: flex; gap: 8px; flex-shrink: 0; flex-wrap: wrap; }
+.btn.btn-ok { background: rgba(16, 185, 129, 0.14); color: var(--mint); border-color: transparent; }
+
+.sol-rank-t { font-size: 12px; font-weight: 700; color: var(--muted); margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.03em; }
+.sol-rank-row { display: flex; align-items: center; gap: 12px; padding: 8px 0; border-bottom: 1px solid var(--line); }
+.sol-rank-row:last-child { border-bottom: none; }
+.sol-rank-pos { width: 24px; height: 24px; border-radius: 50%; background: var(--line); color: var(--text); font-weight: 800; font-size: 12px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.sol-rank-nome { font-weight: 600; color: var(--text); flex: 1; }
+.sol-rank-val { font-size: 12.5px; color: var(--muted); }

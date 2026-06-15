@@ -129,6 +129,7 @@ function dbVazio() {
       horario: horarioPadrao(),
     },
     waChats: {}, // { "instance::numero": { ...conversa } }
+    solicitacoes: [], // [{ id, vendedorId, vendedorNome, descricao, cliente, numero, urgencia, status, criadoEm, resolvidoEm }]
     seq: 1,
   };
 }
@@ -151,6 +152,7 @@ function loadDB() {
       if (!db.waConfig.horario) db.waConfig.horario = horarioPadrao();
       else db.waConfig.horario = normalizaHorario(db.waConfig.horario);
       if (!db.waChats || typeof db.waChats !== "object") db.waChats = {};
+      if (!Array.isArray(db.solicitacoes)) db.solicitacoes = [];
       // migração: chats que só têm mensagem enviada (sem resposta do lead) tinham o
       // nome do vendedor por engano — troca pelo número até o lead responder
       Object.values(db.waChats).forEach((c) => {
@@ -305,6 +307,106 @@ app.delete("/api/users/:id", auth, gerenteOnly, (req, res) => {
   db.users.splice(i, 1);
   saveSoon();
   res.json({ ok: true });
+});
+
+/* ============================================================
+   SOLICITAÇÕES DE SUPORTE (vendedor pede ajuda ao suporte)
+   ============================================================ */
+const URGENCIAS = ["baixa", "normal", "alta"];
+const STATUS_SOL = ["aberta", "andamento", "resolvida"];
+
+// lista: gerente vê todas; vendedor vê só as próprias
+app.get("/api/solicitacoes", auth, (req, res) => {
+  let lista = db.solicitacoes || [];
+  if (req.user.role !== "gerente") lista = lista.filter((s) => s.vendedorId === req.user.id);
+  const st = req.query.status;
+  if (st && STATUS_SOL.includes(st)) lista = lista.filter((s) => s.status === st);
+  lista = [...lista].sort((a, b) => (b.criadoEm || 0) - (a.criadoEm || 0));
+  res.json(lista);
+});
+
+// criar (qualquer usuário logado — normalmente o vendedor)
+app.post("/api/solicitacoes", auth, (req, res) => {
+  const { descricao, cliente, numero, urgencia } = req.body || {};
+  if (!descricao || !descricao.trim())
+    return res.status(400).json({ error: "Descreva o que você precisa" });
+  const nova = {
+    id: proximoId("sol"),
+    vendedorId: req.user.id,
+    vendedorNome: req.user.nome,
+    descricao: descricao.trim().slice(0, 2000),
+    cliente: String(cliente || "").trim().slice(0, 120),
+    numero: String(numero || "").trim().slice(0, 40),
+    urgencia: URGENCIAS.includes(urgencia) ? urgencia : "normal",
+    status: "aberta",
+    criadoEm: Date.now(),
+    resolvidoEm: null,
+  };
+  db.solicitacoes.push(nova);
+  saveSoon();
+  res.json(nova);
+});
+
+// mudar status (só gerente)
+app.patch("/api/solicitacoes/:id", auth, gerenteOnly, (req, res) => {
+  const s = (db.solicitacoes || []).find((x) => x.id === req.params.id);
+  if (!s) return res.status(404).json({ error: "Solicitação não encontrada" });
+  const { status } = req.body || {};
+  if (status && STATUS_SOL.includes(status)) {
+    s.status = status;
+    s.resolvidoEm = status === "resolvida" ? Date.now() : null;
+  }
+  saveSoon();
+  res.json(s);
+});
+
+// relatório (números) — só gerente
+app.get("/api/solicitacoes/relatorio", auth, gerenteOnly, (req, res) => {
+  const desde = Number(req.query.desde) || 0;
+  const ate = Number(req.query.ate) || Date.now();
+  const todas = (db.solicitacoes || []).filter((s) => s.criadoEm >= desde && s.criadoEm <= ate);
+  const mapa = {};
+  todas.forEach((s) => {
+    const k = s.vendedorId || "?";
+    if (!mapa[k]) mapa[k] = { vendedorId: k, nome: s.vendedorNome || "—", total: 0, resolvidas: 0 };
+    mapa[k].total++;
+    if (s.status === "resolvida") mapa[k].resolvidas++;
+  });
+  const porVendedor = Object.values(mapa).sort((a, b) => b.total - a.total);
+  const cont = { aberta: 0, andamento: 0, resolvida: 0 };
+  let somaMs = 0, nResolv = 0;
+  todas.forEach((s) => {
+    cont[s.status] = (cont[s.status] || 0) + 1;
+    if (s.status === "resolvida" && s.resolvidoEm) { somaMs += (s.resolvidoEm - s.criadoEm); nResolv++; }
+  });
+  const total = todas.length;
+  res.json({
+    porVendedor,
+    situacao: {
+      total,
+      aberta: cont.aberta, andamento: cont.andamento, resolvida: cont.resolvida,
+      taxaResolucao: total ? Math.round((cont.resolvida / total) * 100) : 0,
+      tempoMedioResolverSeg: nResolv ? Math.round(somaMs / nResolv / 1000) : 0,
+    },
+  });
+});
+
+// análise da IA das solicitações — só gerente
+app.get("/api/solicitacoes/ia", auth, gerenteOnly, async (req, res) => {
+  const desde = Number(req.query.desde) || 0;
+  const ate = Number(req.query.ate) || Date.now();
+  const todas = (db.solicitacoes || []).filter((s) => s.criadoEm >= desde && s.criadoEm <= ate);
+  if (!todas.length) return res.json({ texto: "Nenhuma solicitação no período para analisar." });
+  const linhas = todas.slice(0, 80).map((s) =>
+    `- [${s.urgencia}/${s.status}] ${s.vendedorNome}: ${s.descricao}${s.cliente ? " (cliente: " + s.cliente + ")" : ""}`
+  ).join("\n");
+  const prompt = `Você é analista de operações de uma escola técnica de eletrônica. Abaixo estão solicitações de ajuda que os vendedores abriram para o suporte interno. Analise e aponte de forma objetiva, em português do Brasil e no máximo 3 parágrafos curtos: (1) os temas/motivos mais recorrentes; (2) gargalos ou problemas que se repetem; (3) sugestões práticas para reduzir o volume de solicitações. Não invente dados que não estejam na lista.\n\nSolicitações:\n${linhas}`;
+  try {
+    const out = await chamarIA(prompt);
+    res.json({ texto: out.trim() });
+  } catch (e) {
+    res.status(400).json({ error: e.message });
+  }
 });
 
 /* ============================================================

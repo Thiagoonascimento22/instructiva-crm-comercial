@@ -37,6 +37,7 @@ const I = {
   users: (p) => (<svg {...p} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>),
   spark: (p) => (<svg {...p} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3v4M12 17v4M3 12h4M17 12h4M5.6 5.6l2.8 2.8M15.6 15.6l2.8 2.8M18.4 5.6l-2.8 2.8M8.4 15.6l-2.8 2.8"/></svg>),
   estrela: (p) => (<svg {...p} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2.5l2.9 6 6.6.9-4.8 4.6 1.2 6.5L12 18.9 6.1 21l1.2-6.5L2.5 9.9l6.6-.9z"/></svg>),
+  suporte: (p) => (<svg {...p} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3.6"/><path d="M5.6 5.6l3.9 3.9M14.5 14.5l3.9 3.9M18.4 5.6l-3.9 3.9M9.5 14.5l-3.9 3.9"/></svg>),
   funnel: (p) => (<svg {...p} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M3 4h18l-7 8v7l-4-2v-5z"/></svg>),
 };
 
@@ -128,6 +129,7 @@ export default function App() {
     whatsapp: { t: "WhatsApp", s: "Acompanhe as conversas dos atendentes" },
     ia: { t: "Análise Inteligente", s: "A IA avalia a qualidade do atendimento" },
     nps: { t: "NPS / Satisfação", s: "Notas da pesquisa, por vendedor e período" },
+    solicitacoes: { t: "Solicitações de suporte", s: "Pedidos de ajuda dos vendedores e análise" },
     equipe: { t: "Equipe & Acessos", s: "Gerencie os atendentes e seus acessos" },
     config: { t: "Configurações", s: "Seus dados de acesso" },
   };
@@ -146,6 +148,7 @@ export default function App() {
           <NavBtn ic={I.wa} label="WhatsApp" active={view === "whatsapp"} onClick={() => setView("whatsapp")} />
           {isGer && <NavBtn ic={I.spark} label="Análise IA" active={view === "ia"} onClick={() => setView("ia")} />}
           {isGer && <NavBtn ic={I.estrela} label="NPS" active={view === "nps"} onClick={() => setView("nps")} />}
+          {isGer && <NavBtn ic={I.suporte} label="Solicitações" active={view === "solicitacoes"} onClick={() => setView("solicitacoes")} />}
           {isGer && <NavBtn ic={I.team} label="Equipe & Acessos" active={view === "equipe"} onClick={() => setView("equipe")} />}
           <NavBtn ic={I.cog} label="Configurações" active={view === "config"} onClick={() => setView("config")} />
         </nav>
@@ -177,6 +180,7 @@ export default function App() {
           {view === "whatsapp" && <WhatsApp user={user} showToast={showToast} target={waTarget} onTargetUsed={() => setWaTarget(null)} />}
           {view === "ia" && isGer && <PaginaIA user={user} showToast={showToast} />}
           {view === "nps" && isGer && <PaginaNPS showToast={showToast} />}
+          {view === "solicitacoes" && isGer && <PaginaSolicitacoes showToast={showToast} />}
           {view === "equipe" && isGer && <Equipe showToast={showToast} meId={user.id} />}
           {view === "config" && <Config user={user} setUser={setUser} showToast={showToast} />}
         </div>
@@ -2665,7 +2669,7 @@ function Monitoria({ user, showToast }) {
     return (
       <div>
         {topo}
-        {det ? <PainelIndividual info={det.info} evo={det.evo} nps={det.nps} isGer={isGer} onVoltar={() => setVendFiltro("")} /> : <div className="spin" />}
+        {det ? <PainelIndividual info={det.info} evo={det.evo} nps={det.nps} isGer={isGer} showToast={showToast} onVoltar={() => setVendFiltro("")} /> : <div className="spin" />}
       </div>
     );
   }
@@ -2736,14 +2740,59 @@ function Monitoria({ user, showToast }) {
   );
 }
 
-function PainelIndividual({ info: d, evo, nps, isGer, onVoltar }) {
+function PainelIndividual({ info: d, evo, nps, isGer, showToast, onVoltar }) {
   const ativos = (evo || []).filter((x) => x.atendimentos > 0 || x.mensagens > 0);
+  const [pedindo, setPedindo] = useState(false);
+  const [minhas, setMinhas] = useState(null);
+  useEffect(() => {
+    if (isGer) { setMinhas(null); return; }
+    api.solicitacoes().then(setMinhas).catch(() => setMinhas([]));
+  }, [isGer]);
   return (
     <div>
       <div className="ind-head">
         {isGer && <button className="btn btn-sm" onClick={onVoltar}>← Todos os vendedores</button>}
         <div className="ind-nome"><span className="rank-av" style={{ width: 30, height: 30, fontSize: 12 }}>{iniciais(d.nome)}</span>{d.nome}</div>
       </div>
+
+      {!isGer && (
+        <div className="sup-card">
+          <div>
+            <div className="sup-card-t">Precisa de ajuda no atendimento?</div>
+            <div className="sup-card-s">Abra uma solicitação que o suporte recebe na hora.</div>
+          </div>
+          <button className="btn btn-primary" onClick={() => setPedindo(true)}><I.suporte style={{ width: 16, height: 16 }} /> Pedir ajuda ao suporte</button>
+        </div>
+      )}
+
+      {!isGer && minhas && minhas.length > 0 && (
+        <div className="panel">
+          <div className="panel-h"><h3>Minhas solicitações<span className="panel-sub">acompanhe o status dos seus pedidos</span></h3></div>
+          <div className="sol-list">
+            {minhas.slice(0, 8).map((s) => (
+              <div className="sol-row" key={s.id}>
+                <span className={"sol-st " + s.status}>{rotuloStatus(s.status)}</span>
+                <div className="sol-info">
+                  <div className="sol-desc">{s.descricao}</div>
+                  <div className="sol-meta">{s.cliente ? "Cliente: " + s.cliente + " · " : ""}{fmtDataHora(s.criadoEm)}</div>
+                </div>
+                <span className={"sol-urg " + s.urgencia}>{s.urgencia}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {pedindo && (
+        <SolicitacaoForm
+          onClose={() => setPedindo(false)}
+          onSaved={(nova) => {
+            setPedindo(false);
+            setMinhas((l) => [nova, ...(l || [])]);
+            showToast && showToast("✓ Solicitação enviada ao suporte");
+          }}
+        />
+      )}
 
       <div className="stats">
         <StatIco ico={I.refresh} cor="#8b7bff" val={fmtTempo(d.tmrSeg)} lab="Tempo médio de resposta (TMA)" />
@@ -2817,6 +2866,194 @@ function PainelIndividual({ info: d, evo, nps, isGer, onVoltar }) {
               <div className="cc-meta">
                 {c.semResposta ? <span className="badge red">sem resposta</span> : c.atendida ? <span className="badge green">respondida</span> : <span className="badge">só recebida</span>}
                 {c.tmrSeg > 0 && <span className="t">resp. {fmtTempo(c.tmrSeg)}</span>}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ============================ SOLICITAÇÕES DE SUPORTE ============================ */
+function rotuloStatus(s) {
+  return s === "aberta" ? "Aberta" : s === "andamento" ? "Em andamento" : "Resolvida";
+}
+
+function SolicitacaoForm({ onClose, onSaved }) {
+  const [f, setF] = useState({ descricao: "", cliente: "", numero: "", urgencia: "normal" });
+  const [saving, setSaving] = useState(false);
+  const set = (k, v) => setF((s) => ({ ...s, [k]: v }));
+  async function salvar() {
+    if (!f.descricao.trim()) { alert("Descreva o que você precisa."); return; }
+    setSaving(true);
+    try { const nova = await api.criarSolicitacao(f); onSaved(nova); }
+    catch (e) { alert(e.message); setSaving(false); }
+  }
+  return (
+    <div className="modal" onClick={(e) => e.target === e.currentTarget && onClose()}>
+      <div className="modal-box">
+        <div className="mh">
+          <h3>Pedir ajuda ao suporte</h3>
+          <p>Descreva o que está acontecendo. O suporte recebe sua solicitação na hora.</p>
+        </div>
+        <div className="mb">
+          <div className="field">
+            <label>O que você precisa?</label>
+            <textarea className="input" rows={4} value={f.descricao} onChange={(e) => set("descricao", e.target.value)} placeholder="Ex: cliente quer emitir nota fiscal e não sei como fazer..." autoFocus />
+          </div>
+          <div className="field">
+            <label>Cliente <span style={{ color: "var(--faint)", fontWeight: 400 }}>— opcional</span></label>
+            <input className="input" value={f.cliente} onChange={(e) => set("cliente", e.target.value)} placeholder="nome do cliente" />
+          </div>
+          <div className="field">
+            <label>WhatsApp do cliente <span style={{ color: "var(--faint)", fontWeight: 400 }}>— opcional</span></label>
+            <input className="input" value={f.numero} onChange={(e) => set("numero", e.target.value)} placeholder="ex: 44 99999-9999" />
+          </div>
+          <div className="field">
+            <label>Urgência</label>
+            <select className="select" value={f.urgencia} onChange={(e) => set("urgencia", e.target.value)}>
+              <option value="baixa">Baixa</option>
+              <option value="normal">Normal</option>
+              <option value="alta">Alta</option>
+            </select>
+          </div>
+        </div>
+        <div className="mf">
+          <button className="btn full" onClick={onClose}>Cancelar</button>
+          <button className="btn btn-primary full" onClick={salvar} disabled={saving}>{saving ? "Enviando..." : "Enviar solicitação"}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function PaginaSolicitacoes({ showToast }) {
+  const [lista, setLista] = useState(null);
+  const [rel, setRel] = useState(null);
+  const [filtro, setFiltro] = useState("todas");
+  const [periodo, setPeriodo] = useState("30");
+  const [ia, setIa] = useState(null);
+  const [iaLoad, setIaLoad] = useState(false);
+  const [iaErr, setIaErr] = useState("");
+
+  function intervalo() {
+    const ate = Date.now();
+    if (periodo === "tudo") return [0, ate];
+    if (periodo === "hoje") return [inicioDoDia(new Date()), ate];
+    const dias = Number(periodo);
+    return [inicioDoDia(new Date(Date.now() - (dias - 1) * 86400000)), ate];
+  }
+
+  async function carregarLista() {
+    try { setLista(await api.solicitacoes(filtro === "todas" ? "" : filtro)); }
+    catch (e) { showToast("✗ " + e.message); setLista([]); }
+  }
+  async function carregarRel() {
+    const [ini, fim] = intervalo();
+    try { setRel(await api.solicitacoesRelatorio(ini, fim)); } catch (_) { setRel(null); }
+  }
+  useEffect(() => { carregarLista(); /* eslint-disable-next-line */ }, [filtro]);
+  useEffect(() => { carregarRel(); setIa(null); setIaErr(""); /* eslint-disable-next-line */ }, [periodo]);
+
+  async function mudar(id, status) {
+    try {
+      const u = await api.statusSolicitacao(id, status);
+      setLista((l) => (l || []).map((x) => (x.id === u.id ? u : x)));
+      carregarRel();
+    } catch (e) { showToast("✗ " + e.message); }
+  }
+  async function gerarIA() {
+    setIaLoad(true); setIaErr(""); setIa(null);
+    const [ini, fim] = intervalo();
+    try { const r = await api.solicitacoesIA(ini, fim); setIa(r.texto); }
+    catch (e) { setIaErr(e.message); }
+    finally { setIaLoad(false); }
+  }
+
+  const sit = rel && rel.situacao;
+  const perBtn = (v, txt) => (
+    <button className={"chip" + (periodo === v ? " on" : "")} onClick={() => setPeriodo(v)}>{txt}</button>
+  );
+  const filBtn = (v, txt) => (
+    <button className={"chip" + (filtro === v ? " on" : "")} onClick={() => setFiltro(v)}>{txt}</button>
+  );
+
+  return (
+    <div>
+      <div className="panel">
+        <div className="panel-h"><h3>Visão geral<span className="panel-sub">situação das solicitações no período</span></h3></div>
+        <div className="ia-periodo" style={{ padding: "0 18px 14px" }}>
+          <span className="lbl">Período:</span>
+          {perBtn("hoje", "Hoje")}{perBtn("7", "7 dias")}{perBtn("30", "30 dias")}{perBtn("tudo", "Tudo")}
+        </div>
+        {!sit && <div className="spin" />}
+        {sit && (
+          <>
+            <div className="mon-strip" style={{ margin: "0 18px 16px" }}>
+              <div className="mon-mini"><div className="lab">Total</div><div className="num">{sit.total}</div></div>
+              <div className="mon-mini"><div className="lab">Abertas</div><div className="num">{sit.aberta}</div></div>
+              <div className="mon-mini"><div className="lab">Em andamento</div><div className="num">{sit.andamento}</div></div>
+              <div className="mon-mini"><div className="lab">Resolvidas</div><div className="num">{sit.resolvida}</div></div>
+              <div className="mon-mini"><div className="lab">Taxa de resolução</div><div className="num">{sit.taxaResolucao}%</div></div>
+              <div className="mon-mini"><div className="lab">Tempo médio p/ resolver</div><div className="num">{sit.tempoMedioResolverSeg ? fmtTempo(sit.tempoMedioResolverSeg) : "—"}</div></div>
+            </div>
+            {rel.porVendedor.length > 0 && (
+              <div style={{ padding: "0 18px 18px" }}>
+                <div className="sol-rank-t">Quem mais abriu chamado</div>
+                {rel.porVendedor.map((v, i) => (
+                  <div className="sol-rank-row" key={v.vendedorId}>
+                    <span className="sol-rank-pos">{i + 1}</span>
+                    <span className="sol-rank-nome">{v.nome}</span>
+                    <span className="sol-rank-val">{v.total} {v.total === 1 ? "pedido" : "pedidos"} · {v.resolvidas} resolvido{v.resolvidas === 1 ? "" : "s"}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </>
+        )}
+      </div>
+
+      <div className="panel">
+        <div className="panel-h">
+          <h3>Análise da IA<span className="panel-sub">temas recorrentes e sugestões</span></h3>
+          <button className="btn btn-primary btn-sm" onClick={gerarIA} disabled={iaLoad}>{iaLoad ? "Analisando..." : "Gerar análise"}</button>
+        </div>
+        <div style={{ padding: 18 }}>
+          {!ia && !iaErr && !iaLoad && <div className="dash-empty">Clique em "Gerar análise" para a IA avaliar as solicitações do período.</div>}
+          {iaLoad && <div className="spin" />}
+          {iaErr && <div className="ia-erro">{iaErr}</div>}
+          {ia && <div className="ia-resumo" style={{ whiteSpace: "pre-wrap" }}>{ia}</div>}
+        </div>
+      </div>
+
+      <div className="panel">
+        <div className="panel-h"><h3>Fila de solicitações<span className="panel-sub">trabalhe os pedidos e atualize o status</span></h3></div>
+        <div className="ia-periodo" style={{ padding: "0 18px 14px" }}>
+          <span className="lbl">Status:</span>
+          {filBtn("todas", "Todas")}{filBtn("aberta", "Abertas")}{filBtn("andamento", "Em andamento")}{filBtn("resolvida", "Resolvidas")}
+        </div>
+        <div className="sol-list" style={{ padding: "0 6px 8px" }}>
+          {!lista && <div className="spin" />}
+          {lista && lista.length === 0 && <div className="dash-empty" style={{ padding: 18 }}>Nenhuma solicitação por aqui.</div>}
+          {(lista || []).map((s) => (
+            <div className="sol-row big" key={s.id}>
+              <div className="sol-info">
+                <div className="sol-top">
+                  <span className={"sol-st " + s.status}>{rotuloStatus(s.status)}</span>
+                  <span className={"sol-urg " + s.urgencia}>{s.urgencia}</span>
+                  <b className="sol-quem">{s.vendedorNome}</b>
+                </div>
+                <div className="sol-desc">{s.descricao}</div>
+                <div className="sol-meta">
+                  {s.cliente ? "Cliente: " + s.cliente + (s.numero ? " (" + s.numero + ")" : "") + " · " : (s.numero ? s.numero + " · " : "")}
+                  {fmtDataHora(s.criadoEm)}
+                </div>
+              </div>
+              <div className="sol-acoes">
+                {s.status === "aberta" && <button className="btn btn-sm" onClick={() => mudar(s.id, "andamento")}>Em andamento</button>}
+                {s.status !== "resolvida" && <button className="btn btn-sm btn-ok" onClick={() => mudar(s.id, "resolvida")}>Resolver</button>}
+                {s.status === "resolvida" && <button className="btn btn-sm" onClick={() => mudar(s.id, "aberta")}>Reabrir</button>}
               </div>
             </div>
           ))}
