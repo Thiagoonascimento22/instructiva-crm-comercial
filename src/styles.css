@@ -2249,3 +2249,9 @@ h1, h2, h3, h4, .topbar .greet, .panel-h h3, .login-card .ttl, .login-card h2, .
 }
 .nps-vsel:focus { outline: none; border-color: var(--laranja); }
 @media (max-width: 760px) { .nps-vsel { margin-left: 0; width: 100%; } }
+
+/* NPS dentro do painel individual */
+.ind-nps { display: grid; grid-template-columns: 200px 1fr; gap: 18px; align-items: center; padding: 18px; }
+.ind-nps-media { display: flex; flex-direction: column; align-items: flex-start; }
+.ind-nps-aval { padding: 0 18px 14px; }
+@media (max-width: 760px) { .ind-nps { grid-template-columns: 1fr; } }

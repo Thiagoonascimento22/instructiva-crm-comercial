@@ -221,14 +221,12 @@ function gerenteOnly(req, res, next) {
 app.post("/api/login", (req, res) => {
   const { login, senha } = req.body || {};
   const user = db.users.find(
-    (u) => u.login.toLowerCase() === String(login || "").toLowerCase()
+    (u) => (u.login || "").toLowerCase() === String(login || "").toLowerCase()
   );
   if (!user || user.senha !== senha)
     return res.status(401).json({ error: "Login ou senha incorretos" });
   if (!user.ativo)
     return res.status(403).json({ error: "Usuário desativado" });
-  if (user.role !== "gerente")
-    return res.status(403).json({ error: "Apenas a gerência acessa o sistema de monitoria." });
   user.token = novoToken();
   saveSoon();
   res.json({ token: user.token, user: semSenha(user) });
@@ -260,14 +258,16 @@ app.post("/api/users", auth, gerenteOnly, (req, res) => {
   if (ehGerente && (!login || !senha))
     return res.status(400).json({ error: "Gerente precisa de login e senha" });
   const id = proximoId("u");
-  const loginFinal = ehGerente ? login.trim() : "vend-" + id;
-  if (db.users.some((u) => u.login.toLowerCase() === loginFinal.toLowerCase()))
+  const loginFinal = ehGerente
+    ? login.trim()
+    : (login && login.trim() ? login.trim() : "vend-" + id);
+  if (db.users.some((u) => (u.login || "").toLowerCase() === loginFinal.toLowerCase()))
     return res.status(400).json({ error: "Já existe alguém com esse login" });
   const novo = {
     id,
     nome: nome.trim(),
     login: loginFinal,
-    senha: ehGerente ? senha : crypto.randomBytes(8).toString("hex"),
+    senha: ehGerente ? senha : (senha && senha.length >= 3 ? senha : crypto.randomBytes(8).toString("hex")),
     role: ehGerente ? "gerente" : "vendedor",
     ativo: true,
     token: null,
@@ -281,8 +281,14 @@ app.post("/api/users", auth, gerenteOnly, (req, res) => {
 app.put("/api/users/:id", auth, gerenteOnly, (req, res) => {
   const u = db.users.find((x) => x.id === req.params.id);
   if (!u) return res.status(404).json({ error: "Usuário não encontrado" });
-  const { nome, senha, role, meta, ativo } = req.body || {};
+  const { nome, login, senha, role, meta, ativo } = req.body || {};
   if (nome && nome.trim()) u.nome = nome.trim();
+  if (login && login.trim()) {
+    const l = login.trim();
+    if (db.users.some((x) => x.id !== u.id && (x.login || "").toLowerCase() === l.toLowerCase()))
+      return res.status(400).json({ error: "Já existe alguém com esse login" });
+    u.login = l;
+  }
   if (senha && senha.length >= 3) u.senha = senha;
   if (role) u.role = role === "gerente" ? "gerente" : "vendedor";
   if (meta !== undefined) u.meta = Number(meta) || 0;
@@ -1092,11 +1098,12 @@ function comentariosNPS(vendedorId, desde, ate, max = 6) {
     .slice(0, max)
     .map((c) => `nota ${c.nota}: "${String(c.notaTexto).slice(0, 120)}"`);
 }
-app.get("/api/nps", auth, gerenteOnly, (req, res) => {
+app.get("/api/nps", auth, (req, res) => {
   const desde = req.query.desde ? Number(req.query.desde) : 0;
   const ate = req.query.ate ? Number(req.query.ate) : Date.now();
   const vendedores = db.users.filter((u) => u.role === "vendedor" && u.ativo);
-  const filtroId = req.query.vendedorId || "";
+  let filtroId = req.query.vendedorId || "";
+  if (req.user.role !== "gerente") filtroId = req.user.id; // vendedor só vê o próprio NPS
   const alvo = filtroId ? vendedores.filter((v) => v.id === filtroId) : vendedores;
   // instâncias consideradas: todas mapeadas, ou só as do vendedor filtrado
   const mapeadas = new Set();
@@ -1135,7 +1142,7 @@ app.get("/api/nps", auth, gerenteOnly, (req, res) => {
     geral: { respostas: nG, media: nG ? Math.round((somaG / nG) * 10) / 10 : 0, dist: distGeral },
     vendedores: porVendedor,
     avaliacoes: avaliacoes.slice(0, 100),
-    vendedoresLista: vendedores.map((v) => ({ id: v.id, nome: v.nome })),
+    vendedoresLista: req.user.role === "gerente" ? vendedores.map((v) => ({ id: v.id, nome: v.nome })) : [],
   });
 });
 // tempo (em ms) entre dois instantes contando SÓ o horário de atendimento configurado

@@ -142,9 +142,9 @@ export default function App() {
           <div className="tag">Monitoria de Atendimento</div>
         </div>
         <nav className="nav">
-          <NavBtn ic={I.dash} label="Monitoria" active={view === "painel"} onClick={() => setView("painel")} />
+          <NavBtn ic={I.dash} label={isGer ? "Monitoria" : "Meu Painel"} active={view === "painel"} onClick={() => setView("painel")} />
           <NavBtn ic={I.wa} label="WhatsApp" active={view === "whatsapp"} onClick={() => setView("whatsapp")} />
-          <NavBtn ic={I.spark} label="Análise IA" active={view === "ia"} onClick={() => setView("ia")} />
+          {isGer && <NavBtn ic={I.spark} label="Análise IA" active={view === "ia"} onClick={() => setView("ia")} />}
           {isGer && <NavBtn ic={I.estrela} label="NPS" active={view === "nps"} onClick={() => setView("nps")} />}
           {isGer && <NavBtn ic={I.team} label="Equipe & Acessos" active={view === "equipe"} onClick={() => setView("equipe")} />}
           <NavBtn ic={I.cog} label="Configurações" active={view === "config"} onClick={() => setView("config")} />
@@ -175,7 +175,7 @@ export default function App() {
         <div className="content">
           {view === "painel" && <Monitoria user={user} showToast={showToast} />}
           {view === "whatsapp" && <WhatsApp user={user} showToast={showToast} target={waTarget} onTargetUsed={() => setWaTarget(null)} />}
-          {view === "ia" && <PaginaIA user={user} showToast={showToast} />}
+          {view === "ia" && isGer && <PaginaIA user={user} showToast={showToast} />}
           {view === "nps" && isGer && <PaginaNPS showToast={showToast} />}
           {view === "equipe" && isGer && <Equipe showToast={showToast} meId={user.id} />}
           {view === "config" && <Config user={user} setUser={setUser} showToast={showToast} />}
@@ -791,7 +791,7 @@ function Equipe({ showToast, meId }) {
 function UserForm({ user, onClose, onSaved }) {
   const novo = !user;
   const [f, setF] = useState({
-    nome: user?.nome || "", login: "", senha: "",
+    nome: user?.nome || "", login: user?.login || "", senha: "",
     role: user?.role || "vendedor", ativo: user ? user.ativo : true,
   });
   const [saving, setSaving] = useState(false);
@@ -804,13 +804,14 @@ function UserForm({ user, onClose, onSaved }) {
     setSaving(true);
     try {
       if (novo) {
-        const dados = ehGerente
-          ? { nome: f.nome, role: "gerente", login: f.login, senha: f.senha }
-          : { nome: f.nome, role: "vendedor" };
+        const dados = { nome: f.nome, role: f.role };
+        if (f.login.trim()) dados.login = f.login.trim();
+        if (f.senha) dados.senha = f.senha;
         const u = await api.createUser(dados);
         onSaved(u, true);
       } else {
         const dados = { nome: f.nome, role: f.role, ativo: f.ativo };
+        if (f.login.trim() && f.login.trim() !== (user.login || "")) dados.login = f.login.trim();
         if (f.senha) dados.senha = f.senha;
         const u = await api.updateUser(user.id, dados);
         onSaved(u, false);
@@ -823,32 +824,28 @@ function UserForm({ user, onClose, onSaved }) {
       <div className="modal-box">
         <div className="mh">
           <h3>{novo ? "Adicionar pessoa" : "Editar"}</h3>
-          <p>{ehGerente ? "Gerentes acessam o sistema de monitoria." : "Vendedores são monitorados, não acessam o sistema."}</p>
+          <p>{ehGerente ? "Gerentes veem tudo da equipe." : "Vendedores veem só os próprios números. Defina login e senha pra liberar o acesso dele."}</p>
         </div>
         <div className="mb">
           <div className="field">
             <label>Perfil</label>
             <select className="select" value={f.role} onChange={(e) => set("role", e.target.value)}>
-              <option value="vendedor">Vendedor (monitorado)</option>
-              <option value="gerente">Gerente (acessa o sistema)</option>
+              <option value="vendedor">Vendedor (vê os próprios números)</option>
+              <option value="gerente">Gerente (vê tudo)</option>
             </select>
           </div>
           <div className="field">
             <label>Nome</label>
             <input className="input" value={f.nome} onChange={(e) => set("nome", e.target.value)} autoFocus />
           </div>
-          {ehGerente && novo && (
-            <div className="field">
-              <label>Login (usuário)</label>
-              <input className="input" value={f.login} onChange={(e) => set("login", e.target.value)} placeholder="ex: thalia" />
-            </div>
-          )}
-          {ehGerente && (
-            <div className="field">
-              <label>{novo ? "Senha" : "Nova senha (deixe vazio pra manter)"}</label>
-              <input className="input" type="password" value={f.senha} onChange={(e) => set("senha", e.target.value)} placeholder="mínimo 3 caracteres" />
-            </div>
-          )}
+          <div className="field">
+            <label>Login (usuário){!ehGerente && <span style={{ color: "var(--faint)", fontWeight: 400 }}> — pra ele acessar</span>}</label>
+            <input className="input" value={f.login} onChange={(e) => set("login", e.target.value)} placeholder={ehGerente ? "ex: thalia" : "ex: joao (deixe vazio se não for liberar acesso)"} />
+          </div>
+          <div className="field">
+            <label>{novo ? (ehGerente ? "Senha" : "Senha de acesso") : "Nova senha (vazio = manter)"}</label>
+            <input className="input" type="password" value={f.senha} onChange={(e) => set("senha", e.target.value)} placeholder="mínimo 3 caracteres" />
+          </div>
           {!novo && (
             <label style={{ display: "flex", alignItems: "center", gap: 9, fontSize: 14, cursor: "pointer" }}>
               <input type="checkbox" checked={f.ativo} onChange={(e) => set("ativo", e.target.checked)} style={{ width: 17, height: 17 }} />
@@ -2620,8 +2617,12 @@ function Monitoria({ user, showToast }) {
     (async () => {
       const [ini, fim] = intervaloPeriodo(preset, de, ate);
       try {
-        const [info, ev] = await Promise.all([api.monitoriaVendedor(alvo, ini, fim), api.monitoriaEvolucao(ini, fim, alvo)]);
-        if (!cancel) setDet({ info, evo: ev.dias || [] });
+        const [info, ev, nps] = await Promise.all([
+          api.monitoriaVendedor(alvo, ini, fim),
+          api.monitoriaEvolucao(ini, fim, alvo),
+          api.nps(ini, fim, alvo).catch(() => null),
+        ]);
+        if (!cancel) setDet({ info, evo: ev.dias || [], nps });
       } catch (e) { if (!cancel) showToast("✗ " + e.message); }
     })();
     return () => { cancel = true; };
@@ -2664,7 +2665,7 @@ function Monitoria({ user, showToast }) {
     return (
       <div>
         {topo}
-        {det ? <PainelIndividual info={det.info} evo={det.evo} isGer={isGer} onVoltar={() => setVendFiltro("")} /> : <div className="spin" />}
+        {det ? <PainelIndividual info={det.info} evo={det.evo} nps={det.nps} isGer={isGer} onVoltar={() => setVendFiltro("")} /> : <div className="spin" />}
       </div>
     );
   }
@@ -2755,6 +2756,34 @@ function PainelIndividual({ info: d, evo, isGer, onVoltar }) {
         <div className="mon-mini"><div className="lab">Taxa de resposta</div><div className="num">{d.taxaResposta || 0}%</div></div>
         <div className="mon-mini"><div className="lab">Conversas atendidas</div><div className="num">{d.atendidas || 0} de {d.conversas || 0}</div></div>
       </div>
+
+      {nps && nps.geral && nps.geral.respostas > 0 && (
+        <div className="panel">
+          <div className="panel-h"><h3>Satisfação (NPS)<span className="panel-sub">notas da pesquisa no período</span></h3></div>
+          <div className="ind-nps">
+            <div className="ind-nps-media">
+              <div className="nps-media">{nps.geral.media.toFixed(1)}<small>/5</small></div>
+              <Estrelas n={nps.geral.media} />
+              <div className="nps-sub">{nps.geral.respostas} {nps.geral.respostas === 1 ? "avaliação" : "avaliações"}</div>
+            </div>
+            <div className="ind-nps-dist"><DistBar dist={nps.geral.dist} /></div>
+          </div>
+          {nps.avaliacoes && nps.avaliacoes.length > 0 && (
+            <div className="ind-nps-aval">
+              {nps.avaliacoes.slice(0, 6).map((a) => (
+                <div key={a.id + a.notaEm} className="nps-aval-row">
+                  <span className={"nps-nota n" + Math.round(a.nota)}>⭐ {a.nota}</span>
+                  <div className="nps-aval-info">
+                    <div className="nps-aval-top"><b>{a.nome}</b></div>
+                    {a.notaTexto && <div className="nps-aval-txt">"{a.notaTexto}"</div>}
+                  </div>
+                  <span className="nps-aval-data">{fmtDataHora(a.notaEm)}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       {ativos.length > 0 && (
         <div className="panel">
