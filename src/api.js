@@ -88,7 +88,8 @@ export const api = {
   // Solicitações de suporte
   solicitacoes: (status) => req("GET", "/api/solicitacoes" + (status ? "?status=" + encodeURIComponent(status) : "")),
   criarSolicitacao: (dados) => req("POST", "/api/solicitacoes", dados),
-  statusSolicitacao: (id, status) => req("PATCH", "/api/solicitacoes/" + id, { status }),
+  statusSolicitacao: (id, status, resposta) => req("PATCH", "/api/solicitacoes/" + id, { status, resposta }),
+  marcarSolicitacoesVistas: () => req("POST", "/api/solicitacoes/marcar-vistas"),
   solicitacoesRelatorio: (desde, ate) => req("GET", `/api/solicitacoes/relatorio?desde=${desde || 0}&ate=${ate || Date.now()}`),
   solicitacoesIA: (desde, ate) => req("GET", `/api/solicitacoes/ia?desde=${desde || 0}&ate=${ate || Date.now()}`),
 };

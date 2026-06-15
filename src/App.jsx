@@ -108,6 +108,13 @@ export default function App() {
     api.me().then(setUser).catch(() => setToken("")).finally(() => setBooting(false));
   }, []);
 
+  const vistaInicial = useRef(false);
+  useEffect(() => {
+    if (!user || vistaInicial.current) return;
+    vistaInicial.current = true;
+    if (user.role === "suporte") setView("solicitacoes");
+  }, [user]);
+
   function showToast(msg) {
     setToast(msg);
     clearTimeout(toastT.current);
@@ -124,6 +131,7 @@ export default function App() {
   if (user.precisaOnboarding) return <Onboarding user={user} onDone={setUser} />;
 
   const isGer = user.role === "gerente";
+  const isSuporte = user.role === "suporte";
   const titulos = {
     painel: { t: "Monitoria de Atendimento", s: "Acompanhe a produtividade e a agilidade do time" },
     whatsapp: { t: "WhatsApp", s: "Acompanhe as conversas dos atendentes" },
@@ -144,11 +152,11 @@ export default function App() {
           <div className="tag">Monitoria de Atendimento</div>
         </div>
         <nav className="nav">
-          <NavBtn ic={I.dash} label={isGer ? "Monitoria" : "Meu Painel"} active={view === "painel"} onClick={() => setView("painel")} />
-          <NavBtn ic={I.wa} label="WhatsApp" active={view === "whatsapp"} onClick={() => setView("whatsapp")} />
+          {!isSuporte && <NavBtn ic={I.dash} label={isGer ? "Monitoria" : "Meu Painel"} active={view === "painel"} onClick={() => setView("painel")} />}
+          {!isSuporte && <NavBtn ic={I.wa} label="WhatsApp" active={view === "whatsapp"} onClick={() => setView("whatsapp")} />}
           {isGer && <NavBtn ic={I.spark} label="Análise IA" active={view === "ia"} onClick={() => setView("ia")} />}
           {isGer && <NavBtn ic={I.estrela} label="NPS" active={view === "nps"} onClick={() => setView("nps")} />}
-          {isGer && <NavBtn ic={I.suporte} label="Solicitações" active={view === "solicitacoes"} onClick={() => setView("solicitacoes")} />}
+          {(isGer || isSuporte) && <NavBtn ic={I.suporte} label="Solicitações" active={view === "solicitacoes"} onClick={() => setView("solicitacoes")} />}
           {isGer && <NavBtn ic={I.team} label="Equipe & Acessos" active={view === "equipe"} onClick={() => setView("equipe")} />}
           <NavBtn ic={I.cog} label="Configurações" active={view === "config"} onClick={() => setView("config")} />
         </nav>
@@ -157,7 +165,7 @@ export default function App() {
             <div className="avatar">{iniciais(user.nome)}</div>
             <div>
               <div className="nm">{user.nome}</div>
-              <div className="rl">{isGer ? "Gerente comercial" : "Vendedor"}</div>
+              <div className="rl">{isGer ? "Gerente comercial" : isSuporte ? "Suporte" : "Vendedor"}</div>
             </div>
           </div>
           <button className="theme-toggle" onClick={toggleTheme}>
@@ -176,11 +184,11 @@ export default function App() {
           </div>
         </div>
         <div className="content">
-          {view === "painel" && <Monitoria user={user} showToast={showToast} />}
-          {view === "whatsapp" && <WhatsApp user={user} showToast={showToast} target={waTarget} onTargetUsed={() => setWaTarget(null)} />}
+          {view === "painel" && !isSuporte && <Monitoria user={user} showToast={showToast} />}
+          {view === "whatsapp" && !isSuporte && <WhatsApp user={user} showToast={showToast} target={waTarget} onTargetUsed={() => setWaTarget(null)} />}
           {view === "ia" && isGer && <PaginaIA user={user} showToast={showToast} />}
           {view === "nps" && isGer && <PaginaNPS showToast={showToast} />}
-          {view === "solicitacoes" && isGer && <PaginaSolicitacoes showToast={showToast} />}
+          {view === "solicitacoes" && (isGer || isSuporte) && <PaginaSolicitacoes showToast={showToast} readonly={isGer} />}
           {view === "equipe" && isGer && <Equipe showToast={showToast} meId={user.id} />}
           {view === "config" && <Config user={user} setUser={setUser} showToast={showToast} />}
         </div>
@@ -768,9 +776,9 @@ function Equipe({ showToast, meId }) {
             <div className="avatar">{iniciais(u.nome)}</div>
             <div className="info">
               <div className="nm">{u.nome} {!u.ativo && <span className="tag-off">• desativado</span>}</div>
-              <div className="sub">{u.role === "gerente" ? "@" + u.login + " · acessa o sistema" : "vendedor monitorado no WhatsApp"}</div>
+              <div className="sub">{u.role === "vendedor" ? "vendedor monitorado no WhatsApp" : "@" + u.login + " · acessa o sistema"}</div>
             </div>
-            <span className={"tag-role " + (u.role === "gerente" ? "ger" : "ven")}>{u.role === "gerente" ? "Gerente" : "Vendedor"}</span>
+            <span className={"tag-role " + (u.role === "vendedor" ? "ven" : u.role === "suporte" ? "sup" : "ger")}>{u.role === "gerente" ? "Gerente" : u.role === "suporte" ? "Suporte" : "Vendedor"}</span>
             <button className="btn btn-sm" onClick={() => setEditing(u)}>Editar</button>
             {u.id !== meId && <button className="x-btn" onClick={() => excluir(u)} title="Excluir"><I.trash style={{ width: 16, height: 16 }} /></button>}
           </div>
@@ -800,11 +808,11 @@ function UserForm({ user, onClose, onSaved }) {
   });
   const [saving, setSaving] = useState(false);
   const set = (k, v) => setF((s) => ({ ...s, [k]: v }));
-  const ehGerente = f.role === "gerente";
+  const precisaAcesso = f.role !== "vendedor";
 
   async function salvar() {
     if (!f.nome.trim()) { alert("Informe o nome."); return; }
-    if (novo && ehGerente && (!f.login.trim() || !f.senha)) { alert("Gerente precisa de login e senha."); return; }
+    if (novo && precisaAcesso && (!f.login.trim() || !f.senha)) { alert("Esse perfil precisa de login e senha."); return; }
     setSaving(true);
     try {
       if (novo) {
@@ -828,13 +836,14 @@ function UserForm({ user, onClose, onSaved }) {
       <div className="modal-box">
         <div className="mh">
           <h3>{novo ? "Adicionar pessoa" : "Editar"}</h3>
-          <p>{ehGerente ? "Gerentes veem tudo da equipe." : "Vendedores veem só os próprios números. Defina login e senha pra liberar o acesso dele."}</p>
+          <p>{f.role === "gerente" ? "Gerentes veem tudo (e só visualizam as solicitações)." : f.role === "suporte" ? "O suporte recebe, responde e resolve as solicitações dos vendedores." : "Vendedores veem só os próprios números. Defina login e senha pra liberar o acesso dele."}</p>
         </div>
         <div className="mb">
           <div className="field">
             <label>Perfil</label>
             <select className="select" value={f.role} onChange={(e) => set("role", e.target.value)}>
               <option value="vendedor">Vendedor (vê os próprios números)</option>
+              <option value="suporte">Suporte (resolve as solicitações)</option>
               <option value="gerente">Gerente (vê tudo)</option>
             </select>
           </div>
@@ -843,11 +852,11 @@ function UserForm({ user, onClose, onSaved }) {
             <input className="input" value={f.nome} onChange={(e) => set("nome", e.target.value)} autoFocus />
           </div>
           <div className="field">
-            <label>Login (usuário){!ehGerente && <span style={{ color: "var(--faint)", fontWeight: 400 }}> — pra ele acessar</span>}</label>
-            <input className="input" value={f.login} onChange={(e) => set("login", e.target.value)} placeholder={ehGerente ? "ex: thalia" : "ex: joao (deixe vazio se não for liberar acesso)"} />
+            <label>Login (usuário){!precisaAcesso && <span style={{ color: "var(--faint)", fontWeight: 400 }}> — pra ele acessar</span>}</label>
+            <input className="input" value={f.login} onChange={(e) => set("login", e.target.value)} placeholder={precisaAcesso ? "ex: leticia" : "ex: joao (deixe vazio se não for liberar acesso)"} />
           </div>
           <div className="field">
-            <label>{novo ? (ehGerente ? "Senha" : "Senha de acesso") : "Nova senha (vazio = manter)"}</label>
+            <label>{novo ? (precisaAcesso ? "Senha" : "Senha de acesso") : "Nova senha (vazio = manter)"}</label>
             <input className="input" type="password" value={f.senha} onChange={(e) => set("senha", e.target.value)} placeholder="mínimo 3 caracteres" />
           </div>
           {!novo && (
@@ -1041,6 +1050,8 @@ function WhatsApp({ user, showToast, target, onTargetUsed }) {
   const [novoLead, setNovoLead] = useState(null);
   const [enviando, setEnviando] = useState(false);
   const [pedindoSuporte, setPedindoSuporte] = useState(false);
+  const [minhasSol, setMinhasSol] = useState([]);
+  const [verSol, setVerSol] = useState(false);
   const msgsEnd = useRef(null);
   const selRef = useRef(null);
   const filtroRef = useRef("todas");
@@ -1069,14 +1080,20 @@ function WhatsApp({ user, showToast, target, onTargetUsed }) {
   async function initVendedor() {
     try { setMinha(await api.waMinha()); } catch (_) {}
   }
+  async function carregarMinhasSol() {
+    if (isGer) return;
+    try { setMinhasSol(await api.solicitacoes()); } catch (_) {}
+  }
 
   useEffect(() => {
     (async () => {
       if (isGer) await initGerente(); else await initVendedor();
       await carregarChats(false);
+      carregarMinhasSol();
     })();
     const t = setInterval(async () => {
       await carregarChats(true);
+      if (!isGer) carregarMinhasSol();
       if (selRef.current) {
         try { setChat(await api.waChat(selRef.current)); } catch (_) {}
       }
@@ -1148,6 +1165,7 @@ function WhatsApp({ user, showToast, target, onTargetUsed }) {
 
   const buscando = busca.trim().length > 0;
   const aguardandoCount = chats.filter((c) => c.aguardando).length;
+  const badgeSol = minhasSol.filter((s) => s.status === "resolvida" && !s.resolvidoVisto).length;
   let filtrados = chats.filter((c) => {
     if (soAguardando && !c.aguardando) return false;
     // a busca já vem filtrada do servidor; o filtro de vendedor só vale fora da busca
@@ -1195,6 +1213,16 @@ function WhatsApp({ user, showToast, target, onTargetUsed }) {
           >
             ⏳ Aguardando{aguardandoCount ? ` (${aguardandoCount})` : ""}
           </button>
+          {!isGer && (
+            <button
+              type="button"
+              className={"chip sol-chip" + (badgeSol ? " on-alert" : "")}
+              onClick={() => { setVerSol(true); api.marcarSolicitacoesVistas().then(carregarMinhasSol).catch(() => {}); }}
+              title="Ver minhas solicitações ao suporte"
+            >
+              <I.suporte style={{ width: 13, height: 13 }} /> Minhas solicitações{badgeSol ? ` (${badgeSol})` : ""}
+            </button>
+          )}
         </div>
         <div style={{ display: "flex", gap: 8 }}>
           {isGer && <button className="btn" onClick={() => setShowCfg(true)}><I.cog style={{ width: 15, height: 15 }} /> Configurar conexão</button>}
@@ -1277,9 +1305,10 @@ function WhatsApp({ user, showToast, target, onTargetUsed }) {
         <SolicitacaoForm
           defaults={{ cliente: chat.nome, numero: chat.numero }}
           onClose={() => setPedindoSuporte(false)}
-          onSaved={() => { setPedindoSuporte(false); showToast("✓ Solicitação enviada ao suporte"); }}
+          onSaved={() => { setPedindoSuporte(false); showToast("✓ Solicitação enviada ao suporte"); carregarMinhasSol(); }}
         />
       )}
+      {verSol && <MinhasSolicitacoesModal itens={minhasSol} onClose={() => setVerSol(false)} />}
     </div>
   );
 }
@@ -2892,7 +2921,7 @@ function SolicitacaoForm({ onClose, onSaved, defaults }) {
   );
 }
 
-function PaginaSolicitacoes({ showToast }) {
+function PaginaSolicitacoes({ showToast, readonly }) {
   const [lista, setLista] = useState(null);
   const [rel, setRel] = useState(null);
   const [filtro, setFiltro] = useState("todas");
@@ -2920,9 +2949,9 @@ function PaginaSolicitacoes({ showToast }) {
   useEffect(() => { carregarLista(); /* eslint-disable-next-line */ }, [filtro]);
   useEffect(() => { carregarRel(); setIa(null); setIaErr(""); /* eslint-disable-next-line */ }, [periodo]);
 
-  async function mudar(id, status) {
+  async function mudar(id, status, resposta) {
     try {
-      const u = await api.statusSolicitacao(id, status);
+      const u = await api.statusSolicitacao(id, status, resposta);
       setLista((l) => (l || []).map((x) => (x.id === u.id ? u : x)));
       carregarRel();
     } catch (e) { showToast("✗ " + e.message); }
@@ -3000,28 +3029,74 @@ function PaginaSolicitacoes({ showToast }) {
         <div className="sol-list" style={{ padding: "0 6px 8px" }}>
           {!lista && <div className="spin" />}
           {lista && lista.length === 0 && <div className="dash-empty" style={{ padding: 18 }}>Nenhuma solicitação por aqui.</div>}
-          {(lista || []).map((s) => (
-            <div className="sol-row big" key={s.id}>
-              <div className="sol-info">
-                <div className="sol-top">
-                  <span className={"sol-st " + s.status}>{rotuloStatus(s.status)}</span>
-                  <span className={"sol-urg " + s.urgencia}>{s.urgencia}</span>
-                  <b className="sol-quem">{s.vendedorNome}</b>
-                </div>
-                <div className="sol-desc">{s.descricao}</div>
-                <div className="sol-meta">
-                  {s.cliente ? "Cliente: " + s.cliente + (s.numero ? " (" + s.numero + ")" : "") + " · " : (s.numero ? s.numero + " · " : "")}
-                  {fmtDataHora(s.criadoEm)}
-                </div>
-              </div>
-              <div className="sol-acoes">
-                {s.status === "aberta" && <button className="btn btn-sm" onClick={() => mudar(s.id, "andamento")}>Em andamento</button>}
-                {s.status !== "resolvida" && <button className="btn btn-sm btn-ok" onClick={() => mudar(s.id, "resolvida")}>Resolver</button>}
-                {s.status === "resolvida" && <button className="btn btn-sm" onClick={() => mudar(s.id, "aberta")}>Reabrir</button>}
-              </div>
-            </div>
-          ))}
+          {(lista || []).map((s) => <SolicitacaoRow key={s.id} s={s} onMudar={mudar} readonly={readonly} />)}
         </div>
+      </div>
+    </div>
+  );
+}
+
+function SolicitacaoRow({ s, onMudar, readonly }) {
+  const [resp, setResp] = useState(s.resposta || "");
+  const resolvida = s.status === "resolvida";
+  return (
+    <div className="sol-row big">
+      <div className="sol-info">
+        <div className="sol-top">
+          <span className={"sol-st " + s.status}>{rotuloStatus(s.status)}</span>
+          <span className={"sol-urg " + s.urgencia}>{s.urgencia}</span>
+          <b className="sol-quem">{s.vendedorNome}</b>
+        </div>
+        <div className="sol-desc">{s.descricao}</div>
+        <div className="sol-meta">
+          {s.cliente ? "Cliente: " + s.cliente + (s.numero ? " (" + s.numero + ")" : "") + " · " : (s.numero ? s.numero + " · " : "")}
+          {fmtDataHora(s.criadoEm)}
+        </div>
+        {resolvida && s.resposta && <div className="sol-resp"><b>Resposta:</b> {s.resposta}</div>}
+        {!readonly && !resolvida && (
+          <input className="input sol-resp-input" value={resp} onChange={(e) => setResp(e.target.value)} placeholder="Resposta pro vendedor (opcional)" />
+        )}
+      </div>
+      {!readonly && (
+        <div className="sol-acoes">
+          {s.status === "aberta" && <button className="btn btn-sm" onClick={() => onMudar(s.id, "andamento", resp)}>Em andamento</button>}
+          {!resolvida && <button className="btn btn-sm btn-ok" onClick={() => onMudar(s.id, "resolvida", resp)}>Resolver</button>}
+          {resolvida && <button className="btn btn-sm" onClick={() => onMudar(s.id, "aberta", "")}>Reabrir</button>}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function MinhasSolicitacoesModal({ itens, onClose }) {
+  return (
+    <div className="modal" onClick={(e) => e.target === e.currentTarget && onClose()}>
+      <div className="modal-box">
+        <div className="mh">
+          <h3>Minhas solicitações</h3>
+          <p>Acompanhe o status dos seus pedidos ao suporte.</p>
+        </div>
+        <div className="mb" style={{ maxHeight: "60vh", overflowY: "auto" }}>
+          {(!itens || itens.length === 0) && <div className="dash-empty">Você ainda não abriu nenhuma solicitação.</div>}
+          <div className="sol-list">
+            {(itens || []).map((s) => (
+              <div className="sol-row big" key={s.id}>
+                <div className="sol-info">
+                  <div className="sol-top">
+                    <span className={"sol-st " + s.status}>{rotuloStatus(s.status)}</span>
+                    <span className={"sol-urg " + s.urgencia}>{s.urgencia}</span>
+                  </div>
+                  <div className="sol-desc">{s.descricao}</div>
+                  <div className="sol-meta">{s.cliente ? "Cliente: " + s.cliente + " · " : ""}{fmtDataHora(s.criadoEm)}</div>
+                  {s.status === "resolvida" && (
+                    <div className="sol-resp">{s.resposta ? <><b>✓ Suporte respondeu:</b> {s.resposta}</> : <b>✓ Resolvido pelo suporte</b>}</div>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+        <div className="mf"><button className="btn btn-primary full" onClick={onClose}>Fechar</button></div>
       </div>
     </div>
   );

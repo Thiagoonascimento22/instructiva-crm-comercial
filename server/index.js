@@ -153,6 +153,10 @@ function loadDB() {
       else db.waConfig.horario = normalizaHorario(db.waConfig.horario);
       if (!db.waChats || typeof db.waChats !== "object") db.waChats = {};
       if (!Array.isArray(db.solicitacoes)) db.solicitacoes = [];
+      db.solicitacoes.forEach((s) => {
+        if (typeof s.resposta !== "string") s.resposta = "";
+        if (typeof s.resolvidoVisto !== "boolean") s.resolvidoVisto = true;
+      });
       // migração: chats que só têm mensagem enviada (sem resposta do lead) tinham o
       // nome do vendedor por engano — troca pelo número até o lead responder
       Object.values(db.waChats).forEach((c) => {
@@ -219,6 +223,16 @@ function gerenteOnly(req, res, next) {
     return res.status(403).json({ error: "Acesso restrito ao gerente" });
   next();
 }
+function suporteOnly(req, res, next) {
+  if (req.user.role !== "suporte")
+    return res.status(403).json({ error: "Apenas o suporte pode atualizar solicitações" });
+  next();
+}
+function gerenteOuSuporte(req, res, next) {
+  if (req.user.role !== "gerente" && req.user.role !== "suporte")
+    return res.status(403).json({ error: "Acesso restrito" });
+  next();
+}
 
 app.post("/api/login", (req, res) => {
   const { login, senha } = req.body || {};
@@ -256,11 +270,12 @@ app.post("/api/users", auth, gerenteOnly, (req, res) => {
   const { nome, login, senha, role } = req.body || {};
   if (!nome || !nome.trim())
     return res.status(400).json({ error: "Informe o nome" });
-  const ehGerente = role === "gerente";
-  if (ehGerente && (!login || !senha))
-    return res.status(400).json({ error: "Gerente precisa de login e senha" });
+  const roleFinal = ["gerente", "suporte", "vendedor"].includes(role) ? role : "vendedor";
+  const precisaAcesso = roleFinal !== "vendedor";
+  if (precisaAcesso && (!login || !senha))
+    return res.status(400).json({ error: "Esse perfil precisa de login e senha" });
   const id = proximoId("u");
-  const loginFinal = ehGerente
+  const loginFinal = precisaAcesso
     ? login.trim()
     : (login && login.trim() ? login.trim() : "vend-" + id);
   if (db.users.some((u) => (u.login || "").toLowerCase() === loginFinal.toLowerCase()))
@@ -269,8 +284,8 @@ app.post("/api/users", auth, gerenteOnly, (req, res) => {
     id,
     nome: nome.trim(),
     login: loginFinal,
-    senha: ehGerente ? senha : (senha && senha.length >= 3 ? senha : crypto.randomBytes(8).toString("hex")),
-    role: ehGerente ? "gerente" : "vendedor",
+    senha: precisaAcesso ? senha : (senha && senha.length >= 3 ? senha : crypto.randomBytes(8).toString("hex")),
+    role: roleFinal,
     ativo: true,
     token: null,
     criadoEm: Date.now(),
@@ -292,7 +307,7 @@ app.put("/api/users/:id", auth, gerenteOnly, (req, res) => {
     u.login = l;
   }
   if (senha && senha.length >= 3) u.senha = senha;
-  if (role) u.role = role === "gerente" ? "gerente" : "vendedor";
+  if (role) u.role = ["gerente", "suporte", "vendedor"].includes(role) ? role : u.role;
   if (meta !== undefined) u.meta = Number(meta) || 0;
   if (ativo !== undefined) u.ativo = !!ativo;
   saveSoon();
@@ -315,10 +330,10 @@ app.delete("/api/users/:id", auth, gerenteOnly, (req, res) => {
 const URGENCIAS = ["baixa", "normal", "alta"];
 const STATUS_SOL = ["aberta", "andamento", "resolvida"];
 
-// lista: gerente vê todas; vendedor vê só as próprias
+// lista: gerente e suporte veem todas; vendedor vê só as próprias
 app.get("/api/solicitacoes", auth, (req, res) => {
   let lista = db.solicitacoes || [];
-  if (req.user.role !== "gerente") lista = lista.filter((s) => s.vendedorId === req.user.id);
+  if (req.user.role === "vendedor") lista = lista.filter((s) => s.vendedorId === req.user.id);
   const st = req.query.status;
   if (st && STATUS_SOL.includes(st)) lista = lista.filter((s) => s.status === st);
   lista = [...lista].sort((a, b) => (b.criadoEm || 0) - (a.criadoEm || 0));
@@ -339,6 +354,8 @@ app.post("/api/solicitacoes", auth, (req, res) => {
     numero: String(numero || "").trim().slice(0, 40),
     urgencia: URGENCIAS.includes(urgencia) ? urgencia : "normal",
     status: "aberta",
+    resposta: "",
+    resolvidoVisto: true,
     criadoEm: Date.now(),
     resolvidoEm: null,
   };
@@ -347,21 +364,35 @@ app.post("/api/solicitacoes", auth, (req, res) => {
   res.json(nova);
 });
 
-// mudar status (só gerente)
-app.patch("/api/solicitacoes/:id", auth, gerenteOnly, (req, res) => {
+// mudar status / responder (só o suporte)
+app.patch("/api/solicitacoes/:id", auth, suporteOnly, (req, res) => {
   const s = (db.solicitacoes || []).find((x) => x.id === req.params.id);
   if (!s) return res.status(404).json({ error: "Solicitação não encontrada" });
-  const { status } = req.body || {};
+  const { status, resposta } = req.body || {};
+  if (typeof resposta === "string") s.resposta = resposta.trim().slice(0, 2000);
   if (status && STATUS_SOL.includes(status)) {
     s.status = status;
-    s.resolvidoEm = status === "resolvida" ? Date.now() : null;
+    if (status === "resolvida") { s.resolvidoEm = Date.now(); s.resolvidoVisto = false; }
+    else { s.resolvidoEm = null; }
   }
   saveSoon();
   res.json(s);
 });
 
+// vendedor marca suas resolvidas como vistas (limpa o aviso)
+app.post("/api/solicitacoes/marcar-vistas", auth, (req, res) => {
+  let n = 0;
+  (db.solicitacoes || []).forEach((s) => {
+    if (s.vendedorId === req.user.id && s.status === "resolvida" && !s.resolvidoVisto) {
+      s.resolvidoVisto = true; n++;
+    }
+  });
+  if (n) saveSoon();
+  res.json({ ok: true, vistas: n });
+});
+
 // relatório (números) — só gerente
-app.get("/api/solicitacoes/relatorio", auth, gerenteOnly, (req, res) => {
+app.get("/api/solicitacoes/relatorio", auth, gerenteOuSuporte, (req, res) => {
   const desde = Number(req.query.desde) || 0;
   const ate = Number(req.query.ate) || Date.now();
   const todas = (db.solicitacoes || []).filter((s) => s.criadoEm >= desde && s.criadoEm <= ate);
@@ -392,7 +423,7 @@ app.get("/api/solicitacoes/relatorio", auth, gerenteOnly, (req, res) => {
 });
 
 // análise da IA das solicitações — só gerente
-app.get("/api/solicitacoes/ia", auth, gerenteOnly, async (req, res) => {
+app.get("/api/solicitacoes/ia", auth, gerenteOuSuporte, async (req, res) => {
   const desde = Number(req.query.desde) || 0;
   const ate = Number(req.query.ate) || Date.now();
   const todas = (db.solicitacoes || []).filter((s) => s.criadoEm >= desde && s.criadoEm <= ate);

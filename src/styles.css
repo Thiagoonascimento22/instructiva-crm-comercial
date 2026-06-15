@@ -2300,3 +2300,12 @@ h1, h2, h3, h4, .topbar .greet, .panel-h h3, .login-card .ttl, .login-card h2, .
   padding: 8px 12px; cursor: pointer; transition: .15s; white-space: nowrap;
 }
 .btn-suporte:hover { background: var(--brand); color: #fff; }
+
+/* resposta do suporte + chip de solicitações do vendedor */
+.sol-resp { margin-top: 8px; font-size: 13px; color: var(--text); background: rgba(16, 185, 129, 0.08); border: 1px solid rgba(16, 185, 129, 0.28); border-radius: 8px; padding: 8px 10px; line-height: 1.45; word-break: break-word; }
+.sol-resp b { color: var(--mint); }
+.sol-resp-input { margin-top: 8px; font-size: 13px; }
+.sol-chip { display: inline-flex; align-items: center; gap: 5px; }
+.sol-chip.on-alert { background: rgba(16, 185, 129, 0.14); border-color: var(--mint); color: var(--mint); font-weight: 700; }
+
+.tag-role.sup { background: rgba(16, 185, 129, 0.16); color: var(--mint); }
