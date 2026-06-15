@@ -156,6 +156,7 @@ function loadDB() {
       db.solicitacoes.forEach((s) => {
         if (typeof s.resposta !== "string") s.resposta = "";
         if (typeof s.resolvidoVisto !== "boolean") s.resolvidoVisto = true;
+        if (typeof s.suporteEnviado !== "boolean") s.suporteEnviado = false;
       });
       // migração: chats que só têm mensagem enviada (sem resposta do lead) tinham o
       // nome do vendedor por engano — troca pelo número até o lead responder
@@ -344,6 +345,73 @@ app.get("/api/solicitacoes", auth, (req, res) => {
 });
 
 // criar (qualquer usuário logado — normalmente o vendedor)
+// ===== Ponte com o app do Suporte =====
+const SUPORTE_URL = (process.env.SUPORTE_URL || "").replace(/\/+$/, "");
+const BRIDGE_KEY = process.env.BRIDGE_KEY || "";
+const STATUS_SUP_PARA_MON = { recebida: "aberta", em_atendimento: "andamento", concluida: "resolvida" };
+
+async function pushSuporte(s) {
+  if (!SUPORTE_URL || !BRIDGE_KEY) return false;
+  try {
+    const ctrl = new AbortController();
+    const tm = setTimeout(() => ctrl.abort(), 12000);
+    const r = await fetch(SUPORTE_URL + "/api/solic/inbound", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-bridge-key": BRIDGE_KEY },
+      body: JSON.stringify({
+        monitoriaId: s.id, vendedorNome: s.vendedorNome, cliente: s.cliente,
+        numero: s.numero, descricao: s.descricao, urgencia: s.urgencia,
+      }),
+      signal: ctrl.signal,
+    });
+    clearTimeout(tm);
+    return r.ok;
+  } catch (_) { return false; }
+}
+
+// sincroniza o status das solicitações com o app do Suporte (a cada 20s)
+async function sincronizarSuporte() {
+  if (!SUPORTE_URL || !BRIDGE_KEY) return;
+  const lista = db.solicitacoes || [];
+  for (const s of lista) {
+    if (!s.suporteEnviado && s.status !== "resolvida") {
+      if (await pushSuporte(s)) { s.suporteEnviado = true; saveSoon(); }
+    }
+  }
+  const abertas = lista.filter((s) => s.suporteEnviado && s.status !== "resolvida");
+  if (!abertas.length) return;
+  try {
+    const ids = abertas.map((s) => s.id).join(",");
+    const ctrl = new AbortController();
+    const tm = setTimeout(() => ctrl.abort(), 12000);
+    const r = await fetch(SUPORTE_URL + "/api/solic/status?ids=" + encodeURIComponent(ids), {
+      headers: { "x-bridge-key": BRIDGE_KEY }, signal: ctrl.signal,
+    });
+    clearTimeout(tm);
+    if (!r.ok) return;
+    const data = await r.json();
+    const porId = {};
+    (data.solicitacoes || []).forEach((x) => { porId[x.monitoriaId] = x; });
+    let mudou = false;
+    for (const s of abertas) {
+      const sup = porId[s.id];
+      if (!sup) continue;
+      const novoStatus = STATUS_SUP_PARA_MON[sup.status] || s.status;
+      if (novoStatus !== s.status || (sup.resposta && sup.resposta !== s.resposta)) {
+        s.status = novoStatus;
+        if (sup.resposta) s.resposta = sup.resposta;
+        if (novoStatus === "resolvida") {
+          s.resolvidoVisto = false;
+          if (!s.resolvidoEm) s.resolvidoEm = Date.now();
+        }
+        mudou = true;
+      }
+    }
+    if (mudou) saveSoon();
+  } catch (_) {}
+}
+setInterval(() => { sincronizarSuporte().catch(() => {}); }, 20000);
+
 app.post("/api/solicitacoes", auth, (req, res) => {
   const { descricao, cliente, numero, urgencia } = req.body || {};
   if (!descricao || !descricao.trim())
@@ -359,11 +427,13 @@ app.post("/api/solicitacoes", auth, (req, res) => {
     status: "aberta",
     resposta: "",
     resolvidoVisto: true,
+    suporteEnviado: false,
     criadoEm: Date.now(),
     resolvidoEm: null,
   };
   db.solicitacoes.push(nova);
   saveSoon();
+  pushSuporte(nova).then((ok) => { if (ok) { nova.suporteEnviado = true; saveSoon(); } }).catch(() => {});
   res.json(nova);
 });
 

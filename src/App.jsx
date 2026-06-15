@@ -1415,7 +1415,7 @@ function WhatsApp({ user, showToast, target, onTargetUsed }) {
                 <div className="num">{chat.numero}</div>
               </div>
               {chat.nota != null && <span className="nota-badge" title="Nota da pesquisa de satisfação">⭐ {chat.nota}/5</span>}
-              {!isGer && <button type="button" className="btn-suporte" onClick={() => setPedindoSuporte(true)} title="Pedir ajuda do suporte para este atendimento"><I.suporte style={{ width: 14, height: 14 }} /> Solicitar suporte</button>}
+              {!isGer && <button type="button" className="btn-suporte" onClick={() => setPedindoSuporte(true)} title="Encaminhar este atendimento para a equipe de suporte"><I.suporte style={{ width: 14, height: 14 }} /> Encaminhar pro suporte</button>}
               {chat.encerrado ? (
                 <div className="enc-acao">
                   <span className="enc-tag">✓ Encerrado</span>
@@ -3077,7 +3077,7 @@ function SolicitacaoForm({ onClose, onSaved, defaults }) {
     <div className="modal" onClick={(e) => e.target === e.currentTarget && onClose()}>
       <div className="modal-box">
         <div className="mh">
-          <h3>Solicitar suporte</h3>
+          <h3>Encaminhar pro suporte</h3>
           <p>Descreva o que está acontecendo nesse atendimento. O suporte recebe sua solicitação na hora.</p>
         </div>
         <div className="mb">
@@ -3104,7 +3104,7 @@ function SolicitacaoForm({ onClose, onSaved, defaults }) {
         </div>
         <div className="mf">
           <button className="btn full" onClick={onClose}>Cancelar</button>
-          <button className="btn btn-primary full" onClick={salvar} disabled={saving}>{saving ? "Enviando..." : "Enviar solicitação"}</button>
+          <button className="btn btn-primary full" onClick={salvar} disabled={saving}>{saving ? "Enviando..." : "Encaminhar pro suporte"}</button>
         </div>
       </div>
     </div>
