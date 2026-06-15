@@ -2736,7 +2736,7 @@ function Monitoria({ user, showToast }) {
   );
 }
 
-function PainelIndividual({ info: d, evo, isGer, onVoltar }) {
+function PainelIndividual({ info: d, evo, nps, isGer, onVoltar }) {
   const ativos = (evo || []).filter((x) => x.atendimentos > 0 || x.mensagens > 0);
   return (
     <div>
