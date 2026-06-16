@@ -407,15 +407,15 @@ async function deleteSuporte(monitoriaId) {
 }
 
 // encaminha uma mensagem do chat ao Suporte (fonte da verdade da thread)
-async function pushMensagemSuporte(monitoriaId, autorNome, texto) {
+async function pushMensagemSuporte(monitoriaId, autorNome, texto, anexo) {
   if (!SUPORTE_URL || !BRIDGE_KEY) return null;
   try {
     const ctrl = new AbortController();
-    const tm = setTimeout(() => ctrl.abort(), 12000);
+    const tm = setTimeout(() => ctrl.abort(), 15000);
     const r = await fetch(SUPORTE_URL + "/api/solic/inbound/" + encodeURIComponent(monitoriaId) + "/mensagem", {
       method: "POST",
       headers: { "Content-Type": "application/json", "x-bridge-key": BRIDGE_KEY },
-      body: JSON.stringify({ autorNome, texto }),
+      body: JSON.stringify({ autorNome, texto, ...(anexo ? { anexo } : {}) }),
       signal: ctrl.signal,
     });
     clearTimeout(tm);
@@ -449,9 +449,10 @@ async function sincronizarSuporte() {
     const porId = {};
     (data.solicitacoes || []).forEach((x) => { porId[x.monitoriaId] = x; });
     let mudou = false;
+    const removidos = [];
     for (const s of abertas) {
       const sup = porId[s.id];
-      if (!sup) continue;
+      if (!sup) { removidos.push(s.id); continue; }
       const novoStatus = STATUS_SUP_PARA_MON[sup.status] || s.status;
       if (novoStatus !== s.status || (sup.resposta && sup.resposta !== s.resposta)) {
         s.status = novoStatus;
@@ -466,6 +467,10 @@ async function sincronizarSuporte() {
         s.mensagens = sup.mensagens;
         mudou = true;
       }
+    }
+    if (removidos.length) {
+      db.solicitacoes = db.solicitacoes.filter((s) => !removidos.includes(s.id));
+      mudou = true;
     }
     if (mudou) saveSoon();
   } catch (_) {}
@@ -490,6 +495,7 @@ app.post("/api/solicitacoes", auth, (req, res) => {
     campos: sanitizeCampos(campos),
     anexos: anexosBytes.map((a) => ({ nome: a.nome, mime: a.mime })),
     mensagens: [],
+    vendedorViu: 0,
     status: "aberta",
     resposta: "",
     resolvidoVisto: true,
@@ -503,6 +509,17 @@ app.post("/api/solicitacoes", auth, (req, res) => {
   res.json(nova);
 });
 
+// marca o chat deste chamado como visto pelo vendedor (zera o selo de não-lidas)
+app.post("/api/solicitacoes/:id/visto", auth, (req, res) => {
+  const s = (db.solicitacoes || []).find((x) => x.id === req.params.id);
+  if (!s) return res.status(404).json({ error: "Solicitação não encontrada" });
+  if (req.user.role === "vendedor" && s.vendedorId !== req.user.id)
+    return res.status(403).json({ error: "Sem permissão" });
+  s.vendedorViu = Date.now();
+  saveSoon();
+  res.json(s);
+});
+
 // vendedor (ou gerente) envia mensagem no chat do chamado → encaminha ao Suporte
 app.post("/api/solicitacoes/:id/mensagem", auth, async (req, res) => {
   const s = (db.solicitacoes || []).find((x) => x.id === req.params.id);
@@ -510,14 +527,33 @@ app.post("/api/solicitacoes/:id/mensagem", auth, async (req, res) => {
   if (req.user.role === "vendedor" && s.vendedorId !== req.user.id)
     return res.status(403).json({ error: "Sem permissão" });
   const texto = String((req.body && req.body.texto) || "").trim().slice(0, 2000);
-  if (!texto) return res.status(400).json({ error: "Escreva uma mensagem" });
+  const anexoIn = req.body && req.body.anexo;
+  if (anexoIn && anexoIn.dados && String(anexoIn.dados).length > 16 * 1024 * 1024)
+    return res.status(413).json({ error: "Arquivo muito grande (máx 8MB)" });
+  const anexo = (anexoIn && anexoIn.dados) ? { nome: String(anexoIn.nome || "arquivo").slice(0, 200), mime: String(anexoIn.mime || "application/octet-stream").slice(0, 100), dados: String(anexoIn.dados) } : null;
+  if (!texto && !anexo) return res.status(400).json({ error: "Escreva uma mensagem ou anexe um arquivo" });
   if (!SUPORTE_URL || !BRIDGE_KEY) return res.status(503).json({ error: "Ponte com o suporte não configurada" });
   if (!s.suporteEnviado) { if (await pushSuporte(s)) { s.suporteEnviado = true; saveSoon(); } }
-  const thread = await pushMensagemSuporte(s.id, req.user.nome || "Vendedor", texto);
+  const thread = await pushMensagemSuporte(s.id, req.user.nome || "Vendedor", texto, anexo);
   if (!thread) return res.status(502).json({ error: "Não foi possível enviar agora. Tente de novo." });
   s.mensagens = thread;
   saveSoon();
   res.json(s);
+});
+
+// proxy do download de anexo do chat (busca no Suporte com a chave da ponte)
+app.get("/api/solicitacoes/:id/chat-anexo/:anexoId", auth, async (req, res) => {
+  const s = (db.solicitacoes || []).find((x) => x.id === req.params.id);
+  if (!s) return res.status(404).end();
+  if (req.user.role === "vendedor" && s.vendedorId !== req.user.id) return res.status(403).end();
+  if (!SUPORTE_URL || !BRIDGE_KEY) return res.status(503).end();
+  try {
+    const r = await fetch(SUPORTE_URL + "/api/solic/inbound/" + encodeURIComponent(s.id) + "/anexo/" + encodeURIComponent(req.params.anexoId), { headers: { "x-bridge-key": BRIDGE_KEY } });
+    if (!r.ok) return res.status(r.status).end();
+    res.setHeader("Content-Type", r.headers.get("content-type") || "application/octet-stream");
+    const cd = r.headers.get("content-disposition"); if (cd) res.setHeader("Content-Disposition", cd);
+    res.end(Buffer.from(await r.arrayBuffer()));
+  } catch (_) { res.status(502).end(); }
 });
 
 // puxa do Suporte o estado mais recente de UM chamado (status, resposta, mensagens)
@@ -546,6 +582,11 @@ app.get("/api/solicitacoes/:id/sync", auth, async (req, res) => {
           if (sup.resposta) s.resposta = sup.resposta;
           if (Array.isArray(sup.mensagens)) s.mensagens = sup.mensagens;
           saveSoon();
+        } else {
+          // excluída no suporte → remove aqui também
+          db.solicitacoes = (db.solicitacoes || []).filter((x) => x.id !== s.id);
+          saveSoon();
+          return res.json({ removida: true });
         }
       }
     } catch (_) {}

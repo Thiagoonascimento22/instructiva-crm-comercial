@@ -93,7 +93,17 @@ export const api = {
   // Solicitações de suporte
   solicitacoes: (status) => req("GET", "/api/solicitacoes" + (status ? "?status=" + encodeURIComponent(status) : "")),
   criarSolicitacao: (dados) => req("POST", "/api/solicitacoes", dados),
-  enviarMensagemSolic: (id, texto) => req("POST", "/api/solicitacoes/" + id + "/mensagem", { texto }),
+  enviarMensagemSolic: (id, texto, anexo) => req("POST", "/api/solicitacoes/" + id + "/mensagem", { texto, anexo }),
+  abrirChatAnexo: async (id, anexoId) => {
+    const t = getToken();
+    const r = await fetch("/api/solicitacoes/" + id + "/chat-anexo/" + anexoId, { headers: t ? { Authorization: "Bearer " + t } : {} });
+    if (!r.ok) throw new Error("não foi possível abrir o anexo");
+    const blob = await r.blob();
+    const url = URL.createObjectURL(blob);
+    window.open(url, "_blank");
+    setTimeout(() => URL.revokeObjectURL(url), 60000);
+  },
+  marcarChatVisto: (id) => req("POST", "/api/solicitacoes/" + id + "/visto"),
   sincronizarSolic: (id) => req("GET", "/api/solicitacoes/" + id + "/sync"),
   excluirSolicitacao: (id) => req("DELETE", "/api/solicitacoes/" + id),
   statusSolicitacao: (id, status, resposta) => req("PATCH", "/api/solicitacoes/" + id, { status, resposta }),

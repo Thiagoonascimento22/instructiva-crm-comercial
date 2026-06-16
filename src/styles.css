@@ -2516,3 +2516,24 @@ h1, h2, h3, h4, .topbar .greet, .panel-h h3, .login-card .ttl, .login-card h2, .
 .sol-chat-in:focus { border-color: var(--brand); }
 .sol-chat-send { width: 42px; height: 42px; flex-shrink: 0; border: none; border-radius: 12px; background: var(--grad); color: #fff; cursor: pointer; display: grid; place-items: center; }
 .sol-chat-send:disabled { opacity: .45; cursor: default; }
+
+/* selo de mensagens não lidas na linha da solicitação */
+.sol-row-novas { display: inline-flex; align-items: center; gap: 4px; background: var(--brand); color: #fff; font-size: 11px; font-weight: 700; height: 20px; padding: 0 8px; border-radius: 10px; box-shadow: var(--glow-brand, 0 2px 8px rgba(255,122,26,.35)); }
+
+/* busca de solicitações */
+.sol-busca { display: flex; align-items: center; gap: 9px; background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 0 14px; height: 44px; margin-bottom: 14px; color: var(--muted); }
+.sol-busca-in { flex: 1; min-width: 0; border: none; background: transparent; outline: none; font-size: 14px; font-family: inherit; color: var(--text); height: 100%; }
+.sol-busca-x { border: none; background: transparent; color: var(--muted); cursor: pointer; display: flex; padding: 4px; border-radius: 8px; }
+.sol-busca-x:hover { background: var(--bg); color: var(--text); }
+
+/* anexo no chat */
+.sol-chat-clip { width: 42px; height: 42px; flex-shrink: 0; border: 1px solid var(--line); border-radius: 12px; background: var(--card); color: var(--muted); cursor: pointer; display: grid; place-items: center; }
+.sol-chat-clip:hover { color: var(--brand); border-color: var(--brand); }
+.sol-chat-anexo-pre { display: inline-flex; align-items: center; gap: 6px; background: var(--bg); border: 1px solid var(--line); border-radius: 10px; padding: 6px 10px; font-size: 13px; color: var(--text); margin-bottom: 8px; max-width: 100%; }
+.sol-chat-anexo-pre span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sol-chat-anexo-pre button { border: none; background: transparent; color: var(--muted); cursor: pointer; font-size: 17px; line-height: 1; padding: 0 2px; }
+.sol-msg-b span { display: block; }
+.sol-msg-anexo { display: inline-flex; align-items: center; gap: 6px; border: none; cursor: pointer; font-family: inherit; font-size: 13px; font-weight: 600; padding: 7px 11px; border-radius: 10px; max-width: 100%; word-break: break-word; text-align: left; }
+.sol-msg-anexo:not(:first-child) { margin-top: 6px; }
+.sol-msg.mine .sol-msg-anexo { background: rgba(255,255,255,.22); color: #fff; }
+.sol-msg.theirs .sol-msg-anexo { background: var(--card); border: 1px solid var(--line); color: var(--text); }

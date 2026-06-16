@@ -162,7 +162,8 @@ export default function App() {
   const isGer = user.role === "gerente";
   const isSuporte = user.role === "suporte";
   const isVend = !isGer && !isSuporte;
-  const badgeSol = minhasSol.filter((s) => s.status === "resolvida" && !s.resolvidoVisto).length;
+  const naoLidasVend = (s) => (Array.isArray(s.mensagens) ? s.mensagens : []).filter((m) => m.autor === "suporte" && (m.ts || 0) > (s.vendedorViu || 0)).length;
+  const badgeSol = minhasSol.filter((s) => (s.status === "resolvida" && !s.resolvidoVisto) || naoLidasVend(s) > 0).length;
   const titulos = {
     painel: { t: "Monitoria de Atendimento", s: "Acompanhe a produtividade e a agilidade do time" },
     whatsapp: { t: "WhatsApp", s: "Acompanhe as conversas dos atendentes" },
@@ -3375,16 +3376,28 @@ function PaginaMinhasSolicitacoes({ itens, recarregar, showToast }) {
   const [excluindo, setExcluindo] = useState(null);
   const [msg, setMsg] = useState("");
   const [enviando, setEnviando] = useState(false);
+  const [anexoChat, setAnexoChat] = useState(null);
   const threadRef = useRef(null);
   const [periodo, setPeriodo] = useState("tudo");
   const [cde, setCde] = useState("");
   const [cate, setCate] = useState("");
+  const [busca, setBusca] = useState("");
   useEffect(() => {
     api.marcarSolicitacoesVistas().then(recarregar).catch(() => {});
     // eslint-disable-next-line
   }, []);
   const todas = itens || [];
-  const lista = todas.filter((s) => dentroPeriodo(s.criadoEm, periodo, cde, cate));
+  const combinaBusca = (s, q) => {
+    if (!q || !q.trim()) return true;
+    const termo = q.trim().toLowerCase();
+    const digitos = termo.replace(/\D/g, "");
+    const campos = (s.campos || []).map((c) => String(c.valor || "")).join(" ");
+    const alvo = [s.cliente, s.numero, s.descricao, campos].join(" ").toLowerCase();
+    if (alvo.includes(termo)) return true;
+    if (digitos.length >= 3 && alvo.replace(/\D/g, "").includes(digitos)) return true;
+    return false;
+  };
+  const lista = todas.filter((s) => dentroPeriodo(s.criadoEm, periodo, cde, cate) && combinaBusca(s, busca));
   const ativas = lista.filter((s) => s.status !== "resolvida");
   const resolvidas = lista.filter((s) => s.status === "resolvida");
 
@@ -3406,9 +3419,9 @@ function PaginaMinhasSolicitacoes({ itens, recarregar, showToast }) {
 
   // enquanto o chamado está aberto, puxa novidades do suporte a cada 6s
   useEffect(() => {
-    if (!aberta) { setMsg(""); return; }
+    if (!aberta) { setMsg(""); setAnexoChat(null); return; }
     let vivo = true;
-    const tick = () => api.sincronizarSolic(aberta.id).then(() => { if (vivo) recarregar(); }).catch(() => {});
+    const tick = () => api.sincronizarSolic(aberta.id).then((r) => { if (!vivo) return; if (r && r.removida) { setAberta(null); alert("Esse chamado foi resolvido e removido pelo suporte."); } recarregar(); }).catch(() => {});
     tick();
     const t = setInterval(tick, 6000);
     return () => { vivo = false; clearInterval(t); };
@@ -3421,11 +3434,27 @@ function PaginaMinhasSolicitacoes({ itens, recarregar, showToast }) {
     if (threadRef.current) threadRef.current.scrollTop = threadRef.current.scrollHeight;
   }, [nMsgs, aberta && aberta.id]);
 
+  // marca o chat como visto ao abrir o chamado e quando chega mensagem nova com ele aberto
+  useEffect(() => {
+    if (!aberta) return;
+    api.marcarChatVisto(aberta.id).then(() => recarregar()).catch(() => {});
+    // eslint-disable-next-line
+  }, [aberta && aberta.id, nMsgs]);
+
+  function onPickChatFile(fileList) {
+    const file = (fileList || [])[0];
+    if (!file) return;
+    if (file.size > 8 * 1024 * 1024) { alert(`"${file.name}" passa de 8MB e não pode ser anexado.`); return; }
+    const reader = new FileReader();
+    reader.onload = () => setAnexoChat({ nome: file.name, mime: file.type || "application/octet-stream", dados: String(reader.result).split(",")[1] || "" });
+    reader.readAsDataURL(file);
+  }
+
   async function enviar() {
     const t = msg.trim();
-    if (!t || enviando || !aberta) return;
+    if ((!t && !anexoChat) || enviando || !aberta) return;
     setEnviando(true);
-    try { await api.enviarMensagemSolic(aberta.id, t); setMsg(""); await recarregar(); }
+    try { await api.enviarMensagemSolic(aberta.id, t, anexoChat); setMsg(""); setAnexoChat(null); await recarregar(); }
     catch (e) { alert(e.message); }
     setEnviando(false);
   }
@@ -3433,10 +3462,11 @@ function PaginaMinhasSolicitacoes({ itens, recarregar, showToast }) {
   const row = (s) => {
     const st = stInfo(s.status);
     const nAnexos = Array.isArray(s.anexos) ? s.anexos.length : 0;
+    const naoLidas = (s.mensagens || []).filter((m) => m.autor === "suporte" && (m.ts || 0) > (s.vendedorViu || 0)).length;
     return (
       <button className="sol-row" key={s.id} onClick={() => setAberta(s)}>
         <div className="sol-row-l">
-          <div className="sol-row-titulo">{s.descricao}</div>
+          <div className="sol-row-titulo" style={naoLidas > 0 ? { fontWeight: 800 } : undefined}>{s.descricao}</div>
           <div className="sol-row-meta">
             {s.tipoLabel ? <span>{s.tipoLabel}</span> : null}
             <span className="sol-row-dot">·</span>
@@ -3445,6 +3475,7 @@ function PaginaMinhasSolicitacoes({ itens, recarregar, showToast }) {
           </div>
         </div>
         <div className="sol-row-r">
+          {naoLidas > 0 ? <span className="sol-row-novas"><I.chat style={{ width: 12, height: 12 }} /> {naoLidas}</span> : null}
           {s.urgencia ? <span className={"msol-urg " + s.urgencia}>{urgLabel(s.urgencia)}</span> : null}
           <span className={"msol-st " + st.cls}>{st.txt}</span>
         </div>
@@ -3496,14 +3527,24 @@ function PaginaMinhasSolicitacoes({ itens, recarregar, showToast }) {
                   <div className="sol-chat-vazio">Nenhuma mensagem ainda. Precisa adicionar uma informação ou tirar uma dúvida? Fale com o suporte aqui.</div>
                 ) : (s.mensagens || []).map((m) => (
                   <div key={m.id} className={"sol-msg " + (m.autor === "vendedor" ? "mine" : "theirs")}>
-                    <div className="sol-msg-b">{m.texto}</div>
+                    <div className="sol-msg-b">
+                      {m.texto ? <span>{m.texto}</span> : null}
+                      {m.anexo ? <button className="sol-msg-anexo" onClick={() => api.abrirChatAnexo(s.id, m.anexo.id).catch((e) => alert(e.message))}><I.clip style={{ width: 13, height: 13 }} /> {m.anexo.nome}</button> : null}
+                    </div>
                     <div className="sol-msg-m">{m.autor === "vendedor" ? "Você" : (m.autorNome || "Suporte")} · {new Date(m.ts).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}</div>
                   </div>
                 ))}
               </div>
+              {anexoChat && (
+                <div className="sol-chat-anexo-pre"><I.clip style={{ width: 13, height: 13 }} /> <span>{anexoChat.nome}</span><button onClick={() => setAnexoChat(null)} title="Remover">×</button></div>
+              )}
               <div className="sol-chat-comp">
+                <label className="sol-chat-clip" title="Anexar arquivo">
+                  <I.clip style={{ width: 17, height: 17 }} />
+                  <input type="file" style={{ display: "none" }} onChange={(e) => { onPickChatFile(e.target.files); e.target.value = ""; }} />
+                </label>
                 <input className="sol-chat-in" value={msg} onChange={(e) => setMsg(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); enviar(); } }} placeholder="Escreva uma mensagem..." />
-                <button className="sol-chat-send" disabled={enviando || !msg.trim()} onClick={enviar} title="Enviar"><I.send style={{ width: 16, height: 16 }} /></button>
+                <button className="sol-chat-send" disabled={enviando || (!msg.trim() && !anexoChat)} onClick={enviar} title="Enviar"><I.send style={{ width: 16, height: 16 }} /></button>
               </div>
             </div>
           </div>
@@ -3527,6 +3568,13 @@ function PaginaMinhasSolicitacoes({ itens, recarregar, showToast }) {
         ) : <span />}
         <button className="btn btn-primary" onClick={() => setNova(true)}><I.suporte style={{ width: 15, height: 15 }} /> Nova solicitação</button>
       </div>
+      {todas.length > 0 && (
+        <div className="sol-busca">
+          <I.search style={{ width: 16, height: 16, flexShrink: 0 }} />
+          <input className="sol-busca-in" value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Buscar por nome, e-mail ou CPF do aluno..." />
+          {busca ? <button className="sol-busca-x" onClick={() => setBusca("")} title="Limpar"><I.x style={{ width: 14, height: 14 }} /></button> : null}
+        </div>
+      )}
       {periodo === "custom" && todas.length > 0 && (
         <div className="sol-custom">
           <input type="date" className="input" value={cde} onChange={(e) => setCde(e.target.value)} />
