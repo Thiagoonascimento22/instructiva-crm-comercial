@@ -76,6 +76,21 @@ function horaCurta(ts) {
   return d.toLocaleDateString("pt-BR", mesmoAno ? { day: "2-digit", month: "2-digit" } : { day: "2-digit", month: "2-digit", year: "2-digit" });
 }
 function inicioDoDia(t) { const x = new Date(t); x.setHours(0, 0, 0, 0); return x; }
+function dentroPeriodo(criadoEm, periodo, cde, cate) {
+  const t = typeof criadoEm === "number" ? criadoEm : new Date(criadoEm).getTime();
+  if (!t) return true;
+  const agora = new Date();
+  if (periodo === "hoje") return t >= inicioDoDia(agora).getTime();
+  if (periodo === "semana") { const d = new Date(agora); const dow = (d.getDay() + 6) % 7; d.setDate(d.getDate() - dow); return t >= inicioDoDia(d).getTime(); }
+  if (periodo === "mes") return t >= inicioDoDia(new Date(agora.getFullYear(), agora.getMonth(), 1)).getTime();
+  if (periodo === "custom") {
+    const ini = cde ? inicioDoDia(new Date(cde + "T00:00:00")).getTime() : 0;
+    const fim = cate ? inicioDoDia(new Date(cate + "T00:00:00")).getTime() + 86400000 - 1 : Infinity;
+    return t >= ini && t <= fim;
+  }
+  return true;
+}
+const PERIODOS = [["tudo", "Tudo"], ["hoje", "Hoje"], ["semana", "Essa semana"], ["mes", "Esse mês"], ["custom", "Personalizado"]];
 function dataInputHoje() { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; }
 // tempo de espera curto: 45s, 12min, 2h10, 3d
 function fmtEspera(seg) {
@@ -3075,15 +3090,9 @@ const CAMPOS_LIB = [
   { k: "dataCompra", label: "Data da compra", type: "date", req: true },
   { k: "codigoVenda", label: "Código da venda", req: true },
   { k: "vendedor", label: "Vendedor", req: true },
-  { k: "formaVenda", label: "Forma da venda", opc: ["Guru", "Greenn", "Hotmart", "TMB"], req: true },
+  { k: "formaVenda", label: "Forma da venda", opc: ["Guru", "Greenn", "Hotmart", "TMB", "PIX CNPJ"], req: true },
   { k: "curso", label: "Curso", req: true },
   { k: "valorTotal", label: "Valor total", req: true },
-  { k: "entrada", label: "Entrada", req: true },
-  { k: "pagamento", label: "Forma de pagamento", opc: ["PIX", "PIX CNPJ", "Boleto", "Cartão"], req: true },
-  { k: "qtdParcelas", label: "Qtd de parcelas", req: true },
-  { k: "valorParcela", label: "Valor da parcela" },
-  { k: "futurasParcelas", label: "Valor das futuras parcelas" },
-  { k: "vencimento", label: "Melhor data de vencimento", type: "date" },
   { k: "observacoes", label: "Observações da negociação", area: true },
   { k: "anexos", label: "Anexar comprovantes", file: true },
 ];
@@ -3350,11 +3359,15 @@ function SolicitacaoRow({ s, onMudar, readonly }) {
 function PaginaMinhasSolicitacoes({ itens, recarregar, showToast }) {
   const [nova, setNova] = useState(false);
   const [excluindo, setExcluindo] = useState(null);
+  const [periodo, setPeriodo] = useState("tudo");
+  const [cde, setCde] = useState("");
+  const [cate, setCate] = useState("");
   useEffect(() => {
     api.marcarSolicitacoesVistas().then(recarregar).catch(() => {});
     // eslint-disable-next-line
   }, []);
-  const lista = itens || [];
+  const todas = itens || [];
+  const lista = todas.filter((s) => dentroPeriodo(s.criadoEm, periodo, cde, cate));
   const ativas = lista.filter((s) => s.status !== "resolvida");
   const resolvidas = lista.filter((s) => s.status === "resolvida");
 
@@ -3403,13 +3416,33 @@ function PaginaMinhasSolicitacoes({ itens, recarregar, showToast }) {
   return (
     <div className="msol-page">
       <div className="msol-head">
+        {todas.length > 0 ? (
+          <div className="sol-periodo">
+            {PERIODOS.map(([v, l]) => (
+              <button key={v} className={"sol-per-btn" + (periodo === v ? " on" : "")} onClick={() => setPeriodo(v)}>{l}</button>
+            ))}
+          </div>
+        ) : <span />}
         <button className="btn btn-primary" onClick={() => setNova(true)}><I.suporte style={{ width: 15, height: 15 }} /> Nova solicitação</button>
       </div>
-      {lista.length === 0 ? (
+      {periodo === "custom" && todas.length > 0 && (
+        <div className="sol-custom">
+          <input type="date" className="input" value={cde} onChange={(e) => setCde(e.target.value)} />
+          <span>até</span>
+          <input type="date" className="input" value={cate} onChange={(e) => setCate(e.target.value)} />
+        </div>
+      )}
+      {todas.length === 0 ? (
         <div className="msol-vazio">
           <I.suporte style={{ width: 42, height: 42, opacity: 0.35 }} />
           <div className="msol-vazio-t">Você ainda não encaminhou nenhuma solicitação</div>
           <div className="msol-vazio-s">Clique em <b>"Nova solicitação"</b> aqui em cima, ou abra uma conversa no WhatsApp e use <b>"Encaminhar pro suporte"</b>.</div>
+        </div>
+      ) : lista.length === 0 ? (
+        <div className="msol-vazio">
+          <I.suporte style={{ width: 42, height: 42, opacity: 0.35 }} />
+          <div className="msol-vazio-t">Nenhuma solicitação nesse período</div>
+          <div className="msol-vazio-s">Selecione outro período ou <b>"Tudo"</b>.</div>
         </div>
       ) : (
         <>
