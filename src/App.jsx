@@ -202,7 +202,7 @@ export default function App() {
         <div className="content">
           {view === "painel" && !isSuporte && <Monitoria user={user} showToast={showToast} />}
           {view === "whatsapp" && !isSuporte && <WhatsApp user={user} showToast={showToast} target={waTarget} onTargetUsed={() => setWaTarget(null)} recarregarSol={carregarMinhasSol} />}
-          {view === "minhasSolicitacoes" && !isGer && !isSuporte && <PaginaMinhasSolicitacoes itens={minhasSol} recarregar={carregarMinhasSol} />}
+          {view === "minhasSolicitacoes" && !isGer && !isSuporte && <PaginaMinhasSolicitacoes itens={minhasSol} recarregar={carregarMinhasSol} showToast={showToast} />}
           {view === "ia" && isGer && <PaginaIA user={user} showToast={showToast} />}
           {view === "nps" && isGer && <PaginaNPS showToast={showToast} />}
           {view === "solicitacoes" && (isGer || isSuporte) && <PaginaSolicitacoes showToast={showToast} readonly={isGer} />}
@@ -3068,23 +3068,24 @@ const SOLIC_TIPOS = [
 ];
 const CAMPOS_LIB = [
   { k: "nome", label: "Nome do aluno", req: true },
-  { k: "cpf", label: "CPF" },
-  { k: "email", label: "E-mail" },
-  { k: "telefone", label: "Telefone" },
-  { k: "endereco", label: "Endereço", area: true },
-  { k: "dataCompra", label: "Data da compra", type: "date" },
-  { k: "codigoVenda", label: "Código da venda" },
-  { k: "vendedor", label: "Vendedor" },
-  { k: "formaVenda", label: "Forma da venda", opc: ["Guru", "Greenn", "Hotmart", "TMB"] },
-  { k: "curso", label: "Curso" },
-  { k: "valorTotal", label: "Valor total" },
-  { k: "entrada", label: "Entrada" },
-  { k: "pagamento", label: "PIX / Boleto / Cartão", opc: ["PIX", "Boleto", "Cartão"] },
+  { k: "cpf", label: "CPF", req: true },
+  { k: "email", label: "E-mail", req: true },
+  { k: "telefone", label: "Telefone", req: true },
+  { k: "endereco", label: "Endereço", area: true, req: true },
+  { k: "dataCompra", label: "Data da compra", type: "date", req: true },
+  { k: "codigoVenda", label: "Código da venda", req: true },
+  { k: "vendedor", label: "Vendedor", req: true },
+  { k: "formaVenda", label: "Forma da venda", opc: ["Guru", "Greenn", "Hotmart", "TMB"], req: true },
+  { k: "curso", label: "Curso", req: true },
+  { k: "valorTotal", label: "Valor total", req: true },
+  { k: "entrada", label: "Entrada", req: true },
+  { k: "pagamento", label: "Forma de pagamento", opc: ["PIX", "PIX CNPJ", "Boleto", "Cartão"], req: true },
+  { k: "qtdParcelas", label: "Qtd de parcelas", req: true },
   { k: "valorParcela", label: "Valor da parcela" },
-  { k: "qtdParcelas", label: "Qtd de parcelas" },
   { k: "futurasParcelas", label: "Valor das futuras parcelas" },
   { k: "vencimento", label: "Melhor data de vencimento", type: "date" },
   { k: "observacoes", label: "Observações da negociação", area: true },
+  { k: "anexos", label: "Anexar comprovantes", file: true },
 ];
 const CAMPOS_OUTRAS = [
   { k: "nome", label: "Nome do aluno", req: true },
@@ -3100,14 +3101,28 @@ function SolicitacaoForm({ onClose, onSaved, defaults }) {
   const [f, setF] = useState({ nome: (defaults && defaults.cliente) || "", telefone: (defaults && defaults.numero) || "" });
   const [saving, setSaving] = useState(false);
   const set = (k, v) => setF((s) => ({ ...s, [k]: v }));
+  const [anexos, setAnexos] = useState([]);
+  function onPickFiles(fileList) {
+    const arr = Array.from(fileList || []);
+    for (const file of arr) {
+      if (file.size > 8 * 1024 * 1024) { alert(`"${file.name}" passa de 8MB e não foi anexado.`); continue; }
+      const reader = new FileReader();
+      reader.onload = () => {
+        const dados = String(reader.result).split(",")[1] || "";
+        setAnexos((a) => (a.length >= 5 ? a : [...a, { nome: file.name, mime: file.type || "application/octet-stream", dados }]));
+      };
+      reader.readAsDataURL(file);
+    }
+  }
+  const removerAnexo = (i) => setAnexos((a) => a.filter((_, idx) => idx !== i));
   const defs = tipo === "liberacao_curso" ? CAMPOS_LIB : CAMPOS_OUTRAS;
 
   async function salvar() {
     for (const c of defs) {
-      if (c.req && !String(f[c.k] || "").trim()) { alert("Preencha: " + c.label); return; }
+      if (c.req && !c.file && !String(f[c.k] || "").trim()) { alert("Preencha: " + c.label); return; }
     }
     const campos = defs
-      .filter((c) => String(f[c.k] || "").trim())
+      .filter((c) => !c.file && String(f[c.k] || "").trim())
       .map((c) => ({ label: c.label, valor: String(f[c.k]).trim() }));
     const nome = String(f.nome || "").trim();
     const telefone = String(f.telefone || "").trim();
@@ -3116,11 +3131,32 @@ function SolicitacaoForm({ onClose, onSaved, defaults }) {
       ? tipoLabel + (f.curso ? " — " + String(f.curso).trim() : "")
       : String(f.solicitacao || "").trim();
     setSaving(true);
-    try { const nova = await api.criarSolicitacao({ tipo, tipoLabel, cliente: nome, numero: telefone, descricao, campos }); onSaved(nova); }
+    try { const nova = await api.criarSolicitacao({ tipo, tipoLabel, cliente: nome, numero: telefone, descricao, campos, anexos }); onSaved(nova); }
     catch (e) { alert(e.message); setSaving(false); }
   }
 
   const renderCampo = (c) => {
+    if (c.file) {
+      return (
+        <div className="field" key={c.k}>
+          <label>{c.label}<span style={{ color: "var(--faint)", fontWeight: 400 }}> — opcional (até 5, máx 8MB cada)</span></label>
+          <label className="anexo-btn">
+            <I.clip style={{ width: 15, height: 15 }} /> Escolher arquivos
+            <input type="file" multiple accept="image/*,application/pdf" style={{ display: "none" }} onChange={(e) => { onPickFiles(e.target.files); e.target.value = ""; }} />
+          </label>
+          {anexos.length > 0 && (
+            <div className="anexo-list">
+              {anexos.map((a, i) => (
+                <div className="anexo-item" key={i}>
+                  <span className="anexo-nome">{a.nome}</span>
+                  <button type="button" className="anexo-x" onClick={() => removerAnexo(i)} aria-label="Remover">×</button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      );
+    }
     const val = f[c.k] || "";
     return (
       <div className="field" key={c.k}>
@@ -3311,7 +3347,9 @@ function SolicitacaoRow({ s, onMudar, readonly }) {
   );
 }
 
-function PaginaMinhasSolicitacoes({ itens, recarregar }) {
+function PaginaMinhasSolicitacoes({ itens, recarregar, showToast }) {
+  const [nova, setNova] = useState(false);
+  const [excluindo, setExcluindo] = useState(null);
   useEffect(() => {
     api.marcarSolicitacoesVistas().then(recarregar).catch(() => {});
     // eslint-disable-next-line
@@ -3325,14 +3363,24 @@ function PaginaMinhasSolicitacoes({ itens, recarregar }) {
     st === "andamento" ? { txt: "Em atendimento", cls: "and" } :
     { txt: "Aguardando", cls: "ab" };
 
+  async function excluir(s) {
+    if (!window.confirm("Excluir esta solicitação? Ela também será removida do suporte.")) return;
+    setExcluindo(s.id);
+    try { await api.excluirSolicitacao(s.id); await recarregar(); showToast && showToast("✓ Solicitação excluída"); }
+    catch (e) { alert(e.message); }
+    setExcluindo(null);
+  }
+
   const card = (s) => {
     const st = stInfo(s.status);
+    const nAnexos = Array.isArray(s.anexos) ? s.anexos.length : 0;
     return (
       <div className="msol-card" key={s.id}>
         <div className="msol-top">
           <span className={"msol-st " + st.cls}>{st.txt}</span>
           {s.tipoLabel ? <span className="msol-tipo">{s.tipoLabel}</span> : null}
           <span className="msol-data">{fmtDataHora(s.criadoEm)}</span>
+          <button className="msol-del" title="Excluir solicitação" disabled={excluindo === s.id} onClick={() => excluir(s)}><I.trash style={{ width: 15, height: 15 }} /></button>
         </div>
         <div className="msol-desc">{s.descricao}</div>
         {Array.isArray(s.campos) && s.campos.length > 0 && (
@@ -3341,6 +3389,9 @@ function PaginaMinhasSolicitacoes({ itens, recarregar }) {
               <div className="msol-campo" key={i}><span>{c.label}</span><b>{c.valor}</b></div>
             ))}
           </div>
+        )}
+        {nAnexos > 0 && (
+          <div className="msol-anexos"><I.clip style={{ width: 13, height: 13 }} /> {nAnexos} comprovante{nAnexos > 1 ? "s" : ""} anexado{nAnexos > 1 ? "s" : ""}</div>
         )}
         {s.status === "resolvida" && (
           <div className="msol-resp">{s.resposta ? <><b>Resposta do suporte:</b> {s.resposta}</> : <b>✓ Resolvido pelo suporte</b>}</div>
@@ -3351,11 +3402,14 @@ function PaginaMinhasSolicitacoes({ itens, recarregar }) {
 
   return (
     <div className="msol-page">
+      <div className="msol-head">
+        <button className="btn btn-primary" onClick={() => setNova(true)}><I.suporte style={{ width: 15, height: 15 }} /> Nova solicitação</button>
+      </div>
       {lista.length === 0 ? (
         <div className="msol-vazio">
           <I.suporte style={{ width: 42, height: 42, opacity: 0.35 }} />
           <div className="msol-vazio-t">Você ainda não encaminhou nenhuma solicitação</div>
-          <div className="msol-vazio-s">Abra uma conversa no WhatsApp e clique em <b>"Encaminhar pro suporte"</b>.</div>
+          <div className="msol-vazio-s">Clique em <b>"Nova solicitação"</b> aqui em cima, ou abra uma conversa no WhatsApp e use <b>"Encaminhar pro suporte"</b>.</div>
         </div>
       ) : (
         <>
@@ -3372,6 +3426,12 @@ function PaginaMinhasSolicitacoes({ itens, recarregar }) {
             </div>
           )}
         </>
+      )}
+      {nova && (
+        <SolicitacaoForm
+          onClose={() => setNova(false)}
+          onSaved={() => { setNova(false); showToast && showToast("✓ Encaminhado para o suporte"); recarregar(); }}
+        />
       )}
     </div>
   );

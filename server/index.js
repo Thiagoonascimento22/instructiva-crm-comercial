@@ -9,7 +9,7 @@ process.env.TZ = process.env.TZ || "America/Sao_Paulo";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
-app.use(express.json({ limit: "25mb" }));
+app.use(express.json({ limit: "40mb" }));
 
 /* ============================================================
    BANCO EM ARQUIVO JSON (com espera do volume do Railway)
@@ -358,7 +358,19 @@ function sanitizeCampos(arr) {
     .filter((c) => c.label && c.valor);
 }
 
-async function pushSuporte(s) {
+function anexosParaEnviar(arr) {
+  if (!Array.isArray(arr)) return [];
+  return arr
+    .slice(0, 5)
+    .map((a) => ({
+      nome: String((a && a.nome) || "arquivo").slice(0, 200),
+      mime: String((a && a.mime) || "application/octet-stream").slice(0, 100),
+      dados: String((a && a.dados) || "").slice(0, 12 * 1024 * 1024),
+    }))
+    .filter((a) => a.dados);
+}
+
+async function pushSuporte(s, anexos) {
   if (!SUPORTE_URL || !BRIDGE_KEY) return false;
   try {
     const ctrl = new AbortController();
@@ -370,7 +382,23 @@ async function pushSuporte(s) {
         monitoriaId: s.id, vendedorNome: s.vendedorNome, cliente: s.cliente,
         numero: s.numero, descricao: s.descricao, urgencia: s.urgencia,
         tipo: s.tipo, tipoLabel: s.tipoLabel, campos: s.campos,
+        anexos: anexos || [],
       }),
+      signal: ctrl.signal,
+    });
+    clearTimeout(tm);
+    return r.ok;
+  } catch (_) { return false; }
+}
+
+async function deleteSuporte(monitoriaId) {
+  if (!SUPORTE_URL || !BRIDGE_KEY) return false;
+  try {
+    const ctrl = new AbortController();
+    const tm = setTimeout(() => ctrl.abort(), 12000);
+    const r = await fetch(SUPORTE_URL + "/api/solic/inbound/" + encodeURIComponent(monitoriaId), {
+      method: "DELETE",
+      headers: { "x-bridge-key": BRIDGE_KEY },
       signal: ctrl.signal,
     });
     clearTimeout(tm);
@@ -425,6 +453,7 @@ app.post("/api/solicitacoes", auth, (req, res) => {
   const { descricao, cliente, numero, urgencia, tipo, tipoLabel, campos } = req.body || {};
   if (!descricao || !descricao.trim())
     return res.status(400).json({ error: "Descreva o que você precisa" });
+  const anexosBytes = anexosParaEnviar(req.body && req.body.anexos);
   const nova = {
     id: proximoId("sol"),
     vendedorId: req.user.id,
@@ -436,6 +465,7 @@ app.post("/api/solicitacoes", auth, (req, res) => {
     tipo: String(tipo || "outras").trim().slice(0, 40),
     tipoLabel: String(tipoLabel || "").trim().slice(0, 60),
     campos: sanitizeCampos(campos),
+    anexos: anexosBytes.map((a) => ({ nome: a.nome, mime: a.mime })),
     status: "aberta",
     resposta: "",
     resolvidoVisto: true,
@@ -445,8 +475,20 @@ app.post("/api/solicitacoes", auth, (req, res) => {
   };
   db.solicitacoes.push(nova);
   saveSoon();
-  pushSuporte(nova).then((ok) => { if (ok) { nova.suporteEnviado = true; saveSoon(); } }).catch(() => {});
+  pushSuporte(nova, anexosBytes).then((ok) => { if (ok) { nova.suporteEnviado = true; saveSoon(); } }).catch(() => {});
   res.json(nova);
+});
+
+app.delete("/api/solicitacoes/:id", auth, (req, res) => {
+  const i = (db.solicitacoes || []).findIndex((x) => x.id === req.params.id);
+  if (i < 0) return res.status(404).json({ error: "Solicitação não encontrada" });
+  const s = db.solicitacoes[i];
+  if (req.user.role !== "gerente" && s.vendedorId !== req.user.id)
+    return res.status(403).json({ error: "sem permissão" });
+  db.solicitacoes.splice(i, 1);
+  saveSoon();
+  deleteSuporte(s.id).catch(() => {});
+  res.json({ ok: true });
 });
 
 // mudar status / responder (só o suporte)

@@ -2372,3 +2372,17 @@ h1, h2, h3, h4, .topbar .greet, .panel-h h3, .login-card .ttl, .login-card h2, .
 .msol-campo { font-size: 13px; line-height: 1.4; color: var(--text); }
 .msol-campo span { color: var(--muted); }
 .msol-campo b { color: var(--text); font-weight: 600; }
+
+/* criar/excluir/anexos na página Minhas solicitações */
+.msol-head { display: flex; justify-content: flex-end; margin-bottom: 16px; }
+.msol-del { margin-left: 4px; background: transparent; border: none; color: var(--faint); cursor: pointer; padding: 4px; border-radius: 8px; display: inline-flex; align-items: center; transition: all .15s; }
+.msol-del:hover { color: #dc2626; background: rgba(239,68,68,.1); }
+.msol-del:disabled { opacity: .4; cursor: default; }
+.msol-anexos { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--muted); background: var(--nav-hover); padding: 6px 11px; border-radius: 8px; margin-top: 2px; }
+.anexo-btn { display: inline-flex; align-items: center; gap: 7px; padding: 9px 14px; border: 1px dashed var(--line); border-radius: 10px; background: var(--input-bg); color: var(--text); font-size: 13.5px; font-weight: 600; cursor: pointer; width: fit-content; }
+.anexo-btn:hover { border-color: var(--brand); color: var(--brand); }
+.anexo-list { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
+.anexo-item { display: flex; align-items: center; gap: 8px; background: var(--nav-hover); border-radius: 8px; padding: 7px 10px; font-size: 13px; }
+.anexo-nome { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); }
+.anexo-x { background: transparent; border: none; color: var(--faint); font-size: 18px; line-height: 1; cursor: pointer; padding: 0 4px; }
+.anexo-x:hover { color: #dc2626; }
