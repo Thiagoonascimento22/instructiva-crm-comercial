@@ -3371,6 +3371,7 @@ function SolicitacaoRow({ s, onMudar, readonly }) {
 
 function PaginaMinhasSolicitacoes({ itens, recarregar, showToast }) {
   const [nova, setNova] = useState(false);
+  const [aberta, setAberta] = useState(null);
   const [excluindo, setExcluindo] = useState(null);
   const [periodo, setPeriodo] = useState("tudo");
   const [cde, setCde] = useState("");
@@ -3388,43 +3389,84 @@ function PaginaMinhasSolicitacoes({ itens, recarregar, showToast }) {
     st === "resolvida" ? { txt: "Resolvida", cls: "ok" } :
     st === "andamento" ? { txt: "Em atendimento", cls: "and" } :
     { txt: "Aguardando", cls: "ab" };
+  const urgLabel = (u) => ({ baixa: "Baixa", media: "Média", alta: "Alta" })[u] || "";
 
   async function excluir(s) {
     if (!window.confirm("Excluir esta solicitação? Ela também será removida do suporte.")) return;
     setExcluindo(s.id);
-    try { await api.excluirSolicitacao(s.id); await recarregar(); showToast && showToast("✓ Solicitação excluída"); }
+    try { await api.excluirSolicitacao(s.id); setAberta(null); await recarregar(); showToast && showToast("✓ Solicitação excluída"); }
     catch (e) { alert(e.message); }
     setExcluindo(null);
   }
 
-  const card = (s) => {
+  const abertaLive = aberta ? (todas.find((x) => x.id === aberta.id) || aberta) : null;
+
+  const row = (s) => {
     const st = stInfo(s.status);
     const nAnexos = Array.isArray(s.anexos) ? s.anexos.length : 0;
     return (
-      <div className="msol-card" key={s.id}>
-        <div className="msol-top">
-          <span className={"msol-st " + st.cls}>{st.txt}</span>
-          {s.tipoLabel ? <span className="msol-tipo">{s.tipoLabel}</span> : null}
-          {s.urgencia ? <span className={"msol-urg " + s.urgencia}>{({ baixa: "Baixa", media: "Média", alta: "Alta" })[s.urgencia] || ""}</span> : null}
-          <span className="msol-data">{fmtDataHora(s.criadoEm)}</span>
-          <button className="msol-del" title="Excluir solicitação" disabled={excluindo === s.id} onClick={() => excluir(s)}><I.trash style={{ width: 15, height: 15 }} /></button>
-        </div>
-        <div className="msol-desc">{s.descricao}</div>
-        {Array.isArray(s.campos) && s.campos.length > 0 && (
-          <div className="msol-campos">
-            {s.campos.map((c, i) => (
-              <div className="msol-campo" key={i}><span>{c.label}</span><b>{c.valor}</b></div>
-            ))}
+      <button className="sol-row" key={s.id} onClick={() => setAberta(s)}>
+        <div className="sol-row-l">
+          <div className="sol-row-titulo">{s.descricao}</div>
+          <div className="sol-row-meta">
+            {s.tipoLabel ? <span>{s.tipoLabel}</span> : null}
+            <span className="sol-row-dot">·</span>
+            <span>{fmtDataHora(s.criadoEm)}</span>
+            {nAnexos > 0 ? <><span className="sol-row-dot">·</span><span className="sol-row-clip"><I.clip style={{ width: 12, height: 12 }} /> {nAnexos}</span></> : null}
           </div>
-        )}
-        {nAnexos > 0 && (
-          <div className="msol-anexos"><I.clip style={{ width: 13, height: 13 }} /> {nAnexos} comprovante{nAnexos > 1 ? "s" : ""} anexado{nAnexos > 1 ? "s" : ""}</div>
-        )}
-        {s.status === "resolvida" && (
-          <div className="msol-resp">{s.resposta ? <><b>Resposta do suporte:</b> {s.resposta}</> : <b>✓ Resolvido pelo suporte</b>}</div>
-        )}
-      </div>
+        </div>
+        <div className="sol-row-r">
+          {s.urgencia ? <span className={"msol-urg " + s.urgencia}>{urgLabel(s.urgencia)}</span> : null}
+          <span className={"msol-st " + st.cls}>{st.txt}</span>
+        </div>
+      </button>
     );
+  };
+
+  const detalhe = (s) => {
+    const st = stInfo(s.status);
+    const nAnexos = Array.isArray(s.anexos) ? s.anexos.length : 0;
+    return createPortal(
+      <div className="modal" onClick={(e) => { if (e.target === e.currentTarget) setAberta(null); }}>
+        <div className="modal-box sol-det">
+          <div className="sol-det-top">
+            <div className="sol-det-badges">
+              {s.tipoLabel ? <span className="msol-tipo">{s.tipoLabel}</span> : null}
+              {s.urgencia ? <span className={"msol-urg " + s.urgencia}>{urgLabel(s.urgencia)}</span> : null}
+              <span className={"msol-st " + st.cls}>{st.txt}</span>
+            </div>
+            <button className="sol-det-x" onClick={() => setAberta(null)} title="Fechar"><I.x style={{ width: 18, height: 18 }} /></button>
+          </div>
+          <div className="mb sol-det-body">
+            <div className="sol-det-titulo">{s.descricao}</div>
+            <div className="sol-det-data">{fmtDataHora(s.criadoEm)}</div>
+            {Array.isArray(s.campos) && s.campos.length > 0 && (
+              <div className="sol-det-campos">
+                {s.campos.map((c, i) => (
+                  <div className="sol-det-campo" key={i}><span>{c.label}</span><b>{c.valor}</b></div>
+                ))}
+              </div>
+            )}
+            {nAnexos > 0 && (
+              <div className="sol-det-sec">
+                <div className="sol-det-sec-t">Anexos enviados</div>
+                <div className="sol-det-anexos">
+                  {s.anexos.map((a, i) => (
+                    <div className="sol-det-anexo" key={i}><I.clip style={{ width: 13, height: 13 }} /> {a.nome}</div>
+                  ))}
+                </div>
+              </div>
+            )}
+            {s.status === "resolvida" && (
+              <div className="sol-det-resp">{s.resposta ? <><b>Resposta do suporte</b><p>{s.resposta}</p></> : <b>✓ Resolvido pelo suporte</b>}</div>
+            )}
+          </div>
+          <div className="sol-det-foot">
+            <button className="btn sol-det-del" disabled={excluindo === s.id} onClick={() => excluir(s)}><I.trash style={{ width: 15, height: 15 }} /> Excluir</button>
+            <button className="btn btn-primary" onClick={() => setAberta(null)}>Fechar</button>
+          </div>
+        </div>
+      </div>, document.body);
   };
 
   return (
@@ -3463,13 +3505,13 @@ function PaginaMinhasSolicitacoes({ itens, recarregar, showToast }) {
           {ativas.length > 0 && (
             <div className="msol-sec">
               <div className="msol-sec-tit">Em aberto <span className="msol-sec-n">{ativas.length}</span></div>
-              {ativas.map(card)}
+              {ativas.map(row)}
             </div>
           )}
           {resolvidas.length > 0 && (
             <div className="msol-sec">
               <div className="msol-sec-tit">Resolvidas <span className="msol-sec-n">{resolvidas.length}</span></div>
-              {resolvidas.map(card)}
+              {resolvidas.map(row)}
             </div>
           )}
         </>
@@ -3480,6 +3522,7 @@ function PaginaMinhasSolicitacoes({ itens, recarregar, showToast }) {
           onSaved={() => { setNova(false); showToast && showToast("✓ Encaminhado para o suporte"); recarregar(); }}
         />
       )}
+      {abertaLive && detalhe(abertaLive)}
     </div>
   );
 }
