@@ -162,8 +162,7 @@ export default function App() {
   const isGer = user.role === "gerente";
   const isSuporte = user.role === "suporte";
   const isVend = !isGer && !isSuporte;
-  const naoLidasVend = (s) => (Array.isArray(s.mensagens) ? s.mensagens : []).filter((m) => m.autor === "suporte" && (m.ts || 0) > (s.vendedorViu || 0)).length;
-  const badgeSol = minhasSol.filter((s) => (s.status === "resolvida" && !s.resolvidoVisto) || naoLidasVend(s) > 0).length;
+  const badgeSol = minhasSol.filter((s) => s.status === "resolvida" && !s.resolvidoVisto).length;
   const titulos = {
     painel: { t: "Monitoria de Atendimento", s: "Acompanhe a produtividade e a agilidade do time" },
     whatsapp: { t: "WhatsApp", s: "Acompanhe as conversas dos atendentes" },

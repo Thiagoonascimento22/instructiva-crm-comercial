@@ -95,13 +95,23 @@ export const api = {
   criarSolicitacao: (dados) => req("POST", "/api/solicitacoes", dados),
   enviarMensagemSolic: (id, texto, anexo) => req("POST", "/api/solicitacoes/" + id + "/mensagem", { texto, anexo }),
   abrirChatAnexo: async (id, anexoId) => {
-    const t = getToken();
-    const r = await fetch("/api/solicitacoes/" + id + "/chat-anexo/" + anexoId, { headers: t ? { Authorization: "Bearer " + t } : {} });
-    if (!r.ok) throw new Error("não foi possível abrir o anexo");
-    const blob = await r.blob();
-    const url = URL.createObjectURL(blob);
-    window.open(url, "_blank");
-    setTimeout(() => URL.revokeObjectURL(url), 60000);
+    const win = window.open("", "_blank");
+    try {
+      const t = getToken();
+      const r = await fetch("/api/solicitacoes/" + id + "/chat-anexo/" + anexoId, { headers: t ? { Authorization: "Bearer " + t } : {} });
+      if (!r.ok) throw new Error("não foi possível abrir o anexo");
+      const blob = await r.blob();
+      const url = URL.createObjectURL(blob);
+      if (win) { win.location.href = url; }
+      else {
+        const cd = r.headers.get("content-disposition") || "";
+        const mm = cd.match(/filename="?([^"]+)"?/);
+        const a = document.createElement("a");
+        a.href = url; a.download = mm ? mm[1] : "arquivo";
+        document.body.appendChild(a); a.click(); a.remove();
+      }
+      setTimeout(() => URL.revokeObjectURL(url), 60000);
+    } catch (e) { if (win) win.close(); throw e; }
   },
   marcarChatVisto: (id) => req("POST", "/api/solicitacoes/" + id + "/visto"),
   sincronizarSolic: (id) => req("GET", "/api/solicitacoes/" + id + "/sync"),
