@@ -350,6 +350,14 @@ const SUPORTE_URL = (process.env.SUPORTE_URL || "").replace(/\/+$/, "");
 const BRIDGE_KEY = process.env.BRIDGE_KEY || "";
 const STATUS_SUP_PARA_MON = { recebida: "aberta", em_atendimento: "andamento", concluida: "resolvida" };
 
+function sanitizeCampos(arr) {
+  if (!Array.isArray(arr)) return [];
+  return arr
+    .slice(0, 40)
+    .map((c) => ({ label: String((c && c.label) || "").slice(0, 60), valor: String((c && c.valor) || "").slice(0, 500) }))
+    .filter((c) => c.label && c.valor);
+}
+
 async function pushSuporte(s) {
   if (!SUPORTE_URL || !BRIDGE_KEY) return false;
   try {
@@ -361,6 +369,7 @@ async function pushSuporte(s) {
       body: JSON.stringify({
         monitoriaId: s.id, vendedorNome: s.vendedorNome, cliente: s.cliente,
         numero: s.numero, descricao: s.descricao, urgencia: s.urgencia,
+        tipo: s.tipo, tipoLabel: s.tipoLabel, campos: s.campos,
       }),
       signal: ctrl.signal,
     });
@@ -413,7 +422,7 @@ async function sincronizarSuporte() {
 setInterval(() => { sincronizarSuporte().catch(() => {}); }, 20000);
 
 app.post("/api/solicitacoes", auth, (req, res) => {
-  const { descricao, cliente, numero, urgencia } = req.body || {};
+  const { descricao, cliente, numero, urgencia, tipo, tipoLabel, campos } = req.body || {};
   if (!descricao || !descricao.trim())
     return res.status(400).json({ error: "Descreva o que você precisa" });
   const nova = {
@@ -424,6 +433,9 @@ app.post("/api/solicitacoes", auth, (req, res) => {
     cliente: String(cliente || "").trim().slice(0, 120),
     numero: String(numero || "").trim().slice(0, 40),
     urgencia: URGENCIAS.includes(urgencia) ? urgencia : "normal",
+    tipo: String(tipo || "outras").trim().slice(0, 40),
+    tipoLabel: String(tipoLabel || "").trim().slice(0, 60),
+    campos: sanitizeCampos(campos),
     status: "aberta",
     resposta: "",
     resolvidoVisto: true,

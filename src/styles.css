@@ -2365,3 +2365,10 @@ h1, h2, h3, h4, .topbar .greet, .panel-h h3, .login-card .ttl, .login-card h2, .
 .msol-vazio { text-align: center; padding: 70px 20px; color: var(--muted); display: flex; flex-direction: column; align-items: center; gap: 10px; }
 .msol-vazio-t { font-size: 16px; font-weight: 600; color: var(--text); }
 .msol-vazio-s { font-size: 13.5px; color: var(--muted); max-width: 360px; }
+
+/* selo de tipo + grid de campos na página Minhas solicitações */
+.msol-tipo { font-size: 11px; font-weight: 600; padding: 3px 11px; border-radius: 20px; color: var(--brand); background: rgba(255,122,26,.12); }
+.msol-campos { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 5px 18px; margin: 4px 0 10px; padding: 12px 14px; background: var(--nav-hover); border-radius: 10px; }
+.msol-campo { font-size: 13px; line-height: 1.4; color: var(--text); }
+.msol-campo span { color: var(--muted); }
+.msol-campo b { color: var(--text); font-weight: 600; }

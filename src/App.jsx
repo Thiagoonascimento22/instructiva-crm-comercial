@@ -3062,44 +3062,98 @@ function rotuloStatus(s) {
   return s === "aberta" ? "Aberta" : s === "andamento" ? "Em andamento" : "Resolvida";
 }
 
+const SOLIC_TIPOS = [
+  { v: "liberacao_curso", label: "Liberação de curso" },
+  { v: "outras", label: "Outras solicitações" },
+];
+const CAMPOS_LIB = [
+  { k: "nome", label: "Nome do aluno", req: true },
+  { k: "cpf", label: "CPF" },
+  { k: "email", label: "E-mail" },
+  { k: "telefone", label: "Telefone" },
+  { k: "endereco", label: "Endereço", area: true },
+  { k: "dataCompra", label: "Data da compra", type: "date" },
+  { k: "codigoVenda", label: "Código da venda" },
+  { k: "vendedor", label: "Vendedor" },
+  { k: "formaVenda", label: "Forma da venda", opc: ["Guru", "Greenn", "Hotmart", "TMB"] },
+  { k: "curso", label: "Curso" },
+  { k: "valorTotal", label: "Valor total" },
+  { k: "entrada", label: "Entrada" },
+  { k: "pagamento", label: "PIX / Boleto / Cartão", opc: ["PIX", "Boleto", "Cartão"] },
+  { k: "valorParcela", label: "Valor da parcela" },
+  { k: "qtdParcelas", label: "Qtd de parcelas" },
+  { k: "futurasParcelas", label: "Valor das futuras parcelas" },
+  { k: "vencimento", label: "Melhor data de vencimento", type: "date" },
+  { k: "observacoes", label: "Observações da negociação", area: true },
+];
+const CAMPOS_OUTRAS = [
+  { k: "nome", label: "Nome do aluno", req: true },
+  { k: "email", label: "E-mail" },
+  { k: "cpf", label: "CPF" },
+  { k: "telefone", label: "Telefone" },
+  { k: "curso", label: "Curso" },
+  { k: "solicitacao", label: "Qual a solicitação", area: true, req: true },
+];
+
 function SolicitacaoForm({ onClose, onSaved, defaults }) {
-  const [f, setF] = useState({ descricao: "", cliente: (defaults && defaults.cliente) || "", numero: (defaults && defaults.numero) || "", urgencia: "normal" });
+  const [tipo, setTipo] = useState("liberacao_curso");
+  const [f, setF] = useState({ nome: (defaults && defaults.cliente) || "", telefone: (defaults && defaults.numero) || "" });
   const [saving, setSaving] = useState(false);
   const set = (k, v) => setF((s) => ({ ...s, [k]: v }));
+  const defs = tipo === "liberacao_curso" ? CAMPOS_LIB : CAMPOS_OUTRAS;
+
   async function salvar() {
-    if (!f.descricao.trim()) { alert("Descreva o que você precisa."); return; }
+    for (const c of defs) {
+      if (c.req && !String(f[c.k] || "").trim()) { alert("Preencha: " + c.label); return; }
+    }
+    const campos = defs
+      .filter((c) => String(f[c.k] || "").trim())
+      .map((c) => ({ label: c.label, valor: String(f[c.k]).trim() }));
+    const nome = String(f.nome || "").trim();
+    const telefone = String(f.telefone || "").trim();
+    const tipoLabel = (SOLIC_TIPOS.find((t) => t.v === tipo) || {}).label || "Solicitação";
+    const descricao = tipo === "liberacao_curso"
+      ? tipoLabel + (f.curso ? " — " + String(f.curso).trim() : "")
+      : String(f.solicitacao || "").trim();
     setSaving(true);
-    try { const nova = await api.criarSolicitacao(f); onSaved(nova); }
+    try { const nova = await api.criarSolicitacao({ tipo, tipoLabel, cliente: nome, numero: telefone, descricao, campos }); onSaved(nova); }
     catch (e) { alert(e.message); setSaving(false); }
   }
+
+  const renderCampo = (c) => {
+    const val = f[c.k] || "";
+    return (
+      <div className="field" key={c.k}>
+        <label>{c.label}{c.req ? " *" : <span style={{ color: "var(--faint)", fontWeight: 400 }}> — opcional</span>}</label>
+        {c.opc ? (
+          <select className="select" value={val} onChange={(e) => set(c.k, e.target.value)}>
+            <option value="">Escolher…</option>
+            {c.opc.map((o) => <option key={o} value={o}>{o}</option>)}
+          </select>
+        ) : c.area ? (
+          <textarea className="input" rows={3} value={val} onChange={(e) => set(c.k, e.target.value)} placeholder={c.label} />
+        ) : (
+          <input className="input" type={c.type || "text"} value={val} onChange={(e) => set(c.k, e.target.value)} placeholder={c.label} />
+        )}
+      </div>
+    );
+  };
+
   return (
     <div className="modal" onClick={(e) => e.target === e.currentTarget && onClose()}>
       <div className="modal-box">
         <div className="mh">
           <h3>Encaminhar pro suporte</h3>
-          <p>Descreva o que está acontecendo nesse atendimento. O suporte recebe sua solicitação na hora.</p>
+          <p>Escolha o tipo e preencha o que tiver. O suporte recebe na hora.</p>
         </div>
-        <div className="mb">
+        <div className="mb" style={{ maxHeight: "62vh", overflowY: "auto" }}>
           <div className="field">
-            <label>O que você precisa?</label>
-            <textarea className="input" rows={4} value={f.descricao} onChange={(e) => set("descricao", e.target.value)} placeholder="Ex: cliente quer emitir nota fiscal e não sei como fazer..." autoFocus />
-          </div>
-          <div className="field">
-            <label>Cliente <span style={{ color: "var(--faint)", fontWeight: 400 }}>— opcional</span></label>
-            <input className="input" value={f.cliente} onChange={(e) => set("cliente", e.target.value)} placeholder="nome do cliente" />
-          </div>
-          <div className="field">
-            <label>WhatsApp do cliente <span style={{ color: "var(--faint)", fontWeight: 400 }}>— opcional</span></label>
-            <input className="input" value={f.numero} onChange={(e) => set("numero", e.target.value)} placeholder="ex: 44 99999-9999" />
-          </div>
-          <div className="field">
-            <label>Urgência</label>
-            <select className="select" value={f.urgencia} onChange={(e) => set("urgencia", e.target.value)}>
-              <option value="baixa">Baixa</option>
-              <option value="normal">Normal</option>
-              <option value="alta">Alta</option>
+            <label>Tipo de solicitação *</label>
+            <select className="select" value={tipo} onChange={(e) => setTipo(e.target.value)}>
+              {SOLIC_TIPOS.map((t) => <option key={t.v} value={t.v}>{t.label}</option>)}
             </select>
           </div>
+          {defs.map(renderCampo)}
         </div>
         <div className="mf">
           <button className="btn full" onClick={onClose}>Cancelar</button>
@@ -3277,11 +3331,17 @@ function PaginaMinhasSolicitacoes({ itens, recarregar }) {
       <div className="msol-card" key={s.id}>
         <div className="msol-top">
           <span className={"msol-st " + st.cls}>{st.txt}</span>
-          <span className={"msol-urg " + s.urgencia}>{s.urgencia}</span>
+          {s.tipoLabel ? <span className="msol-tipo">{s.tipoLabel}</span> : null}
           <span className="msol-data">{fmtDataHora(s.criadoEm)}</span>
         </div>
         <div className="msol-desc">{s.descricao}</div>
-        {s.cliente ? <div className="msol-cliente">Cliente: <b>{s.cliente}</b>{s.numero ? " · " + s.numero : ""}</div> : null}
+        {Array.isArray(s.campos) && s.campos.length > 0 && (
+          <div className="msol-campos">
+            {s.campos.map((c, i) => (
+              <div className="msol-campo" key={i}><span>{c.label}</span><b>{c.valor}</b></div>
+            ))}
+          </div>
+        )}
         {s.status === "resolvida" && (
           <div className="msol-resp">{s.resposta ? <><b>Resposta do suporte:</b> {s.resposta}</> : <b>✓ Resolvido pelo suporte</b>}</div>
         )}
