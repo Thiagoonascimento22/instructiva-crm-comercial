@@ -549,7 +549,11 @@ app.get("/api/solicitacoes/:id/chat-anexo/:anexoId", auth, async (req, res) => {
   if (!SUPORTE_URL || !BRIDGE_KEY) return res.status(503).end();
   try {
     const r = await fetch(SUPORTE_URL + "/api/solic/inbound/" + encodeURIComponent(s.id) + "/anexo/" + encodeURIComponent(req.params.anexoId), { headers: { "x-bridge-key": BRIDGE_KEY } });
-    if (!r.ok) return res.status(r.status).end();
+    if (!r.ok) {
+      const body = await r.text().catch(() => "");
+      res.status(r.status).setHeader("Content-Type", r.headers.get("content-type") || "application/json");
+      return res.end(body || JSON.stringify({ error: "não foi possível abrir o anexo" }));
+    }
     res.setHeader("Content-Type", r.headers.get("content-type") || "application/octet-stream");
     const cd = r.headers.get("content-disposition"); if (cd) res.setHeader("Content-Disposition", cd);
     res.end(Buffer.from(await r.arrayBuffer()));

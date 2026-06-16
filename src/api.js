@@ -99,7 +99,7 @@ export const api = {
     try {
       const t = getToken();
       const r = await fetch("/api/solicitacoes/" + id + "/chat-anexo/" + anexoId, { headers: t ? { Authorization: "Bearer " + t } : {} });
-      if (!r.ok) throw new Error("não foi possível abrir o anexo");
+      if (!r.ok) { let msg = "não foi possível abrir o anexo"; try { const j = await r.json(); if (j && j.error) msg = j.error; } catch (_) {} throw new Error(msg); }
       const blob = await r.blob();
       const url = URL.createObjectURL(blob);
       if (win) { win.location.href = url; }
