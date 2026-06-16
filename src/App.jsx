@@ -161,6 +161,7 @@ export default function App() {
 
   const isGer = user.role === "gerente";
   const isSuporte = user.role === "suporte";
+  const isVend = !isGer && !isSuporte;
   const badgeSol = minhasSol.filter((s) => s.status === "resolvida" && !s.resolvidoVisto).length;
   const titulos = {
     painel: { t: "Monitoria de Atendimento", s: "Acompanhe a produtividade e a agilidade do time" },
@@ -176,10 +177,10 @@ export default function App() {
   const saud = hora < 12 ? "Bom dia" : hora < 18 ? "Boa tarde" : "Boa noite";
 
   return (
-    <div className="shell">
+    <div className={"shell" + (isVend ? " tema-v" : "")}>
       <aside className="sidebar">
         <div className="brand">
-          <img src={theme === "dark" ? LOGO_LIGHT : LOGO_FULL} alt="Instructiva" />
+          <img src={(theme === "dark" || isVend) ? LOGO_LIGHT : LOGO_FULL} alt="Instructiva" />
           <div className="tag">Monitoria de Atendimento</div>
         </div>
         <nav className="nav">
