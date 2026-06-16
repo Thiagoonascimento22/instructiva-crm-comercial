@@ -3099,10 +3099,10 @@ const CAMPOS_LIB = [
 ];
 const CAMPOS_OUTRAS = [
   { k: "nome", label: "Nome do aluno", req: true },
-  { k: "email", label: "E-mail" },
-  { k: "cpf", label: "CPF" },
-  { k: "telefone", label: "Telefone" },
-  { k: "curso", label: "Curso" },
+  { k: "email", label: "E-mail", req: true },
+  { k: "cpf", label: "CPF", req: true },
+  { k: "telefone", label: "Telefone", req: true },
+  { k: "curso", label: "Curso", req: true },
   { k: "solicitacao", label: "Qual a solicitação", area: true, req: true },
 ];
 
