@@ -3105,6 +3105,7 @@ const CAMPOS_OUTRAS = [
   { k: "telefone", label: "Telefone", req: true },
   { k: "curso", label: "Curso", req: true },
   { k: "solicitacao", label: "Qual a solicitação", area: true, req: true },
+  { k: "anexos", label: "Anexar comprovantes", file: true },
 ];
 
 function SolicitacaoForm({ onClose, onSaved, defaults }) {
@@ -3126,6 +3127,7 @@ function SolicitacaoForm({ onClose, onSaved, defaults }) {
     }
   }
   const removerAnexo = (i) => setAnexos((a) => a.filter((_, idx) => idx !== i));
+  const [urg, setUrg] = useState("media");
   const defs = tipo === "liberacao_curso" ? CAMPOS_LIB : CAMPOS_OUTRAS;
 
   async function salvar() {
@@ -3142,7 +3144,7 @@ function SolicitacaoForm({ onClose, onSaved, defaults }) {
       ? tipoLabel + (f.curso ? " — " + String(f.curso).trim() : "")
       : String(f.solicitacao || "").trim();
     setSaving(true);
-    try { const nova = await api.criarSolicitacao({ tipo, tipoLabel, cliente: nome, numero: telefone, descricao, campos, anexos }); onSaved(nova); }
+    try { const nova = await api.criarSolicitacao({ tipo, tipoLabel, urgencia: urg, cliente: nome, numero: telefone, descricao, campos, anexos }); onSaved(nova); }
     catch (e) { alert(e.message); setSaving(false); }
   }
 
@@ -3198,6 +3200,14 @@ function SolicitacaoForm({ onClose, onSaved, defaults }) {
             <label>Tipo de solicitação *</label>
             <select className="select" value={tipo} onChange={(e) => setTipo(e.target.value)}>
               {SOLIC_TIPOS.map((t) => <option key={t.v} value={t.v}>{t.label}</option>)}
+            </select>
+          </div>
+          <div className="field">
+            <label>Nível de urgência *</label>
+            <select className="select" value={urg} onChange={(e) => setUrg(e.target.value)}>
+              <option value="baixa">Baixa</option>
+              <option value="media">Média</option>
+              <option value="alta">Alta</option>
             </select>
           </div>
           {defs.map(renderCampo)}
@@ -3395,6 +3405,7 @@ function PaginaMinhasSolicitacoes({ itens, recarregar, showToast }) {
         <div className="msol-top">
           <span className={"msol-st " + st.cls}>{st.txt}</span>
           {s.tipoLabel ? <span className="msol-tipo">{s.tipoLabel}</span> : null}
+          {s.urgencia ? <span className={"msol-urg " + s.urgencia}>{({ baixa: "Baixa", media: "Média", alta: "Alta" })[s.urgencia] || ""}</span> : null}
           <span className="msol-data">{fmtDataHora(s.criadoEm)}</span>
           <button className="msol-del" title="Excluir solicitação" disabled={excluindo === s.id} onClick={() => excluir(s)}><I.trash style={{ width: 15, height: 15 }} /></button>
         </div>

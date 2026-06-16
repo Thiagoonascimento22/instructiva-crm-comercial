@@ -331,7 +331,7 @@ app.delete("/api/users/:id", auth, gerenteOnly, (req, res) => {
 /* ============================================================
    SOLICITAÇÕES DE SUPORTE (vendedor pede ajuda ao suporte)
    ============================================================ */
-const URGENCIAS = ["baixa", "normal", "alta"];
+const URGENCIAS = ["baixa", "media", "alta"];
 const STATUS_SOL = ["aberta", "andamento", "resolvida"];
 
 // lista: gerente e suporte veem todas; vendedor vê só as próprias
@@ -461,7 +461,7 @@ app.post("/api/solicitacoes", auth, (req, res) => {
     descricao: descricao.trim().slice(0, 2000),
     cliente: String(cliente || "").trim().slice(0, 120),
     numero: String(numero || "").trim().slice(0, 40),
-    urgencia: URGENCIAS.includes(urgencia) ? urgencia : "normal",
+    urgencia: URGENCIAS.includes(urgencia) ? urgencia : "media",
     tipo: String(tipo || "outras").trim().slice(0, 40),
     tipoLabel: String(tipoLabel || "").trim().slice(0, 60),
     campos: sanitizeCampos(campos),
