@@ -406,6 +406,25 @@ async function deleteSuporte(monitoriaId) {
   } catch (_) { return false; }
 }
 
+// encaminha uma mensagem do chat ao Suporte (fonte da verdade da thread)
+async function pushMensagemSuporte(monitoriaId, autorNome, texto) {
+  if (!SUPORTE_URL || !BRIDGE_KEY) return null;
+  try {
+    const ctrl = new AbortController();
+    const tm = setTimeout(() => ctrl.abort(), 12000);
+    const r = await fetch(SUPORTE_URL + "/api/solic/inbound/" + encodeURIComponent(monitoriaId) + "/mensagem", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-bridge-key": BRIDGE_KEY },
+      body: JSON.stringify({ autorNome, texto }),
+      signal: ctrl.signal,
+    });
+    clearTimeout(tm);
+    if (!r.ok) return null;
+    const data = await r.json();
+    return Array.isArray(data.mensagens) ? data.mensagens : null;
+  } catch (_) { return null; }
+}
+
 // sincroniza o status das solicitações com o app do Suporte (a cada 20s)
 async function sincronizarSuporte() {
   if (!SUPORTE_URL || !BRIDGE_KEY) return;
@@ -443,6 +462,10 @@ async function sincronizarSuporte() {
         }
         mudou = true;
       }
+      if (Array.isArray(sup.mensagens) && JSON.stringify(sup.mensagens) !== JSON.stringify(s.mensagens || [])) {
+        s.mensagens = sup.mensagens;
+        mudou = true;
+      }
     }
     if (mudou) saveSoon();
   } catch (_) {}
@@ -466,6 +489,7 @@ app.post("/api/solicitacoes", auth, (req, res) => {
     tipoLabel: String(tipoLabel || "").trim().slice(0, 60),
     campos: sanitizeCampos(campos),
     anexos: anexosBytes.map((a) => ({ nome: a.nome, mime: a.mime })),
+    mensagens: [],
     status: "aberta",
     resposta: "",
     resolvidoVisto: true,
@@ -477,6 +501,56 @@ app.post("/api/solicitacoes", auth, (req, res) => {
   saveSoon();
   pushSuporte(nova, anexosBytes).then((ok) => { if (ok) { nova.suporteEnviado = true; saveSoon(); } }).catch(() => {});
   res.json(nova);
+});
+
+// vendedor (ou gerente) envia mensagem no chat do chamado → encaminha ao Suporte
+app.post("/api/solicitacoes/:id/mensagem", auth, async (req, res) => {
+  const s = (db.solicitacoes || []).find((x) => x.id === req.params.id);
+  if (!s) return res.status(404).json({ error: "Solicitação não encontrada" });
+  if (req.user.role === "vendedor" && s.vendedorId !== req.user.id)
+    return res.status(403).json({ error: "Sem permissão" });
+  const texto = String((req.body && req.body.texto) || "").trim().slice(0, 2000);
+  if (!texto) return res.status(400).json({ error: "Escreva uma mensagem" });
+  if (!SUPORTE_URL || !BRIDGE_KEY) return res.status(503).json({ error: "Ponte com o suporte não configurada" });
+  if (!s.suporteEnviado) { if (await pushSuporte(s)) { s.suporteEnviado = true; saveSoon(); } }
+  const thread = await pushMensagemSuporte(s.id, req.user.nome || "Vendedor", texto);
+  if (!thread) return res.status(502).json({ error: "Não foi possível enviar agora. Tente de novo." });
+  s.mensagens = thread;
+  saveSoon();
+  res.json(s);
+});
+
+// puxa do Suporte o estado mais recente de UM chamado (status, resposta, mensagens)
+app.get("/api/solicitacoes/:id/sync", auth, async (req, res) => {
+  const s = (db.solicitacoes || []).find((x) => x.id === req.params.id);
+  if (!s) return res.status(404).json({ error: "Solicitação não encontrada" });
+  if (req.user.role === "vendedor" && s.vendedorId !== req.user.id)
+    return res.status(403).json({ error: "Sem permissão" });
+  if (SUPORTE_URL && BRIDGE_KEY && s.suporteEnviado) {
+    try {
+      const ctrl = new AbortController();
+      const tm = setTimeout(() => ctrl.abort(), 10000);
+      const r = await fetch(SUPORTE_URL + "/api/solic/status?ids=" + encodeURIComponent(s.id), {
+        headers: { "x-bridge-key": BRIDGE_KEY }, signal: ctrl.signal,
+      });
+      clearTimeout(tm);
+      if (r.ok) {
+        const data = await r.json();
+        const sup = (data.solicitacoes || [])[0];
+        if (sup) {
+          const novoStatus = STATUS_SUP_PARA_MON[sup.status] || s.status;
+          if (novoStatus !== s.status) {
+            s.status = novoStatus;
+            if (novoStatus === "resolvida") { s.resolvidoVisto = false; if (!s.resolvidoEm) s.resolvidoEm = Date.now(); }
+          }
+          if (sup.resposta) s.resposta = sup.resposta;
+          if (Array.isArray(sup.mensagens)) s.mensagens = sup.mensagens;
+          saveSoon();
+        }
+      }
+    } catch (_) {}
+  }
+  res.json(s);
 });
 
 app.delete("/api/solicitacoes/:id", auth, (req, res) => {

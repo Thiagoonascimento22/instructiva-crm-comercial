@@ -3373,6 +3373,9 @@ function PaginaMinhasSolicitacoes({ itens, recarregar, showToast }) {
   const [nova, setNova] = useState(false);
   const [aberta, setAberta] = useState(null);
   const [excluindo, setExcluindo] = useState(null);
+  const [msg, setMsg] = useState("");
+  const [enviando, setEnviando] = useState(false);
+  const threadRef = useRef(null);
   const [periodo, setPeriodo] = useState("tudo");
   const [cde, setCde] = useState("");
   const [cate, setCate] = useState("");
@@ -3400,6 +3403,32 @@ function PaginaMinhasSolicitacoes({ itens, recarregar, showToast }) {
   }
 
   const abertaLive = aberta ? (todas.find((x) => x.id === aberta.id) || aberta) : null;
+
+  // enquanto o chamado está aberto, puxa novidades do suporte a cada 6s
+  useEffect(() => {
+    if (!aberta) { setMsg(""); return; }
+    let vivo = true;
+    const tick = () => api.sincronizarSolic(aberta.id).then(() => { if (vivo) recarregar(); }).catch(() => {});
+    tick();
+    const t = setInterval(tick, 6000);
+    return () => { vivo = false; clearInterval(t); };
+    // eslint-disable-next-line
+  }, [aberta && aberta.id]);
+
+  // rola o chat pro fim quando chega mensagem nova
+  const nMsgs = abertaLive && Array.isArray(abertaLive.mensagens) ? abertaLive.mensagens.length : 0;
+  useEffect(() => {
+    if (threadRef.current) threadRef.current.scrollTop = threadRef.current.scrollHeight;
+  }, [nMsgs, aberta && aberta.id]);
+
+  async function enviar() {
+    const t = msg.trim();
+    if (!t || enviando || !aberta) return;
+    setEnviando(true);
+    try { await api.enviarMensagemSolic(aberta.id, t); setMsg(""); await recarregar(); }
+    catch (e) { alert(e.message); }
+    setEnviando(false);
+  }
 
   const row = (s) => {
     const st = stInfo(s.status);
@@ -3460,6 +3489,23 @@ function PaginaMinhasSolicitacoes({ itens, recarregar, showToast }) {
             {s.status === "resolvida" && (
               <div className="sol-det-resp">{s.resposta ? <><b>Resposta do suporte</b><p>{s.resposta}</p></> : <b>✓ Resolvido pelo suporte</b>}</div>
             )}
+            <div className="sol-chat">
+              <div className="sol-det-sec-t">Conversa com o suporte</div>
+              <div className="sol-chat-thread" ref={threadRef}>
+                {(s.mensagens || []).length === 0 ? (
+                  <div className="sol-chat-vazio">Nenhuma mensagem ainda. Precisa adicionar uma informação ou tirar uma dúvida? Fale com o suporte aqui.</div>
+                ) : (s.mensagens || []).map((m) => (
+                  <div key={m.id} className={"sol-msg " + (m.autor === "vendedor" ? "mine" : "theirs")}>
+                    <div className="sol-msg-b">{m.texto}</div>
+                    <div className="sol-msg-m">{m.autor === "vendedor" ? "Você" : (m.autorNome || "Suporte")} · {new Date(m.ts).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}</div>
+                  </div>
+                ))}
+              </div>
+              <div className="sol-chat-comp">
+                <input className="sol-chat-in" value={msg} onChange={(e) => setMsg(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); enviar(); } }} placeholder="Escreva uma mensagem..." />
+                <button className="sol-chat-send" disabled={enviando || !msg.trim()} onClick={enviar} title="Enviar"><I.send style={{ width: 16, height: 16 }} /></button>
+              </div>
+            </div>
           </div>
           <div className="sol-det-foot">
             <button className="btn sol-det-del" disabled={excluindo === s.id} onClick={() => excluir(s)}><I.trash style={{ width: 15, height: 15 }} /> Excluir</button>

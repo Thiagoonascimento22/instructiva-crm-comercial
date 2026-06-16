@@ -93,6 +93,8 @@ export const api = {
   // Solicitações de suporte
   solicitacoes: (status) => req("GET", "/api/solicitacoes" + (status ? "?status=" + encodeURIComponent(status) : "")),
   criarSolicitacao: (dados) => req("POST", "/api/solicitacoes", dados),
+  enviarMensagemSolic: (id, texto) => req("POST", "/api/solicitacoes/" + id + "/mensagem", { texto }),
+  sincronizarSolic: (id) => req("GET", "/api/solicitacoes/" + id + "/sync"),
   excluirSolicitacao: (id) => req("DELETE", "/api/solicitacoes/" + id),
   statusSolicitacao: (id, status, resposta) => req("PATCH", "/api/solicitacoes/" + id, { status, resposta }),
   marcarSolicitacoesVistas: () => req("POST", "/api/solicitacoes/marcar-vistas"),
