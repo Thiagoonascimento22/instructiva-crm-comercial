@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from "react";
+import { createPortal } from "react-dom";
 import { api, getToken, setToken } from "./api.js";
 import { LOGO_FULL, LOGO_LIGHT } from "./logos.js";
 
@@ -3184,14 +3185,14 @@ function SolicitacaoForm({ onClose, onSaved, defaults }) {
     );
   };
 
-  return (
+  return createPortal(
     <div className="modal" onClick={(e) => e.target === e.currentTarget && onClose()}>
       <div className="modal-box">
         <div className="mh">
           <h3>Encaminhar pro suporte</h3>
           <p>Escolha o tipo e preencha o que tiver. O suporte recebe na hora.</p>
         </div>
-        <div className="mb" style={{ maxHeight: "62vh", overflowY: "auto" }}>
+        <div className="mb">
           <div className="field">
             <label>Tipo de solicitação *</label>
             <select className="select" value={tipo} onChange={(e) => setTipo(e.target.value)}>
@@ -3205,7 +3206,8 @@ function SolicitacaoForm({ onClose, onSaved, defaults }) {
           <button className="btn btn-primary full" onClick={salvar} disabled={saving}>{saving ? "Enviando..." : "Encaminhar pro suporte"}</button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
 
