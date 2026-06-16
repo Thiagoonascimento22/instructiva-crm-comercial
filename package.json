@@ -1,27 +1,19 @@
 {
-  "name": "suporte-instructiva",
+  "name": "instructiva-crm-comercial",
   "version": "1.0.0",
+  "private": true,
   "type": "module",
-  "description": "Sistema de Controle de Atendimento ao Aluno - Instructiva",
   "scripts": {
-    "dev": "concurrently \"npm run dev:server\" \"npm run dev:client\"",
-    "dev:server": "node server/index.js",
-    "dev:client": "vite",
+    "dev": "vite",
     "build": "vite build",
-    "postinstall": "vite build",
-    "start": "node server/index.js"
+    "start": "node server/index.js",
+    "postinstall": "vite build"
   },
   "dependencies": {
-    "express": "^4.21.0",
-    "cors": "^2.8.5",
+    "@vitejs/plugin-react": "^4.3.1",
+    "express": "^4.19.2",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
-    "recharts": "^2.12.7",
-    "lucide-react": "^0.383.0"
-  },
-  "devDependencies": {
-    "@vitejs/plugin-react": "^4.3.1",
-    "concurrently": "^9.0.1",
-    "vite": "^5.4.8"
+    "vite": "^5.4.2"
   }
 }
