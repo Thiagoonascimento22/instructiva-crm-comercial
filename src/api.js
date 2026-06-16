@@ -1,105 +1,61 @@
-const TOKEN_KEY = "instructiva_crm_token";
+// Camada de comunicação com o backend.
+// Guarda o token em memória + localStorage para manter login entre recarregamentos.
 
-export function getToken() {
-  return localStorage.getItem(TOKEN_KEY) || "";
-}
-export function setToken(t) {
-  if (t) localStorage.setItem(TOKEN_KEY, t);
-  else localStorage.removeItem(TOKEN_KEY);
+let token = localStorage.getItem("instructiva_token") || null;
+
+function setToken(t) {
+  token = t;
+  if (t) localStorage.setItem("instructiva_token", t);
+  else localStorage.removeItem("instructiva_token");
 }
 
-async function req(method, url, body) {
+async function req(method, path, body) {
   const headers = { "Content-Type": "application/json" };
-  const t = getToken();
-  if (t) headers.Authorization = "Bearer " + t;
-  const res = await fetch(url, {
+  if (token) headers.Authorization = "Bearer " + token;
+  const r = await fetch("/api" + path, {
     method,
     headers,
     body: body ? JSON.stringify(body) : undefined,
   });
-  let data = null;
-  try {
-    data = await res.json();
-  } catch (_) {}
-  if (!res.ok) {
-    const msg = (data && data.error) || "Erro " + res.status;
-    const err = new Error(msg);
-    err.status = res.status;
-    throw err;
-  }
+  let data = {};
+  try { data = await r.json(); } catch {}
+  if (!r.ok) throw new Error(data.error || "erro na requisição");
   return data;
 }
 
 export const api = {
-  login: (login, senha) => req("POST", "/api/login", { login, senha }),
-  me: () => req("GET", "/api/me"),
-  updateMe: (dados) => req("PUT", "/api/me", dados),
-
-  listUsers: () => req("GET", "/api/users"),
-  createUser: (dados) => req("POST", "/api/users", dados),
-  updateUser: (id, dados) => req("PUT", "/api/users/" + id, dados),
-  deleteUser: (id) => req("DELETE", "/api/users/" + id),
-
-  listCards: (responsavel) =>
-    req("GET", "/api/cards" + (responsavel ? "?responsavel=" + responsavel : "")),
-  createCard: (dados) => req("POST", "/api/cards", dados),
-  updateCard: (id, dados) => req("PUT", "/api/cards/" + id, dados),
-  deleteCard: (id) => req("DELETE", "/api/cards/" + id),
-  importCards: (dados) => req("POST", "/api/cards/import", dados),
-  bulkCards: (dados) => req("POST", "/api/cards/bulk", dados),
-  listVendedores: () => req("GET", "/api/vendedores"),
-
-  // WhatsApp
-  waConfig: () => req("GET", "/api/wa/config"),
-  waSetConfig: (dados) => req("PUT", "/api/wa/config", dados),
-  waMinha: () => req("GET", "/api/wa/minha"),
-  waChats: (instance, q, arquivadas) =>
-    req("GET", "/api/wa/chats" + (() => {
-      const p = [instance ? "instance=" + encodeURIComponent(instance) : "", q ? "q=" + encodeURIComponent(q) : "", arquivadas ? "arquivadas=1" : ""].filter(Boolean);
-      return p.length ? "?" + p.join("&") : "";
-    })()),
-  waChat: (id) => req("GET", "/api/wa/chats/" + id),
-  waSendMidia: (id, dados) => req("POST", "/api/wa/chats/" + id + "/send-midia", dados),
-  waArquivar: (id, arquivar) => req("POST", "/api/wa/chats/" + id + "/arquivar", { arquivar }),
-  midiaUrl: (chatId, mid) => "/api/wa/midia/" + encodeURIComponent(chatId) + "/" + encodeURIComponent(mid),
-  midiaBlob: async (chatId, mid) => {
-    const t = getToken();
-    const res = await fetch(api.midiaUrl(chatId, mid), { headers: t ? { Authorization: "Bearer " + t } : {} });
-    if (!res.ok) { let e = "Erro " + res.status; try { const j = await res.json(); e = j.error || e; } catch (_) {} throw new Error(e); }
-    return URL.createObjectURL(await res.blob());
-  },
-  waSend: (id, texto) => req("POST", "/api/wa/chats/" + id + "/send", { texto }),
-  waEncerrar: (id, encerrar) => req("POST", "/api/wa/chats/" + id + "/encerrar", { encerrar }),
-  nps: (desde, ate, vendedorId) => req("GET", `/api/nps?desde=${desde || 0}&ate=${ate || Date.now()}` + (vendedorId ? `&vendedorId=${encodeURIComponent(vendedorId)}` : "")),
-  waIniciar: (dados) => req("POST", "/api/wa/iniciar", dados),
-  waConnect: (instance) =>
-    req("POST", "/api/wa/connect", { instance, publicUrl: window.location.origin }),
-  waStatus: (instance) => req("GET", "/api/wa/status/" + instance),
-  waInstanciasEvolution: () => req("GET", "/api/wa/instancias-evolution"),
-  waLogout: (instance) => req("POST", "/api/wa/logout/" + instance),
-  waDeleteInstance: (instance) => req("DELETE", "/api/wa/instance/" + instance),
-
-  // IA
-  iaEquipe: (desde, ate) => req("POST", "/api/ia/equipe", { desde: desde || 0, ate: ate || Date.now() }),
-  iaVendedor: (id, desde, ate) => req("POST", "/api/ia/vendedor/" + id, { desde: desde || 0, ate: ate || Date.now() }),
-
-  // Monitoria
-  horario: () => req("GET", "/api/horario"),
-  setHorario: (h) => req("PUT", "/api/horario", h),
-  monitoria: (desde, ate) => req("GET", `/api/monitoria?desde=${desde || 0}&ate=${ate || Date.now()}`),
-  monitoriaVendedor: (id, desde, ate) => req("GET", `/api/monitoria/vendedor/${id}?desde=${desde || 0}&ate=${ate || Date.now()}`),
-  monitoriaEvolucao: (desde, ate, vendedorId) => req("GET", `/api/monitoria/evolucao?desde=${desde || 0}&ate=${ate || Date.now()}${vendedorId ? "&vendedorId=" + vendedorId : ""}`),
-
-  // Solicitações de suporte
-  solicitacoes: (status) => req("GET", "/api/solicitacoes" + (status ? "?status=" + encodeURIComponent(status) : "")),
-  criarSolicitacao: (dados) => req("POST", "/api/solicitacoes", dados),
-  enviarMensagemSolic: (id, texto, anexo) => req("POST", "/api/solicitacoes/" + id + "/mensagem", { texto, anexo }),
-  abrirChatAnexo: async (id, anexoId) => {
+  get token() { return token; },
+  setToken,
+  // auth
+  login: (login, senha) => req("POST", "/login", { login, senha }),
+  logout: () => req("POST", "/logout"),
+  me: () => req("GET", "/me"),
+  updateMe: (payload) => req("PUT", "/me", payload),
+  // users
+  listUsers: () => req("GET", "/users"),
+  listUserNames: () => req("GET", "/users/names"),
+  createUser: (payload) => req("POST", "/users", payload),
+  updateUser: (id, payload) => req("PUT", "/users/" + id, payload),
+  deleteUser: (id) => req("DELETE", "/users/" + id),
+  // records
+  listRecords: () => req("GET", "/records"),
+  createRecord: (payload) => req("POST", "/records", payload),
+  updateRecord: (id, payload) => req("PUT", "/records/" + id, payload),
+  deleteRecord: (id) => req("DELETE", "/records/" + id),
+  // tasks
+  listTasks: () => req("GET", "/tasks"),
+  createTask: (payload) => req("POST", "/tasks", payload),
+  updateTask: (id, payload) => req("PUT", "/tasks/" + id, payload),
+  deleteTask: (id) => req("DELETE", "/tasks/" + id),
+  // ia
+  analise: (colaboradoraId) => req("POST", "/analise", colaboradoraId ? { colaboradoraId } : {}),
+  // solicitações (vindas do comercial)
+  solicitacoes: () => req("GET", "/solicitacoes"),
+  abrirAnexo: async (solId, anexoId) => {
     const win = window.open("", "_blank");
     try {
-      const t = getToken();
-      const r = await fetch("/api/solicitacoes/" + id + "/chat-anexo/" + anexoId, { headers: t ? { Authorization: "Bearer " + t } : {} });
-      if (!r.ok) { let msg = "não foi possível abrir o anexo"; try { const j = await r.json(); if (j && j.error) msg = j.error; } catch (_) {} throw new Error(msg); }
+      const r = await fetch("/api/solic/anexo/" + solId + "/" + anexoId, { headers: token ? { Authorization: "Bearer " + token } : {} });
+      if (!r.ok) { let msg = ""; try { const j = await r.json(); if (j && j.error) msg = j.error; } catch (_) {} if (!msg) msg = "não foi possível abrir o anexo (erro " + r.status + ")"; throw new Error(msg); }
       const blob = await r.blob();
       const url = URL.createObjectURL(blob);
       if (win) { win.location.href = url; }
@@ -113,11 +69,28 @@ export const api = {
       setTimeout(() => URL.revokeObjectURL(url), 60000);
     } catch (e) { if (win) win.close(); throw e; }
   },
-  marcarChatVisto: (id) => req("POST", "/api/solicitacoes/" + id + "/visto"),
-  sincronizarSolic: (id) => req("GET", "/api/solicitacoes/" + id + "/sync"),
-  excluirSolicitacao: (id) => req("DELETE", "/api/solicitacoes/" + id),
-  statusSolicitacao: (id, status, resposta) => req("PATCH", "/api/solicitacoes/" + id, { status, resposta }),
-  marcarSolicitacoesVistas: () => req("POST", "/api/solicitacoes/marcar-vistas"),
-  solicitacoesRelatorio: (desde, ate) => req("GET", `/api/solicitacoes/relatorio?desde=${desde || 0}&ate=${ate || Date.now()}`),
-  solicitacoesIA: (desde, ate) => req("GET", `/api/solicitacoes/ia?desde=${desde || 0}&ate=${ate || Date.now()}`),
+  solicAceitar: (id) => req("POST", "/solicitacoes/" + id + "/aceitar"),
+  solicConcluir: (id, resposta) => req("POST", "/solicitacoes/" + id + "/concluir", { resposta }),
+  solicMensagem: (id, texto, anexo) => req("POST", "/solicitacoes/" + id + "/mensagem", { texto, anexo }),
+  solicVisto: (id) => req("POST", "/solicitacoes/" + id + "/visto"),
+  solicExcluir: (id) => req("DELETE", "/solicitacoes/" + id),
+  solicReabrir: (id) => req("POST", "/solicitacoes/" + id + "/reabrir"),
+  // whatsapp
+  waGetConfig: () => req("GET", "/wa/config"),
+  waSetConfig: (payload) => req("PUT", "/wa/config", payload),
+  waListChats: (instance) => req("GET", "/wa/chats" + (instance ? "?instance=" + encodeURIComponent(instance) : "")),
+  waGetChat: (id) => req("GET", "/wa/chats/" + encodeURIComponent(id)),
+  waSend: (id, texto) => req("POST", "/wa/send", { id, texto }),
+  waSendMedia: (payload) => req("POST", "/wa/send-media", payload),
+  waSendAudio: (id, base64) => req("POST", "/wa/send-audio", { id, base64 }),
+  waConnectInstance: (instance) => req("POST", "/wa/instance/connect", { instance }),
+  waInstanceStatus: (nome) => req("GET", "/wa/instance/status/" + encodeURIComponent(nome)),
+  waMinhaInstancia: () => req("GET", "/wa/minha-instancia"),
+  waLogoutInstance: (nome) => req("POST", "/wa/instance/logout/" + encodeURIComponent(nome)),
+  waDeleteInstance: (nome) => req("DELETE", "/wa/instance/" + encodeURIComponent(nome)),
+  waLimparFantasmas: () => req("POST", "/wa/limpar-fantasmas"),
+  waBaixarMidia: (id, mediaMsgId) => req("POST", "/wa/media", { id, mediaMsgId }),
+  waNovaConversa: (instance, numero, texto) => req("POST", "/wa/nova-conversa", { instance, numero, texto }),
+  waInstanciasEvolution: () => req("GET", "/wa/instancias-evolution"),
+  waLimparConversas: () => req("POST", "/wa/limpar-conversas"),
 };
