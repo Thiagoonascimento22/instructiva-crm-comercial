@@ -2957,3 +2957,75 @@ h1, h2, h3, h4, .topbar .greet, .panel-h h3, .login-card .ttl, .login-card h2, .
 .dispm-next:hover:not(:disabled) { transform: translateY(-1px); }
 .dispm-next:disabled { opacity: .45; cursor: not-allowed; box-shadow: none; }
 .dispm-next.disparar { background: linear-gradient(135deg, #12b76a, #059669); box-shadow: 0 12px 28px -12px rgba(16,185,129,.5); }
+
+/* ============================================================
+   DARK MODE — ajustes do canal oficial e disparo
+   ============================================================ */
+/* hero: usa variáveis + gradiente que funciona nos dois temas */
+.disp-hero {
+  background: linear-gradient(135deg, rgba(255,122,26,.10) 0%, var(--card) 60%);
+}
+[data-theme="dark"] .disp-hero {
+  background: linear-gradient(135deg, rgba(255,122,26,.14) 0%, var(--surface-2) 60%);
+  border-color: var(--line);
+}
+.disp-hero-titulo { color: var(--text); }
+.disp-hero-sub { color: var(--muted); }
+
+/* cards de campanha no dark */
+[data-theme="dark"] .disp-camp-card { background: var(--surface-2); border-color: var(--line); }
+[data-theme="dark"] .disp-camp-card:hover { border-color: var(--brand); }
+
+/* seleção de número/template/modo nos modais: trocar o #fff6ef fixo */
+[data-theme="dark"] .dispm { background: var(--card); }
+[data-theme="dark"] .dispm-num,
+[data-theme="dark"] .dispm-tpl,
+[data-theme="dark"] .dispm-modo-btn { background: var(--surface-2); }
+[data-theme="dark"] .dispm-num.on,
+[data-theme="dark"] .dispm-tpl.on,
+[data-theme="dark"] .dispm-modo-btn.on { background: rgba(255,122,26,.16); border-color: var(--brand); }
+[data-theme="dark"] .dispm-num-ico { background: rgba(16,185,129,.18); }
+[data-theme="dark"] .dispm-rev { background: var(--surface-2); }
+[data-theme="dark"] .dispm-close { background: var(--surface-2); }
+[data-theme="dark"] .dispm-close:hover { background: var(--line); }
+[data-theme="dark"] .dispm-bola { background: var(--surface-2); }
+[data-theme="dark"] .dispm-passo.done .dispm-bola { background: var(--card); }
+
+/* abas internas (Disparo/Vendedores/Templates/Números) no dark */
+[data-theme="dark"] .of-tab { background: var(--surface-2); border-color: var(--line); color: var(--muted); }
+[data-theme="dark"] .of-tab:hover { color: var(--text); }
+
+/* prévia da mensagem (bolha verde) mantém legível no dark */
+[data-theme="dark"] .dispm-previa-bolha,
+[data-theme="dark"] .of-msg.me .of-msg-bubble,
+[data-theme="dark"] .wz-preview-bubble { background: #1f6e4d; color: #eafff4; }
+
+/* templates: linhas e selos no dark */
+[data-theme="dark"] .of-tpl-row { background: var(--surface-2); border-color: var(--line); }
+
+/* vendedores no dark */
+[data-theme="dark"] .of-vend { background: var(--surface-2); }
+[data-theme="dark"] .of-vend.on { background: var(--card); }
+
+/* números no dark */
+[data-theme="dark"] .of-num { background: var(--surface-2); }
+
+/* modal de métricas no dark */
+[data-theme="dark"] .mm-big-card { background: var(--surface-2); }
+
+/* inbox oficial no dark */
+[data-theme="dark"] .of-inbox { background: var(--card); }
+[data-theme="dark"] .of-conv-msgs { background: var(--bg); }
+[data-theme="dark"] .of-msg.them .of-msg-bubble { background: var(--surface-2); color: var(--text); }
+[data-theme="dark"] .of-conv-input input,
+[data-theme="dark"] .dispm-textarea { background: var(--surface-2); color: var(--text); border-color: var(--line); }
+[data-theme="dark"] .of-chat-item:hover { background: var(--surface-2); }
+[data-theme="dark"] .of-transfer-pop { background: var(--card); border-color: var(--line); }
+[data-theme="dark"] .of-acao-btn { background: var(--surface-2); border-color: var(--line); }
+
+/* nota interna (transferência) legível no dark */
+[data-theme="dark"] .of-nota { background: rgba(255,181,71,.16); color: #ffce80; }
+
+/* botão encerrar atendimento */
+.of-acao-btn.fim:hover { border-color: var(--coral); color: var(--coral); }
+[data-theme="dark"] .of-acao-btn.fim:hover { border-color: var(--coral); color: var(--coral); }

@@ -496,6 +496,8 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
   app.get("/api/oficial/chats", auth, (req, res) => {
     const q = String(req.query.q || "").trim().toLowerCase();
     let chats = Object.values(db.waChats).filter((c) => c.canal === "oficial");
+    const incluirEncerrados = String(req.query.encerrados || "") === "1";
+    if (!incluirEncerrados) chats = chats.filter((c) => !c.encerrado);
     if (req.user.role !== "gerente") {
       // vendedor: só os atribuídos a ele E que o lead já respondeu
       // (conversa de disparo sem resposta fica invisível pro vendedor)
@@ -617,6 +619,24 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
         .filter((u) => u.role === "vendedor" && u.ativo)
         .map((u) => ({ id: u.id, nome: u.nome, oficialAtivo: !!u.oficialAtivo }))
     );
+  });
+
+  /* encerrar atendimento (some da lista ativa do vendedor) */
+  app.post("/api/oficial/chats/:id/encerrar", auth, (req, res) => {
+    const chat = db.waChats[req.params.id];
+    if (!chat || chat.canal !== "oficial") return res.status(404).json({ error: "Conversa não encontrada" });
+    if (req.user.role !== "gerente" && chat.vendedorId !== req.user.id) {
+      return res.status(403).json({ error: "Sem acesso a essa conversa" });
+    }
+    const encerrar = req.body && req.body.encerrar !== false; // default true
+    chat.encerrado = !!encerrar;
+    if (encerrar) {
+      chat.encerradoEm = Date.now();
+      if (!Array.isArray(chat.notas)) chat.notas = [];
+      chat.notas.push({ tipo: "encerrado", texto: `${req.user.nome} encerrou o atendimento`, ts: Date.now(), por: req.user.nome });
+    }
+    salvar();
+    res.json({ ok: true, encerrado: chat.encerrado });
   });
 
   /* limpar conversas de teste/órfãs (gerente) */

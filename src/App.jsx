@@ -1761,7 +1761,7 @@ function OficialNumeros({ showToast }) {
 /* ============================================================
    INBOX OFICIAL — usado tanto pelo gerente quanto pelo vendedor
    ============================================================ */
-function InboxOficial({ isGer, showToast }) {
+function InboxOficial({ isGer, showToast, onIrParaEvolution }) {
   const [chats, setChats] = useState([]);
   const [sel, setSel] = useState(null);
   const [conversa, setConversa] = useState(null);
@@ -1808,6 +1808,29 @@ function InboxOficial({ isGer, showToast }) {
       carregarLista();
       setShowTransfer(false);
       showToast("Conversa transferida");
+    } catch (e) { showToast(e.message); }
+  }
+
+  async function chamarPeloMeu() {
+    if (!conversa) return;
+    if (!confirm(`Abrir uma conversa NOVA com ${conversa.nome} pelo seu WhatsApp?\n\nIsso inicia um atendimento do zero no seu número (não continua o oficial).`)) return;
+    try {
+      await api.waIniciar({ numero: conversa.numero, texto: "Olá! Tudo bem?" });
+      showToast("Conversa aberta no seu WhatsApp!");
+      if (onIrParaEvolution) onIrParaEvolution();
+    } catch (e) {
+      showToast(e.message || "Não foi possível abrir. Verifique se seu WhatsApp está conectado.");
+    }
+  }
+
+  async function encerrar() {
+    if (!sel) return;
+    if (!confirm("Encerrar este atendimento? Ele sai da sua lista de conversas ativas.")) return;
+    try {
+      await api.ofEncerrar(sel);
+      showToast("Atendimento encerrado");
+      setSel(null);
+      carregarLista();
     } catch (e) { showToast(e.message); }
   }
 
@@ -1889,11 +1912,19 @@ function InboxOficial({ isGer, showToast }) {
               </div>
               {conversa.origemDisparo && conversa.campanha && <span className="of-pill">{conversa.campanha}</span>}
               <div className="of-conv-acoes">
+                {!isGer && (
+                  <button className="of-acao-btn" title="Abrir conversa com este lead pelo seu WhatsApp" onClick={() => chamarPeloMeu()}>
+                    <I.wa className="ico" /> Meu número
+                  </button>
+                )}
                 <button className="of-acao-btn" title="Transferir para outro vendedor" onClick={() => setShowTransfer((v) => !v)}>
                   <I.users className="ico" /> Transferir
                 </button>
                 <button className="of-acao-btn sup" title="Pedir ajuda ao suporte" onClick={() => setPedindoSuporte(true)}>
                   <I.suporte className="ico" /> Suporte
+                </button>
+                <button className="of-acao-btn fim" title="Encerrar atendimento" onClick={() => encerrar()}>
+                  <I.check className="ico" /> Encerrar
                 </button>
               </div>
               {showTransfer && (
@@ -2247,7 +2278,7 @@ function WhatsApp({ user, showToast, target, onTargetUsed, recarregarSol }) {
       </div>
 
       {canalAba === "oficial" ? (
-        <InboxOficial isGer={isGer} showToast={showToast} />
+        <InboxOficial isGer={isGer} showToast={showToast} onIrParaEvolution={() => setCanalAba("evolution")} />
       ) : semEvolution ? (
         <div className="wa-grid"><div className="wa-none">
           <I.wa className="ico" />
