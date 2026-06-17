@@ -166,6 +166,7 @@ export default function App() {
   const titulos = {
     painel: { t: "Monitoria de Atendimento", s: "Acompanhe a produtividade e a agilidade do time" },
     whatsapp: { t: "WhatsApp", s: "Acompanhe as conversas dos atendentes" },
+    oficial: { t: "Disparo Oficial", s: "Disparo em massa e distribuição automática de leads" },
     minhasSolicitacoes: { t: "Minhas solicitações", s: "Acompanhe seus pedidos ao suporte" },
     ia: { t: "Análise Inteligente", s: "A IA avalia a qualidade do atendimento" },
     nps: { t: "NPS / Satisfação", s: "Notas da pesquisa, por vendedor e período" },
@@ -186,6 +187,7 @@ export default function App() {
         <nav className="nav">
           {!isSuporte && <NavBtn ic={I.dash} label={isGer ? "Monitoria" : "Meu Painel"} active={view === "painel"} onClick={() => setView("painel")} />}
           {!isSuporte && <NavBtn ic={I.wa} label="WhatsApp" active={view === "whatsapp"} onClick={() => setView("whatsapp")} />}
+          {isGer && <NavBtn ic={I.send} label="Disparo Oficial" active={view === "oficial"} onClick={() => setView("oficial")} />}
           {!isGer && !isSuporte && <NavBtn ic={I.suporte} label="Minhas solicitações" active={view === "minhasSolicitacoes"} badge={badgeSol} onClick={() => setView("minhasSolicitacoes")} />}
           {isGer && <NavBtn ic={I.spark} label="Análise IA" active={view === "ia"} onClick={() => setView("ia")} />}
           {isGer && <NavBtn ic={I.estrela} label="NPS" active={view === "nps"} onClick={() => setView("nps")} />}
@@ -219,6 +221,7 @@ export default function App() {
         <div className="content">
           {view === "painel" && !isSuporte && <Monitoria user={user} showToast={showToast} />}
           {view === "whatsapp" && !isSuporte && <WhatsApp user={user} showToast={showToast} target={waTarget} onTargetUsed={() => setWaTarget(null)} recarregarSol={carregarMinhasSol} />}
+          {view === "oficial" && isGer && <PaginaOficial showToast={showToast} />}
           {view === "minhasSolicitacoes" && !isGer && !isSuporte && <PaginaMinhasSolicitacoes itens={minhasSol} recarregar={carregarMinhasSol} showToast={showToast} />}
           {view === "ia" && isGer && <PaginaIA user={user} showToast={showToast} />}
           {view === "nps" && isGer && <PaginaNPS showToast={showToast} />}
@@ -1075,8 +1078,538 @@ function MidiaMsg({ chatId, m }) {
    ============================================================ */
 const EMOJIS = ["😀","😅","😂","🙂","😉","😍","😎","🤝","👍","👏","🙏","🔥","✅","❌","⚠️","💰","📌","📎","🎉","❤️","🤔","😅","😢","😡","👋","💪","📞","📲","🕐","🙌","✨","😊"];
 
+/* ============================================================
+   CANAL OFICIAL — TELAS (gerente: disparo/vendedores/números)
+   ============================================================ */
+function PaginaOficial({ showToast }) {
+  const [aba, setAba] = useState("disparo");
+  return (
+    <div className="of-wrap">
+      <div className="of-tabs">
+        <button className={aba === "disparo" ? "of-tab on" : "of-tab"} onClick={() => setAba("disparo")}>
+          <I.send className="ico" /> Disparo
+        </button>
+        <button className={aba === "inbox" ? "of-tab on" : "of-tab"} onClick={() => setAba("inbox")}>
+          <I.chat className="ico" /> Conversas
+        </button>
+        <button className={aba === "vendedores" ? "of-tab on" : "of-tab"} onClick={() => setAba("vendedores")}>
+          <I.users className="ico" /> Vendedores
+        </button>
+        <button className={aba === "numeros" ? "of-tab on" : "of-tab"} onClick={() => setAba("numeros")}>
+          <I.wa className="ico" /> Números
+        </button>
+      </div>
+      <div className="of-body">
+        {aba === "disparo" && <OficialDisparo showToast={showToast} />}
+        {aba === "inbox" && <InboxOficial isGer={true} showToast={showToast} />}
+        {aba === "vendedores" && <OficialVendedores showToast={showToast} />}
+        {aba === "numeros" && <OficialNumeros showToast={showToast} />}
+      </div>
+    </div>
+  );
+}
+
+/* ---------- DISPARO EM MASSA ---------- */
+function OficialDisparo({ showToast }) {
+  const [numeros, setNumeros] = useState([]);
+  const [numeroId, setNumeroId] = useState("");
+  const [templates, setTemplates] = useState([]);
+  const [carregandoTpl, setCarregandoTpl] = useState(false);
+  const [template, setTemplate] = useState(null);
+  const [contatos, setContatos] = useState([]);
+  const [nomeCampanha, setNomeCampanha] = useState("");
+  const [enviando, setEnviando] = useState(false);
+  const [campanhas, setCampanhas] = useState([]);
+  const fileRef = useRef(null);
+
+  const carregarCampanhas = () => api.ofCampanhas().then(setCampanhas).catch(() => {});
+
+  useEffect(() => {
+    api.ofNumeros().then((ns) => {
+      const ativos = ns.filter((n) => n.ativo);
+      setNumeros(ativos);
+      if (ativos[0]) setNumeroId(ativos[0].id);
+    }).catch(() => {});
+    carregarCampanhas();
+  }, []);
+
+  useEffect(() => {
+    if (!numeroId) { setTemplates([]); setTemplate(null); return; }
+    setCarregandoTpl(true);
+    api.ofTemplates(numeroId)
+      .then((r) => { setTemplates(r.templates || []); })
+      .catch((e) => { showToast(e.message); setTemplates([]); })
+      .finally(() => setCarregandoTpl(false));
+    setTemplate(null);
+  }, [numeroId]);
+
+  function lerCSV(file) {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const txt = String(reader.result || "");
+      const linhas = txt.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+      const out = [];
+      for (const l of linhas) {
+        // aceita: telefone  OU  telefone,nome  OU  nome,telefone
+        const partes = l.split(/[,;\t]/).map((p) => p.trim());
+        let telefone = "", nome = "";
+        for (const p of partes) {
+          const dig = p.replace(/\D/g, "");
+          if (dig.length >= 10 && !telefone) telefone = dig;
+          else if (p && !/^\d+$/.test(p) && !nome) nome = p;
+        }
+        if (telefone) out.push({ telefone, nome });
+      }
+      // remove cabeçalho se a 1ª linha não tiver telefone válido
+      setContatos(out);
+      if (!out.length) showToast("Nenhum telefone válido encontrado no arquivo");
+    };
+    reader.readAsText(file);
+  }
+
+  async function disparar() {
+    if (!numeroId) return showToast("Escolha um número");
+    if (!template) return showToast("Escolha um template");
+    if (!contatos.length) return showToast("Suba a lista de contatos");
+    if (!confirm(`Disparar "${template.name}" para ${contatos.length} contato(s)?`)) return;
+    setEnviando(true);
+    try {
+      const r = await api.ofDisparar({
+        numeroId,
+        template: template.name,
+        idioma: template.language,
+        nomeCampanha: nomeCampanha || template.name,
+        contatos,
+      });
+      showToast(`Disparo iniciado para ${r.total} contato(s)!`);
+      setContatos([]);
+      setNomeCampanha("");
+      if (fileRef.current) fileRef.current.value = "";
+      setTimeout(carregarCampanhas, 1500);
+    } catch (e) {
+      showToast(e.message);
+    } finally {
+      setEnviando(false);
+    }
+  }
+
+  if (numeros.length === 0) {
+    return (
+      <div className="dash-empty">
+        <I.wa className="ico-empty" />
+        <p>Nenhum número oficial cadastrado ainda.</p>
+        <p className="panel-sub">Vá na aba <b>Números</b> e cadastre o número da Meta para começar.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="of-grid">
+      <div className="panel">
+        <div className="panel-h"><I.send className="ico" /> Novo disparo</div>
+
+        <div className="field">
+          <label className="lab">Número de envio</label>
+          <select className="select" value={numeroId} onChange={(e) => setNumeroId(e.target.value)}>
+            {numeros.map((n) => (
+              <option key={n.id} value={n.id}>{n.apelido}{n.numero ? " · " + n.numero : ""}</option>
+            ))}
+          </select>
+        </div>
+
+        <div className="field">
+          <label className="lab">Template aprovado</label>
+          {carregandoTpl ? (
+            <div className="panel-sub"><span className="spin" /> Carregando templates…</div>
+          ) : templates.length === 0 ? (
+            <div className="panel-sub">Nenhum template aprovado nesse número.</div>
+          ) : (
+            <div className="of-tpl-list">
+              {templates.map((t) => (
+                <button
+                  key={t.name + t.language}
+                  className={template && template.name === t.name && template.language === t.language ? "of-tpl on" : "of-tpl"}
+                  onClick={() => setTemplate(t)}
+                >
+                  <div className="of-tpl-top">
+                    <b>{t.name}</b>
+                    <span className="of-tag">{t.language}</span>
+                  </div>
+                  <div className="of-tpl-txt">{t.texto || "(sem corpo de texto)"}</div>
+                  {t.vars > 0 && <div className="of-tpl-vars">⚠️ usa {t.vars} variável(eis) — preencha no CSV após o telefone</div>}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div className="field">
+          <label className="lab">Nome da campanha (opcional)</label>
+          <input className="input" placeholder="Ex: Disparo Inversor Solar" value={nomeCampanha} onChange={(e) => setNomeCampanha(e.target.value)} />
+        </div>
+
+        <div className="field">
+          <label className="lab">Lista de contatos (CSV ou TXT)</label>
+          <input ref={fileRef} className="input" type="file" accept=".csv,.txt" onChange={(e) => e.target.files[0] && lerCSV(e.target.files[0])} />
+          <div className="panel-sub">Formato: um por linha — <code>telefone</code> ou <code>telefone,nome</code>. O DDI 55 é adicionado automaticamente.</div>
+          {contatos.length > 0 && <div className="of-count">✅ {contatos.length} contato(s) carregado(s)</div>}
+        </div>
+
+        <button className="btn btn-primary full" disabled={enviando} onClick={disparar}>
+          {enviando ? <><span className="spin" /> Disparando…</> : <>Disparar para {contatos.length || 0} contato(s)</>}
+        </button>
+      </div>
+
+      <div className="panel">
+        <div className="panel-h"><I.dash className="ico" /> Campanhas recentes</div>
+        {campanhas.length === 0 ? (
+          <div className="panel-sub">Nenhuma campanha disparada ainda.</div>
+        ) : (
+          <div className="of-camp-list">
+            {campanhas.map((c) => (
+              <div key={c.id} className="of-camp">
+                <div className="of-camp-top">
+                  <b>{c.nome}</b>
+                  <span className="of-tag">{new Date(c.criadoEm).toLocaleDateString("pt-BR")}</span>
+                </div>
+                <div className="of-camp-stats">
+                  <span className="ok">✅ {c.enviados} enviados</span>
+                  {c.falhas > 0 && <span className="err">❌ {c.falhas} falhas</span>}
+                  <span className="tot">de {c.total}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+        <button className="btn btn-sm" style={{ marginTop: 10 }} onClick={carregarCampanhas}><I.refresh className="ico" /> Atualizar</button>
+      </div>
+    </div>
+  );
+}
+
+/* ---------- VENDEDORES (ativo + percentual) ---------- */
+function OficialVendedores({ showToast }) {
+  const [vends, setVends] = useState([]);
+  const [carregando, setCarregando] = useState(true);
+
+  const carregar = () => {
+    setCarregando(true);
+    api.ofVendedores().then(setVends).catch((e) => showToast(e.message)).finally(() => setCarregando(false));
+  };
+  useEffect(carregar, []);
+
+  async function toggle(v) {
+    try {
+      const r = await api.ofEditarVendedor(v.id, { oficialAtivo: !v.oficialAtivo });
+      setVends((xs) => xs.map((x) => x.id === v.id ? { ...x, ...r } : x));
+    } catch (e) { showToast(e.message); }
+  }
+  async function setPct(v, pct) {
+    try {
+      const r = await api.ofEditarVendedor(v.id, { oficialPercentual: pct });
+      setVends((xs) => xs.map((x) => x.id === v.id ? { ...x, ...r } : x));
+    } catch (e) { showToast(e.message); }
+  }
+  async function zerar() {
+    if (!confirm("Zerar todos os contadores de leads recebidos? A distribuição recomeça do zero.")) return;
+    try { await api.ofZerarContadores(); carregar(); showToast("Contadores zerados"); }
+    catch (e) { showToast(e.message); }
+  }
+
+  const ativos = vends.filter((v) => v.oficialAtivo);
+  const somaPct = ativos.reduce((s, v) => s + (Number(v.oficialPercentual) || 0), 0);
+
+  if (carregando) return <div className="dash-empty"><span className="spin" /> Carregando…</div>;
+  if (vends.length === 0) {
+    return (
+      <div className="dash-empty">
+        <I.users className="ico-empty" />
+        <p>Nenhum vendedor cadastrado.</p>
+        <p className="panel-sub">Vá em <b>Equipe & Acessos</b> e crie os vendedores primeiro.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="panel">
+      <div className="panel-h"><I.users className="ico" /> Distribuição de leads</div>
+      <div className="panel-sub">
+        Ligue quem está atendendo agora e defina o percentual de cada um. Os leads que responderem ao disparo
+        são distribuídos automaticamente só entre os <b>ativos</b>, respeitando o percentual.
+      </div>
+
+      {ativos.length > 0 && somaPct !== 100 && somaPct !== 0 && (
+        <div className="of-aviso">
+          ⚠️ A soma dos percentuais dos ativos é {somaPct}% (não 100%). Funciona mesmo assim — o sistema
+          ajusta proporcionalmente — mas o ideal é somar 100%.
+        </div>
+      )}
+
+      <div className="of-vend-list">
+        {vends.map((v) => (
+          <div key={v.id} className={v.oficialAtivo ? "of-vend on" : "of-vend"}>
+            <button className={v.oficialAtivo ? "of-switch on" : "of-switch"} onClick={() => toggle(v)} title={v.oficialAtivo ? "Ativo — clique para pausar" : "Pausado — clique para ativar"}>
+              <span className="of-switch-dot" />
+            </button>
+            <div className="of-vend-nome">
+              <b>{v.nome}</b>
+              <span className="of-vend-sub">{v.oficialLeadsRecebidos || 0} leads recebidos</span>
+            </div>
+            <div className="of-vend-pct">
+              <input
+                type="number" min="0" max="100" className="input of-pct-input"
+                value={v.oficialPercentual || 0}
+                onChange={(e) => setPct(v, Number(e.target.value))}
+                disabled={!v.oficialAtivo}
+              />
+              <span>%</span>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <div className="of-vend-foot">
+        <div className="panel-sub"><b>{ativos.length}</b> ativo(s) · soma {somaPct}%</div>
+        <button className="btn btn-sm" onClick={zerar}><I.refresh className="ico" /> Zerar contadores</button>
+      </div>
+    </div>
+  );
+}
+
+/* ---------- NÚMEROS (pool da Cloud API) ---------- */
+function OficialNumeros({ showToast }) {
+  const [numeros, setNumeros] = useState([]);
+  const [form, setForm] = useState(null);
+  const [webhook, setWebhook] = useState(null);
+
+  const carregar = () => api.ofNumeros().then(setNumeros).catch((e) => showToast(e.message));
+  useEffect(() => {
+    carregar();
+    api.ofWebhookInfo(window.location.origin).then(setWebhook).catch(() => {});
+  }, []);
+
+  async function salvar() {
+    if (!form.apelido || !form.phoneNumberId || !form.token) {
+      return showToast("Preencha apelido, Phone Number ID e Token");
+    }
+    try {
+      if (form.id) await api.ofEditarNumero(form.id, form);
+      else await api.ofCriarNumero(form);
+      setForm(null); carregar(); showToast("Número salvo!");
+    } catch (e) { showToast(e.message); }
+  }
+  async function excluir(n) {
+    if (!confirm(`Excluir o número "${n.apelido}"?`)) return;
+    try { await api.ofExcluirNumero(n.id); carregar(); showToast("Número excluído"); }
+    catch (e) { showToast(e.message); }
+  }
+  async function testar(n) {
+    showToast("Testando conexão…");
+    try {
+      const r = await api.ofTemplates(n.id);
+      showToast(`✅ Conexão OK! ${(r.templates || []).length} template(s) aprovado(s).`);
+    } catch (e) { showToast("❌ " + e.message); }
+  }
+
+  return (
+    <div className="of-grid">
+      <div className="panel">
+        <div className="panel-h">
+          <I.wa className="ico" /> Números oficiais
+          <button className="btn btn-sm" style={{ marginLeft: "auto" }} onClick={() => setForm({ apelido: "", numero: "", phoneNumberId: "", wabaId: "", token: "" })}>
+            <I.plus className="ico" /> Adicionar
+          </button>
+        </div>
+        {numeros.length === 0 ? (
+          <div className="panel-sub">Nenhum número cadastrado. Clique em “Adicionar”.</div>
+        ) : (
+          <div className="of-num-list">
+            {numeros.map((n) => (
+              <div key={n.id} className="of-num">
+                <div className="of-num-info">
+                  <b>{n.apelido}</b>
+                  <span className="of-num-sub">{n.numero || "—"} · ID {n.phoneNumberId}</span>
+                </div>
+                <span className={n.ativo ? "of-badge ok" : "of-badge off"}>{n.ativo ? "Ativo" : "Inativo"}</span>
+                <button className="btn btn-sm" onClick={() => testar(n)} title="Testar conexão"><I.check className="ico" /></button>
+                <button className="btn btn-sm" onClick={() => setForm({ ...n, token: "" })} title="Editar"><I.cog className="ico" /></button>
+                <button className="btn btn-sm danger" onClick={() => excluir(n)} title="Excluir"><I.trash className="ico" /></button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {webhook && (
+        <div className="panel">
+          <div className="panel-h"><I.link className="ico" /> Webhook (configure na Meta)</div>
+          <div className="panel-sub">No app da Meta, em WhatsApp → Configuração → Webhook, cole estes dois valores:</div>
+          <div className="field">
+            <label className="lab">URL de callback</label>
+            <input className="input mono" readOnly value={webhook.url} onFocus={(e) => e.target.select()} />
+          </div>
+          <div className="field">
+            <label className="lab">Token de verificação</label>
+            <input className="input mono" readOnly value={webhook.verifyToken} onFocus={(e) => e.target.select()} />
+          </div>
+          <div className="panel-sub">Depois de verificar, ative o campo <b>messages</b> nos webhooks.</div>
+        </div>
+      )}
+
+      {form && (
+        <div className="modal" onClick={(e) => e.target === e.currentTarget && setForm(null)}>
+          <div className="modal-box">
+            <div className="mh"><b>{form.id ? "Editar número" : "Novo número oficial"}</b><button className="x-btn" onClick={() => setForm(null)}><I.x /></button></div>
+            <div className="mb">
+              <div className="field"><label className="lab">Apelido</label><input className="input" placeholder="Ex: Thalia" value={form.apelido} onChange={(e) => setForm({ ...form, apelido: e.target.value })} /></div>
+              <div className="field"><label className="lab">Número (opcional)</label><input className="input" placeholder="+5544997550996" value={form.numero} onChange={(e) => setForm({ ...form, numero: e.target.value })} /></div>
+              <div className="field"><label className="lab">Phone Number ID</label><input className="input mono" placeholder="copie da Meta" value={form.phoneNumberId} onChange={(e) => setForm({ ...form, phoneNumberId: e.target.value })} /></div>
+              <div className="field"><label className="lab">WABA ID</label><input className="input mono" placeholder="copie da Meta" value={form.wabaId} onChange={(e) => setForm({ ...form, wabaId: e.target.value })} /></div>
+              <div className="field"><label className="lab">Access Token {form.id && <span className="panel-sub">(deixe vazio p/ manter o atual)</span>}</label><input className="input mono" placeholder="EAA..." value={form.token} onChange={(e) => setForm({ ...form, token: e.target.value })} /></div>
+            </div>
+            <div className="mf">
+              <button className="btn" onClick={() => setForm(null)}>Cancelar</button>
+              <button className="btn btn-primary" onClick={salvar}>Salvar</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ============================================================
+   INBOX OFICIAL — usado tanto pelo gerente quanto pelo vendedor
+   ============================================================ */
+function InboxOficial({ isGer, showToast }) {
+  const [chats, setChats] = useState([]);
+  const [sel, setSel] = useState(null);
+  const [conversa, setConversa] = useState(null);
+  const [texto, setTexto] = useState("");
+  const [busca, setBusca] = useState("");
+  const [vendedores, setVendedores] = useState([]);
+  const fimRef = useRef(null);
+
+  const carregarLista = () => api.ofChats(busca).then(setChats).catch(() => {});
+  useEffect(() => {
+    carregarLista();
+    const t = setInterval(carregarLista, 5000);
+    if (isGer) api.ofVendedores().then(setVendedores).catch(() => {});
+    return () => clearInterval(t);
+  }, [busca]);
+
+  useEffect(() => {
+    if (!sel) { setConversa(null); return; }
+    const carregar = () => api.ofChat(sel).then(setConversa).catch(() => {});
+    carregar();
+    const t = setInterval(carregar, 4000);
+    return () => clearInterval(t);
+  }, [sel]);
+
+  useEffect(() => { if (fimRef.current) fimRef.current.scrollIntoView(); }, [conversa]);
+
+  async function enviar() {
+    if (!texto.trim() || !sel) return;
+    const t = texto;
+    setTexto("");
+    try {
+      await api.ofEnviar(sel, t);
+      api.ofChat(sel).then(setConversa).catch(() => {});
+    } catch (e) { showToast(e.message); setTexto(t); }
+  }
+  async function atribuir(vendedorId) {
+    if (!sel) return;
+    try { await api.ofAtribuir(sel, vendedorId); api.ofChat(sel).then(setConversa); carregarLista(); showToast("Lead reatribuído"); }
+    catch (e) { showToast(e.message); }
+  }
+
+  return (
+    <div className="of-inbox">
+      <div className="of-inbox-list">
+        <div className="of-inbox-search">
+          <I.search className="ico" />
+          <input placeholder="Buscar por nome ou número" value={busca} onChange={(e) => setBusca(e.target.value)} />
+        </div>
+        {chats.length === 0 ? (
+          <div className="of-inbox-empty">
+            <I.chat className="ico-empty" />
+            <p>Nenhuma conversa ainda.</p>
+            <p className="panel-sub">Quando um lead responder ao disparo, ele aparece aqui.</p>
+          </div>
+        ) : chats.map((c) => (
+          <button key={c.id} className={sel === c.id ? "of-chat-item on" : "of-chat-item"} onClick={() => setSel(c.id)}>
+            <div className="of-chat-av">{iniciais(c.nome)}</div>
+            <div className="of-chat-mid">
+              <div className="of-chat-nm">
+                {c.nome}
+                {c.origemDisparo && <span className="of-pill">OFICIAL · Disparo</span>}
+              </div>
+              <div className="of-chat-last">{c.ultima ? (c.ultima.role === "me" ? "Você: " : "") + c.ultima.content : "—"}</div>
+              {isGer && c.vendedorNome && <div className="of-chat-vend">→ {c.vendedorNome}</div>}
+              {isGer && !c.vendedorId && <div className="of-chat-vend sem">→ aguardando distribuição</div>}
+            </div>
+            <div className="of-chat-right">
+              <span className="of-chat-hora">{c.atualizadoEm ? horaCurta(c.atualizadoEm) : ""}</span>
+              {c.naoLidas > 0 && <span className="of-chat-badge">{c.naoLidas}</span>}
+            </div>
+          </button>
+        ))}
+      </div>
+
+      <div className="of-inbox-conv">
+        {!conversa ? (
+          <div className="of-inbox-empty big">
+            <I.chat className="ico-empty" />
+            <p>Selecione uma conversa</p>
+          </div>
+        ) : (
+          <>
+            <div className="of-conv-head">
+              <div className="of-chat-av">{iniciais(conversa.nome)}</div>
+              <div className="of-conv-info">
+                <b>{conversa.nome}</b>
+                <span>{conversa.numero}{conversa.origemDisparo && conversa.campanha ? " · " + conversa.campanha : ""}</span>
+              </div>
+              {conversa.origemDisparo && <span className="of-pill">OFICIAL · Disparo</span>}
+              {isGer && (
+                <select className="select of-reassign" value={conversa.vendedorId || ""} onChange={(e) => atribuir(e.target.value)}>
+                  <option value="" disabled>Atribuir a…</option>
+                  {vendedores.map((v) => <option key={v.id} value={v.id}>{v.nome}</option>)}
+                </select>
+              )}
+            </div>
+            <div className="of-conv-msgs">
+              {(conversa.mensagens || []).map((m, i) => (
+                <div key={i} className={"of-msg " + (m.role === "me" ? "me" : "them")}>
+                  <div className="of-msg-bubble">
+                    {m.template && <span className="of-msg-tpl">📤 Template</span>}
+                    {m.content}
+                    <span className="of-msg-hora">{horaCurta(m.ts)}</span>
+                  </div>
+                </div>
+              ))}
+              <div ref={fimRef} />
+            </div>
+            <div className="of-conv-input">
+              <input
+                placeholder="Escreva uma mensagem…"
+                value={texto}
+                onChange={(e) => setTexto(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && enviar()}
+              />
+              <button className="btn btn-primary" onClick={enviar}><I.send className="ico" /></button>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+
 function WhatsApp({ user, showToast, target, onTargetUsed, recarregarSol }) {
   const isGer = user.role === "gerente";
+  const [canalAba, setCanalAba] = useState("evolution"); // evolution | oficial
   const [chats, setChats] = useState([]);
   const [usersMap, setUsersMap] = useState({});
   const [usersArr, setUsersArr] = useState([]);
@@ -1363,6 +1896,19 @@ function WhatsApp({ user, showToast, target, onTargetUsed, recarregarSol }) {
 
   return (
     <div className="wa-page">
+      <div className="canal-abas">
+        <button className={canalAba === "evolution" ? "canal-aba on" : "canal-aba"} onClick={() => setCanalAba("evolution")}>
+          <I.wa className="ico" /> {isGer ? "WhatsApp dos vendedores" : "Meu WhatsApp"}
+        </button>
+        <button className={canalAba === "oficial" ? "canal-aba on oficial" : "canal-aba oficial"} onClick={() => setCanalAba("oficial")}>
+          <I.send className="ico" /> Oficial · Disparo
+        </button>
+      </div>
+
+      {canalAba === "oficial" ? (
+        <InboxOficial isGer={isGer} showToast={showToast} />
+      ) : (
+      <>
       <div style={{ display: "flex", justifyContent: "space-between", gap: 10, marginBottom: 14, flexWrap: "wrap" }}>
         <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
           {isGer && (
@@ -1514,6 +2060,8 @@ function WhatsApp({ user, showToast, target, onTargetUsed, recarregarSol }) {
           onClose={() => setPedindoSuporte(false)}
           onSaved={() => { setPedindoSuporte(false); showToast("✓ Encaminhado para o suporte"); recarregarSol && recarregarSol(); }}
         />
+      )}
+      </>
       )}
     </div>
   );

@@ -2537,3 +2537,137 @@ h1, h2, h3, h4, .topbar .greet, .panel-h h3, .login-card .ttl, .login-card h2, .
 .sol-msg-anexo:not(:first-child) { margin-top: 6px; }
 .sol-msg.mine .sol-msg-anexo { background: rgba(255,255,255,.22); color: #fff; }
 .sol-msg.theirs .sol-msg-anexo { background: var(--card); border: 1px solid var(--line); color: var(--text); }
+
+/* ============================================================
+   CANAL OFICIAL (Cloud API) — disparo, vendedores, números, inbox
+   ============================================================ */
+:root { --of-green: #10b981; --of-green-d: #059669; --of-green-soft: rgba(16,185,129,.12); }
+
+.of-wrap { display: flex; flex-direction: column; gap: 16px; }
+.of-tabs { display: flex; gap: 6px; flex-wrap: wrap; }
+.of-tab {
+  display: inline-flex; align-items: center; gap: 7px; padding: 9px 16px;
+  border: 1px solid var(--line); background: var(--card); color: var(--muted);
+  border-radius: 11px; font-weight: 600; font-size: 13.5px; cursor: pointer; transition: .15s;
+}
+.of-tab .ico { width: 16px; height: 16px; }
+.of-tab:hover { border-color: var(--of-green); color: var(--text); }
+.of-tab.on { background: var(--of-green); border-color: var(--of-green); color: #fff; box-shadow: 0 8px 20px -10px var(--of-green); }
+
+.of-grid { display: grid; grid-template-columns: 1.3fr 1fr; gap: 16px; align-items: start; }
+@media (max-width: 980px) { .of-grid { grid-template-columns: 1fr; } }
+
+/* templates */
+.of-tpl-list { display: flex; flex-direction: column; gap: 8px; max-height: 320px; overflow-y: auto; }
+.of-tpl {
+  text-align: left; border: 1px solid var(--line); background: var(--surface-2);
+  border-radius: 10px; padding: 11px 13px; cursor: pointer; transition: .15s;
+}
+.of-tpl:hover { border-color: var(--of-green); }
+.of-tpl.on { border-color: var(--of-green); background: var(--of-green-soft); box-shadow: inset 0 0 0 1px var(--of-green); }
+.of-tpl-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 4px; }
+.of-tpl-txt { font-size: 12.5px; color: var(--muted); line-height: 1.45; white-space: pre-wrap; }
+.of-tpl-vars { font-size: 11.5px; color: var(--amber); margin-top: 6px; font-weight: 600; }
+.of-tag { font-size: 11px; background: var(--th-bg); color: var(--muted); padding: 2px 8px; border-radius: 6px; font-weight: 600; }
+.of-count { margin-top: 8px; font-size: 13px; color: var(--of-green-d); font-weight: 700; }
+
+/* campanhas */
+.of-camp-list { display: flex; flex-direction: column; gap: 8px; max-height: 360px; overflow-y: auto; }
+.of-camp { border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; background: var(--surface-2); }
+.of-camp-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 5px; }
+.of-camp-stats { display: flex; gap: 12px; font-size: 12.5px; }
+.of-camp-stats .ok { color: var(--of-green-d); font-weight: 600; }
+.of-camp-stats .err { color: var(--coral); font-weight: 600; }
+.of-camp-stats .tot { color: var(--faint); }
+
+/* vendedores */
+.of-vend-list { display: flex; flex-direction: column; gap: 8px; margin-top: 12px; }
+.of-vend {
+  display: flex; align-items: center; gap: 13px; padding: 11px 14px;
+  border: 1px solid var(--line); border-radius: 12px; background: var(--surface-2); opacity: .6; transition: .15s;
+}
+.of-vend.on { opacity: 1; border-color: rgba(16,185,129,.4); background: var(--card); }
+.of-vend-nome { flex: 1; display: flex; flex-direction: column; }
+.of-vend-nome b { font-size: 14px; }
+.of-vend-sub { font-size: 11.5px; color: var(--faint); }
+.of-vend-pct { display: flex; align-items: center; gap: 5px; font-weight: 700; color: var(--muted); }
+.of-pct-input { width: 64px; text-align: center; padding: 7px; }
+.of-vend-foot { display: flex; align-items: center; justify-content: space-between; margin-top: 14px; }
+.of-aviso { background: rgba(245,158,11,.1); border: 1px solid rgba(245,158,11,.3); color: var(--amber); padding: 10px 13px; border-radius: 10px; font-size: 12.5px; font-weight: 600; margin: 12px 0; }
+
+/* switch */
+.of-switch {
+  width: 44px; height: 25px; border-radius: 20px; border: none; background: var(--line);
+  position: relative; cursor: pointer; transition: .2s; flex-shrink: 0;
+}
+.of-switch.on { background: var(--of-green); }
+.of-switch-dot { position: absolute; top: 3px; left: 3px; width: 19px; height: 19px; border-radius: 50%; background: #fff; transition: .2s; box-shadow: 0 1px 3px rgba(0,0,0,.3); }
+.of-switch.on .of-switch-dot { left: 22px; }
+
+/* números */
+.of-num-list { display: flex; flex-direction: column; gap: 8px; }
+.of-num { display: flex; align-items: center; gap: 9px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 11px; background: var(--surface-2); }
+.of-num-info { flex: 1; display: flex; flex-direction: column; }
+.of-num-info b { font-size: 14px; }
+.of-num-sub { font-size: 11.5px; color: var(--faint); }
+.of-badge { font-size: 11px; padding: 3px 9px; border-radius: 7px; font-weight: 700; }
+.of-badge.ok { background: var(--of-green-soft); color: var(--of-green-d); }
+.of-badge.off { background: rgba(100,116,139,.12); color: var(--lead); }
+.btn.danger { color: var(--coral); }
+
+/* ABAS de canal dentro do WhatsApp */
+.canal-abas { display: flex; gap: 6px; margin-bottom: 16px; border-bottom: 1px solid var(--line); padding-bottom: 0; }
+.canal-aba {
+  display: inline-flex; align-items: center; gap: 8px; padding: 11px 18px;
+  border: none; background: none; color: var(--muted); font-weight: 600; font-size: 14px;
+  cursor: pointer; border-bottom: 2.5px solid transparent; margin-bottom: -1px; transition: .15s;
+}
+.canal-aba .ico { width: 17px; height: 17px; }
+.canal-aba:hover { color: var(--text); }
+.canal-aba.on { color: var(--brand); border-bottom-color: var(--brand); }
+.canal-aba.oficial.on { color: var(--of-green-d); border-bottom-color: var(--of-green); }
+
+/* INBOX oficial */
+.of-inbox { display: grid; grid-template-columns: 330px 1fr; gap: 0; border: 1px solid var(--line); border-radius: 14px; overflow: hidden; height: calc(100vh - 230px); min-height: 480px; background: var(--card); }
+@media (max-width: 860px) { .of-inbox { grid-template-columns: 1fr; } .of-inbox-conv { display: none; } }
+.of-inbox-list { border-right: 1px solid var(--line); display: flex; flex-direction: column; overflow: hidden; }
+.of-inbox-search { display: flex; align-items: center; gap: 8px; padding: 12px 14px; border-bottom: 1px solid var(--line); }
+.of-inbox-search .ico { width: 16px; height: 16px; color: var(--faint); }
+.of-inbox-search input { border: none; background: none; outline: none; flex: 1; font-size: 13.5px; color: var(--text); }
+.of-chat-item { display: flex; gap: 11px; align-items: center; padding: 12px 14px; border: none; border-bottom: 1px solid var(--line-2); background: none; cursor: pointer; text-align: left; width: 100%; transition: .12s; }
+.of-chat-item:hover { background: var(--surface-2); }
+.of-chat-item.on { background: var(--of-green-soft); }
+.of-chat-av { width: 40px; height: 40px; border-radius: 50%; background: var(--grad); color: #fff; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 14px; flex-shrink: 0; }
+.of-chat-mid { flex: 1; min-width: 0; }
+.of-chat-nm { font-weight: 600; font-size: 14px; display: flex; align-items: center; gap: 7px; }
+.of-chat-last { font-size: 12.5px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 2px; }
+.of-chat-vend { font-size: 11.5px; color: var(--of-green-d); font-weight: 600; margin-top: 2px; }
+.of-chat-vend.sem { color: var(--amber); }
+.of-chat-right { display: flex; flex-direction: column; align-items: flex-end; gap: 5px; }
+.of-chat-hora { font-size: 11px; color: var(--faint); }
+.of-chat-badge { background: var(--of-green); color: #fff; font-size: 11px; font-weight: 700; min-width: 19px; height: 19px; border-radius: 10px; display: flex; align-items: center; justify-content: center; padding: 0 5px; }
+.of-pill { font-size: 10px; background: var(--of-green); color: #fff; padding: 2px 7px; border-radius: 6px; font-weight: 700; letter-spacing: .02em; }
+
+.of-inbox-conv { display: flex; flex-direction: column; overflow: hidden; }
+.of-conv-head { display: flex; align-items: center; gap: 11px; padding: 13px 16px; border-bottom: 1px solid var(--line); }
+.of-conv-info { flex: 1; display: flex; flex-direction: column; }
+.of-conv-info b { font-size: 14.5px; }
+.of-conv-info span { font-size: 12px; color: var(--faint); }
+.of-reassign { width: 170px; padding: 7px 10px; font-size: 12.5px; }
+.of-conv-msgs { flex: 1; overflow-y: auto; padding: 18px 16px; display: flex; flex-direction: column; gap: 8px; background: var(--surface-2); }
+.of-msg { display: flex; }
+.of-msg.me { justify-content: flex-end; }
+.of-msg-bubble { max-width: 72%; padding: 9px 13px; border-radius: 13px; font-size: 13.5px; line-height: 1.45; position: relative; box-shadow: var(--shadow-sm); }
+.of-msg.them .of-msg-bubble { background: var(--bubble-them); border-bottom-left-radius: 4px; }
+.of-msg.me .of-msg-bubble { background: #d9fdd3; color: #111; border-bottom-right-radius: 4px; }
+.of-msg-hora { font-size: 10px; color: rgba(0,0,0,.4); margin-left: 9px; float: right; margin-top: 4px; }
+.of-msg-tpl { display: block; font-size: 10.5px; font-weight: 700; color: var(--of-green-d); margin-bottom: 3px; }
+.of-conv-input { display: flex; gap: 9px; padding: 12px 14px; border-top: 1px solid var(--line); }
+.of-conv-input input { flex: 1; border: 1px solid var(--line); border-radius: 11px; padding: 10px 14px; font-size: 14px; outline: none; background: var(--input-bg); color: var(--text); }
+.of-conv-input input:focus { border-color: var(--of-green); }
+.of-conv-input .btn .ico { width: 17px; height: 17px; }
+
+.of-inbox-empty { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; padding: 40px 20px; text-align: center; color: var(--muted); flex: 1; }
+.of-inbox-empty.big { height: 100%; }
+.of-inbox-empty .ico-empty { width: 46px; height: 46px; color: var(--faint); opacity: .5; }
+.of-inbox-empty p { margin: 0; font-size: 14px; }

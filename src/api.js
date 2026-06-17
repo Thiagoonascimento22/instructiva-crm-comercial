@@ -83,6 +83,27 @@ export const api = {
   iaEquipe: (desde, ate) => req("POST", "/api/ia/equipe", { desde: desde || 0, ate: ate || Date.now() }),
   iaVendedor: (id, desde, ate) => req("POST", "/api/ia/vendedor/" + id, { desde: desde || 0, ate: ate || Date.now() }),
 
+  // Canal Oficial (WhatsApp Cloud API)
+  ofNumeros: () => req("GET", "/api/oficial/numeros"),
+  ofCriarNumero: (dados) => req("POST", "/api/oficial/numeros", dados),
+  ofEditarNumero: (id, dados) => req("PUT", "/api/oficial/numeros/" + id, dados),
+  ofExcluirNumero: (id) => req("DELETE", "/api/oficial/numeros/" + id),
+  ofTemplates: (id) => req("GET", "/api/oficial/numeros/" + id + "/templates"),
+  ofVendedores: () => req("GET", "/api/oficial/vendedores"),
+  ofEditarVendedor: (id, dados) => req("PUT", "/api/oficial/vendedores/" + id, dados),
+  ofZerarContadores: () => req("POST", "/api/oficial/vendedores/zerar"),
+  ofDisparar: (dados) => req("POST", "/api/oficial/disparar", dados),
+  ofCampanhas: () => req("GET", "/api/oficial/campanhas"),
+  ofChats: (q, numeroId) =>
+    req("GET", "/api/oficial/chats" + (() => {
+      const p = [q ? "q=" + encodeURIComponent(q) : "", numeroId ? "numeroId=" + encodeURIComponent(numeroId) : ""].filter(Boolean);
+      return p.length ? "?" + p.join("&") : "";
+    })()),
+  ofChat: (id) => req("GET", "/api/oficial/chats/" + encodeURIComponent(id)),
+  ofEnviar: (id, texto) => req("POST", "/api/oficial/chats/" + encodeURIComponent(id) + "/send", { texto }),
+  ofAtribuir: (id, vendedorId) => req("POST", "/api/oficial/chats/" + encodeURIComponent(id) + "/atribuir", { vendedorId }),
+  ofWebhookInfo: (base) => req("GET", "/api/oficial/webhook-info?base=" + encodeURIComponent(base || "")),
+
   // Monitoria
   horario: () => req("GET", "/api/horario"),
   setHorario: (h) => req("PUT", "/api/horario", h),

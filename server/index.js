@@ -3,6 +3,7 @@ import fs from "fs";
 import path from "path";
 import crypto from "crypto";
 import { fileURLToPath } from "url";
+import { instalarCanalOficial } from "./oficial.js";
 
 // horário comercial / dias da semana são calculados no fuso de Brasília
 process.env.TZ = process.env.TZ || "America/Sao_Paulo";
@@ -1844,6 +1845,18 @@ Escreva em português brasileiro, tom direto e construtivo, sem ser ofensivo.`;
 });
 
 /* ============================================================
+   CANAL OFICIAL (WhatsApp Cloud API) — rotas /api/oficial/*
+   ============================================================ */
+const canalOficial = instalarCanalOficial({
+  app,
+  getDb: () => db,
+  saveDB,
+  proximoId,
+  auth,
+  gerenteOnly,
+});
+
+/* ============================================================
    FRONTEND (build do Vite)
    ============================================================ */
 const dist = path.join(__dirname, "..", "dist");
@@ -1888,6 +1901,7 @@ const PORT = process.env.PORT || 3000;
 aguardarVolume().then(() => {
   garantirPastaMidia();
   loadDB();
+  canalOficial.garantirEstrutura(); // cria db.oficial depois de carregar o banco
   resetAdminSeNecessario();
   app.listen(PORT, () => console.log("✓ CRM Comercial rodando na porta", PORT));
 });
