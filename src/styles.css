@@ -2813,3 +2813,147 @@ h1, h2, h3, h4, .topbar .greet, .panel-h h3, .login-card .ttl, .login-card h2, .
 .of-limpar-btn { background: none; border: none; color: var(--faint); cursor: pointer; padding: 5px; border-radius: 7px; transition: .15s; flex-shrink: 0; }
 .of-limpar-btn:hover { background: rgba(244,63,94,.1); color: var(--coral); }
 .of-limpar-btn .ico { width: 16px !important; height: 16px !important; }
+
+/* ============================================================
+   DISPARO v3 — hero, cards e MODAL moderno
+   ============================================================ */
+.disp-page { display: flex; flex-direction: column; gap: 22px; }
+
+/* hero */
+.disp-hero {
+  display: flex; justify-content: space-between; align-items: center; gap: 28px;
+  background: linear-gradient(135deg, #fff6ef 0%, #ffffff 60%);
+  border: 1px solid var(--line); border-radius: 20px; padding: 30px 32px;
+  position: relative; overflow: hidden;
+}
+.disp-hero::after {
+  content: ""; position: absolute; right: -60px; top: -60px; width: 280px; height: 280px;
+  background: radial-gradient(circle, rgba(255,122,26,.14), transparent 70%); pointer-events: none;
+}
+.disp-hero-l { max-width: 540px; position: relative; z-index: 1; }
+.disp-hero-eyebrow { font-size: 11px; font-weight: 800; letter-spacing: .12em; color: var(--brand); margin-bottom: 10px; }
+.disp-hero-titulo { font-size: 27px; font-weight: 800; line-height: 1.12; color: var(--text); margin: 0 0 10px; letter-spacing: -.02em; }
+.disp-hero-sub { font-size: 14.5px; color: var(--muted); line-height: 1.5; margin: 0 0 20px; }
+.disp-cta {
+  display: inline-flex; align-items: center; gap: 9px; padding: 13px 24px;
+  background: var(--grad); color: #fff; border: none; border-radius: 13px;
+  font-size: 15px; font-weight: 700; cursor: pointer; transition: .18s; box-shadow: var(--glow-brand);
+}
+.disp-cta:hover { transform: translateY(-2px); box-shadow: 0 18px 36px -14px rgba(255,122,26,.55); }
+.disp-cta .ico { width: 18px !important; height: 18px !important; }
+.disp-hero-stats { display: flex; gap: 26px; position: relative; z-index: 1; }
+.disp-stat { display: flex; flex-direction: column; align-items: center; }
+.disp-stat-n { font-size: 32px; font-weight: 800; color: var(--text); line-height: 1; }
+.disp-stat-n.ok { color: var(--of-green-d); }
+.disp-stat-n.resp { color: var(--brand); }
+.disp-stat-l { font-size: 11px; color: var(--faint); margin-top: 5px; text-transform: uppercase; letter-spacing: .04em; }
+@media (max-width: 820px) { .disp-hero { flex-direction: column; align-items: flex-start; } }
+
+/* campanhas */
+.disp-camps-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+.disp-camps-head h3 { font-size: 17px; font-weight: 700; margin: 0; }
+.disp-camp-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 13px; }
+.disp-camp-card { border: 1px solid var(--line); border-radius: 15px; padding: 17px; background: var(--card); cursor: pointer; transition: .16s; }
+.disp-camp-card:hover { border-color: var(--brand); box-shadow: var(--card-hover-shadow); transform: translateY(-2px); }
+.disp-camp-card-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; margin-bottom: 14px; }
+.disp-camp-nome b { font-size: 15px; display: block; }
+.disp-camp-nome span { font-size: 11.5px; color: var(--faint); }
+.disp-camp-x { background: none; border: none; color: var(--faint); cursor: pointer; padding: 4px; border-radius: 7px; transition: .15s; }
+.disp-camp-x:hover { background: rgba(244,63,94,.1); color: var(--coral); }
+.disp-camp-x .ico { width: 15px !important; height: 15px !important; }
+.disp-camp-nums { display: flex; gap: 15px; margin-bottom: 12px; }
+.disp-camp-nums > div { display: flex; flex-direction: column; }
+.disp-camp-n { font-size: 21px; font-weight: 800; color: var(--text); line-height: 1; }
+.disp-camp-n.ok { color: var(--of-green-d); }
+.disp-camp-n.resp { color: var(--brand); }
+.disp-camp-n.err { color: var(--coral); }
+.disp-camp-l { font-size: 10px; color: var(--faint); margin-top: 3px; text-transform: uppercase; }
+.disp-camp-bar { height: 5px; background: var(--line); border-radius: 4px; overflow: hidden; }
+.disp-camp-bar > div { height: 100%; background: var(--grad); border-radius: 4px; transition: width .4s; }
+.disp-vazio { text-align: center; padding: 50px 20px; color: var(--muted); border: 1px dashed var(--line); border-radius: 16px; }
+.disp-vazio .ico-empty { width: 44px !important; height: 44px !important; color: var(--faint); opacity: .5; margin-bottom: 8px; }
+
+/* ===== MODAL DE DISPARO ===== */
+.dispm-overlay {
+  position: fixed; inset: 0; background: rgba(15,16,30,.55); backdrop-filter: blur(4px);
+  display: flex; align-items: center; justify-content: center; z-index: 100; padding: 20px;
+  animation: dispmIn .2s ease;
+}
+@keyframes dispmIn { from { opacity: 0; } to { opacity: 1; } }
+.dispm {
+  background: var(--card); border-radius: 22px; width: 100%; max-width: 620px;
+  box-shadow: 0 40px 100px -30px rgba(15,16,30,.5); position: relative;
+  display: flex; flex-direction: column; max-height: 90vh; overflow: hidden;
+  animation: dispmUp .25s cubic-bezier(.2,.8,.2,1);
+}
+@keyframes dispmUp { from { transform: translateY(20px) scale(.98); opacity: 0; } to { transform: none; opacity: 1; } }
+.dispm-close { position: absolute; top: 16px; right: 16px; background: var(--surface-2); border: none; width: 32px; height: 32px; border-radius: 9px; cursor: pointer; color: var(--muted); display: flex; align-items: center; justify-content: center; z-index: 5; transition: .15s; }
+.dispm-close:hover { background: var(--line); color: var(--text); }
+.dispm-close svg { width: 16px; height: 16px; }
+
+/* trilha de passos */
+.dispm-trilha { display: flex; justify-content: space-between; padding: 26px 40px 18px; position: relative; }
+.dispm-trilha-bg { position: absolute; top: 39px; left: 56px; right: 56px; height: 2px; background: var(--line); z-index: 0; }
+.dispm-trilha-fill { height: 100%; background: var(--grad); transition: width .35s ease; }
+.dispm-passo { display: flex; flex-direction: column; align-items: center; gap: 6px; position: relative; z-index: 1; }
+.dispm-passo span { font-size: 11px; font-weight: 600; color: var(--faint); }
+.dispm-passo.on span { color: var(--brand); }
+.dispm-passo.done span { color: var(--text); }
+.dispm-bola { width: 28px; height: 28px; border-radius: 50%; background: var(--card); border: 2px solid var(--line); color: var(--faint); display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 700; transition: .25s; }
+.dispm-passo.on .dispm-bola { background: var(--grad); border-color: transparent; color: #fff; box-shadow: var(--glow-brand); transform: scale(1.1); }
+.dispm-passo.done .dispm-bola { background: #fff; border-color: var(--brand); color: var(--brand); }
+
+/* conteúdo */
+.dispm-conteudo { padding: 8px 32px 4px; overflow-y: auto; flex: 1; }
+.dispm-fade { animation: dispmFade .25s ease; }
+@keyframes dispmFade { from { opacity: 0; transform: translateX(8px); } to { opacity: 1; transform: none; } }
+.dispm-titulo { font-size: 21px; font-weight: 800; color: var(--text); margin: 0 0 5px; letter-spacing: -.02em; }
+.dispm-sub { font-size: 13.5px; color: var(--muted); margin: 0 0 20px; }
+.dispm-load { padding: 30px; text-align: center; color: var(--muted); }
+
+/* passo número */
+.dispm-num-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 11px; }
+.dispm-num { position: relative; border: 2px solid var(--line); border-radius: 15px; padding: 18px; background: var(--surface-2); cursor: pointer; transition: .15s; text-align: left; }
+.dispm-num:hover { border-color: var(--brand); }
+.dispm-num.on { border-color: var(--brand); background: #fff6ef; }
+.dispm-num-ico { width: 38px; height: 38px; border-radius: 11px; background: var(--of-green-soft); display: flex; align-items: center; justify-content: center; margin-bottom: 10px; }
+.dispm-num-ico .ico { width: 20px !important; height: 20px !important; color: var(--of-green-d); }
+.dispm-num b { font-size: 15px; display: block; }
+.dispm-num span { font-size: 12.5px; color: var(--faint); }
+.dispm-num-check { position: absolute; top: 14px; right: 14px; width: 22px; height: 22px; border-radius: 50%; background: var(--brand); color: #fff; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 800; }
+
+/* passo template */
+.dispm-tpl-grid { display: flex; flex-direction: column; gap: 9px; max-height: 320px; overflow-y: auto; padding-right: 4px; }
+.dispm-tpl { border: 2px solid var(--line); border-radius: 13px; padding: 14px 16px; background: var(--surface-2); cursor: pointer; transition: .15s; text-align: left; }
+.dispm-tpl:hover { border-color: var(--brand); }
+.dispm-tpl.on { border-color: var(--brand); background: #fff6ef; }
+.dispm-tpl-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px; }
+.dispm-tpl-head b { font-size: 14px; }
+.dispm-tpl-txt { font-size: 12.5px; color: var(--muted); line-height: 1.45; white-space: pre-wrap; }
+.dispm-tpl-var { font-size: 11px; color: var(--amber); font-weight: 600; margin-top: 6px; }
+
+/* passo contatos */
+.dispm-modo { display: flex; gap: 9px; margin-bottom: 14px; }
+.dispm-modo-btn { flex: 1; padding: 12px; border: 2px solid var(--line); border-radius: 12px; background: var(--surface-2); color: var(--muted); font-weight: 600; font-size: 13.5px; cursor: pointer; transition: .15s; }
+.dispm-modo-btn:hover { border-color: var(--brand); }
+.dispm-modo-btn.on { border-color: var(--brand); background: #fff6ef; color: var(--brand); }
+.dispm-textarea { width: 100%; border: 1px solid var(--line); border-radius: 12px; padding: 13px 15px; font-size: 14px; font-family: inherit; outline: none; resize: vertical; background: var(--input-bg); color: var(--text); margin-bottom: 10px; box-sizing: border-box; }
+.dispm-textarea:focus { border-color: var(--brand); }
+.dispm-count { margin-top: 12px; font-size: 14px; color: var(--of-green-d); font-weight: 700; }
+
+/* passo revisar */
+.dispm-review { display: flex; flex-direction: column; gap: 1px; border-radius: 14px; overflow: hidden; border: 1px solid var(--line); margin-bottom: 18px; }
+.dispm-rev { display: flex; justify-content: space-between; align-items: center; padding: 15px 18px; background: var(--surface-2); }
+.dispm-rev span { font-size: 13.5px; color: var(--muted); }
+.dispm-rev b { font-size: 14.5px; }
+.dispm-campo { margin-bottom: 16px; }
+.dispm-campo label { display: block; font-size: 12.5px; color: var(--muted); font-weight: 600; margin-bottom: 6px; }
+.dispm-previa-lab { font-size: 11px; color: var(--faint); font-weight: 700; text-transform: uppercase; letter-spacing: .04em; }
+.dispm-previa-bolha { background: #d9fdd3; color: #111; padding: 13px 16px; border-radius: 14px; border-bottom-left-radius: 4px; font-size: 13.5px; line-height: 1.5; white-space: pre-wrap; margin-top: 8px; box-shadow: var(--shadow-sm); }
+
+/* rodapé */
+.dispm-foot { display: flex; justify-content: space-between; align-items: center; padding: 18px 32px 24px; gap: 12px; border-top: 1px solid var(--line-2); margin-top: 8px; }
+.dispm-next { display: inline-flex; align-items: center; gap: 8px; padding: 12px 26px; background: var(--grad); color: #fff; border: none; border-radius: 12px; font-size: 14.5px; font-weight: 700; cursor: pointer; transition: .16s; box-shadow: var(--glow-brand); }
+.dispm-next:hover:not(:disabled) { transform: translateY(-1px); }
+.dispm-next:disabled { opacity: .45; cursor: not-allowed; box-shadow: none; }
+.dispm-next.disparar { background: linear-gradient(135deg, #12b76a, #059669); box-shadow: 0 12px 28px -12px rgba(16,185,129,.5); }

@@ -1115,93 +1115,135 @@ function PaginaOficial({ showToast }) {
 
 /* ---------- DISPARO EM MASSA ---------- */
 /* ---------- DISPARO EM MASSA (assistente em etapas) ---------- */
+/* ---------- DISPARO (aba de abertura + modal moderno) ---------- */
 function OficialDisparo({ showToast }) {
-  const [passo, setPasso] = useState(1);
-  const [numeros, setNumeros] = useState([]);
-  const [numeroId, setNumeroId] = useState("");
-  const [templates, setTemplates] = useState([]);
-  const [carregandoTpl, setCarregandoTpl] = useState(false);
-  const [template, setTemplate] = useState(null);
-  const [modoContato, setModoContato] = useState("arquivo"); // arquivo | manual
-  const [contatos, setContatos] = useState([]);
-  const [textoManual, setTextoManual] = useState("");
-  const [nomeCampanha, setNomeCampanha] = useState("");
-  const [enviando, setEnviando] = useState(false);
   const [campanhas, setCampanhas] = useState([]);
   const [campSel, setCampSel] = useState(null);
-  const fileRef = useRef(null);
+  const [abrir, setAbrir] = useState(false);
+  const [numeros, setNumeros] = useState([]);
 
   const carregarCampanhas = () => api.ofCampanhas().then(setCampanhas).catch(() => {});
+  useEffect(() => {
+    carregarCampanhas();
+    api.ofNumeros().then((ns) => setNumeros(ns.filter((n) => n.ativo))).catch(() => {});
+  }, []);
 
   async function excluirCampanha(c) {
     const apagar = confirm(
-      `Excluir a campanha "${c.nome}"?\n\n` +
-      `Clique OK para excluir TAMBÉM as conversas que vieram dela.\n` +
-      `Clique Cancelar para manter as conversas (e parar aqui).`
+      `Excluir a campanha "${c.nome}"?\n\nOK = exclui TAMBÉM as conversas dela.\nCancelar = mantém as conversas.`
     );
-    // se o usuário cancelou, perguntamos se quer ao menos remover só o registro
     if (!apagar) {
-      const soRegistro = confirm(`Quer remover só o registro da campanha "${c.nome}" da lista, mantendo as conversas?`);
-      if (!soRegistro) return;
+      const soReg = confirm(`Remover só o registro da campanha "${c.nome}" da lista?`);
+      if (!soReg) return;
       try { await api.ofExcluirCampanha(c.id, false); showToast("Campanha removida da lista"); carregarCampanhas(); }
       catch (e) { showToast(e.message); }
       return;
     }
     try {
       const r = await api.ofExcluirCampanha(c.id, true);
-      showToast(`Campanha excluída (${r.conversasRemovidas || 0} conversa(s) removida(s))`);
+      showToast(`Campanha excluída (${r.conversasRemovidas || 0} conversa(s))`);
       carregarCampanhas();
     } catch (e) { showToast(e.message); }
   }
 
-  useEffect(() => {
-    api.ofNumeros().then((ns) => {
-      const ativos = ns.filter((n) => n.ativo);
-      setNumeros(ativos);
-      if (ativos[0]) setNumeroId(ativos[0].id);
-    }).catch(() => {});
-    carregarCampanhas();
-  }, []);
+  // métricas gerais (soma de tudo)
+  const tot = campanhas.reduce((a, c) => ({
+    enviados: a.enviados + (c.enviados || 0),
+    entregues: a.entregues + (c.entregues || 0),
+    responderam: a.responderam + (c.responderam || 0),
+  }), { enviados: 0, entregues: 0, responderam: 0 });
 
-  // carrega templates quando escolhe o número
+  return (
+    <div className="disp-page">
+      {/* hero / abertura */}
+      <div className="disp-hero">
+        <div className="disp-hero-l">
+          <div className="disp-hero-eyebrow">CANAL OFICIAL · META</div>
+          <h2 className="disp-hero-titulo">Dispare e distribua leads no automático</h2>
+          <p className="disp-hero-sub">Envie um template aprovado para sua lista. Quem responder cai direto na fila dos vendedores ativos.</p>
+          <button className="disp-cta" onClick={() => { if (!numeros.length) return showToast("Cadastre um número na aba Números primeiro"); setAbrir(true); }}>
+            <I.send className="ico" /> Novo disparo
+          </button>
+        </div>
+        <div className="disp-hero-stats">
+          <div className="disp-stat"><span className="disp-stat-n">{tot.enviados}</span><span className="disp-stat-l">Enviados</span></div>
+          <div className="disp-stat"><span className="disp-stat-n ok">{tot.entregues}</span><span className="disp-stat-l">Entregues</span></div>
+          <div className="disp-stat"><span className="disp-stat-n resp">{tot.responderam}</span><span className="disp-stat-l">Responderam</span></div>
+        </div>
+      </div>
+
+      {/* campanhas */}
+      <div className="disp-camps">
+        <div className="disp-camps-head">
+          <h3>Campanhas</h3>
+          <button className="btn btn-sm" onClick={carregarCampanhas}><I.refresh className="ico" /> Atualizar</button>
+        </div>
+        {campanhas.length === 0 ? (
+          <div className="disp-vazio">
+            <I.send className="ico-empty" />
+            <p>Nenhuma campanha ainda. Clique em <b>Novo disparo</b> para começar.</p>
+          </div>
+        ) : (
+          <div className="disp-camp-grid">
+            {campanhas.map((c) => {
+              const pctResp = c.enviados ? Math.round((c.responderam || 0) / c.enviados * 100) : 0;
+              return (
+                <div key={c.id} className="disp-camp-card" onClick={() => setCampSel(c)}>
+                  <div className="disp-camp-card-top">
+                    <div className="disp-camp-nome">
+                      <b>{c.nome}</b>
+                      <span>{new Date(c.criadoEm).toLocaleDateString("pt-BR")} · {c.template}</span>
+                    </div>
+                    <button className="disp-camp-x" title="Excluir" onClick={(e) => { e.stopPropagation(); excluirCampanha(c); }}><I.trash className="ico" /></button>
+                  </div>
+                  <div className="disp-camp-nums">
+                    <div><span className="disp-camp-n">{c.enviados || 0}</span><span className="disp-camp-l">enviados</span></div>
+                    <div><span className="disp-camp-n ok">{c.entregues || 0}</span><span className="disp-camp-l">entregues</span></div>
+                    <div><span className="disp-camp-n resp">{c.responderam || 0}</span><span className="disp-camp-l">resp.</span></div>
+                    {c.falhas > 0 && <div><span className="disp-camp-n err">{c.falhas}</span><span className="disp-camp-l">erros</span></div>}
+                  </div>
+                  <div className="disp-camp-bar"><div style={{ width: pctResp + "%" }} /></div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {abrir && <ModalDisparo numeros={numeros} showToast={showToast} onClose={() => setAbrir(false)} onDone={() => { setAbrir(false); setTimeout(carregarCampanhas, 1500); }} />}
+      {campSel && <ModalMetricas camp={campSel} onClose={() => setCampSel(null)} />}
+    </div>
+  );
+}
+
+/* ---------- MODAL DE DISPARO (passo a passo moderno) ---------- */
+function ModalDisparo({ numeros, showToast, onClose, onDone }) {
+  const [passo, setPasso] = useState(1);
+  const [numeroId, setNumeroId] = useState(numeros[0] ? numeros[0].id : "");
+  const [templates, setTemplates] = useState([]);
+  const [carregandoTpl, setCarregandoTpl] = useState(false);
+  const [template, setTemplate] = useState(null);
+  const [modoContato, setModoContato] = useState("manual");
+  const [contatos, setContatos] = useState([]);
+  const [textoManual, setTextoManual] = useState("");
+  const [nomeCampanha, setNomeCampanha] = useState("");
+  const [enviando, setEnviando] = useState(false);
+  const fileRef = useRef(null);
+
   useEffect(() => {
-    if (!numeroId) { setTemplates([]); setTemplate(null); return; }
+    if (!numeroId) return;
     setCarregandoTpl(true);
     api.ofTemplates(numeroId)
-      .then((r) => { setTemplates(r.templates || []); })
+      .then((r) => setTemplates(r.templates || []))
       .catch((e) => { showToast(e.message); setTemplates([]); })
       .finally(() => setCarregandoTpl(false));
     setTemplate(null);
   }, [numeroId]);
 
-  function lerCSV(file) {
-    const reader = new FileReader();
-    reader.onload = () => {
-      const txt = String(reader.result || "");
-      const linhas = txt.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
-      const out = [];
-      for (const l of linhas) {
-        const partes = l.split(/[,;\t]/).map((p) => p.trim());
-        let telefone = "", nome = "";
-        for (const p of partes) {
-          const dig = p.replace(/\D/g, "");
-          if (dig.length >= 10 && !telefone) telefone = dig;
-          else if (p && !/^\d+$/.test(p) && !nome) nome = p;
-        }
-        if (telefone) out.push({ telefone, nome });
-      }
-      setContatos(out);
-      if (!out.length) showToast("Nenhum telefone válido encontrado no arquivo");
-      else showToast(`${out.length} contato(s) carregado(s)`);
-    };
-    reader.readAsText(file);
-  }
-
-  function processarManual() {
-    const linhas = String(textoManual).split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+  function parseContatos(txt) {
+    const linhas = String(txt).split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
     const out = [];
     for (const l of linhas) {
-      // aceita "numero" ou "numero, nome"
       const partes = l.split(/[,;\t]/).map((p) => p.trim());
       let telefone = "", nome = "";
       for (const p of partes) {
@@ -1211,235 +1253,156 @@ function OficialDisparo({ showToast }) {
       }
       if (telefone) out.push({ telefone, nome });
     }
+    return out;
+  }
+  function lerCSV(file) {
+    const r = new FileReader();
+    r.onload = () => {
+      const out = parseContatos(r.result || "");
+      setContatos(out);
+      showToast(out.length ? `${out.length} contato(s) carregado(s)` : "Nenhum telefone válido");
+    };
+    r.readAsText(file);
+  }
+  function processarManual() {
+    const out = parseContatos(textoManual);
     setContatos(out);
-    if (!out.length) showToast("Nenhum número válido. Use um por linha.");
-    else showToast(`${out.length} número(s) reconhecido(s)`);
+    showToast(out.length ? `${out.length} número(s) reconhecido(s)` : "Nenhum número válido");
   }
 
   async function disparar() {
-    if (!numeroId) return showToast("Escolha um número");
-    if (!template) return showToast("Escolha um template");
-    if (!contatos.length) return showToast("Adicione os contatos");
     setEnviando(true);
     try {
       const r = await api.ofDisparar({
-        numeroId,
-        template: template.name,
-        idioma: template.language,
-        nomeCampanha: nomeCampanha || template.name,
-        contatos,
+        numeroId, template: template.name, idioma: template.language,
+        nomeCampanha: nomeCampanha || template.name, contatos,
       });
       showToast(`Disparo iniciado para ${r.total} contato(s)!`);
-      // reseta o assistente
-      setContatos([]); setTextoManual(""); setNomeCampanha(""); setTemplate(null);
-      if (fileRef.current) fileRef.current.value = "";
-      setPasso(1);
-      setTimeout(carregarCampanhas, 1500);
-    } catch (e) {
-      showToast(e.message);
-    } finally {
-      setEnviando(false);
-    }
+      onDone();
+    } catch (e) { showToast(e.message); }
+    finally { setEnviando(false); }
   }
 
   const numeroSel = numeros.find((n) => n.id === numeroId);
-
-  if (numeros.length === 0) {
-    return (
-      <div className="dash-empty">
-        <I.wa className="ico-empty" />
-        <p>Nenhum número oficial cadastrado ainda.</p>
-        <p className="panel-sub">Vá na aba <b>Números</b> e cadastre o número da Meta para começar.</p>
-      </div>
-    );
-  }
-
   const PASSOS = ["Número", "Mensagem", "Contatos", "Revisar"];
+  const podeAvancar = passo === 1 ? !!numeroId : passo === 2 ? !!template : passo === 3 ? contatos.length > 0 : true;
 
   return (
-    <div className="of-grid">
-      <div className="panel of-wizard">
-        {/* barra de progresso */}
-        <div className="wz-steps">
+    <div className="dispm-overlay" onClick={(e) => e.target === e.currentTarget && onClose()}>
+      <div className="dispm">
+        <button className="dispm-close" onClick={onClose}><I.x /></button>
+
+        {/* trilha de passos */}
+        <div className="dispm-trilha">
           {PASSOS.map((nome, i) => {
             const n = i + 1;
             return (
-              <React.Fragment key={n}>
-                <div className={"wz-step" + (passo === n ? " on" : "") + (passo > n ? " done" : "")}>
-                  <div className="wz-num">{passo > n ? "✓" : n}</div>
-                  <span>{nome}</span>
-                </div>
-                {n < PASSOS.length && <div className={"wz-line" + (passo > n ? " done" : "")} />}
-              </React.Fragment>
+              <div key={n} className={"dispm-passo" + (passo === n ? " on" : "") + (passo > n ? " done" : "")}>
+                <div className="dispm-bola">{passo > n ? "✓" : n}</div>
+                <span>{nome}</span>
+              </div>
             );
           })}
+          <div className="dispm-trilha-bg"><div className="dispm-trilha-fill" style={{ width: ((passo - 1) / (PASSOS.length - 1) * 100) + "%" }} /></div>
         </div>
 
-        {/* PASSO 1 — número */}
-        {passo === 1 && (
-          <div className="wz-body">
-            <div className="wz-titulo">De qual número vai sair o disparo?</div>
-            <div className="wz-num-list">
-              {numeros.map((n) => (
-                <button key={n.id} className={numeroId === n.id ? "wz-num-card on" : "wz-num-card"} onClick={() => setNumeroId(n.id)}>
-                  <I.wa className="ico" />
-                  <div>
+        <div className="dispm-conteudo">
+          {passo === 1 && (
+            <div className="dispm-fade">
+              <h3 className="dispm-titulo">De qual número vai sair?</h3>
+              <p className="dispm-sub">Escolha o WhatsApp oficial que vai enviar as mensagens.</p>
+              <div className="dispm-num-grid">
+                {numeros.map((n) => (
+                  <button key={n.id} className={numeroId === n.id ? "dispm-num on" : "dispm-num"} onClick={() => setNumeroId(n.id)}>
+                    <div className="dispm-num-ico"><I.wa className="ico" /></div>
                     <b>{n.apelido}</b>
                     <span>{n.numero || "—"}</span>
-                  </div>
-                  {numeroId === n.id && <span className="wz-check">✓</span>}
-                </button>
-              ))}
-            </div>
-            <div className="wz-foot">
-              <span />
-              <button className="btn btn-primary" disabled={!numeroId} onClick={() => setPasso(2)}>Continuar →</button>
-            </div>
-          </div>
-        )}
-
-        {/* PASSO 2 — template */}
-        {passo === 2 && (
-          <div className="wz-body">
-            <div className="wz-titulo">Qual mensagem (template) vai enviar?</div>
-            {carregandoTpl ? (
-              <div className="panel-sub"><span className="spin" /> Carregando templates…</div>
-            ) : templates.length === 0 ? (
-              <div className="panel-sub">Nenhum template aprovado nesse número.</div>
-            ) : (
-              <div className="of-tpl-list">
-                {templates.map((t) => (
-                  <button
-                    key={t.name + t.language}
-                    className={template && template.name === t.name && template.language === t.language ? "of-tpl on" : "of-tpl"}
-                    onClick={() => setTemplate(t)}
-                  >
-                    <div className="of-tpl-top">
-                      <b>{t.name}</b>
-                      <span className="of-tag">{t.language}</span>
-                    </div>
-                    <div className="of-tpl-txt">{t.texto || "(sem corpo de texto)"}</div>
-                    {t.vars > 0 && <div className="of-tpl-vars">⚠️ usa {t.vars} variável(eis) — preencha no CSV após o telefone</div>}
+                    {numeroId === n.id && <div className="dispm-num-check">✓</div>}
                   </button>
                 ))}
               </div>
-            )}
-            <div className="wz-foot">
-              <button className="btn" onClick={() => setPasso(1)}>← Voltar</button>
-              <button className="btn btn-primary" disabled={!template} onClick={() => setPasso(3)}>Continuar →</button>
             </div>
-          </div>
-        )}
+          )}
 
-        {/* PASSO 3 — contatos */}
-        {passo === 3 && (
-          <div className="wz-body">
-            <div className="wz-titulo">Para quem vai enviar?</div>
-            <div className="wz-modo">
-              <button className={modoContato === "arquivo" ? "wz-modo-btn on" : "wz-modo-btn"} onClick={() => setModoContato("arquivo")}>📄 Subir arquivo</button>
-              <button className={modoContato === "manual" ? "wz-modo-btn on" : "wz-modo-btn"} onClick={() => setModoContato("manual")}>✍️ Colar números</button>
-            </div>
-
-            {modoContato === "arquivo" ? (
-              <div className="field">
-                <input ref={fileRef} className="input" type="file" accept=".csv,.txt" onChange={(e) => e.target.files[0] && lerCSV(e.target.files[0])} />
-                <div className="panel-sub">Formato: um por linha — <code>telefone</code> ou <code>telefone,nome</code>. O DDI 55 é adicionado automaticamente.</div>
-              </div>
-            ) : (
-              <div className="field">
-                <textarea
-                  className="textarea"
-                  rows={8}
-                  placeholder={"Cole os números, um por linha:\n44999887766\n11988776655, João\n21997654321"}
-                  value={textoManual}
-                  onChange={(e) => setTextoManual(e.target.value)}
-                />
-                <div className="panel-sub">Um por linha. Pode ser só o número ou <code>numero, nome</code>. O DDI 55 é adicionado automaticamente.</div>
-                <button className="btn btn-sm" style={{ marginTop: 8 }} onClick={processarManual}>Reconhecer números</button>
-              </div>
-            )}
-
-            {contatos.length > 0 && <div className="of-count">✅ {contatos.length} contato(s) prontos</div>}
-
-            <div className="wz-foot">
-              <button className="btn" onClick={() => setPasso(2)}>← Voltar</button>
-              <button className="btn btn-primary" disabled={!contatos.length} onClick={() => setPasso(4)}>Continuar →</button>
-            </div>
-          </div>
-        )}
-
-        {/* PASSO 4 — revisar */}
-        {passo === 4 && (
-          <div className="wz-body">
-            <div className="wz-titulo">Confira antes de disparar</div>
-            <div className="wz-review">
-              <div className="wz-rev-item"><span>Número</span><b>{numeroSel ? numeroSel.apelido + (numeroSel.numero ? " · " + numeroSel.numero : "") : "—"}</b></div>
-              <div className="wz-rev-item"><span>Template</span><b>{template ? template.name : "—"}</b></div>
-              <div className="wz-rev-item"><span>Contatos</span><b>{contatos.length}</b></div>
-            </div>
-
-            <div className="field" style={{ marginTop: 14 }}>
-              <label className="lab">Nome da campanha (opcional)</label>
-              <input className="input" placeholder="Ex: Disparo Inversor Solar" value={nomeCampanha} onChange={(e) => setNomeCampanha(e.target.value)} />
-            </div>
-
-            <div className="wz-preview">
-              <div className="wz-preview-lab">Prévia da mensagem:</div>
-              <div className="wz-preview-bubble">{template ? template.texto : ""}</div>
-            </div>
-
-            <div className="wz-foot">
-              <button className="btn" onClick={() => setPasso(3)}>← Voltar</button>
-              <button className="btn btn-primary" disabled={enviando} onClick={disparar}>
-                {enviando ? <><span className="spin" /> Disparando…</> : <>🚀 Disparar para {contatos.length} contato(s)</>}
-              </button>
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* campanhas recentes */}
-      <div className="panel">
-        <div className="panel-h"><I.dash className="ico" /> Campanhas recentes</div>
-        {campanhas.length === 0 ? (
-          <div className="panel-sub">Nenhuma campanha disparada ainda.</div>
-        ) : (
-          <div className="of-camp-list">
-            {campanhas.map((c) => {
-              const pctEntrega = c.enviados ? Math.round((c.entregues || 0) / c.enviados * 100) : 0;
-              const pctResp = c.enviados ? Math.round((c.responderam || 0) / c.enviados * 100) : 0;
-              return (
-                <div key={c.id} className="of-camp-card" onClick={() => setCampSel(c)}>
-                  <div className="of-camp-card-top">
-                    <div>
-                      <b>{c.nome}</b>
-                      <span className="of-camp-data">{new Date(c.criadoEm).toLocaleDateString("pt-BR")} · {c.template}</span>
-                    </div>
-                    <button className="of-camp-x" title="Excluir" onClick={(e) => { e.stopPropagation(); excluirCampanha(c); }}><I.trash className="ico" /></button>
-                  </div>
-                  <div className="of-camp-mini">
-                    <div className="of-mini"><span className="of-mini-n">{c.enviados || 0}</span><span className="of-mini-l">enviados</span></div>
-                    <div className="of-mini"><span className="of-mini-n ok">{c.entregues || 0}</span><span className="of-mini-l">entregues</span></div>
-                    <div className="of-mini"><span className="of-mini-n resp">{c.responderam || 0}</span><span className="of-mini-l">responderam</span></div>
-                    {c.falhas > 0 && <div className="of-mini"><span className="of-mini-n err">{c.falhas}</span><span className="of-mini-l">erros</span></div>}
-                  </div>
-                  <div className="of-camp-bar"><div className="of-camp-bar-fill" style={{ width: pctResp + "%" }} /></div>
-                  <div className="of-camp-ver">Ver métricas →</div>
+          {passo === 2 && (
+            <div className="dispm-fade">
+              <h3 className="dispm-titulo">Qual mensagem enviar?</h3>
+              <p className="dispm-sub">Só templates aprovados pela Meta aparecem aqui.</p>
+              {carregandoTpl ? (
+                <div className="dispm-load"><span className="spin" /> Carregando templates…</div>
+              ) : templates.length === 0 ? (
+                <div className="dispm-load">Nenhum template aprovado. Crie um na aba Templates.</div>
+              ) : (
+                <div className="dispm-tpl-grid">
+                  {templates.map((t) => (
+                    <button key={t.name + t.language} className={template && template.name === t.name ? "dispm-tpl on" : "dispm-tpl"} onClick={() => setTemplate(t)}>
+                      <div className="dispm-tpl-head"><b>{t.name}</b><span className="of-tag">{t.language}</span></div>
+                      <div className="dispm-tpl-txt">{t.texto || "(sem corpo)"}</div>
+                      {t.vars > 0 && <div className="dispm-tpl-var">usa {t.vars} variável(eis)</div>}
+                    </button>
+                  ))}
                 </div>
-              );
-            })}
-          </div>
-        )}
-        <button className="btn btn-sm" style={{ marginTop: 10 }} onClick={carregarCampanhas}><I.refresh className="ico" /> Atualizar</button>
-      </div>
+              )}
+            </div>
+          )}
 
-      {/* modal de métricas da campanha */}
-      {campSel && <ModalMetricas camp={campSel} onClose={() => setCampSel(null)} />}
+          {passo === 3 && (
+            <div className="dispm-fade">
+              <h3 className="dispm-titulo">Para quem vai enviar?</h3>
+              <p className="dispm-sub">Cole os números ou suba um arquivo. O DDI 55 entra sozinho.</p>
+              <div className="dispm-modo">
+                <button className={modoContato === "manual" ? "dispm-modo-btn on" : "dispm-modo-btn"} onClick={() => setModoContato("manual")}>✍️ Colar números</button>
+                <button className={modoContato === "arquivo" ? "dispm-modo-btn on" : "dispm-modo-btn"} onClick={() => setModoContato("arquivo")}>📄 Subir arquivo</button>
+              </div>
+              {modoContato === "manual" ? (
+                <>
+                  <textarea className="dispm-textarea" rows={6} placeholder={"44999887766\n11988776655, João\n21997654321"} value={textoManual} onChange={(e) => setTextoManual(e.target.value)} onBlur={processarManual} />
+                  <button className="btn btn-sm" onClick={processarManual}>Reconhecer números</button>
+                </>
+              ) : (
+                <input ref={fileRef} className="input" type="file" accept=".csv,.txt" onChange={(e) => e.target.files[0] && lerCSV(e.target.files[0])} />
+              )}
+              {contatos.length > 0 && <div className="dispm-count">✅ {contatos.length} contato(s) prontos</div>}
+            </div>
+          )}
+
+          {passo === 4 && (
+            <div className="dispm-fade">
+              <h3 className="dispm-titulo">Tudo pronto?</h3>
+              <p className="dispm-sub">Confira e dispare.</p>
+              <div className="dispm-review">
+                <div className="dispm-rev"><span>📱 Número</span><b>{numeroSel ? numeroSel.apelido : "—"}</b></div>
+                <div className="dispm-rev"><span>💬 Template</span><b>{template ? template.name : "—"}</b></div>
+                <div className="dispm-rev"><span>👥 Contatos</span><b>{contatos.length}</b></div>
+              </div>
+              <div className="dispm-campo">
+                <label>Nome da campanha (opcional)</label>
+                <input className="input" placeholder="Ex: Disparo Inversor Solar" value={nomeCampanha} onChange={(e) => setNomeCampanha(e.target.value)} />
+              </div>
+              <div className="dispm-previa">
+                <span className="dispm-previa-lab">Prévia</span>
+                <div className="dispm-previa-bolha">{template ? template.texto : ""}</div>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* rodapé com navegação */}
+        <div className="dispm-foot">
+          {passo > 1 ? <button className="btn" onClick={() => setPasso(passo - 1)}>← Voltar</button> : <button className="btn" onClick={onClose}>Cancelar</button>}
+          {passo < 4 ? (
+            <button className="dispm-next" disabled={!podeAvancar} onClick={() => setPasso(passo + 1)}>Continuar →</button>
+          ) : (
+            <button className="dispm-next disparar" disabled={enviando} onClick={disparar}>
+              {enviando ? <><span className="spin" /> Disparando…</> : <>🚀 Disparar para {contatos.length}</>}
+            </button>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
 
-/* ---------- modal de métricas de uma campanha ---------- */
 function ModalMetricas({ camp, onClose }) {
   const enviados = camp.enviados || 0;
   const linha = (lab, val, cor) => {

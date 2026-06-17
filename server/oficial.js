@@ -398,7 +398,7 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
           chat.origemDisparo = true;
           chat.campanha = campanha.nome;
           chat.campanhaId = campanha.id;
-          chat.respondeu = false; // ainda não respondeu
+          if (chat.respondeu === undefined) chat.respondeu = false;
           const ts = Date.now();
           chat.mensagens.push({ role: "me", content: `[disparo] ${templateName}`, ts, template: true });
           chat.atualizadoEm = ts;
@@ -648,11 +648,15 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
             chat.naoLidas = (chat.naoLidas || 0) + 1;
             chat.atualizadoEm = ts;
 
-            // conta "responderam" na campanha (só a 1ª resposta de cada lead)
-            if (chat.origemDisparo && chat.campanhaId && !chat.respondeu) {
+            // conta "responderam" na campanha (só a 1ª resposta de cada lead daquela campanha)
+            if (chat.origemDisparo && chat.campanhaId && !chat.jaContouResposta) {
+              chat.jaContouResposta = true;
               chat.respondeu = true;
               const camp = (db.oficial.campanhas || []).find((x) => x.id === chat.campanhaId);
               if (camp) camp.responderam = (camp.responderam || 0) + 1;
+            } else if (chat.origemDisparo) {
+              // garante que conversas de disparo fiquem visíveis ao vendedor após responder
+              chat.respondeu = true;
             }
 
             // ===== DISTRIBUIÇÃO: lead respondeu -> dá pra um vendedor ativo =====
