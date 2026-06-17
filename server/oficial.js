@@ -258,25 +258,51 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
         const msg = (data && data.error && data.error.message) || ("Erro Graph " + r.status);
         return res.status(400).json({ error: msg });
       }
-      const aprovados = (data.data || [])
-        .filter((t) => t.status === "APPROVED")
-        .map((t) => {
-          // conta quantas variáveis {{n}} existem no corpo
-          const body = (t.components || []).find((c) => c.type === "BODY");
-          const texto = body ? body.text || "" : "";
-          const vars = (texto.match(/\{\{\d+\}\}/g) || []).length;
-          return { name: t.name, language: t.language, category: t.category, vars, texto };
-        });
-      res.json({ templates: aprovados });
+      const todos = (data.data || []).map((t) => {
+        const body = (t.components || []).find((c) => c.type === "BODY");
+        const texto = body ? body.text || "" : "";
+        const vars = (texto.match(/\{\{\d+\}\}/g) || []).length;
+        return { name: t.name, language: t.language, category: t.category, status: t.status, vars, texto };
+      });
+      const aprovados = todos.filter((t) => t.status === "APPROVED");
+      res.json({ templates: aprovados, todos });
     } catch (e) {
       res.status(500).json({ error: e.message });
     }
   });
 
-  /* ============================================================
-     ROTAS — VENDEDORES DO CANAL OFICIAL (gerente)
-     ativo + percentual + contador
-     ============================================================ */
+  /* ---- criar um template novo na Meta (fica pendente até a Meta aprovar) ---- */
+  app.post("/api/oficial/numeros/:id/templates", auth, gerenteOnly, async (req, res) => {
+    const n = acharNumero(req.params.id);
+    if (!n) return res.status(404).json({ error: "Número não encontrado" });
+    if (!n.wabaId) return res.status(400).json({ error: "Esse número não tem WABA ID configurado" });
+    const b = req.body || {};
+    const nome = String(b.nome || "").trim().toLowerCase().replace(/[^a-z0-9_]/g, "_");
+    const corpo = String(b.corpo || "").trim();
+    const categoria = String(b.categoria || "MARKETING").toUpperCase(); // MARKETING | UTILITY
+    const idioma = String(b.idioma || "pt_BR").trim();
+    if (!nome || !corpo) return res.status(400).json({ error: "Informe o nome e o texto do template" });
+    try {
+      const r = await fetch(`${GRAPH}/${n.wabaId}/message_templates`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: "Bearer " + n.token },
+        body: JSON.stringify({
+          name: nome,
+          language: idioma,
+          category: categoria === "UTILITY" ? "UTILITY" : "MARKETING",
+          components: [{ type: "BODY", text: corpo }],
+        }),
+      });
+      const data = await r.json();
+      if (!r.ok) {
+        const msg = (data && data.error && data.error.message) || ("Erro Graph " + r.status);
+        return res.status(400).json({ error: msg });
+      }
+      res.json({ ok: true, id: data.id, status: data.status || "PENDING", category: data.category || categoria });
+    } catch (e) {
+      res.status(500).json({ error: e.message });
+    }
+  });
   app.get("/api/oficial/vendedores", auth, gerenteOnly, (req, res) => {
     const lista = db.users
       .filter((u) => u.role === "vendedor" && u.ativo)
@@ -338,7 +364,10 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
       nome: String(b.nomeCampanha || templateName).trim(),
       numeroId: numeroCfg.id,
       template: templateName,
-      enviados: 0,
+      enviados: 0,    // aceitos pela Meta (sent)
+      entregues: 0,   // delivered (via webhook de status)
+      lidos: 0,       // read (via webhook de status)
+      responderam: 0, // leads que mandaram msg de volta
       falhas: 0,
       total: contatos.length,
       criadoEm: Date.now(),
@@ -355,14 +384,21 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
         if (!telefone) { campanha.falhas++; continue; }
         const nome = (c.nome || "").trim() || telefone;
         try {
-          await enviarTemplate(numeroCfg, telefone, templateName, idioma, c.variaveis || []);
+          const resp = await enviarTemplate(numeroCfg, telefone, templateName, idioma, c.variaveis || []);
           campanha.enviados++;
+          // guarda o messageId -> campanha, pra contar delivered/read no webhook de status
+          const mid = resp && resp.messages && resp.messages[0] && resp.messages[0].id;
+          if (mid) {
+            if (!db.oficial.msgCampanha) db.oficial.msgCampanha = {};
+            db.oficial.msgCampanha[mid] = campanha.id;
+          }
           // cria o chat já (marcado como veio de disparo) — sem dono ainda;
           // o dono é definido quando o lead RESPONDER (no webhook)
           const chat = acharOuCriarChat(numeroCfg.id, telefone, nome);
           chat.origemDisparo = true;
           chat.campanha = campanha.nome;
           chat.campanhaId = campanha.id;
+          chat.respondeu = false; // ainda não respondeu
           const ts = Date.now();
           chat.mensagens.push({ role: "me", content: `[disparo] ${templateName}`, ts, template: true });
           chat.atualizadoEm = ts;
@@ -412,7 +448,9 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
     const q = String(req.query.q || "").trim().toLowerCase();
     let chats = Object.values(db.waChats).filter((c) => c.canal === "oficial");
     if (req.user.role !== "gerente") {
-      chats = chats.filter((c) => c.vendedorId === req.user.id);
+      // vendedor: só os atribuídos a ele E que o lead já respondeu
+      // (conversa de disparo sem resposta fica invisível pro vendedor)
+      chats = chats.filter((c) => c.vendedorId === req.user.id && (!c.origemDisparo || c.respondeu));
     } else if (req.query.numeroId && req.query.numeroId !== "todos") {
       chats = chats.filter((c) => c.numeroOficialId === req.query.numeroId);
     }
@@ -463,6 +501,7 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
       vendedorId: chat.vendedorId || null,
       vendedorNome: v ? v.nome : "",
       mensagens: chat.mensagens || [],
+      notas: chat.notas || [], // notas internas (transferências etc) — lead não vê
     });
   });
 
@@ -491,18 +530,60 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
     }
   });
 
-  /* reatribuir manualmente (gerente) */
-  app.post("/api/oficial/chats/:id/atribuir", auth, gerenteOnly, (req, res) => {
+  /* reatribuir: gerente sempre; vendedor pode passar pra um colega.
+     Grava uma NOTA interna visível a todos os colaboradores (o lead não vê). */
+  app.post("/api/oficial/chats/:id/atribuir", auth, (req, res) => {
     const chat = db.waChats[req.params.id];
     if (!chat || chat.canal !== "oficial") return res.status(404).json({ error: "Conversa não encontrada" });
+    // vendedor só pode reatribuir se a conversa for dele
+    if (req.user.role !== "gerente" && chat.vendedorId !== req.user.id) {
+      return res.status(403).json({ error: "Você só pode transferir conversas suas" });
+    }
     const vendedorId = String((req.body && req.body.vendedorId) || "");
     const v = db.users.find((u) => u.id === vendedorId && u.role === "vendedor");
     if (!v) return res.status(400).json({ error: "Vendedor inválido" });
+
+    const de = chat.vendedorNome || (chat.vendedorId ? "" : "ninguém");
     chat.vendedorId = v.id;
     chat.vendedorNome = v.nome;
     chat.atribuidoEm = Date.now();
+
+    // nota interna de transferência
+    if (!Array.isArray(chat.notas)) chat.notas = [];
+    chat.notas.push({
+      tipo: "transferencia",
+      texto: `${req.user.nome} transferiu ${de ? "de " + de + " " : ""}para ${v.nome}`,
+      ts: Date.now(),
+      por: req.user.nome,
+    });
+    if (chat.notas.length > 100) chat.notas = chat.notas.slice(-100);
     salvar();
     res.json({ ok: true, vendedorId: v.id, vendedorNome: v.nome });
+  });
+
+  /* lista de vendedores pra reatribuição (qualquer colaborador logado pode ver) */
+  app.get("/api/oficial/vendedores-lista", auth, (req, res) => {
+    res.json(
+      db.users
+        .filter((u) => u.role === "vendedor" && u.ativo)
+        .map((u) => ({ id: u.id, nome: u.nome, oficialAtivo: !!u.oficialAtivo }))
+    );
+  });
+
+  /* limpar conversas de teste/órfãs (gerente) */
+  app.post("/api/oficial/chats/limpar", auth, gerenteOnly, (req, res) => {
+    const modo = String((req.body && req.body.modo) || "");
+    let removidas = 0;
+    for (const [id, chat] of Object.entries(db.waChats)) {
+      if (chat.canal !== "oficial") continue;
+      let apaga = false;
+      if (modo === "todas") apaga = true;
+      else if (modo === "sem_resposta") apaga = chat.origemDisparo && !chat.respondeu;
+      else if (modo === "sem_dono") apaga = !chat.vendedorId;
+      if (apaga) { delete db.waChats[id]; removidas++; }
+    }
+    salvar();
+    res.json({ ok: true, removidas });
   });
 
   /* ============================================================
@@ -567,9 +648,39 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
             chat.naoLidas = (chat.naoLidas || 0) + 1;
             chat.atualizadoEm = ts;
 
+            // conta "responderam" na campanha (só a 1ª resposta de cada lead)
+            if (chat.origemDisparo && chat.campanhaId && !chat.respondeu) {
+              chat.respondeu = true;
+              const camp = (db.oficial.campanhas || []).find((x) => x.id === chat.campanhaId);
+              if (camp) camp.responderam = (camp.responderam || 0) + 1;
+            }
+
             // ===== DISTRIBUIÇÃO: lead respondeu -> dá pra um vendedor ativo =====
             if (!chat.vendedorId) {
               atribuirLead(chat);
+            }
+          }
+
+          // ===== STATUS de entrega (delivered/read) das mensagens de disparo =====
+          for (const st of val.statuses || []) {
+            const mid = st.id;
+            const campId = db.oficial.msgCampanha && db.oficial.msgCampanha[mid];
+            if (!campId) continue;
+            const camp = (db.oficial.campanhas || []).find((x) => x.id === campId);
+            if (!camp) continue;
+            // dedup: não conta o mesmo (mensagem + status) duas vezes
+            if (!db.oficial.statusVistos) db.oficial.statusVistos = {};
+            const chave = mid + ":" + st.status;
+            if (db.oficial.statusVistos[chave]) continue;
+            db.oficial.statusVistos[chave] = 1;
+
+            if (st.status === "delivered") {
+              camp.entregues = (camp.entregues || 0) + 1;
+            } else if (st.status === "read") {
+              camp.lidos = (camp.lidos || 0) + 1;
+            } else if (st.status === "failed") {
+              camp.falhas = (camp.falhas || 0) + 1;
+              if (camp.enviados > 0) camp.enviados--;
             }
           }
         }

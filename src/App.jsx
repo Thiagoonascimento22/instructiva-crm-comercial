@@ -1095,6 +1095,9 @@ function PaginaOficial({ showToast }) {
         <button className={aba === "vendedores" ? "of-tab on" : "of-tab"} onClick={() => setAba("vendedores")}>
           <I.users className="ico" /> Vendedores
         </button>
+        <button className={aba === "templates" ? "of-tab on" : "of-tab"} onClick={() => setAba("templates")}>
+          <I.chat className="ico" /> Templates
+        </button>
         <button className={aba === "numeros" ? "of-tab on" : "of-tab"} onClick={() => setAba("numeros")}>
           <I.wa className="ico" /> Números
         </button>
@@ -1103,6 +1106,7 @@ function PaginaOficial({ showToast }) {
         {aba === "disparo" && <OficialDisparo showToast={showToast} />}
         {aba === "inbox" && <InboxOficial isGer={true} showToast={showToast} />}
         {aba === "vendedores" && <OficialVendedores showToast={showToast} />}
+        {aba === "templates" && <OficialTemplates showToast={showToast} />}
         {aba === "numeros" && <OficialNumeros showToast={showToast} />}
       </div>
     </div>
@@ -1124,6 +1128,7 @@ function OficialDisparo({ showToast }) {
   const [nomeCampanha, setNomeCampanha] = useState("");
   const [enviando, setEnviando] = useState(false);
   const [campanhas, setCampanhas] = useState([]);
+  const [campSel, setCampSel] = useState(null);
   const fileRef = useRef(null);
 
   const carregarCampanhas = () => api.ofCampanhas().then(setCampanhas).catch(() => {});
@@ -1400,25 +1405,76 @@ function OficialDisparo({ showToast }) {
           <div className="panel-sub">Nenhuma campanha disparada ainda.</div>
         ) : (
           <div className="of-camp-list">
-            {campanhas.map((c) => (
-              <div key={c.id} className="of-camp">
-                <div className="of-camp-top">
-                  <b>{c.nome}</b>
-                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                    <span className="of-tag">{new Date(c.criadoEm).toLocaleDateString("pt-BR")}</span>
-                    <button className="btn btn-sm danger of-camp-del" title="Excluir campanha" onClick={() => excluirCampanha(c)}><I.trash className="ico" /></button>
+            {campanhas.map((c) => {
+              const pctEntrega = c.enviados ? Math.round((c.entregues || 0) / c.enviados * 100) : 0;
+              const pctResp = c.enviados ? Math.round((c.responderam || 0) / c.enviados * 100) : 0;
+              return (
+                <div key={c.id} className="of-camp-card" onClick={() => setCampSel(c)}>
+                  <div className="of-camp-card-top">
+                    <div>
+                      <b>{c.nome}</b>
+                      <span className="of-camp-data">{new Date(c.criadoEm).toLocaleDateString("pt-BR")} · {c.template}</span>
+                    </div>
+                    <button className="of-camp-x" title="Excluir" onClick={(e) => { e.stopPropagation(); excluirCampanha(c); }}><I.trash className="ico" /></button>
                   </div>
+                  <div className="of-camp-mini">
+                    <div className="of-mini"><span className="of-mini-n">{c.enviados || 0}</span><span className="of-mini-l">enviados</span></div>
+                    <div className="of-mini"><span className="of-mini-n ok">{c.entregues || 0}</span><span className="of-mini-l">entregues</span></div>
+                    <div className="of-mini"><span className="of-mini-n resp">{c.responderam || 0}</span><span className="of-mini-l">responderam</span></div>
+                    {c.falhas > 0 && <div className="of-mini"><span className="of-mini-n err">{c.falhas}</span><span className="of-mini-l">erros</span></div>}
+                  </div>
+                  <div className="of-camp-bar"><div className="of-camp-bar-fill" style={{ width: pctResp + "%" }} /></div>
+                  <div className="of-camp-ver">Ver métricas →</div>
                 </div>
-                <div className="of-camp-stats">
-                  <span className="ok">✅ {c.enviados} enviados</span>
-                  {c.falhas > 0 && <span className="err">❌ {c.falhas} falhas</span>}
-                  <span className="tot">de {c.total}</span>
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
         <button className="btn btn-sm" style={{ marginTop: 10 }} onClick={carregarCampanhas}><I.refresh className="ico" /> Atualizar</button>
+      </div>
+
+      {/* modal de métricas da campanha */}
+      {campSel && <ModalMetricas camp={campSel} onClose={() => setCampSel(null)} />}
+    </div>
+  );
+}
+
+/* ---------- modal de métricas de uma campanha ---------- */
+function ModalMetricas({ camp, onClose }) {
+  const enviados = camp.enviados || 0;
+  const linha = (lab, val, cor) => {
+    const pct = enviados ? Math.round((val / enviados) * 100) : 0;
+    return (
+      <div className="mm-linha">
+        <div className="mm-linha-top"><span>{lab}</span><b>{val} <small>({pct}%)</small></b></div>
+        <div className="mm-bar"><div className="mm-bar-fill" style={{ width: pct + "%", background: cor }} /></div>
+      </div>
+    );
+  };
+  return (
+    <div className="modal" onClick={(e) => e.target === e.currentTarget && onClose()}>
+      <div className="modal-box">
+        <div className="mh"><b>{camp.nome}</b><button className="x-btn" onClick={onClose}><I.x /></button></div>
+        <div className="mb">
+          <div className="panel-sub" style={{ marginBottom: 14 }}>
+            Template <b>{camp.template}</b> · {new Date(camp.criadoEm).toLocaleString("pt-BR")} · total {camp.total} contato(s)
+          </div>
+          <div className="mm-big">
+            <div className="mm-big-card"><span className="mm-big-n">{enviados}</span><span>Enviados</span></div>
+            <div className="mm-big-card"><span className="mm-big-n ok">{camp.entregues || 0}</span><span>Entregues</span></div>
+            <div className="mm-big-card"><span className="mm-big-n resp">{camp.responderam || 0}</span><span>Responderam</span></div>
+            <div className="mm-big-card"><span className="mm-big-n err">{camp.falhas || 0}</span><span>Erros</span></div>
+          </div>
+          <div className="mm-linhas">
+            {linha("Entregues", camp.entregues || 0, "var(--of-green)")}
+            {linha("Lidos", camp.lidos || 0, "var(--cyan)")}
+            {linha("Responderam", camp.responderam || 0, "var(--brand)")}
+            {linha("Erros", camp.falhas || 0, "var(--coral)")}
+          </div>
+          <div className="panel-sub" style={{ marginTop: 12, fontSize: 11.5 }}>
+            Entregues e lidos são atualizados pela Meta em tempo real conforme as mensagens chegam.
+          </div>
+        </div>
       </div>
     </div>
   );
@@ -1513,6 +1569,134 @@ function OficialVendedores({ showToast }) {
 }
 
 /* ---------- NÚMEROS (pool da Cloud API) ---------- */
+/* ---------- TEMPLATES (listar + criar) ---------- */
+function OficialTemplates({ showToast }) {
+  const [numeros, setNumeros] = useState([]);
+  const [numeroId, setNumeroId] = useState("");
+  const [lista, setLista] = useState([]);
+  const [carregando, setCarregando] = useState(false);
+  const [form, setForm] = useState(null);
+  const [salvando, setSalvando] = useState(false);
+
+  useEffect(() => {
+    api.ofNumeros().then((ns) => {
+      setNumeros(ns);
+      if (ns[0]) setNumeroId(ns[0].id);
+    }).catch(() => {});
+  }, []);
+
+  const carregar = () => {
+    if (!numeroId) return;
+    setCarregando(true);
+    api.ofTemplates(numeroId)
+      .then((r) => setLista(r.todos || []))
+      .catch((e) => { showToast(e.message); setLista([]); })
+      .finally(() => setCarregando(false));
+  };
+  useEffect(carregar, [numeroId]);
+
+  async function criar() {
+    if (!form.nome || !form.corpo) return showToast("Preencha nome e texto");
+    setSalvando(true);
+    try {
+      const r = await api.ofCriarTemplate(numeroId, form);
+      showToast(`Template enviado! Status: ${r.status === "APPROVED" ? "aprovado" : "aguardando aprovação da Meta"}`);
+      setForm(null);
+      setTimeout(carregar, 1500);
+    } catch (e) { showToast(e.message); }
+    finally { setSalvando(false); }
+  }
+
+  if (numeros.length === 0) {
+    return (
+      <div className="dash-empty">
+        <I.chat className="ico-empty" />
+        <p>Cadastre um número primeiro (aba Números).</p>
+      </div>
+    );
+  }
+
+  const rotuloStatus = (s) => s === "APPROVED" ? "Aprovado" : s === "PENDING" ? "Pendente" : s === "REJECTED" ? "Rejeitado" : s;
+  const rotuloCat = (c) => c === "UTILITY" ? "Utilidade" : c === "MARKETING" ? "Marketing" : c;
+
+  return (
+    <div className="panel">
+      <div className="panel-h">
+        <I.chat className="ico" /> Templates
+        <div style={{ marginLeft: "auto", display: "flex", gap: 8, alignItems: "center" }}>
+          {numeros.length > 1 && (
+            <select className="select" style={{ width: 160 }} value={numeroId} onChange={(e) => setNumeroId(e.target.value)}>
+              {numeros.map((n) => <option key={n.id} value={n.id}>{n.apelido}</option>)}
+            </select>
+          )}
+          <button className="btn btn-sm" onClick={carregar}><I.refresh className="ico" /></button>
+          <button className="btn btn-primary btn-sm" onClick={() => setForm({ nome: "", corpo: "", categoria: "MARKETING", idioma: "pt_BR" })}>
+            <I.plus className="ico" /> Novo template
+          </button>
+        </div>
+      </div>
+
+      {carregando ? (
+        <div className="panel-sub"><span className="spin" /> Carregando…</div>
+      ) : lista.length === 0 ? (
+        <div className="panel-sub">Nenhum template nesse número ainda.</div>
+      ) : (
+        <div className="of-tpl-manage">
+          {lista.map((t) => (
+            <div key={t.name + t.language} className="of-tpl-row">
+              <div className="of-tpl-row-info">
+                <b>{t.name}</b>
+                <div className="of-tpl-row-txt">{t.texto || "(sem corpo)"}</div>
+              </div>
+              <span className={"of-cat " + t.category}>{rotuloCat(t.category)}</span>
+              <span className={"of-status " + t.status}>{rotuloStatus(t.status)}</span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {form && (
+        <div className="modal" onClick={(e) => e.target === e.currentTarget && setForm(null)}>
+          <div className="modal-box">
+            <div className="mh"><b>Novo template</b><button className="x-btn" onClick={() => setForm(null)}><I.x /></button></div>
+            <div className="mb">
+              <div className="panel-sub" style={{ marginBottom: 12 }}>
+                A Meta precisa aprovar o template antes de poder usar (geralmente de minutos a algumas horas).
+              </div>
+              <div className="field">
+                <label className="lab">Nome (sem espaços, minúsculo)</label>
+                <input className="input mono" placeholder="ex: promocao_setembro" value={form.nome} onChange={(e) => setForm({ ...form, nome: e.target.value })} />
+              </div>
+              <div className="field">
+                <label className="lab">Categoria</label>
+                <div className="wz-modo">
+                  <button className={form.categoria === "MARKETING" ? "wz-modo-btn on" : "wz-modo-btn"} onClick={() => setForm({ ...form, categoria: "MARKETING" })}>📣 Marketing</button>
+                  <button className={form.categoria === "UTILITY" ? "wz-modo-btn on" : "wz-modo-btn"} onClick={() => setForm({ ...form, categoria: "UTILITY" })}>🔧 Utilidade</button>
+                </div>
+                <div className="panel-sub" style={{ fontSize: 11.5, marginTop: 6 }}>
+                  Utilidade (~R$0,07) é mais barato, mas é só pra avisos/transações. Marketing (~R$0,35) é pra promoções e ofertas.
+                </div>
+              </div>
+              <div className="field">
+                <label className="lab">Texto da mensagem</label>
+                <textarea className="textarea" rows={5} placeholder="Olá! Tudo bem? Aqui é da Escola Instructiva…" value={form.corpo} onChange={(e) => setForm({ ...form, corpo: e.target.value })} />
+                <div className="panel-sub" style={{ fontSize: 11.5, marginTop: 6 }}>
+                  Para personalizar com o nome, use <code>{"{{1}}"}</code> (ex: "Olá {"{{1}}"}!"). Aí no disparo você preenche pelo CSV.
+                </div>
+              </div>
+            </div>
+            <div className="mf">
+              <button className="btn" onClick={() => setForm(null)}>Cancelar</button>
+              <button className="btn btn-primary" disabled={salvando} onClick={criar}>{salvando ? <><span className="spin" /> Enviando…</> : "Enviar para aprovação"}</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+
 function OficialNumeros({ showToast }) {
   const [numeros, setNumeros] = useState([]);
   const [form, setForm] = useState(null);
@@ -1624,13 +1808,16 @@ function InboxOficial({ isGer, showToast }) {
   const [texto, setTexto] = useState("");
   const [busca, setBusca] = useState("");
   const [vendedores, setVendedores] = useState([]);
+  const [showTransfer, setShowTransfer] = useState(false);
+  const [pedindoSuporte, setPedindoSuporte] = useState(false);
   const fimRef = useRef(null);
 
   const carregarLista = () => api.ofChats(busca).then(setChats).catch(() => {});
   useEffect(() => {
     carregarLista();
     const t = setInterval(carregarLista, 5000);
-    if (isGer) api.ofVendedores().then(setVendedores).catch(() => {});
+    // todos (gerente e vendedor) podem ver a lista pra transferir
+    api.ofVendedoresLista().then(setVendedores).catch(() => {});
     return () => clearInterval(t);
   }, [busca]);
 
@@ -1653,10 +1840,43 @@ function InboxOficial({ isGer, showToast }) {
       api.ofChat(sel).then(setConversa).catch(() => {});
     } catch (e) { showToast(e.message); setTexto(t); }
   }
-  async function atribuir(vendedorId) {
-    if (!sel) return;
-    try { await api.ofAtribuir(sel, vendedorId); api.ofChat(sel).then(setConversa); carregarLista(); showToast("Lead reatribuído"); }
-    catch (e) { showToast(e.message); }
+  async function transferir(vendedorId) {
+    if (!sel || !vendedorId) return;
+    try {
+      await api.ofAtribuir(sel, vendedorId);
+      api.ofChat(sel).then(setConversa);
+      carregarLista();
+      setShowTransfer(false);
+      showToast("Conversa transferida");
+    } catch (e) { showToast(e.message); }
+  }
+
+  async function limpar() {
+    const op = prompt(
+      "Limpar conversas oficiais. Digite uma opção:\n\n" +
+      "1 = remover disparos sem resposta\n" +
+      "2 = remover conversas sem dono\n" +
+      "3 = remover TODAS as conversas oficiais\n\n" +
+      "(deixe vazio para cancelar)"
+    );
+    const mapa = { "1": "sem_resposta", "2": "sem_dono", "3": "todas" };
+    const modo = mapa[(op || "").trim()];
+    if (!modo) return;
+    if (modo === "todas" && !confirm("Tem certeza? Isso apaga TODAS as conversas oficiais.")) return;
+    try {
+      const r = await api.ofLimparChats(modo);
+      showToast(`${r.removidas} conversa(s) removida(s)`);
+      setSel(null);
+      carregarLista();
+    } catch (e) { showToast(e.message); }
+  }
+
+  // monta uma timeline juntando mensagens + notas, ordenada por tempo
+  const timeline = [];
+  if (conversa) {
+    (conversa.mensagens || []).forEach((m) => timeline.push({ tipo: "msg", ts: m.ts, m }));
+    (conversa.notas || []).forEach((n) => timeline.push({ tipo: "nota", ts: n.ts, n }));
+    timeline.sort((a, b) => (a.ts || 0) - (b.ts || 0));
   }
 
   return (
@@ -1665,6 +1885,7 @@ function InboxOficial({ isGer, showToast }) {
         <div className="of-inbox-search">
           <I.search className="ico" />
           <input placeholder="Buscar por nome ou número" value={busca} onChange={(e) => setBusca(e.target.value)} />
+          {isGer && <button className="of-limpar-btn" title="Limpar conversas" onClick={limpar}><I.trash className="ico" /></button>}
         </div>
         {chats.length === 0 ? (
           <div className="of-inbox-empty">
@@ -1678,7 +1899,7 @@ function InboxOficial({ isGer, showToast }) {
             <div className="of-chat-mid">
               <div className="of-chat-nm">
                 {c.nome}
-                {c.origemDisparo && <span className="of-pill">OFICIAL · Disparo</span>}
+                {c.origemDisparo && <span className="of-pill">{c.campanha || "Disparo"}</span>}
               </div>
               <div className="of-chat-last">{c.ultima ? (c.ultima.role === "me" ? "Você: " : "") + c.ultima.content : "—"}</div>
               {isGer && c.vendedorNome && <div className="of-chat-vend">→ {c.vendedorNome}</div>}
@@ -1704,25 +1925,49 @@ function InboxOficial({ isGer, showToast }) {
               <div className="of-chat-av">{iniciais(conversa.nome)}</div>
               <div className="of-conv-info">
                 <b>{conversa.nome}</b>
-                <span>{conversa.numero}{conversa.origemDisparo && conversa.campanha ? " · " + conversa.campanha : ""}</span>
+                <span>{conversa.numero}{conversa.vendedorNome ? " · com " + conversa.vendedorNome : ""}</span>
               </div>
-              {conversa.origemDisparo && <span className="of-pill">OFICIAL · Disparo</span>}
-              {isGer && (
-                <select className="select of-reassign" value={conversa.vendedorId || ""} onChange={(e) => atribuir(e.target.value)}>
-                  <option value="" disabled>Atribuir a…</option>
-                  {vendedores.map((v) => <option key={v.id} value={v.id}>{v.nome}</option>)}
-                </select>
+              {conversa.origemDisparo && conversa.campanha && <span className="of-pill">{conversa.campanha}</span>}
+              <div className="of-conv-acoes">
+                <button className="of-acao-btn" title="Transferir para outro vendedor" onClick={() => setShowTransfer((v) => !v)}>
+                  <I.users className="ico" /> Transferir
+                </button>
+                <button className="of-acao-btn sup" title="Pedir ajuda ao suporte" onClick={() => setPedindoSuporte(true)}>
+                  <I.suporte className="ico" /> Suporte
+                </button>
+              </div>
+              {showTransfer && (
+                <div className="of-transfer-pop">
+                  <div className="of-transfer-tit">Transferir conversa para:</div>
+                  {vendedores.length === 0 ? (
+                    <div className="panel-sub">Nenhum vendedor disponível.</div>
+                  ) : vendedores.map((v) => (
+                    <button key={v.id} className="of-transfer-item" onClick={() => transferir(v.id)} disabled={v.id === conversa.vendedorId}>
+                      <span className="of-transfer-av">{iniciais(v.nome)}</span>
+                      {v.nome}
+                      {v.id === conversa.vendedorId && <span className="of-transfer-atual">atual</span>}
+                      {v.oficialAtivo && v.id !== conversa.vendedorId && <span className="of-transfer-on">● ativo</span>}
+                    </button>
+                  ))}
+                </div>
               )}
             </div>
             <div className="of-conv-msgs">
-              {(conversa.mensagens || []).map((m, i) => (
-                <div key={i} className={"of-msg " + (m.role === "me" ? "me" : "them")}>
-                  <div className="of-msg-bubble">
-                    {m.template && <span className="of-msg-tpl">📤 Template</span>}
-                    {m.content}
-                    <span className="of-msg-hora">{horaCurta(m.ts)}</span>
+              {timeline.map((item, i) => (
+                item.tipo === "nota" ? (
+                  <div key={i} className="of-nota">
+                    <I.refresh className="ico" /> {item.n.texto}
+                    <span className="of-nota-hora">{horaCurta(item.n.ts)}</span>
                   </div>
-                </div>
+                ) : (
+                  <div key={i} className={"of-msg " + (item.m.role === "me" ? "me" : "them")}>
+                    <div className="of-msg-bubble">
+                      {item.m.template && <span className="of-msg-tpl">📤 Template (disparo)</span>}
+                      {item.m.content}
+                      <span className="of-msg-hora">{horaCurta(item.m.ts)}</span>
+                    </div>
+                  </div>
+                )
               ))}
               <div ref={fimRef} />
             </div>
@@ -1738,10 +1983,17 @@ function InboxOficial({ isGer, showToast }) {
           </>
         )}
       </div>
+
+      {pedindoSuporte && conversa && (
+        <SolicitacaoForm
+          defaults={{ cliente: conversa.nome, numero: conversa.numero }}
+          onClose={() => setPedindoSuporte(false)}
+          onSaved={() => { setPedindoSuporte(false); showToast("✓ Encaminhado para o suporte"); }}
+        />
+      )}
     </div>
   );
 }
-
 
 function WhatsApp({ user, showToast, target, onTargetUsed, recarregarSol }) {
   const isGer = user.role === "gerente";
