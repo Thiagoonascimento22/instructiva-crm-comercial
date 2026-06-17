@@ -212,7 +212,20 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
     res.json((db.oficial.numeros || []).map(numeroPublico));
   });
 
-  app.post("/api/oficial/numeros", auth, gerenteOnly, (req, res) => {
+  /* assina a WABA no webhook (silencioso, não quebra se falhar) */
+  async function assinarWebhook(n) {
+    if (!n || !n.wabaId || !n.token) return false;
+    try {
+      const r = await fetch(`${GRAPH}/${n.wabaId}/subscribed_apps`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${n.token}`, "Content-Type": "application/json" },
+      });
+      if (r.ok) { n.webhookAssinado = true; n.webhookAssinadoEm = Date.now(); return true; }
+    } catch (e) {}
+    return false;
+  }
+
+  app.post("/api/oficial/numeros", auth, gerenteOnly, async (req, res) => {
     const b = req.body || {};
     const apelido = String(b.apelido || "").trim();
     const numero = String(b.numero || "").trim();
@@ -228,11 +241,12 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
       ativo: true,
     };
     db.oficial.numeros.push(novo);
+    await assinarWebhook(novo); // já deixa o webhook recebendo respostas
     salvar();
     res.json(numeroPublico(novo));
   });
 
-  app.put("/api/oficial/numeros/:id", auth, gerenteOnly, (req, res) => {
+  app.put("/api/oficial/numeros/:id", auth, gerenteOnly, async (req, res) => {
     const n = acharNumero(req.params.id);
     if (!n) return res.status(404).json({ error: "Número não encontrado" });
     const b = req.body || {};
@@ -242,6 +256,7 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
     if (b.wabaId !== undefined) n.wabaId = String(b.wabaId).trim();
     if (b.token !== undefined && b.token) n.token = String(b.token).trim();
     if (b.ativo !== undefined) n.ativo = !!b.ativo;
+    await assinarWebhook(n); // re-assina ao editar (caso token tenha mudado)
     salvar();
     res.json(numeroPublico(n));
   });
@@ -252,6 +267,31 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
     db.oficial.numeros.splice(i, 1);
     salvar();
     res.json({ ok: true });
+  });
+
+  /* ---- inscreve a WABA no webhook (faz a Meta enviar as respostas desse número) ---- */
+  app.post("/api/oficial/numeros/:id/assinar-webhook", auth, gerenteOnly, async (req, res) => {
+    const n = acharNumero(req.params.id);
+    if (!n) return res.status(404).json({ error: "Número não encontrado" });
+    if (!n.wabaId) return res.status(400).json({ error: "Esse número não tem WABA ID configurado" });
+    if (!n.token) return res.status(400).json({ error: "Esse número não tem token configurado" });
+    try {
+      const r = await fetch(`${GRAPH}/${n.wabaId}/subscribed_apps`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${n.token}`, "Content-Type": "application/json" },
+      });
+      const data = await r.json().catch(() => ({}));
+      if (!r.ok) {
+        const msg = (data && data.error && data.error.message) || "Falha ao assinar webhook";
+        return res.status(400).json({ error: msg });
+      }
+      n.webhookAssinado = true;
+      n.webhookAssinadoEm = Date.now();
+      salvar();
+      res.json({ ok: true, resultado: data });
+    } catch (e) {
+      res.status(500).json({ error: e.message });
+    }
   });
 
   /* ---- registra o número na Cloud API (necessário quando a verificação em 2 etapas está ativa) ---- */

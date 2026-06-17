@@ -1705,6 +1705,14 @@ function OficialNumeros({ showToast }) {
       carregar();
     } catch (e) { showToast("❌ " + e.message); }
   }
+  async function assinarWebhook(n) {
+    showToast("Ativando recebimento de respostas…");
+    try {
+      await api.ofAssinarWebhook(n.id);
+      showToast("✅ Pronto! As respostas desse número agora chegam no sistema.");
+      carregar();
+    } catch (e) { showToast("❌ " + e.message); }
+  }
   function copiar(txt, label) {
     navigator.clipboard?.writeText(txt).then(() => showToast(`${label} copiado!`)).catch(() => {});
   }
@@ -1748,6 +1756,7 @@ function OficialNumeros({ showToast }) {
                 <span className="onum-card-id">ID {n.phoneNumberId}</span>
               </div>
               <div className="onum-card-acoes">
+                <button className="onum-acao" onClick={() => assinarWebhook(n)} title="Ativar recebimento de respostas (webhook)"><I.link className="ico" /></button>
                 <button className="onum-acao" onClick={() => registrar(n)} title="Registrar número na Cloud API (use se aparecer erro de envio)"><I.key className="ico" /></button>
                 <button className="onum-acao" onClick={() => testar(n)} title="Testar conexão" disabled={testando === n.id}>
                   {testando === n.id ? <span className="spin" /> : <I.check className="ico" />}
