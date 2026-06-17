@@ -1110,13 +1110,17 @@ function PaginaOficial({ showToast }) {
 }
 
 /* ---------- DISPARO EM MASSA ---------- */
+/* ---------- DISPARO EM MASSA (assistente em etapas) ---------- */
 function OficialDisparo({ showToast }) {
+  const [passo, setPasso] = useState(1);
   const [numeros, setNumeros] = useState([]);
   const [numeroId, setNumeroId] = useState("");
   const [templates, setTemplates] = useState([]);
   const [carregandoTpl, setCarregandoTpl] = useState(false);
   const [template, setTemplate] = useState(null);
+  const [modoContato, setModoContato] = useState("arquivo"); // arquivo | manual
   const [contatos, setContatos] = useState([]);
+  const [textoManual, setTextoManual] = useState("");
   const [nomeCampanha, setNomeCampanha] = useState("");
   const [enviando, setEnviando] = useState(false);
   const [campanhas, setCampanhas] = useState([]);
@@ -1133,6 +1137,7 @@ function OficialDisparo({ showToast }) {
     carregarCampanhas();
   }, []);
 
+  // carrega templates quando escolhe o número
   useEffect(() => {
     if (!numeroId) { setTemplates([]); setTemplate(null); return; }
     setCarregandoTpl(true);
@@ -1150,7 +1155,6 @@ function OficialDisparo({ showToast }) {
       const linhas = txt.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
       const out = [];
       for (const l of linhas) {
-        // aceita: telefone  OU  telefone,nome  OU  nome,telefone
         const partes = l.split(/[,;\t]/).map((p) => p.trim());
         let telefone = "", nome = "";
         for (const p of partes) {
@@ -1160,18 +1164,36 @@ function OficialDisparo({ showToast }) {
         }
         if (telefone) out.push({ telefone, nome });
       }
-      // remove cabeçalho se a 1ª linha não tiver telefone válido
       setContatos(out);
       if (!out.length) showToast("Nenhum telefone válido encontrado no arquivo");
+      else showToast(`${out.length} contato(s) carregado(s)`);
     };
     reader.readAsText(file);
+  }
+
+  function processarManual() {
+    const linhas = String(textoManual).split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+    const out = [];
+    for (const l of linhas) {
+      // aceita "numero" ou "numero, nome"
+      const partes = l.split(/[,;\t]/).map((p) => p.trim());
+      let telefone = "", nome = "";
+      for (const p of partes) {
+        const dig = p.replace(/\D/g, "");
+        if (dig.length >= 10 && !telefone) telefone = dig;
+        else if (p && !/^\d+$/.test(p) && !nome) nome = p;
+      }
+      if (telefone) out.push({ telefone, nome });
+    }
+    setContatos(out);
+    if (!out.length) showToast("Nenhum número válido. Use um por linha.");
+    else showToast(`${out.length} número(s) reconhecido(s)`);
   }
 
   async function disparar() {
     if (!numeroId) return showToast("Escolha um número");
     if (!template) return showToast("Escolha um template");
-    if (!contatos.length) return showToast("Suba a lista de contatos");
-    if (!confirm(`Disparar "${template.name}" para ${contatos.length} contato(s)?`)) return;
+    if (!contatos.length) return showToast("Adicione os contatos");
     setEnviando(true);
     try {
       const r = await api.ofDisparar({
@@ -1182,9 +1204,10 @@ function OficialDisparo({ showToast }) {
         contatos,
       });
       showToast(`Disparo iniciado para ${r.total} contato(s)!`);
-      setContatos([]);
-      setNomeCampanha("");
+      // reseta o assistente
+      setContatos([]); setTextoManual(""); setNomeCampanha(""); setTemplate(null);
       if (fileRef.current) fileRef.current.value = "";
+      setPasso(1);
       setTimeout(carregarCampanhas, 1500);
     } catch (e) {
       showToast(e.message);
@@ -1192,6 +1215,8 @@ function OficialDisparo({ showToast }) {
       setEnviando(false);
     }
   }
+
+  const numeroSel = numeros.find((n) => n.id === numeroId);
 
   if (numeros.length === 0) {
     return (
@@ -1203,63 +1228,151 @@ function OficialDisparo({ showToast }) {
     );
   }
 
+  const PASSOS = ["Número", "Mensagem", "Contatos", "Revisar"];
+
   return (
     <div className="of-grid">
-      <div className="panel">
-        <div className="panel-h"><I.send className="ico" /> Novo disparo</div>
-
-        <div className="field">
-          <label className="lab">Número de envio</label>
-          <select className="select" value={numeroId} onChange={(e) => setNumeroId(e.target.value)}>
-            {numeros.map((n) => (
-              <option key={n.id} value={n.id}>{n.apelido}{n.numero ? " · " + n.numero : ""}</option>
-            ))}
-          </select>
+      <div className="panel of-wizard">
+        {/* barra de progresso */}
+        <div className="wz-steps">
+          {PASSOS.map((nome, i) => {
+            const n = i + 1;
+            return (
+              <React.Fragment key={n}>
+                <div className={"wz-step" + (passo === n ? " on" : "") + (passo > n ? " done" : "")}>
+                  <div className="wz-num">{passo > n ? "✓" : n}</div>
+                  <span>{nome}</span>
+                </div>
+                {n < PASSOS.length && <div className={"wz-line" + (passo > n ? " done" : "")} />}
+              </React.Fragment>
+            );
+          })}
         </div>
 
-        <div className="field">
-          <label className="lab">Template aprovado</label>
-          {carregandoTpl ? (
-            <div className="panel-sub"><span className="spin" /> Carregando templates…</div>
-          ) : templates.length === 0 ? (
-            <div className="panel-sub">Nenhum template aprovado nesse número.</div>
-          ) : (
-            <div className="of-tpl-list">
-              {templates.map((t) => (
-                <button
-                  key={t.name + t.language}
-                  className={template && template.name === t.name && template.language === t.language ? "of-tpl on" : "of-tpl"}
-                  onClick={() => setTemplate(t)}
-                >
-                  <div className="of-tpl-top">
-                    <b>{t.name}</b>
-                    <span className="of-tag">{t.language}</span>
+        {/* PASSO 1 — número */}
+        {passo === 1 && (
+          <div className="wz-body">
+            <div className="wz-titulo">De qual número vai sair o disparo?</div>
+            <div className="wz-num-list">
+              {numeros.map((n) => (
+                <button key={n.id} className={numeroId === n.id ? "wz-num-card on" : "wz-num-card"} onClick={() => setNumeroId(n.id)}>
+                  <I.wa className="ico" />
+                  <div>
+                    <b>{n.apelido}</b>
+                    <span>{n.numero || "—"}</span>
                   </div>
-                  <div className="of-tpl-txt">{t.texto || "(sem corpo de texto)"}</div>
-                  {t.vars > 0 && <div className="of-tpl-vars">⚠️ usa {t.vars} variável(eis) — preencha no CSV após o telefone</div>}
+                  {numeroId === n.id && <span className="wz-check">✓</span>}
                 </button>
               ))}
             </div>
-          )}
-        </div>
+            <div className="wz-foot">
+              <span />
+              <button className="btn btn-primary" disabled={!numeroId} onClick={() => setPasso(2)}>Continuar →</button>
+            </div>
+          </div>
+        )}
 
-        <div className="field">
-          <label className="lab">Nome da campanha (opcional)</label>
-          <input className="input" placeholder="Ex: Disparo Inversor Solar" value={nomeCampanha} onChange={(e) => setNomeCampanha(e.target.value)} />
-        </div>
+        {/* PASSO 2 — template */}
+        {passo === 2 && (
+          <div className="wz-body">
+            <div className="wz-titulo">Qual mensagem (template) vai enviar?</div>
+            {carregandoTpl ? (
+              <div className="panel-sub"><span className="spin" /> Carregando templates…</div>
+            ) : templates.length === 0 ? (
+              <div className="panel-sub">Nenhum template aprovado nesse número.</div>
+            ) : (
+              <div className="of-tpl-list">
+                {templates.map((t) => (
+                  <button
+                    key={t.name + t.language}
+                    className={template && template.name === t.name && template.language === t.language ? "of-tpl on" : "of-tpl"}
+                    onClick={() => setTemplate(t)}
+                  >
+                    <div className="of-tpl-top">
+                      <b>{t.name}</b>
+                      <span className="of-tag">{t.language}</span>
+                    </div>
+                    <div className="of-tpl-txt">{t.texto || "(sem corpo de texto)"}</div>
+                    {t.vars > 0 && <div className="of-tpl-vars">⚠️ usa {t.vars} variável(eis) — preencha no CSV após o telefone</div>}
+                  </button>
+                ))}
+              </div>
+            )}
+            <div className="wz-foot">
+              <button className="btn" onClick={() => setPasso(1)}>← Voltar</button>
+              <button className="btn btn-primary" disabled={!template} onClick={() => setPasso(3)}>Continuar →</button>
+            </div>
+          </div>
+        )}
 
-        <div className="field">
-          <label className="lab">Lista de contatos (CSV ou TXT)</label>
-          <input ref={fileRef} className="input" type="file" accept=".csv,.txt" onChange={(e) => e.target.files[0] && lerCSV(e.target.files[0])} />
-          <div className="panel-sub">Formato: um por linha — <code>telefone</code> ou <code>telefone,nome</code>. O DDI 55 é adicionado automaticamente.</div>
-          {contatos.length > 0 && <div className="of-count">✅ {contatos.length} contato(s) carregado(s)</div>}
-        </div>
+        {/* PASSO 3 — contatos */}
+        {passo === 3 && (
+          <div className="wz-body">
+            <div className="wz-titulo">Para quem vai enviar?</div>
+            <div className="wz-modo">
+              <button className={modoContato === "arquivo" ? "wz-modo-btn on" : "wz-modo-btn"} onClick={() => setModoContato("arquivo")}>📄 Subir arquivo</button>
+              <button className={modoContato === "manual" ? "wz-modo-btn on" : "wz-modo-btn"} onClick={() => setModoContato("manual")}>✍️ Colar números</button>
+            </div>
 
-        <button className="btn btn-primary full" disabled={enviando} onClick={disparar}>
-          {enviando ? <><span className="spin" /> Disparando…</> : <>Disparar para {contatos.length || 0} contato(s)</>}
-        </button>
+            {modoContato === "arquivo" ? (
+              <div className="field">
+                <input ref={fileRef} className="input" type="file" accept=".csv,.txt" onChange={(e) => e.target.files[0] && lerCSV(e.target.files[0])} />
+                <div className="panel-sub">Formato: um por linha — <code>telefone</code> ou <code>telefone,nome</code>. O DDI 55 é adicionado automaticamente.</div>
+              </div>
+            ) : (
+              <div className="field">
+                <textarea
+                  className="textarea"
+                  rows={8}
+                  placeholder={"Cole os números, um por linha:\n44999887766\n11988776655, João\n21997654321"}
+                  value={textoManual}
+                  onChange={(e) => setTextoManual(e.target.value)}
+                />
+                <div className="panel-sub">Um por linha. Pode ser só o número ou <code>numero, nome</code>. O DDI 55 é adicionado automaticamente.</div>
+                <button className="btn btn-sm" style={{ marginTop: 8 }} onClick={processarManual}>Reconhecer números</button>
+              </div>
+            )}
+
+            {contatos.length > 0 && <div className="of-count">✅ {contatos.length} contato(s) prontos</div>}
+
+            <div className="wz-foot">
+              <button className="btn" onClick={() => setPasso(2)}>← Voltar</button>
+              <button className="btn btn-primary" disabled={!contatos.length} onClick={() => setPasso(4)}>Continuar →</button>
+            </div>
+          </div>
+        )}
+
+        {/* PASSO 4 — revisar */}
+        {passo === 4 && (
+          <div className="wz-body">
+            <div className="wz-titulo">Confira antes de disparar</div>
+            <div className="wz-review">
+              <div className="wz-rev-item"><span>Número</span><b>{numeroSel ? numeroSel.apelido + (numeroSel.numero ? " · " + numeroSel.numero : "") : "—"}</b></div>
+              <div className="wz-rev-item"><span>Template</span><b>{template ? template.name : "—"}</b></div>
+              <div className="wz-rev-item"><span>Contatos</span><b>{contatos.length}</b></div>
+            </div>
+
+            <div className="field" style={{ marginTop: 14 }}>
+              <label className="lab">Nome da campanha (opcional)</label>
+              <input className="input" placeholder="Ex: Disparo Inversor Solar" value={nomeCampanha} onChange={(e) => setNomeCampanha(e.target.value)} />
+            </div>
+
+            <div className="wz-preview">
+              <div className="wz-preview-lab">Prévia da mensagem:</div>
+              <div className="wz-preview-bubble">{template ? template.texto : ""}</div>
+            </div>
+
+            <div className="wz-foot">
+              <button className="btn" onClick={() => setPasso(3)}>← Voltar</button>
+              <button className="btn btn-primary" disabled={enviando} onClick={disparar}>
+                {enviando ? <><span className="spin" /> Disparando…</> : <>🚀 Disparar para {contatos.length} contato(s)</>}
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
+      {/* campanhas recentes */}
       <div className="panel">
         <div className="panel-h"><I.dash className="ico" /> Campanhas recentes</div>
         {campanhas.length === 0 ? (
@@ -1287,7 +1400,6 @@ function OficialDisparo({ showToast }) {
   );
 }
 
-/* ---------- VENDEDORES (ativo + percentual) ---------- */
 function OficialVendedores({ showToast }) {
   const [vends, setVends] = useState([]);
   const [carregando, setCarregando] = useState(true);
