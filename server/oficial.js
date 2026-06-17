@@ -137,9 +137,20 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
     return chat;
   }
 
-  /* ============================================================
-     ENVIO via Cloud API
-     ============================================================ */
+  /* tenta achar um chat existente do mesmo lead, tolerando variação do 9º dígito */
+  function acharChatTolerante(numeroId, telefone) {
+    const exato = db.waChats[chaveChat(numeroId, telefone)];
+    if (exato) return exato;
+    // normaliza pra comparar só os últimos 8 dígitos (núcleo do número)
+    const nucleo = (t) => String(t || "").replace(/\D/g, "").slice(-8);
+    const alvo = nucleo(telefone);
+    if (!alvo) return null;
+    for (const c of Object.values(db.waChats)) {
+      if (c.canal !== "oficial" || c.numeroOficialId !== numeroId) continue;
+      if (nucleo(c.numero) === alvo) return c;
+    }
+    return null;
+  }
   async function graphPost(numeroCfg, payload) {
     const r = await fetch(`${GRAPH}/${numeroCfg.phoneNumberId}/messages`, {
       method: "POST",
@@ -624,7 +635,9 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
           for (const m of val.messages || []) {
             const telefone = m.from; // já vem com DDI
             const nome = nomes[telefone] || telefone;
-            const chat = acharOuCriarChat(numeroCfg.id, telefone, nome);
+            // tenta casar com uma conversa de disparo já existente (tolera 9º dígito)
+            let chat = acharChatTolerante(numeroCfg.id, telefone);
+            if (!chat) chat = acharOuCriarChat(numeroCfg.id, telefone, nome);
             if (nome && nome !== telefone) chat.nome = nome;
 
             // extrai o conteúdo por tipo

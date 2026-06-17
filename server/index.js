@@ -1510,7 +1510,11 @@ function parseIA(txt) {
 }
 function chatsDoVendedor(vendedorId) {
   const insts = (db.waConfig.instancias || []).filter((i) => i.vendedorId === vendedorId).map((i) => i.instance);
-  return Object.values(db.waChats).filter((c) => insts.includes(c.instance));
+  return Object.values(db.waChats).filter((c) => {
+    // chats do Evolution (por instância) OU chats do canal oficial atribuídos ao vendedor
+    if (c.canal === "oficial") return c.vendedorId === vendedorId;
+    return insts.includes(c.instance);
+  });
 }
 function mediaSeg(arr) {
   return arr.length ? Math.round(arr.reduce((a, b) => a + b, 0) / arr.length / 1000) : 0;

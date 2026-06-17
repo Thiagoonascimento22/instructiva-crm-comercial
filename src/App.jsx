@@ -3,6 +3,11 @@ import { createPortal } from "react-dom";
 import { api, getToken, setToken } from "./api.js";
 import { LOGO_FULL, LOGO_LIGHT } from "./logos.js";
 
+/* Portal: renderiza no <body> pra modais cobrirem a tela toda (sem ficar presos a containers com overflow) */
+function Portal({ children }) {
+  return createPortal(children, document.body);
+}
+
 /* ============================ ÍCONES ============================ */
 const I = {
   sun: (p) => (<svg {...p} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M6.3 17.7l-1.4 1.4M19.1 4.9l-1.4 1.4"/></svg>),
@@ -1089,9 +1094,6 @@ function PaginaOficial({ showToast }) {
         <button className={aba === "disparo" ? "of-tab on" : "of-tab"} onClick={() => setAba("disparo")}>
           <I.send className="ico" /> Disparo
         </button>
-        <button className={aba === "inbox" ? "of-tab on" : "of-tab"} onClick={() => setAba("inbox")}>
-          <I.chat className="ico" /> Conversas
-        </button>
         <button className={aba === "vendedores" ? "of-tab on" : "of-tab"} onClick={() => setAba("vendedores")}>
           <I.users className="ico" /> Vendedores
         </button>
@@ -1104,7 +1106,6 @@ function PaginaOficial({ showToast }) {
       </div>
       <div className="of-body">
         {aba === "disparo" && <OficialDisparo showToast={showToast} />}
-        {aba === "inbox" && <InboxOficial isGer={true} showToast={showToast} />}
         {aba === "vendedores" && <OficialVendedores showToast={showToast} />}
         {aba === "templates" && <OficialTemplates showToast={showToast} />}
         {aba === "numeros" && <OficialNumeros showToast={showToast} />}
@@ -1288,6 +1289,7 @@ function ModalDisparo({ numeros, showToast, onClose, onDone }) {
   const podeAvancar = passo === 1 ? !!numeroId : passo === 2 ? !!template : passo === 3 ? contatos.length > 0 : true;
 
   return (
+    <Portal>
     <div className="dispm-overlay" onClick={(e) => e.target === e.currentTarget && onClose()}>
       <div className="dispm">
         <button className="dispm-close" onClick={onClose}><I.x /></button>
@@ -1400,6 +1402,7 @@ function ModalDisparo({ numeros, showToast, onClose, onDone }) {
         </div>
       </div>
     </div>
+    </Portal>
   );
 }
 
@@ -1415,6 +1418,7 @@ function ModalMetricas({ camp, onClose }) {
     );
   };
   return (
+    <Portal>
     <div className="modal" onClick={(e) => e.target === e.currentTarget && onClose()}>
       <div className="modal-box">
         <div className="mh"><b>{camp.nome}</b><button className="x-btn" onClick={onClose}><I.x /></button></div>
@@ -1440,6 +1444,7 @@ function ModalMetricas({ camp, onClose }) {
         </div>
       </div>
     </div>
+    </Portal>
   );
 }
 
@@ -1619,6 +1624,7 @@ function OficialTemplates({ showToast }) {
       )}
 
       {form && (
+        <Portal>
         <div className="modal" onClick={(e) => e.target === e.currentTarget && setForm(null)}>
           <div className="modal-box">
             <div className="mh"><b>Novo template</b><button className="x-btn" onClick={() => setForm(null)}><I.x /></button></div>
@@ -1654,6 +1660,7 @@ function OficialTemplates({ showToast }) {
             </div>
           </div>
         </div>
+        </Portal>
       )}
     </div>
   );
@@ -1740,6 +1747,7 @@ function OficialNumeros({ showToast }) {
       )}
 
       {form && (
+        <Portal>
         <div className="modal" onClick={(e) => e.target === e.currentTarget && setForm(null)}>
           <div className="modal-box">
             <div className="mh"><b>{form.id ? "Editar número" : "Novo número oficial"}</b><button className="x-btn" onClick={() => setForm(null)}><I.x /></button></div>
@@ -1756,6 +1764,7 @@ function OficialNumeros({ showToast }) {
             </div>
           </div>
         </div>
+        </Portal>
       )}
     </div>
   );
