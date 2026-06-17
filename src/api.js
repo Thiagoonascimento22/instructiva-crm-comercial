@@ -94,6 +94,7 @@ export const api = {
   ofZerarContadores: () => req("POST", "/api/oficial/vendedores/zerar"),
   ofDisparar: (dados) => req("POST", "/api/oficial/disparar", dados),
   ofCampanhas: () => req("GET", "/api/oficial/campanhas"),
+  ofExcluirCampanha: (id, apagarConversas) => req("DELETE", "/api/oficial/campanhas/" + id + (apagarConversas ? "?conversas=1" : "")),
   ofChats: (q, numeroId) =>
     req("GET", "/api/oficial/chats" + (() => {
       const p = [q ? "q=" + encodeURIComponent(q) : "", numeroId ? "numeroId=" + encodeURIComponent(numeroId) : ""].filter(Boolean);

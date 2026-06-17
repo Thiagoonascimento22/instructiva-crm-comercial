@@ -384,6 +384,26 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
     res.json((db.oficial.campanhas || []).slice(0, 50));
   });
 
+  /* excluir uma campanha (e, opcionalmente, as conversas que vieram dela) */
+  app.delete("/api/oficial/campanhas/:id", auth, gerenteOnly, (req, res) => {
+    const i = (db.oficial.campanhas || []).findIndex((c) => c.id === req.params.id);
+    if (i < 0) return res.status(404).json({ error: "Campanha não encontrada" });
+    const camp = db.oficial.campanhas[i];
+    const apagarConversas = String(req.query.conversas || "") === "1";
+    let conversasRemovidas = 0;
+    if (apagarConversas) {
+      for (const [id, chat] of Object.entries(db.waChats)) {
+        if (chat.canal === "oficial" && chat.campanhaId === camp.id) {
+          delete db.waChats[id];
+          conversasRemovidas++;
+        }
+      }
+    }
+    db.oficial.campanhas.splice(i, 1);
+    salvar();
+    res.json({ ok: true, conversasRemovidas });
+  });
+
   /* ============================================================
      INBOX OFICIAL — lista de chats
      gerente vê todos; vendedor vê só os atribuídos a ele

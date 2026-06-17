@@ -1128,6 +1128,27 @@ function OficialDisparo({ showToast }) {
 
   const carregarCampanhas = () => api.ofCampanhas().then(setCampanhas).catch(() => {});
 
+  async function excluirCampanha(c) {
+    const apagar = confirm(
+      `Excluir a campanha "${c.nome}"?\n\n` +
+      `Clique OK para excluir TAMBÉM as conversas que vieram dela.\n` +
+      `Clique Cancelar para manter as conversas (e parar aqui).`
+    );
+    // se o usuário cancelou, perguntamos se quer ao menos remover só o registro
+    if (!apagar) {
+      const soRegistro = confirm(`Quer remover só o registro da campanha "${c.nome}" da lista, mantendo as conversas?`);
+      if (!soRegistro) return;
+      try { await api.ofExcluirCampanha(c.id, false); showToast("Campanha removida da lista"); carregarCampanhas(); }
+      catch (e) { showToast(e.message); }
+      return;
+    }
+    try {
+      const r = await api.ofExcluirCampanha(c.id, true);
+      showToast(`Campanha excluída (${r.conversasRemovidas || 0} conversa(s) removida(s))`);
+      carregarCampanhas();
+    } catch (e) { showToast(e.message); }
+  }
+
   useEffect(() => {
     api.ofNumeros().then((ns) => {
       const ativos = ns.filter((n) => n.ativo);
@@ -1383,7 +1404,10 @@ function OficialDisparo({ showToast }) {
               <div key={c.id} className="of-camp">
                 <div className="of-camp-top">
                   <b>{c.nome}</b>
-                  <span className="of-tag">{new Date(c.criadoEm).toLocaleDateString("pt-BR")}</span>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <span className="of-tag">{new Date(c.criadoEm).toLocaleDateString("pt-BR")}</span>
+                    <button className="btn btn-sm danger of-camp-del" title="Excluir campanha" onClick={() => excluirCampanha(c)}><I.trash className="ico" /></button>
+                  </div>
                 </div>
                 <div className="of-camp-stats">
                   <span className="ok">✅ {c.enviados} enviados</span>
@@ -1993,18 +2017,11 @@ function WhatsApp({ user, showToast, target, onTargetUsed, recarregarSol }) {
 
   if (loading) return <div className="spin" />;
 
-  if (!isGer && (!minha || !minha.instance)) {
-    return (
-      <div className="wa-page">
-        <div className="wa-grid"><div className="wa-none">
-          <I.wa className="ico" />
-          <div><b>Seu WhatsApp ainda não foi vinculado.</b><br />Peça pra gerente cadastrar o seu número em WhatsApp → Configurar conexão.</div>
-        </div></div>
-      </div>
-    );
-  }
-
   if (showCfg) return <WhatsAppConfig onVoltar={() => { setShowCfg(false); initGerente(); }} showToast={showToast} />;
+
+  // vendedor sem Evolution vinculado: NÃO bloqueia a tela toda — só o conteúdo Evolution.
+  // a aba "Oficial · Disparo" continua acessível.
+  const semEvolution = !isGer && (!minha || !minha.instance);
 
   return (
     <div className="wa-page">
@@ -2019,6 +2036,11 @@ function WhatsApp({ user, showToast, target, onTargetUsed, recarregarSol }) {
 
       {canalAba === "oficial" ? (
         <InboxOficial isGer={isGer} showToast={showToast} />
+      ) : semEvolution ? (
+        <div className="wa-grid"><div className="wa-none">
+          <I.wa className="ico" />
+          <div><b>Seu WhatsApp (Evolution) ainda não foi vinculado.</b><br />Peça pra gerente cadastrar o seu número, ou use a aba <b>Oficial · Disparo</b> acima.</div>
+        </div></div>
       ) : (
       <>
       <div style={{ display: "flex", justifyContent: "space-between", gap: 10, marginBottom: 14, flexWrap: "wrap" }}>
