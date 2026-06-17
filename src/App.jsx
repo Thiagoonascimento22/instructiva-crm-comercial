@@ -34,6 +34,8 @@ const I = {
   power: (p) => (<svg {...p} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2v10M18.4 6.6a9 9 0 1 1-12.8 0"/></svg>),
   refresh: (p) => (<svg {...p} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 12a9 9 0 0 1 15-6.7L21 8M21 3v5h-5M21 12a9 9 0 0 1-15 6.7L3 16M3 21v-5h5"/></svg>),
   link: (p) => (<svg {...p} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.5 1.5"/><path d="M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.5-1.5"/></svg>),
+  chevron: (p) => (<svg {...p} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M6 9l6 6 6-6"/></svg>),
+  copy: (p) => (<svg {...p} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>),
   dash: (p) => (<svg {...p} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M3 3v18h18"/><rect x="7" y="11" width="3" height="6" rx="1"/><rect x="12" y="7" width="3" height="10" rx="1"/><rect x="17" y="13" width="3" height="4" rx="1"/></svg>),
   medal: (p) => (<svg {...p} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="15" r="6"/><path d="M9 9 6.5 2M15 9l2.5-7M9.5 2h5"/></svg>),
   target: (p) => (<svg {...p} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1.5"/></svg>),
@@ -1659,6 +1661,8 @@ function OficialNumeros({ showToast }) {
   const [numeros, setNumeros] = useState([]);
   const [form, setForm] = useState(null);
   const [webhook, setWebhook] = useState(null);
+  const [verWebhook, setVerWebhook] = useState(false);
+  const [testando, setTestando] = useState(null);
 
   const carregar = () => api.ofNumeros().then(setNumeros).catch((e) => showToast(e.message));
   useEffect(() => {
@@ -1682,73 +1686,144 @@ function OficialNumeros({ showToast }) {
     catch (e) { showToast(e.message); }
   }
   async function testar(n) {
-    showToast("Testando conexão…");
+    setTestando(n.id);
     try {
       const r = await api.ofTemplates(n.id);
       showToast(`✅ Conexão OK! ${(r.templates || []).length} template(s) aprovado(s).`);
     } catch (e) { showToast("❌ " + e.message); }
+    finally { setTestando(null); }
+  }
+  function copiar(txt, label) {
+    navigator.clipboard?.writeText(txt).then(() => showToast(`${label} copiado!`)).catch(() => {});
   }
 
   return (
-    <div className="of-grid">
-      <div className="panel">
-        <div className="panel-h">
-          <I.wa className="ico" /> Números oficiais
-          <button className="btn btn-sm" style={{ marginLeft: "auto" }} onClick={() => setForm({ apelido: "", numero: "", phoneNumberId: "", wabaId: "", token: "" })}>
-            <I.plus className="ico" /> Adicionar
-          </button>
+    <div className="onum">
+      {/* cabeçalho */}
+      <div className="onum-head">
+        <div>
+          <h3 className="onum-titulo">Números oficiais</h3>
+          <p className="onum-sub">WhatsApp Cloud API conectados à sua conta Meta</p>
         </div>
-        {numeros.length === 0 ? (
-          <div className="panel-sub">Nenhum número cadastrado. Clique em “Adicionar”.</div>
-        ) : (
-          <div className="of-num-list">
-            {numeros.map((n) => (
-              <div key={n.id} className="of-num">
-                <div className="of-num-info">
-                  <b>{n.apelido}</b>
-                  <span className="of-num-sub">{n.numero || "—"} · ID {n.phoneNumberId}</span>
-                </div>
-                <span className={n.ativo ? "of-badge ok" : "of-badge off"}>{n.ativo ? "Ativo" : "Inativo"}</span>
-                <button className="btn btn-sm" onClick={() => testar(n)} title="Testar conexão"><I.check className="ico" /></button>
-                <button className="btn btn-sm" onClick={() => setForm({ ...n, token: "" })} title="Editar"><I.cog className="ico" /></button>
-                <button className="btn btn-sm danger" onClick={() => excluir(n)} title="Excluir"><I.trash className="ico" /></button>
-              </div>
-            ))}
-          </div>
-        )}
+        <button className="onum-add" onClick={() => setForm({ apelido: "", numero: "", phoneNumberId: "", wabaId: "", token: "" })}>
+          <I.plus className="ico" /> Adicionar número
+        </button>
       </div>
 
-      {webhook && (
-        <div className="panel">
-          <div className="panel-h"><I.link className="ico" /> Webhook (configure na Meta)</div>
-          <div className="panel-sub">No app da Meta, em WhatsApp → Configuração → Webhook, cole estes dois valores:</div>
-          <div className="field">
-            <label className="lab">URL de callback</label>
-            <input className="input mono" readOnly value={webhook.url} onFocus={(e) => e.target.select()} />
-          </div>
-          <div className="field">
-            <label className="lab">Token de verificação</label>
-            <input className="input mono" readOnly value={webhook.verifyToken} onFocus={(e) => e.target.select()} />
-          </div>
-          <div className="panel-sub">Depois de verificar, ative o campo <b>messages</b> nos webhooks.</div>
+      {/* lista de números */}
+      {numeros.length === 0 ? (
+        <div className="onum-vazio">
+          <div className="onum-vazio-ico"><I.wa className="ico" /></div>
+          <b>Nenhum número conectado ainda</b>
+          <p>Conecte um número da sua conta Meta para começar a disparar.</p>
+          <button className="onum-add" onClick={() => setForm({ apelido: "", numero: "", phoneNumberId: "", wabaId: "", token: "" })}>
+            <I.plus className="ico" /> Adicionar número
+          </button>
+        </div>
+      ) : (
+        <div className="onum-cards">
+          {numeros.map((n) => (
+            <div key={n.id} className="onum-card">
+              <div className="onum-card-ico"><I.wa className="ico" /></div>
+              <div className="onum-card-info">
+                <div className="onum-card-top">
+                  <b>{n.apelido}</b>
+                  <span className={n.ativo ? "onum-status on" : "onum-status off"}>
+                    <i /> {n.ativo ? "Ativo" : "Inativo"}
+                  </span>
+                </div>
+                <span className="onum-card-num">{n.numero || "número não informado"}</span>
+                <span className="onum-card-id">ID {n.phoneNumberId}</span>
+              </div>
+              <div className="onum-card-acoes">
+                <button className="onum-acao" onClick={() => testar(n)} title="Testar conexão" disabled={testando === n.id}>
+                  {testando === n.id ? <span className="spin" /> : <I.check className="ico" />}
+                </button>
+                <button className="onum-acao" onClick={() => setForm({ ...n, token: "" })} title="Editar"><I.cog className="ico" /></button>
+                <button className="onum-acao danger" onClick={() => excluir(n)} title="Excluir"><I.trash className="ico" /></button>
+              </div>
+            </div>
+          ))}
         </div>
       )}
 
+      {/* webhook colapsável */}
+      {webhook && (
+        <div className="onum-webhook">
+          <button className="onum-webhook-h" onClick={() => setVerWebhook((v) => !v)}>
+            <I.link className="ico" />
+            <span>Configuração do Webhook na Meta</span>
+            <I.chevron className={"ico chev" + (verWebhook ? " open" : "")} />
+          </button>
+          {verWebhook && (
+            <div className="onum-webhook-body">
+              <p className="onum-webhook-intro">No painel da Meta, vá em <b>WhatsApp → Configuração → Webhook</b> e cole estes dois valores:</p>
+              <div className="onum-copy">
+                <label>URL de callback</label>
+                <div className="onum-copy-row">
+                  <input className="mono" readOnly value={webhook.url} onFocus={(e) => e.target.select()} />
+                  <button onClick={() => copiar(webhook.url, "URL")} title="Copiar"><I.copy className="ico" /></button>
+                </div>
+              </div>
+              <div className="onum-copy">
+                <label>Token de verificação</label>
+                <div className="onum-copy-row">
+                  <input className="mono" readOnly value={webhook.verifyToken} onFocus={(e) => e.target.select()} />
+                  <button onClick={() => copiar(webhook.verifyToken, "Token")} title="Copiar"><I.copy className="ico" /></button>
+                </div>
+              </div>
+              <p className="onum-webhook-fim">Depois de verificar, ative o campo <b>messages</b> nos webhooks.</p>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* modal adicionar/editar */}
       {form && (
         <Portal>
         <div className="modal" onClick={(e) => e.target === e.currentTarget && setForm(null)}>
-          <div className="modal-box">
-            <div className="mh"><b>{form.id ? "Editar número" : "Novo número oficial"}</b><button className="x-btn" onClick={() => setForm(null)}><I.x /></button></div>
-            <div className="mb">
-              <div className="field"><label className="lab">Apelido</label><input className="input" placeholder="Ex: Thalia" value={form.apelido} onChange={(e) => setForm({ ...form, apelido: e.target.value })} /></div>
-              <div className="field"><label className="lab">Número (opcional)</label><input className="input" placeholder="+5544997550996" value={form.numero} onChange={(e) => setForm({ ...form, numero: e.target.value })} /></div>
-              <div className="field"><label className="lab">Phone Number ID</label><input className="input mono" placeholder="copie da Meta" value={form.phoneNumberId} onChange={(e) => setForm({ ...form, phoneNumberId: e.target.value })} /></div>
-              <div className="field"><label className="lab">WABA ID</label><input className="input mono" placeholder="copie da Meta" value={form.wabaId} onChange={(e) => setForm({ ...form, wabaId: e.target.value })} /></div>
-              <div className="field"><label className="lab">Access Token {form.id && <span className="panel-sub">(deixe vazio p/ manter o atual)</span>}</label><input className="input mono" placeholder="EAA..." value={form.token} onChange={(e) => setForm({ ...form, token: e.target.value })} /></div>
+          <div className="onum-modal">
+            <button className="onum-modal-x" onClick={() => setForm(null)}><I.x /></button>
+            <div className="onum-modal-head">
+              <div className="onum-modal-ico"><I.wa className="ico" /></div>
+              <div>
+                <h3>{form.id ? "Editar número" : "Conectar número da Meta"}</h3>
+                <p>Cole as credenciais do número que já existe na sua conta Meta.</p>
+              </div>
             </div>
-            <div className="mf">
-              <button className="btn" onClick={() => setForm(null)}>Cancelar</button>
-              <button className="btn btn-primary" onClick={salvar}>Salvar</button>
+
+            <div className="onum-modal-body">
+              <div className="onum-f">
+                <label>Apelido <i>(como vai aparecer aqui no sistema)</i></label>
+                <input placeholder="Ex: Thalia, Comercial, Vendas..." value={form.apelido} onChange={(e) => setForm({ ...form, apelido: e.target.value })} />
+              </div>
+              <div className="onum-f">
+                <label>Número de telefone <i>(opcional, só pra você identificar)</i></label>
+                <input placeholder="+55 44 99755-0996" value={form.numero} onChange={(e) => setForm({ ...form, numero: e.target.value })} />
+              </div>
+
+              <div className="onum-divisor"><span>Credenciais da Meta</span></div>
+              <div className="onum-dica">
+                💡 Você encontra esses dados no <b>Meta for Developers</b> → seu app → <b>WhatsApp → Configuração da API</b>. Use sempre o botão de copiar (não digite à mão).
+              </div>
+
+              <div className="onum-f">
+                <label>Phone Number ID</label>
+                <input className="mono" placeholder="Ex: 1115209651681858" value={form.phoneNumberId} onChange={(e) => setForm({ ...form, phoneNumberId: e.target.value })} />
+              </div>
+              <div className="onum-f">
+                <label>WABA ID <i>(ID da conta do WhatsApp Business)</i></label>
+                <input className="mono" placeholder="Ex: 751745137996849" value={form.wabaId} onChange={(e) => setForm({ ...form, wabaId: e.target.value })} />
+              </div>
+              <div className="onum-f">
+                <label>Access Token {form.id && <i>(deixe vazio pra manter o atual)</i>}</label>
+                <input className="mono" placeholder="EAA..." value={form.token} onChange={(e) => setForm({ ...form, token: e.target.value })} />
+              </div>
+            </div>
+
+            <div className="onum-modal-foot">
+              <button className="onum-btn-ghost" onClick={() => setForm(null)}>Cancelar</button>
+              <button className="onum-btn-save" onClick={salvar}>{form.id ? "Salvar alterações" : "Conectar número"}</button>
             </div>
           </div>
         </div>

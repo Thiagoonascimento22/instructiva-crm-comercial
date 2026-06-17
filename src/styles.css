@@ -3029,3 +3029,107 @@ h1, h2, h3, h4, .topbar .greet, .panel-h h3, .login-card .ttl, .login-card h2, .
 /* botão encerrar atendimento */
 .of-acao-btn.fim:hover { border-color: var(--coral); color: var(--coral); }
 [data-theme="dark"] .of-acao-btn.fim:hover { border-color: var(--coral); color: var(--coral); }
+
+/* ============================================================
+   NÚMEROS OFICIAIS — tela redesenhada
+   ============================================================ */
+.onum { display: flex; flex-direction: column; gap: 20px; max-width: 920px; }
+
+/* cabeçalho */
+.onum-head { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.onum-titulo { font-size: 20px; font-weight: 800; margin: 0; color: var(--text); letter-spacing: -.01em; }
+.onum-sub { font-size: 13.5px; color: var(--muted); margin: 3px 0 0; }
+.onum-add { display: inline-flex; align-items: center; gap: 8px; padding: 11px 20px; background: var(--grad); color: #fff; border: none; border-radius: 12px; font-size: 14px; font-weight: 700; cursor: pointer; transition: .16s; box-shadow: var(--glow-brand); white-space: nowrap; }
+.onum-add:hover { transform: translateY(-1px); box-shadow: 0 16px 32px -14px rgba(255,122,26,.5); }
+.onum-add .ico { width: 17px !important; height: 17px !important; }
+
+/* vazio */
+.onum-vazio { text-align: center; padding: 56px 24px; border: 1px dashed var(--line); border-radius: 18px; display: flex; flex-direction: column; align-items: center; gap: 6px; }
+.onum-vazio-ico { width: 56px; height: 56px; border-radius: 16px; background: var(--of-green-soft); display: flex; align-items: center; justify-content: center; margin-bottom: 8px; }
+.onum-vazio-ico .ico { width: 28px !important; height: 28px !important; color: var(--of-green-d); }
+.onum-vazio b { font-size: 16px; color: var(--text); }
+.onum-vazio p { font-size: 13.5px; color: var(--muted); margin: 0 0 14px; }
+
+/* cards de número */
+.onum-cards { display: flex; flex-direction: column; gap: 12px; }
+.onum-card { display: flex; align-items: center; gap: 16px; padding: 18px 20px; background: var(--card); border: 1px solid var(--line); border-radius: 16px; transition: .16s; }
+.onum-card:hover { border-color: var(--of-green); box-shadow: var(--card-hover-shadow); }
+.onum-card-ico { width: 46px; height: 46px; border-radius: 13px; background: var(--of-green-soft); display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.onum-card-ico .ico { width: 24px !important; height: 24px !important; color: var(--of-green-d); }
+.onum-card-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.onum-card-top { display: flex; align-items: center; gap: 10px; }
+.onum-card-top b { font-size: 16px; color: var(--text); }
+.onum-status { display: inline-flex; align-items: center; gap: 5px; font-size: 11.5px; font-weight: 700; padding: 3px 10px; border-radius: 20px; }
+.onum-status i { width: 6px; height: 6px; border-radius: 50%; display: block; }
+.onum-status.on { background: var(--of-green-soft); color: var(--of-green-d); }
+.onum-status.on i { background: var(--of-green); }
+.onum-status.off { background: rgba(148,163,184,.15); color: var(--faint); }
+.onum-status.off i { background: var(--faint); }
+.onum-card-num { font-size: 13.5px; color: var(--muted); font-weight: 500; }
+.onum-card-id { font-size: 11.5px; color: var(--faint); font-family: var(--mono, ui-monospace, monospace); }
+.onum-card-acoes { display: flex; gap: 7px; flex-shrink: 0; }
+.onum-acao { width: 38px; height: 38px; border-radius: 11px; border: 1px solid var(--line); background: var(--surface-2); color: var(--muted); display: flex; align-items: center; justify-content: center; cursor: pointer; transition: .14s; }
+.onum-acao:hover:not(:disabled) { border-color: var(--of-green); color: var(--of-green-d); background: var(--of-green-soft); }
+.onum-acao.danger:hover { border-color: var(--coral); color: var(--coral); background: rgba(244,63,94,.08); }
+.onum-acao:disabled { opacity: .6; cursor: wait; }
+.onum-acao .ico { width: 17px !important; height: 17px !important; }
+
+/* webhook colapsável */
+.onum-webhook { border: 1px solid var(--line); border-radius: 16px; overflow: hidden; background: var(--card); }
+.onum-webhook-h { width: 100%; display: flex; align-items: center; gap: 11px; padding: 16px 20px; background: none; border: none; cursor: pointer; font-size: 14.5px; font-weight: 700; color: var(--text); transition: .14s; }
+.onum-webhook-h:hover { background: var(--surface-2); }
+.onum-webhook-h .ico { width: 18px !important; height: 18px !important; color: var(--muted); }
+.onum-webhook-h .chev { margin-left: auto; transition: transform .2s; }
+.onum-webhook-h .chev.open { transform: rotate(180deg); }
+.onum-webhook-body { padding: 4px 20px 20px; border-top: 1px solid var(--line-2); }
+.onum-webhook-intro { font-size: 13px; color: var(--muted); margin: 14px 0 14px; line-height: 1.5; }
+.onum-webhook-fim { font-size: 12.5px; color: var(--faint); margin: 14px 0 0; }
+.onum-copy { margin-bottom: 14px; }
+.onum-copy label { display: block; font-size: 12px; font-weight: 700; color: var(--muted); margin-bottom: 6px; text-transform: uppercase; letter-spacing: .03em; }
+.onum-copy-row { display: flex; gap: 8px; }
+.onum-copy-row input { flex: 1; padding: 11px 14px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface-2); color: var(--text); font-size: 13px; outline: none; }
+.onum-copy-row input.mono { font-family: var(--mono, ui-monospace, monospace); }
+.onum-copy-row button { width: 44px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface-2); color: var(--muted); cursor: pointer; display: flex; align-items: center; justify-content: center; transition: .14s; flex-shrink: 0; }
+.onum-copy-row button:hover { border-color: var(--brand); color: var(--brand); background: #fff6ef; }
+.onum-copy-row button .ico { width: 16px !important; height: 16px !important; }
+
+/* modal adicionar/editar número */
+.onum-modal { background: var(--card); border-radius: 22px; width: 100%; max-width: 540px; position: relative; max-height: 90vh; overflow-y: auto; box-shadow: 0 40px 100px -30px rgba(15,16,30,.5); animation: dispmUp .25s cubic-bezier(.2,.8,.2,1); }
+.onum-modal-x { position: absolute; top: 16px; right: 16px; width: 32px; height: 32px; border-radius: 9px; border: none; background: var(--surface-2); color: var(--muted); cursor: pointer; display: flex; align-items: center; justify-content: center; transition: .14s; z-index: 2; }
+.onum-modal-x:hover { background: var(--line); color: var(--text); }
+.onum-modal-x svg { width: 16px; height: 16px; }
+.onum-modal-head { display: flex; align-items: flex-start; gap: 14px; padding: 26px 28px 20px; }
+.onum-modal-ico { width: 46px; height: 46px; border-radius: 13px; background: var(--of-green-soft); display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.onum-modal-ico .ico { width: 24px !important; height: 24px !important; color: var(--of-green-d); }
+.onum-modal-head h3 { font-size: 18px; font-weight: 800; margin: 2px 0 4px; color: var(--text); }
+.onum-modal-head p { font-size: 13px; color: var(--muted); margin: 0; line-height: 1.45; }
+.onum-modal-body { padding: 0 28px 8px; }
+.onum-f { margin-bottom: 15px; }
+.onum-f label { display: block; font-size: 13px; font-weight: 600; color: var(--text); margin-bottom: 7px; }
+.onum-f label i { font-style: normal; font-weight: 400; color: var(--faint); font-size: 12px; }
+.onum-f input { width: 100%; padding: 12px 14px; border: 1px solid var(--line); border-radius: 11px; background: var(--input-bg, var(--surface-2)); color: var(--text); font-size: 14px; outline: none; transition: .14s; box-sizing: border-box; }
+.onum-f input:focus { border-color: var(--of-green); box-shadow: 0 0 0 3px var(--of-green-soft); }
+.onum-f input.mono { font-family: var(--mono, ui-monospace, monospace); font-size: 13px; }
+.onum-divisor { display: flex; align-items: center; gap: 12px; margin: 22px 0 14px; }
+.onum-divisor::before, .onum-divisor::after { content: ""; flex: 1; height: 1px; background: var(--line); }
+.onum-divisor span { font-size: 11.5px; font-weight: 700; color: var(--faint); text-transform: uppercase; letter-spacing: .05em; }
+.onum-dica { background: var(--of-green-soft); border: 1px solid var(--of-green-line, rgba(16,185,129,.2)); border-radius: 11px; padding: 12px 14px; font-size: 12.5px; color: var(--text); line-height: 1.5; margin-bottom: 18px; }
+.onum-modal-foot { display: flex; justify-content: flex-end; gap: 10px; padding: 18px 28px 24px; position: sticky; bottom: 0; background: var(--card); border-top: 1px solid var(--line-2); }
+.onum-btn-ghost { padding: 11px 20px; border: 1px solid var(--line); border-radius: 11px; background: none; color: var(--muted); font-size: 14px; font-weight: 600; cursor: pointer; transition: .14s; }
+.onum-btn-ghost:hover { background: var(--surface-2); color: var(--text); }
+.onum-btn-save { padding: 11px 24px; border: none; border-radius: 11px; background: linear-gradient(135deg, #12b76a, #059669); color: #fff; font-size: 14px; font-weight: 700; cursor: pointer; transition: .16s; box-shadow: 0 12px 28px -12px rgba(16,185,129,.5); }
+.onum-btn-save:hover { transform: translateY(-1px); }
+
+/* dark mode da tela de números */
+[data-theme="dark"] .onum-card { background: var(--surface-2); }
+[data-theme="dark"] .onum-acao { background: var(--card); }
+[data-theme="dark"] .onum-webhook { background: var(--surface-2); }
+[data-theme="dark"] .onum-copy-row input,
+[data-theme="dark"] .onum-copy-row button { background: var(--card); }
+[data-theme="dark"] .onum-copy-row button:hover { background: rgba(255,122,26,.16); }
+[data-theme="dark"] .onum-modal { background: var(--card); }
+[data-theme="dark"] .onum-f input { background: var(--surface-2); }
+[data-theme="dark"] .onum-modal-foot { background: var(--card); }
+
+/* verde do oficial mais vivo no dark */
+[data-theme="dark"] { --of-green-d: #34d399; --of-green-soft: rgba(16,185,129,.18); }
