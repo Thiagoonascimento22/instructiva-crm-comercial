@@ -1147,13 +1147,6 @@ function OficialDisparo({ showToast }) {
     } catch (e) { showToast(e.message); }
   }
 
-  // métricas gerais (soma de tudo)
-  const tot = campanhas.reduce((a, c) => ({
-    enviados: a.enviados + (c.enviados || 0),
-    entregues: a.entregues + (c.entregues || 0),
-    responderam: a.responderam + (c.responderam || 0),
-  }), { enviados: 0, entregues: 0, responderam: 0 });
-
   return (
     <div className="disp-page">
       {/* hero / abertura */}
@@ -1166,18 +1159,13 @@ function OficialDisparo({ showToast }) {
             <I.send className="ico" /> Novo disparo
           </button>
         </div>
-        <div className="disp-hero-stats">
-          <div className="disp-stat"><span className="disp-stat-n">{tot.enviados}</span><span className="disp-stat-l">Enviados</span></div>
-          <div className="disp-stat"><span className="disp-stat-n ok">{tot.entregues}</span><span className="disp-stat-l">Entregues</span></div>
-          <div className="disp-stat"><span className="disp-stat-n resp">{tot.responderam}</span><span className="disp-stat-l">Responderam</span></div>
-        </div>
       </div>
 
       {/* campanhas */}
       <div className="disp-camps">
         <div className="disp-camps-head">
           <h3>Campanhas</h3>
-          <button className="btn btn-sm" onClick={carregarCampanhas}><I.refresh className="ico" /> Atualizar</button>
+          <button className="btn btn-sm" onClick={async () => { try { await api.ofRecontar(); } catch (e) {} carregarCampanhas(); }}><I.refresh className="ico" /> Atualizar</button>
         </div>
         {campanhas.length === 0 ? (
           <div className="disp-vazio">

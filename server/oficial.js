@@ -431,6 +431,44 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
     res.json((db.oficial.campanhas || []).slice(0, 50));
   });
 
+  /* recalcula "responderam" de todas as campanhas com base nas conversas atuais.
+     Conserta campanhas antigas onde a resposta caiu numa conversa separada. */
+  app.post("/api/oficial/campanhas/recontar", auth, gerenteOnly, (req, res) => {
+    const nucleo = (t) => String(t || "").replace(/\D/g, "").slice(-8);
+    // mapa: para cada campanha, conjunto de núcleos que receberam disparo
+    const porCampanha = {}; // campId -> Set(nucleos disparados)
+    const respondeuNucleo = {}; // numeroId -> Set(nucleos que responderam)
+
+    for (const c of Object.values(db.waChats)) {
+      if (c.canal !== "oficial") continue;
+      const nuc = nucleo(c.numero);
+      if (!nuc) continue;
+      // quem respondeu? (tem alguma mensagem role=them)
+      const temResposta = (c.mensagens || []).some((m) => m.role === "them");
+      if (temResposta) {
+        if (!respondeuNucleo[c.numeroOficialId]) respondeuNucleo[c.numeroOficialId] = new Set();
+        respondeuNucleo[c.numeroOficialId].add(nuc);
+      }
+      // de qual campanha veio
+      if (c.origemDisparo && c.campanhaId) {
+        if (!porCampanha[c.campanhaId]) porCampanha[c.campanhaId] = { numeroId: c.numeroOficialId, nucs: new Set() };
+        porCampanha[c.campanhaId].nucs.add(nuc);
+      }
+    }
+
+    let ajustadas = 0;
+    for (const camp of db.oficial.campanhas || []) {
+      const info = porCampanha[camp.id];
+      if (!info) continue;
+      const respSet = respondeuNucleo[info.numeroId] || new Set();
+      let n = 0;
+      for (const nuc of info.nucs) if (respSet.has(nuc)) n++;
+      if (n !== (camp.responderam || 0)) { camp.responderam = n; ajustadas++; }
+    }
+    salvar();
+    res.json({ ok: true, ajustadas });
+  });
+
   /* excluir uma campanha (e, opcionalmente, as conversas que vieram dela) */
   app.delete("/api/oficial/campanhas/:id", auth, gerenteOnly, (req, res) => {
     const i = (db.oficial.campanhas || []).findIndex((c) => c.id === req.params.id);
