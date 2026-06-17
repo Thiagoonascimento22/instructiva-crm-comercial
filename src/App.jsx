@@ -1713,6 +1713,28 @@ function OficialNumeros({ showToast }) {
       carregar();
     } catch (e) { showToast("❌ " + e.message); }
   }
+  async function diagnostico() {
+    showToast("Verificando…");
+    try {
+      const d = await api.ofDiagnostico();
+      let txt = "DIAGNÓSTICO DO WEBHOOK\n\n";
+      txt += "Inscrição de cada número (recebe respostas?):\n";
+      for (const n of d.numeros) {
+        const st = n.inscrito === true ? "✅ SIM" : n.inscrito === false ? "❌ NÃO" : "⚠️ " + (n.erro || "?");
+        txt += `• ${n.apelido}: ${st}\n`;
+      }
+      txt += "\nÚltimas chamadas recebidas da Meta:\n";
+      if (!d.log.length) {
+        txt += "(nenhuma chamada recebida ainda)\n";
+      } else {
+        for (const l of d.log.slice(0, 8)) {
+          const hora = new Date(l.ts).toLocaleTimeString("pt-BR");
+          txt += `• ${hora} — ${l.resumo}\n`;
+        }
+      }
+      alert(txt);
+    } catch (e) { showToast("❌ " + e.message); }
+  }
   function copiar(txt, label) {
     navigator.clipboard?.writeText(txt).then(() => showToast(`${label} copiado!`)).catch(() => {});
   }
@@ -1725,9 +1747,12 @@ function OficialNumeros({ showToast }) {
           <h3 className="onum-titulo">Números oficiais</h3>
           <p className="onum-sub">WhatsApp Cloud API conectados à sua conta Meta</p>
         </div>
-        <button className="onum-add" onClick={() => setForm({ apelido: "", numero: "", phoneNumberId: "", wabaId: "", token: "" })}>
-          <I.plus className="ico" /> Adicionar número
-        </button>
+        <div style={{ display: "flex", gap: 10 }}>
+          <button className="onum-btn-ghost" onClick={diagnostico} title="Verificar se as respostas estão chegando">🔍 Diagnóstico</button>
+          <button className="onum-add" onClick={() => setForm({ apelido: "", numero: "", phoneNumberId: "", wabaId: "", token: "" })}>
+            <I.plus className="ico" /> Adicionar número
+          </button>
+        </div>
       </div>
 
       {/* lista de números */}

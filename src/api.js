@@ -90,6 +90,7 @@ export const api = {
   ofExcluirNumero: (id) => req("DELETE", "/api/oficial/numeros/" + id),
   ofRegistrarNumero: (id, pin) => req("POST", "/api/oficial/numeros/" + id + "/registrar", { pin }),
   ofAssinarWebhook: (id) => req("POST", "/api/oficial/numeros/" + id + "/assinar-webhook"),
+  ofDiagnostico: () => req("GET", "/api/oficial/diagnostico"),
   ofTemplates: (id) => req("GET", "/api/oficial/numeros/" + id + "/templates"),
   ofCriarTemplate: (id, dados) => req("POST", "/api/oficial/numeros/" + id + "/templates", dados),
   ofVendedoresLista: () => req("GET", "/api/oficial/vendedores-lista"),

@@ -710,6 +710,27 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
     res.json({ ok: true, encerrado: chat.encerrado });
   });
 
+  /* diagnóstico: últimas chamadas recebidas no webhook + status de inscrição de cada WABA */
+  app.get("/api/oficial/diagnostico", auth, gerenteOnly, async (req, res) => {
+    const log = (db.oficial.webhookLog || []).slice(0, 20);
+    const numeros = [];
+    for (const n of db.oficial.numeros || []) {
+      let inscrito = null, erro = null;
+      if (n.wabaId && n.token) {
+        try {
+          const r = await fetch(`${GRAPH}/${n.wabaId}/subscribed_apps`, {
+            headers: { Authorization: `Bearer ${n.token}` },
+          });
+          const data = await r.json().catch(() => ({}));
+          if (r.ok) inscrito = (data.data || []).length > 0;
+          else erro = (data.error && data.error.message) || "erro";
+        } catch (e) { erro = e.message; }
+      }
+      numeros.push({ apelido: n.apelido, phoneNumberId: n.phoneNumberId, wabaId: n.wabaId, inscrito, erro });
+    }
+    res.json({ verifyToken: db.oficial.verifyToken, numeros, log });
+  });
+
   /* limpar conversas de teste/órfãs (gerente) */
   app.post("/api/oficial/chats/limpar", auth, gerenteOnly, (req, res) => {
     const modo = String((req.body && req.body.modo) || "");
@@ -746,6 +767,26 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
     res.sendStatus(200);
     try {
       const body = req.body || {};
+      // === diagnóstico: guarda as últimas chamadas recebidas (pra depurar) ===
+      if (!db.oficial.webhookLog) db.oficial.webhookLog = [];
+      db.oficial.webhookLog.unshift({
+        ts: Date.now(),
+        object: body.object,
+        resumo: (() => {
+          try {
+            const ch = body.entry && body.entry[0] && body.entry[0].changes && body.entry[0].changes[0];
+            const val = (ch && ch.value) || {};
+            const pid = (val.metadata && val.metadata.phone_number_id) || "?";
+            const msgs = (val.messages || []).length;
+            const statuses = (val.statuses || []).length;
+            const from = val.messages && val.messages[0] && val.messages[0].from;
+            return `phone_id=${pid} msgs=${msgs} status=${statuses}${from ? " from=" + from : ""}`;
+          } catch (e) { return "erro ao resumir"; }
+        })(),
+      });
+      if (db.oficial.webhookLog.length > 30) db.oficial.webhookLog = db.oficial.webhookLog.slice(0, 30);
+      salvar();
+
       if (body.object !== "whatsapp_business_account") return;
       for (const entry of body.entry || []) {
         for (const ch of entry.changes || []) {
