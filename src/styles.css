@@ -2671,3 +2671,26 @@ h1, h2, h3, h4, .topbar .greet, .panel-h h3, .login-card .ttl, .login-card h2, .
 .of-inbox-empty.big { height: 100%; }
 .of-inbox-empty .ico-empty { width: 46px; height: 46px; color: var(--faint); opacity: .5; }
 .of-inbox-empty p { margin: 0; font-size: 14px; }
+
+/* FIX: tamanho dos ícones dentro do canal oficial (evita SVG gigante) */
+.of-wrap .ico, .of-grid .ico, .of-inbox .ico, .canal-abas .ico,
+.of-panel .ico, .of-tab .ico, .of-vend .ico, .of-num .ico,
+.of-conv-input .ico, .of-camp .ico { width: 16px; height: 16px; flex-shrink: 0; }
+.canal-aba .ico { width: 17px; height: 17px; flex-shrink: 0; }
+.of-inbox-empty .ico-empty, .dash-empty .ico-empty { width: 46px; height: 46px; flex-shrink: 0; }
+/* o ícone que abre o painel-h também */
+.panel-h .ico { width: 17px; height: 17px; flex-shrink: 0; }
+.panel-h { display: flex; align-items: center; gap: 8px; }
+
+/* ---- correção: garantir tamanho dos ícones em toda a área oficial ---- */
+.of-wrap .ico, .of-inbox .ico, .canal-abas .ico,
+.of-wrap svg.ico, .of-grid svg, .of-num svg, .of-vend svg,
+.of-conv-head svg, .of-conv-input svg, .of-chat-av svg {
+  width: 16px !important;
+  height: 16px !important;
+  flex-shrink: 0;
+}
+.of-tab .ico, .canal-aba .ico { width: 16px !important; height: 16px !important; }
+.of-inbox-empty .ico-empty, .dash-empty .ico-empty { width: 46px !important; height: 46px !important; }
+/* o ícone de link no painel de webhook e o wa no header do painel */
+.panel-h svg { width: 17px !important; height: 17px !important; flex-shrink: 0; }
