@@ -254,6 +254,37 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
     res.json({ ok: true });
   });
 
+  /* ---- registra o número na Cloud API (necessário quando a verificação em 2 etapas está ativa) ---- */
+  app.post("/api/oficial/numeros/:id/registrar", auth, gerenteOnly, async (req, res) => {
+    const n = acharNumero(req.params.id);
+    if (!n) return res.status(404).json({ error: "Número não encontrado" });
+    const pin = String((req.body && req.body.pin) || "").replace(/\D/g, "");
+    if (pin.length !== 6) return res.status(400).json({ error: "O PIN precisa ter 6 dígitos" });
+    if (!n.token) return res.status(400).json({ error: "Esse número não tem token configurado" });
+    try {
+      const r = await fetch(`${GRAPH}/${n.phoneNumberId}/register`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${n.token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ messaging_product: "whatsapp", pin }),
+      });
+      const data = await r.json().catch(() => ({}));
+      if (!r.ok) {
+        const msg = (data && data.error && data.error.message) || "Falha ao registrar";
+        // erro comum: PIN errado
+        if (/pin/i.test(msg) || (data.error && data.error.code === 100)) {
+          return res.status(400).json({ error: "Não foi possível registrar. Confira se o PIN de 6 dígitos está correto (você pode redefinir em 'Alterar PIN' no painel da Meta)." });
+        }
+        return res.status(400).json({ error: msg });
+      }
+      n.registrado = true;
+      n.registradoEm = Date.now();
+      salvar();
+      res.json({ ok: true });
+    } catch (e) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
   /* ---- testa um número: lê os templates aprovados da WABA ---- */
   app.get("/api/oficial/numeros/:id/templates", auth, gerenteOnly, async (req, res) => {
     const n = acharNumero(req.params.id);

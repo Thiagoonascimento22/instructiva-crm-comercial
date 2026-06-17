@@ -88,6 +88,7 @@ export const api = {
   ofCriarNumero: (dados) => req("POST", "/api/oficial/numeros", dados),
   ofEditarNumero: (id, dados) => req("PUT", "/api/oficial/numeros/" + id, dados),
   ofExcluirNumero: (id) => req("DELETE", "/api/oficial/numeros/" + id),
+  ofRegistrarNumero: (id, pin) => req("POST", "/api/oficial/numeros/" + id + "/registrar", { pin }),
   ofTemplates: (id) => req("GET", "/api/oficial/numeros/" + id + "/templates"),
   ofCriarTemplate: (id, dados) => req("POST", "/api/oficial/numeros/" + id + "/templates", dados),
   ofVendedoresLista: () => req("GET", "/api/oficial/vendedores-lista"),

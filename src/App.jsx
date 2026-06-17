@@ -36,6 +36,7 @@ const I = {
   link: (p) => (<svg {...p} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.5 1.5"/><path d="M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.5-1.5"/></svg>),
   chevron: (p) => (<svg {...p} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M6 9l6 6 6-6"/></svg>),
   copy: (p) => (<svg {...p} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>),
+  key: (p) => (<svg {...p} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.778-7.778zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg>),
   dash: (p) => (<svg {...p} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M3 3v18h18"/><rect x="7" y="11" width="3" height="6" rx="1"/><rect x="12" y="7" width="3" height="10" rx="1"/><rect x="17" y="13" width="3" height="4" rx="1"/></svg>),
   medal: (p) => (<svg {...p} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="15" r="6"/><path d="M9 9 6.5 2M15 9l2.5-7M9.5 2h5"/></svg>),
   target: (p) => (<svg {...p} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1.5"/></svg>),
@@ -1693,6 +1694,17 @@ function OficialNumeros({ showToast }) {
     } catch (e) { showToast("❌ " + e.message); }
     finally { setTestando(null); }
   }
+  async function registrar(n) {
+    const pin = prompt(`Registrar o número "${n.apelido}" na Cloud API.\n\nDigite o PIN de 6 dígitos da verificação em duas etapas (Meta → número → Confirmação em duas etapas):`);
+    if (pin == null) return;
+    if (String(pin).replace(/\D/g, "").length !== 6) return showToast("O PIN precisa ter 6 dígitos");
+    showToast("Registrando número…");
+    try {
+      await api.ofRegistrarNumero(n.id, pin);
+      showToast("✅ Número registrado! Agora teste a conexão.");
+      carregar();
+    } catch (e) { showToast("❌ " + e.message); }
+  }
   function copiar(txt, label) {
     navigator.clipboard?.writeText(txt).then(() => showToast(`${label} copiado!`)).catch(() => {});
   }
@@ -1736,6 +1748,7 @@ function OficialNumeros({ showToast }) {
                 <span className="onum-card-id">ID {n.phoneNumberId}</span>
               </div>
               <div className="onum-card-acoes">
+                <button className="onum-acao" onClick={() => registrar(n)} title="Registrar número na Cloud API (use se aparecer erro de envio)"><I.key className="ico" /></button>
                 <button className="onum-acao" onClick={() => testar(n)} title="Testar conexão" disabled={testando === n.id}>
                   {testando === n.id ? <span className="spin" /> : <I.check className="ico" />}
                 </button>
