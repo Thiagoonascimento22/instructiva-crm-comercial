@@ -728,8 +728,8 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
     }
   });
 
-  // extrai texto de um arquivo enviado (base64) — TXT/MD/CSV nativo; PDF/DOCX virá na próxima fase
-  app.post("/api/oficial/ias/extrair", auth, gerenteOnly, (req, res) => {
+  // extrai texto de um arquivo enviado (base64): TXT/MD/CSV nativo, PDF via pdfjs, DOCX via mammoth
+  app.post("/api/oficial/ias/extrair", auth, gerenteOnly, async (req, res) => {
     const b = req.body || {};
     const nome = String(b.nome || "arquivo").trim();
     const base64 = String(b.base64 || "");
@@ -740,14 +740,50 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
     catch (_) { return res.status(400).json({ error: "Arquivo inválido" }); }
     if (buf.length > 6 * 1024 * 1024) return res.status(400).json({ error: "Arquivo passa de 6MB" });
 
-    const ehTexto = lower.endsWith(".txt") || lower.endsWith(".md") || lower.endsWith(".csv") || lower.endsWith(".text");
-    if (ehTexto) {
-      const texto = buf.toString("utf8").slice(0, 200000);
-      return res.json({ ok: true, nome, texto, tipo: "texto" });
+    try {
+      // TXT / MD / CSV
+      if (lower.endsWith(".txt") || lower.endsWith(".md") || lower.endsWith(".csv") || lower.endsWith(".text")) {
+        const texto = buf.toString("utf8").slice(0, 200000);
+        if (!texto.trim()) return res.status(422).json({ error: "Arquivo de texto vazio" });
+        return res.json({ ok: true, nome, texto, tipo: "texto" });
+      }
+
+      // PDF
+      if (lower.endsWith(".pdf")) {
+        const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
+        const data = new Uint8Array(buf);
+        const doc = await pdfjs.getDocument({ data, useSystemFonts: true, isEvalSupported: false }).promise;
+        let texto = "";
+        const maxPag = Math.min(doc.numPages, 200);
+        for (let i = 1; i <= maxPag; i++) {
+          const page = await doc.getPage(i);
+          const content = await page.getTextContent();
+          texto += content.items.map((it) => it.str).join(" ") + "\n";
+          if (texto.length > 200000) break;
+        }
+        texto = texto.slice(0, 200000).trim();
+        if (!texto) return res.status(422).json({ error: "Não consegui ler texto desse PDF (pode ser um PDF de imagem/escaneado)." });
+        return res.json({ ok: true, nome, texto, tipo: "pdf" });
+      }
+
+      // DOC / DOCX
+      if (lower.endsWith(".docx") || lower.endsWith(".doc")) {
+        const { createRequire } = await import("module");
+        const require2 = createRequire(import.meta.url);
+        const mammoth = require2("mammoth");
+        const r = await mammoth.extractRawText({ buffer: buf });
+        const texto = String(r.value || "").slice(0, 200000).trim();
+        if (!texto) return res.status(422).json({ error: "Não consegui ler texto desse documento." });
+        return res.json({ ok: true, nome, texto, tipo: "docx" });
+      }
+
+      return res.status(415).json({ error: "Formato não suportado. Use PDF, DOC, DOCX, TXT, MD ou CSV." });
+    } catch (e) {
+      console.error("Erro extrair arquivo:", e.message);
+      return res.status(500).json({ error: "Não consegui processar o arquivo: " + e.message });
     }
-    // PDF/DOCX: ainda não extraímos aqui (evita lib que quebra no Railway).
-    return res.status(415).json({ error: "Por enquanto só leio TXT/MD/CSV. Pra PDF/DOC, cole o conteúdo no campo de texto — em breve liberamos o PDF." });
   });
+
 
 
 

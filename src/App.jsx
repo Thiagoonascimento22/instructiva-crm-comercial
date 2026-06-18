@@ -1234,7 +1234,7 @@ function OficialIAs({ showToast }) {
         </div>
         <div style={{ padding: "0 18px 18px" }}>
           <div className="ia-aviso" style={{ marginBottom: 14, fontSize: 13, color: "var(--muted)", background: "var(--bg2)", border: "1px solid var(--border)", borderRadius: 10, padding: "10px 12px" }}>
-            Aqui você só <b>cria e treina</b> a IA. Ela ainda não responde sozinha — isso entra na próxima fase. Cada IA é ligada a um disparo na hora de criar a campanha.
+            Configure tudo que a IA precisa saber. No <b>Preview ao vivo</b> (direita) você testa a conversa na hora. Cada IA é ligada a um disparo na hora de criar a campanha.
           </div>
           {!ias && <div className="spin" />}
           {ias && ias.length === 0 && <div className="dash-empty">Nenhuma IA ainda. Clique em <b>Nova IA</b> pra criar a primeira.</div>}
