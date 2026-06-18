@@ -682,33 +682,33 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
 
   // chama a API da Anthropic e devolve o texto da resposta
   async function chamarClaude(systemPrompt, historico) {
-    const key = process.env.ANTHROPIC_API_KEY;
-    if (!key) throw new Error("ANTHROPIC_API_KEY não configurada");
-    const messages = historico.map((m) => ({
+    const key = process.env.OPENAI_API_KEY;
+    if (!key) throw new Error("OPENAI_API_KEY não configurada");
+    // monta as mensagens no formato da OpenAI (system + histórico)
+    const msgsHist = historico.map((m) => ({
       role: m.role === "them" ? "user" : "assistant",
       // se for áudio do lead, usa a transcrição (a IA "ouve" o áudio)
       content: (m.role === "them" && m.transcricao) ? m.transcricao : (m.content || ""),
     })).filter((m) => m.content);
     // garante que começa com user
-    while (messages.length && messages[0].role !== "user") messages.shift();
-    if (!messages.length) return "";
-    const r = await fetch("https://api.anthropic.com/v1/messages", {
+    while (msgsHist.length && msgsHist[0].role !== "user") msgsHist.shift();
+    if (!msgsHist.length) return "";
+    const messages = [{ role: "system", content: systemPrompt }, ...msgsHist];
+    const r = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "x-api-key": key,
-        "anthropic-version": "2023-06-01",
+        "Authorization": "Bearer " + key,
       },
       body: JSON.stringify({
-        model: "claude-sonnet-4-6",
+        model: "gpt-4o-mini",
         max_tokens: 1024,
-        system: systemPrompt,
         messages,
       }),
     });
     const data = await r.json().catch(() => ({}));
-    if (!r.ok) throw new Error((data.error && data.error.message) || "Erro Claude " + r.status);
-    const txt = (data.content || []).filter((b) => b.type === "text").map((b) => b.text).join("\n").trim();
+    if (!r.ok) throw new Error((data.error && data.error.message) || "Erro OpenAI " + r.status);
+    const txt = ((data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content) || "").trim();
     return txt;
   }
 
