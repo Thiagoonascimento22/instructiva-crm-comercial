@@ -1211,9 +1211,23 @@ function PaginaOficial({ showToast }) {
 function OficialIAs({ showToast }) {
   const [ias, setIas] = useState(null);
   const [editar, setEditar] = useState(null); // objeto IA em edição, ou {} pra nova
+  const [globalAtiva, setGlobalAtiva] = useState(true);
 
   const carregar = () => api.ofIAs().then(setIas).catch(() => setIas([]));
-  useEffect(() => { carregar(); }, []);
+  useEffect(() => {
+    carregar();
+    api.ofIAGlobal().then((r) => setGlobalAtiva(r.ativa !== false)).catch(() => {});
+  }, []);
+
+  async function alternarGlobal() {
+    const nova = !globalAtiva;
+    if (!nova && !confirm("PARAR TODAS as IAs agora?\n\nNenhuma IA vai responder leads em conversa nenhuma até você religar. Os leads continuam chegando, mas ficam sem resposta automática.")) return;
+    try {
+      const r = await api.ofSetIAGlobal(nova);
+      setGlobalAtiva(r.ativa);
+      showToast(r.ativa ? "✓ IAs religadas" : "⏸ TODAS as IAs foram paradas");
+    } catch (e) { showToast("✗ " + e.message); }
+  }
 
   async function excluir(ia) {
     if (!confirm(`Excluir a IA "${ia.nome}"?`)) return;
@@ -1230,8 +1244,25 @@ function OficialIAs({ showToast }) {
       <div className="panel">
         <div className="panel-h">
           <h3>Atendentes de IA<span className="panel-sub">o cérebro que conversa com os leads do disparo</span></h3>
-          <button className="btn btn-primary btn-sm" onClick={() => setEditar({})}><I.plus className="ico" /> Nova IA</button>
+          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+            <button
+              className="btn btn-sm"
+              onClick={alternarGlobal}
+              title={globalAtiva ? "Para TODAS as IAs de uma vez (botão de emergência)" : "Religa as IAs"}
+              style={globalAtiva
+                ? { background: "#fff0f0", color: "#c0392b", border: "1px solid #f1b0b0" }
+                : { background: "#eafaf0", color: "#1a9d54", border: "1px solid #aee3c4" }}
+            >
+              {globalAtiva ? "⏸ Parar todas as IAs" : "▶ Religar IAs"}
+            </button>
+            <button className="btn btn-primary btn-sm" onClick={() => setEditar({})}><I.plus className="ico" /> Nova IA</button>
+          </div>
         </div>
+        {!globalAtiva && (
+          <div style={{ margin: "0 18px 14px", background: "#fff0f0", color: "#c0392b", border: "1px solid #f1b0b0", borderRadius: 10, padding: "10px 12px", fontSize: 13, fontWeight: 600 }}>
+            ⚠️ Todas as IAs estão PARADAS. Nenhum lead recebe resposta automática até você religar.
+          </div>
+        )}
         <div style={{ padding: "0 18px 18px" }}>
           <div className="ia-aviso" style={{ marginBottom: 14, fontSize: 13, color: "var(--muted)", background: "var(--bg2)", border: "1px solid var(--border)", borderRadius: 10, padding: "10px 12px" }}>
             Configure tudo que a IA precisa saber. No <b>Preview ao vivo</b> (direita) você testa a conversa na hora. Cada IA é ligada a um disparo na hora de criar a campanha.
@@ -2520,6 +2551,16 @@ function InboxOficial({ isGer, showToast, onIrParaEvolution }) {
     } catch (e) { showToast(e.message); }
   }
 
+  async function alternarIAConversa() {
+    if (!sel || !conversa) return;
+    const pausar = !conversa.iaPausada;
+    try {
+      await api.ofPausarIAChat(sel, pausar);
+      api.ofChat(sel).then(setConversa);
+      showToast(pausar ? "IA pausada — você assumiu o atendimento" : "IA retomada");
+    } catch (e) { showToast(e.message); }
+  }
+
   async function chamarPeloMeu() {
     if (!conversa) return;
     if (!confirm(`Abrir uma conversa NOVA com ${conversa.nome} pelo seu WhatsApp?\n\nIsso inicia um atendimento do zero no seu número (não continua o oficial).`)) return;
@@ -2621,6 +2662,16 @@ function InboxOficial({ isGer, showToast, onIrParaEvolution }) {
               </div>
               {conversa.origemDisparo && conversa.campanha && <span className="of-pill">{conversa.campanha}</span>}
               <div className="of-conv-acoes">
+                {isGer && conversa.temIA && (
+                  <button
+                    className="of-acao-btn"
+                    title={conversa.iaPausada ? "A IA está pausada nesta conversa. Clique para devolver o atendimento pra ela." : "A IA está atendendo. Clique para pausar e assumir manualmente."}
+                    style={conversa.iaPausada ? { color: "#1a9d54", borderColor: "#aee3c4" } : { color: "#b07a00", borderColor: "#f0d68a" }}
+                    onClick={() => alternarIAConversa()}
+                  >
+                    <I.spark className="ico" /> {conversa.iaPausada ? "Retomar IA" : "Pausar IA"}
+                  </button>
+                )}
                 {!isGer && (
                   <button className="of-acao-btn" title="Abrir conversa com este lead pelo seu WhatsApp" onClick={() => chamarPeloMeu()}>
                     <I.wa className="ico" /> Meu número

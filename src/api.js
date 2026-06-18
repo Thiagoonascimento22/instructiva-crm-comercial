@@ -120,6 +120,9 @@ export const api = {
   ofExcluirIA: (id) => req("DELETE", "/api/oficial/ias/" + id),
   ofExtrairArquivo: (nome, base64) => req("POST", "/api/oficial/ias/extrair", { nome, base64 }),
   ofPreviewIA: (dados) => req("POST", "/api/oficial/ias/preview", dados),
+  ofIAGlobal: () => req("GET", "/api/oficial/ia-global"),
+  ofSetIAGlobal: (ativa) => req("POST", "/api/oficial/ia-global", { ativa }),
+  ofPausarIAChat: (id, pausar) => req("POST", "/api/oficial/chats/" + encodeURIComponent(id) + "/ia", { pausar }),
 
   // Monitoria
   horario: () => req("GET", "/api/horario"),

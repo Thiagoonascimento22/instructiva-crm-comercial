@@ -28,6 +28,7 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
     if (!Array.isArray(db.oficial.ias)) db.oficial.ias = [];
     // ias: [{ id, nome, ativa, modo, persona, playbook, gatilhoHandoff, criadoEm }]
     //   modo: "fecha" (IA vende sozinha) | "qualifica" (IA conversa e passa pro vendedor)
+    if (db.oficial.iaGlobalAtiva === undefined) db.oficial.iaGlobalAtiva = true; // botão de pânico geral
     if (!db.oficial.verifyToken) {
       db.oficial.verifyToken = "instructiva_" + Math.random().toString(36).slice(2, 10);
     }
@@ -578,6 +579,7 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
 
   async function rodarIA(chat, numeroCfg) {
     try {
+      if (db.oficial.iaGlobalAtiva === false) return; // botão de pânico: IA geral desligada
       const ia = (db.oficial.ias || []).find((x) => x.id === chat.iaId);
       if (!ia || !ia.ativa) return;
       const system = montarSystemPrompt(ia, chat.nome);
@@ -733,6 +735,35 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
     db.oficial.ias = (db.oficial.ias || []).filter((x) => x.id !== req.params.id);
     salvar();
     res.json({ ok: true, removida: antes !== db.oficial.ias.length });
+  });
+
+  // estado e controle GLOBAL da IA (botão de pânico)
+  app.get("/api/oficial/ia-global", auth, gerenteOnly, (req, res) => {
+    res.json({ ativa: db.oficial.iaGlobalAtiva !== false });
+  });
+  app.post("/api/oficial/ia-global", auth, gerenteOnly, (req, res) => {
+    const b = req.body || {};
+    db.oficial.iaGlobalAtiva = !!b.ativa;
+    salvar();
+    res.json({ ok: true, ativa: db.oficial.iaGlobalAtiva });
+  });
+
+  // pausar/retomar a IA de UMA conversa (gerente assume manual / devolve pra IA)
+  app.post("/api/oficial/chats/:id/ia", auth, gerenteOnly, (req, res) => {
+    const chat = db.waChats[req.params.id];
+    if (!chat || chat.canal !== "oficial") return res.status(404).json({ error: "Conversa não encontrada" });
+    const b = req.body || {};
+    const pausar = !!b.pausar;
+    chat.iaPausada = pausar;
+    if (!Array.isArray(chat.notas)) chat.notas = [];
+    chat.notas.push({
+      tipo: pausar ? "ia_pausada" : "ia_retomada",
+      texto: `${req.user.nome} ${pausar ? "pausou a IA e assumiu o atendimento" : "devolveu o atendimento pra IA"}`,
+      ts: Date.now(), por: req.user.nome,
+    });
+    if (chat.notas.length > 100) chat.notas = chat.notas.slice(-100);
+    salvar();
+    res.json({ ok: true, iaPausada: chat.iaPausada });
   });
 
   // PREVIEW: testa a IA com a config atual (sem salvar, sem WhatsApp)
@@ -1019,6 +1050,8 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
       campanha: chat.campanha || "",
       vendedorId: chat.vendedorId || null,
       vendedorNome: v ? v.nome : "",
+      temIA: !!chat.iaId,
+      iaPausada: !!chat.iaPausada,
       mensagens: chat.mensagens || [],
       notas: chat.notas || [], // notas internas (transferências etc) — lead não vê
     });
@@ -1039,6 +1072,7 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
       await enviarTextoOficial(numeroCfg, chat.numero, texto);
       const ts = Date.now();
       chat.mensagens.push({ role: "me", content: texto, ts });
+      if (chat.iaId && !chat.iaPausada) chat.iaPausada = true; // humano assumiu -> IA pausa sozinha
       if (chat.mensagens.length > 300) chat.mensagens = chat.mensagens.slice(-300);
       chat.atualizadoEm = ts;
       salvar();
