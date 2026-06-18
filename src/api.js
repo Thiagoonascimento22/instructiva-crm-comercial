@@ -113,6 +113,12 @@ export const api = {
   ofEncerrar: (id) => req("POST", "/api/oficial/chats/" + encodeURIComponent(id) + "/encerrar", { encerrar: true }),
   ofWebhookInfo: (base) => req("GET", "/api/oficial/webhook-info?base=" + encodeURIComponent(base || "")),
 
+  // IAs do Canal Oficial (cérebro)
+  ofIAs: () => req("GET", "/api/oficial/ias"),
+  ofCriarIA: (dados) => req("POST", "/api/oficial/ias", dados),
+  ofEditarIA: (id, dados) => req("PUT", "/api/oficial/ias/" + id, dados),
+  ofExcluirIA: (id) => req("DELETE", "/api/oficial/ias/" + id),
+
   // Monitoria
   horario: () => req("GET", "/api/horario"),
   setHorario: (h) => req("PUT", "/api/horario", h),
