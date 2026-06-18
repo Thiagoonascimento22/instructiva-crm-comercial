@@ -2658,6 +2658,15 @@ h1, h2, h3, h4, .topbar .greet, .panel-h h3, .login-card .ttl, .login-card h2, .
 .of-msg.me { justify-content: flex-end; }
 .of-msg-bubble { max-width: 72%; padding: 9px 13px; border-radius: 13px; font-size: 13.5px; line-height: 1.45; position: relative; box-shadow: var(--shadow-sm); }
 .of-msg.them .of-msg-bubble { background: var(--bubble-them); border-bottom-left-radius: 4px; }
+.of-midia-img { max-width: 240px; border-radius: 10px; cursor: pointer; display: block; margin-bottom: 4px; }
+.of-midia-video { max-width: 260px; margin-bottom: 4px; }
+.of-midia-audio { min-width: 240px; }
+.of-midia-transc { font-size: 12.5px; color: var(--muted); font-style: italic; margin-top: 6px; padding-top: 6px; border-top: 1px dashed var(--line); line-height: 1.4; }
+.of-midia-doc { display: inline-flex; align-items: center; gap: 6px; color: var(--brand); text-decoration: none; font-weight: 600; font-size: 13.5px; padding: 6px 0; }
+.of-midia-doc:hover { text-decoration: underline; }
+.of-midia-btn { background: var(--surface-2); border: 1px solid var(--line); border-radius: 8px; padding: 7px 12px; font-size: 13px; cursor: pointer; color: var(--text); font-weight: 600; }
+.of-midia-load { font-size: 13px; color: var(--muted); padding: 4px 0; }
+.of-midia-erro { font-size: 12.5px; color: #c0392b; padding: 4px 0; }
 .of-msg.me .of-msg-bubble { background: #d9fdd3; color: #111; border-bottom-right-radius: 4px; }
 .of-msg-hora { font-size: 10px; color: rgba(0,0,0,.4); margin-left: 9px; float: right; margin-top: 4px; }
 .of-msg-tpl { display: block; font-size: 10.5px; font-weight: 700; color: var(--of-green-d); margin-bottom: 3px; }

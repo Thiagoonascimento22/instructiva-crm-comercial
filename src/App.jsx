@@ -1212,12 +1212,29 @@ function OficialIAs({ showToast }) {
   const [ias, setIas] = useState(null);
   const [editar, setEditar] = useState(null); // objeto IA em edição, ou {} pra nova
   const [globalAtiva, setGlobalAtiva] = useState(true);
+  const [pendentes, setPendentes] = useState(0);
+  const [respondendoPend, setRespondendoPend] = useState(false);
 
   const carregar = () => api.ofIAs().then(setIas).catch(() => setIas([]));
+  const carregarPendentes = () => api.ofIAPendentes().then((r) => setPendentes(r.total || 0)).catch(() => {});
   useEffect(() => {
     carregar();
     api.ofIAGlobal().then((r) => setGlobalAtiva(r.ativa !== false)).catch(() => {});
+    carregarPendentes();
+    const t = setInterval(carregarPendentes, 15000); // atualiza a contagem a cada 15s
+    return () => clearInterval(t);
   }, []);
+
+  async function responderPendentes() {
+    if (!confirm(`A IA vai responder ${pendentes} lead(s) que estão esperando.\n\nUse isso depois de recarregar o crédito, pra ela responder quem ficou sem resposta. Continuar?`)) return;
+    setRespondendoPend(true);
+    try {
+      const r = await api.ofResponderPendentes();
+      showToast("✓ " + (r.mensagem || "IA respondendo os pendentes"));
+      setTimeout(carregarPendentes, 3000);
+    } catch (e) { showToast("✗ " + e.message); }
+    finally { setRespondendoPend(false); }
+  }
 
   async function alternarGlobal() {
     const nova = !globalAtiva;
@@ -1245,6 +1262,17 @@ function OficialIAs({ showToast }) {
         <div className="panel-h">
           <h3>Atendentes de IA<span className="panel-sub">o cérebro que conversa com os leads do disparo</span></h3>
           <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+            {pendentes > 0 && (
+              <button
+                className="btn btn-sm"
+                onClick={responderPendentes}
+                disabled={respondendoPend}
+                title="Faz a IA responder todos os leads que ficaram esperando (ex: depois que o crédito acabou e voltou)"
+                style={{ background: "#fff7e6", color: "#b9770e", border: "1px solid #f0d088", fontWeight: 600 }}
+              >
+                {respondendoPend ? "Respondendo…" : `🔔 IA responder pendentes (${pendentes})`}
+              </button>
+            )}
             <button
               className="btn btn-sm"
               onClick={alternarGlobal}
@@ -2501,6 +2529,52 @@ function OficialNumeros({ showToast }) {
 /* ============================================================
    INBOX OFICIAL — usado tanto pelo gerente quanto pelo vendedor
    ============================================================ */
+// renderiza mídia recebida do lead no oficial (áudio, imagem, vídeo, documento)
+function OfMidia({ chatId, m }) {
+  const [url, setUrl] = useState(null);
+  const [erro, setErro] = useState(false);
+  const [carregando, setCarregando] = useState(false);
+
+  async function carregar() {
+    if (url || carregando) return;
+    setCarregando(true);
+    try { setUrl(await api.ofMidiaBlob(chatId, m.mid)); }
+    catch (_) { setErro(true); }
+    finally { setCarregando(false); }
+  }
+
+  // imagem e áudio carregam sozinhos; documento/vídeo por clique
+  useEffect(() => {
+    if (m.tipo === "image" || m.tipo === "audio") carregar();
+    // eslint-disable-next-line
+  }, []);
+
+  if (erro) return <div className="of-midia-erro">⚠️ Não foi possível carregar a mídia</div>;
+
+  if (m.tipo === "image") {
+    return url
+      ? <img className="of-midia-img" src={url} alt="Foto do lead" onClick={() => window.open(url, "_blank")} />
+      : <div className="of-midia-load">📷 Carregando foto…</div>;
+  }
+  if (m.tipo === "audio") {
+    return (
+      <div className="of-midia-audio">
+        {url ? <audio controls src={url} style={{ width: "100%" }} /> : <div className="of-midia-load">🎤 Carregando áudio…</div>}
+        {m.transcricao && <div className="of-midia-transc">"{m.transcricao}"</div>}
+      </div>
+    );
+  }
+  if (m.tipo === "video") {
+    return url
+      ? <video className="of-midia-video" controls src={url} style={{ maxWidth: "100%", borderRadius: 8 }} />
+      : <button className="of-midia-btn" onClick={carregar}>{carregando ? "Carregando…" : "🎬 Carregar vídeo"}</button>;
+  }
+  // documento
+  return url
+    ? <a className="of-midia-doc" href={url} target="_blank" rel="noreferrer" download={m.filename || "documento"}>📄 {m.filename || "Abrir documento"}</a>
+    : <button className="of-midia-btn" onClick={carregar}>{carregando ? "Carregando…" : "📄 " + (m.filename || "Baixar documento")}</button>;
+}
+
 function InboxOficial({ isGer, showToast, onIrParaEvolution }) {
   const [chats, setChats] = useState([]);
   const [sel, setSel] = useState(null);
@@ -2795,7 +2869,10 @@ function InboxOficial({ isGer, showToast, onIrParaEvolution }) {
                   <div key={i} className={"of-msg " + (item.m.role === "me" ? "me" : "them")}>
                     <div className="of-msg-bubble">
                       {item.m.template && <span className="of-msg-tpl">📤 Template (disparo)</span>}
-                      {item.m.content}
+                      {item.m.tipo && item.m.tipo !== "text" && item.m.mid && item.m.arquivo && (
+                        <OfMidia chatId={conversa.id} m={item.m} />
+                      )}
+                      {(!item.m.tipo || item.m.tipo === "text" || !item.m.arquivo) && item.m.content}
                       <span className="of-msg-hora">{horaCurta(item.m.ts)}</span>
                     </div>
                   </div>

@@ -111,6 +111,15 @@ export const api = {
   ofEnviar: (id, texto) => req("POST", "/api/oficial/chats/" + encodeURIComponent(id) + "/send", { texto }),
   ofEnviarMidia: (id, dados) => req("POST", "/api/oficial/chats/" + encodeURIComponent(id) + "/midia", dados),
   ofStats: (desde, ate) => req("GET", "/api/oficial/stats?desde=" + (desde || 0) + "&ate=" + (ate || Date.now())),
+  ofIAPendentes: () => req("GET", "/api/oficial/ia-pendentes"),
+  ofResponderPendentes: () => req("POST", "/api/oficial/ia-responder-pendentes", {}),
+  ofMidiaUrl: (chatId, mid) => "/api/oficial/chats/" + encodeURIComponent(chatId) + "/midia/" + encodeURIComponent(mid),
+  ofMidiaBlob: async (chatId, mid) => {
+    const t = getToken();
+    const res = await fetch(api.ofMidiaUrl(chatId, mid), { headers: t ? { Authorization: "Bearer " + t } : {} });
+    if (!res.ok) { let e = "Erro " + res.status; try { const j = await res.json(); e = j.error || e; } catch (_) {} throw new Error(e); }
+    return URL.createObjectURL(await res.blob());
+  },
   ofAtribuir: (id, vendedorId) => req("POST", "/api/oficial/chats/" + encodeURIComponent(id) + "/atribuir", { vendedorId }),
   ofEncerrar: (id) => req("POST", "/api/oficial/chats/" + encodeURIComponent(id) + "/encerrar", { encerrar: true }),
   ofWebhookInfo: (base) => req("GET", "/api/oficial/webhook-info?base=" + encodeURIComponent(base || "")),

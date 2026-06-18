@@ -1858,6 +1858,9 @@ const canalOficial = instalarCanalOficial({
   proximoId,
   auth,
   gerenteOnly,
+  MEDIA_DIR,
+  fs,
+  path,
 });
 
 /* ============================================================

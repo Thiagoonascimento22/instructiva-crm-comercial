@@ -8,7 +8,7 @@
 
 const GRAPH = "https://graph.facebook.com/v21.0";
 
-export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gerenteOnly }) {
+export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gerenteOnly, MEDIA_DIR, fs, path }) {
   // O index.js REATRIBUI o objeto db dentro de loadDB(). Por isso resolvemos
   // o db dinamicamente via Proxy: todo acesso db.x lê/escreve no objeto atual.
   const db = new Proxy({}, {
@@ -219,6 +219,75 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
     if (m.startsWith("video/")) return "video";
     if (m.startsWith("audio/")) return "audio";
     return "document";
+  }
+
+  // extensão a partir do mime (pra salvar com nome certo)
+  function extPorMime(mime) {
+    const map = {
+      "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp", "image/gif": "gif",
+      "audio/ogg": "ogg", "audio/mpeg": "mp3", "audio/mp4": "m4a", "audio/amr": "amr", "audio/wav": "wav",
+      "video/mp4": "mp4", "video/3gpp": "3gp",
+      "application/pdf": "pdf",
+    };
+    return map[String(mime || "").toLowerCase().split(";")[0]] || "bin";
+  }
+
+  // baixa a mídia recebida do Meta (2 passos: pega a URL pelo id, depois baixa os bytes)
+  async function baixarMidiaMeta(numeroCfg, mediaId) {
+    if (!MEDIA_DIR || !fs || !path || !mediaId) return null;
+    try {
+      // passo 1: pega a URL temporária do arquivo
+      const r1 = await fetch(`${GRAPH}/${mediaId}`, {
+        headers: { Authorization: "Bearer " + numeroCfg.token },
+      });
+      if (!r1.ok) return null;
+      const meta = await r1.json();
+      if (!meta || !meta.url) return null;
+      // passo 2: baixa os bytes (precisa do token também)
+      const r2 = await fetch(meta.url, {
+        headers: { Authorization: "Bearer " + numeroCfg.token },
+      });
+      if (!r2.ok) return null;
+      const ab = await r2.arrayBuffer();
+      const buf = Buffer.from(ab);
+      const mime = meta.mime_type || "application/octet-stream";
+      const ext = extPorMime(mime);
+      const fname = "of_" + mediaId + "." + ext;
+      fs.writeFileSync(path.join(MEDIA_DIR, fname), buf);
+      return { arquivo: fname, mimetype: mime, buffer: buf, tamanho: buf.length };
+    } catch (e) {
+      console.log("[oficial] erro ao baixar mídia:", e.message);
+      return null;
+    }
+  }
+
+  // transcreve áudio com Groq Whisper (pra IA "ouvir"); retorna o texto ou null
+  async function transcreverAudio(buffer, mimetype) {
+    const key = process.env.GROQ_API_KEY;
+    if (!key || !buffer) return null;
+    try {
+      const ext = extPorMime(mimetype) || "ogg";
+      const fd = new FormData();
+      const blob = new Blob([buffer], { type: mimetype || "audio/ogg" });
+      fd.append("file", blob, "audio." + ext);
+      fd.append("model", "whisper-large-v3-turbo");
+      fd.append("language", "pt");
+      fd.append("response_format", "text");
+      const r = await fetch("https://api.groq.com/openai/v1/audio/transcriptions", {
+        method: "POST",
+        headers: { Authorization: "Bearer " + key },
+        body: fd,
+      });
+      if (!r.ok) {
+        console.log("[oficial] Groq transcrição falhou:", r.status);
+        return null;
+      }
+      const txt = await r.text();
+      return (txt || "").trim() || null;
+    } catch (e) {
+      console.log("[oficial] erro ao transcrever:", e.message);
+      return null;
+    }
   }
 
   /* monta os components do template a partir das variáveis do lead */
@@ -617,7 +686,8 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
     if (!key) throw new Error("ANTHROPIC_API_KEY não configurada");
     const messages = historico.map((m) => ({
       role: m.role === "them" ? "user" : "assistant",
-      content: m.content || "",
+      // se for áudio do lead, usa a transcrição (a IA "ouve" o áudio)
+      content: (m.role === "them" && m.transcricao) ? m.transcricao : (m.content || ""),
     })).filter((m) => m.content);
     // garante que começa com user
     while (messages.length && messages[0].role !== "user") messages.shift();
@@ -840,6 +910,45 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
     db.oficial.iaGlobalAtiva = !!b.ativa;
     salvar();
     res.json({ ok: true, ativa: db.oficial.iaGlobalAtiva });
+  });
+
+  // quantos leads estão esperando resposta da IA (última msg foi do lead, IA ativa)
+  function chatsPendentesIA() {
+    return Object.values(db.waChats).filter((chat) => {
+      if (chat.canal !== "oficial") return false;
+      if (!chat.iaId || chat.iaPausada) return false;       // IA precisa estar ativa nessa conversa
+      if (db.oficial.iaGlobalAtiva === false) return false;  // IA geral ligada
+      const msgs = chat.mensagens || [];
+      if (!msgs.length) return false;
+      // última mensagem foi do lead (them) = está esperando resposta
+      const ult = msgs[msgs.length - 1];
+      return ult && ult.role === "them";
+    });
+  }
+
+  app.get("/api/oficial/ia-pendentes", auth, gerenteOnly, (req, res) => {
+    res.json({ total: chatsPendentesIA().length });
+  });
+
+  // dispara a IA pra TODOS os leads pendentes (ex: depois que o crédito acabou e voltou)
+  app.post("/api/oficial/ia-responder-pendentes", auth, gerenteOnly, async (req, res) => {
+    const pendentes = chatsPendentesIA();
+    res.json({ ok: true, total: pendentes.length, mensagem: pendentes.length + " conversa(s) sendo respondida(s) pela IA" });
+    // processa em segundo plano, com pausa entre cada (não trava e não estoura rate limit)
+    (async () => {
+      for (const chat of pendentes) {
+        try {
+          const numeroCfg = acharNumero(chat.numeroId);
+          if (!numeroCfg) continue;
+          await rodarIA(chat, numeroCfg);
+          salvar();
+          await new Promise((r) => setTimeout(r, 1500)); // respira entre uma e outra
+        } catch (e) {
+          console.error("Erro ao responder pendente:", e.message);
+        }
+      }
+      console.log("[oficial] IA terminou de responder os pendentes:", pendentes.length);
+    })();
   });
 
   // pausar/retomar a IA de UMA conversa (gerente assume manual / devolve pra IA)
@@ -1195,6 +1304,23 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
     }
   });
 
+  /* serve a mídia recebida do lead (foto, áudio, vídeo, documento) pro frontend */
+  app.get("/api/oficial/chats/:id/midia/:mid", auth, (req, res) => {
+    if (!MEDIA_DIR || !fs || !path) return res.status(404).end();
+    const db = getDb();
+    const chat = db.waChats[req.params.id];
+    if (!chat || chat.canal !== "oficial") return res.status(404).json({ error: "Conversa não encontrada" });
+    const m = (chat.mensagens || []).find((x) => x.mid === req.params.mid);
+    if (!m || !m.arquivo) return res.status(404).json({ error: "Mídia não encontrada" });
+    const fp = path.join(MEDIA_DIR, m.arquivo);
+    if (!fs.existsSync(fp)) return res.status(404).json({ error: "Arquivo não encontrado" });
+    res.setHeader("Content-Type", m.mimetype || "application/octet-stream");
+    res.setHeader("Cache-Control", "private, max-age=86400");
+    if (m.tipo === "document" && m.filename)
+      res.setHeader("Content-Disposition", `inline; filename="${encodeURIComponent(m.filename)}"`);
+    fs.createReadStream(fp).pipe(res);
+  });
+
   /* enviar mídia (áudio/imagem/vídeo/arquivo) numa conversa do oficial.
      Recebe o arquivo em base64; faz upload pro Meta e envia. */
   app.post("/api/oficial/chats/:id/midia", auth, async (req, res) => {
@@ -1348,7 +1474,7 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
     return res.sendStatus(403);
   });
 
-  app.post("/api/oficial/webhook", (req, res) => {
+  app.post("/api/oficial/webhook", async (req, res) => {
     // responde 200 sempre e rápido (a Meta exige)
     res.sendStatus(200);
     try {
@@ -1398,6 +1524,13 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
 
             // extrai o conteúdo por tipo
             let content = "";
+            let midiaTipo = "text";   // text | image | audio | video | document
+            let midiaArquivo = null;  // nome do arquivo salvo no volume
+            let midiaMime = null;
+            let midiaFilename = null; // nome original (documentos)
+            let transcricao = null;   // texto do áudio (pra IA e pra exibir)
+            let mediaIdMeta = null;
+
             if (m.type === "text") content = (m.text && m.text.body) || "";
             else if (m.type === "button") content = (m.button && m.button.text) || "";
             else if (m.type === "interactive") {
@@ -1405,14 +1538,52 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
               content = (it.button_reply && it.button_reply.title) ||
                         (it.list_reply && it.list_reply.title) || "";
             }
-            else if (m.type === "image") content = "📷 Foto" + ((m.image && m.image.caption) ? ": " + m.image.caption : "");
-            else if (m.type === "audio") content = "🎤 Áudio";
-            else if (m.type === "video") content = "🎬 Vídeo" + ((m.video && m.video.caption) ? ": " + m.video.caption : "");
-            else if (m.type === "document") content = "📄 " + ((m.document && (m.document.filename || "Documento")) || "Documento");
+            else if (m.type === "image") {
+              content = (m.image && m.image.caption) ? m.image.caption : "📷 Foto";
+              midiaTipo = "image"; mediaIdMeta = m.image && m.image.id;
+            }
+            else if (m.type === "audio") {
+              content = "🎤 Áudio";
+              midiaTipo = "audio"; mediaIdMeta = m.audio && m.audio.id;
+            }
+            else if (m.type === "video") {
+              content = (m.video && m.video.caption) ? m.video.caption : "🎬 Vídeo";
+              midiaTipo = "video"; mediaIdMeta = m.video && m.video.id;
+            }
+            else if (m.type === "document") {
+              midiaFilename = (m.document && m.document.filename) || "Documento";
+              content = "📄 " + midiaFilename;
+              midiaTipo = "document"; mediaIdMeta = m.document && m.document.id;
+            }
             else content = "[" + m.type + "]";
 
+            // baixa o arquivo de mídia (foto, áudio, vídeo, documento) pro volume
+            if (mediaIdMeta && midiaTipo !== "text") {
+              try {
+                const baixado = await baixarMidiaMeta(numeroCfg, mediaIdMeta);
+                if (baixado) {
+                  midiaArquivo = baixado.arquivo;
+                  midiaMime = baixado.mimetype;
+                  // áudio -> transcreve pra IA "ouvir" e pra exibir
+                  if (midiaTipo === "audio") {
+                    transcricao = await transcreverAudio(baixado.buffer, baixado.mimetype);
+                  }
+                }
+              } catch (_) {}
+            }
+
             const ts = m.timestamp ? Number(m.timestamp) * 1000 : Date.now();
-            chat.mensagens.push({ role: "them", content, ts });
+            // mensagem rica (texto + mídia + transcrição)
+            const msgObj = { role: "them", content, ts };
+            if (midiaTipo !== "text") {
+              msgObj.tipo = midiaTipo;
+              if (midiaArquivo) msgObj.arquivo = midiaArquivo;
+              if (midiaMime) msgObj.mimetype = midiaMime;
+              if (midiaFilename) msgObj.filename = midiaFilename;
+              msgObj.mid = m.id || ("of" + ts);
+            }
+            if (transcricao) msgObj.transcricao = transcricao;
+            chat.mensagens.push(msgObj);
             chat.ultimaMsgLeadId = m.id || null; // pro indicador "digitando"
             if (chat.mensagens.length > 300) chat.mensagens = chat.mensagens.slice(-300);
             chat.naoLidas = (chat.naoLidas || 0) + 1;
