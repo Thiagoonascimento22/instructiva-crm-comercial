@@ -258,7 +258,7 @@ export default function App() {
   const isVend = !isGer && !isSuporte;
   const badgeSol = minhasSol.filter((s) => s.status === "resolvida" && !s.resolvidoVisto).length;
   const titulos = {
-    painel: { t: "Monitoria de Atendimento", s: "Acompanhe a produtividade e a agilidade do time" },
+    painel: { t: "Sistema Comercial", s: "Acompanhe a produtividade e a agilidade do time" },
     whatsapp: { t: "WhatsApp", s: "Acompanhe as conversas dos atendentes" },
     oficial: { t: "Disparo Oficial", s: "Disparo em massa e distribuição automática de leads" },
     minhasSolicitacoes: { t: "Minhas solicitações", s: "Acompanhe seus pedidos ao suporte" },
@@ -276,7 +276,7 @@ export default function App() {
       <aside className="sidebar">
         <div className="brand">
           <img src={(theme === "dark" || isVend) ? LOGO_LIGHT : LOGO_FULL} alt="Instructiva" />
-          <div className="tag">Monitoria de Atendimento</div>
+          <div className="tag">Sistema Comercial</div>
         </div>
         <nav className="nav">
           {!isSuporte && <NavBtn ic={I.dash} label={isGer ? "Monitoria" : "Meu Painel"} active={view === "painel"} onClick={() => setView("painel")} />}
@@ -364,7 +364,7 @@ function Login({ onDone }) {
     <div className="login-wrap">
       <form className="login-card" onSubmit={entrar}>
         <img className="logo" src={dark ? LOGO_LIGHT : LOGO_FULL} alt="Instructiva" />
-        <div className="ttl">Monitoria de Atendimento</div>
+        <div className="ttl">Sistema Comercial</div>
         <h2>Entrar</h2>
         <p className="hi">Acesse com seu usuário e senha.</p>
         {err && <div className="err">{err}</div>}
