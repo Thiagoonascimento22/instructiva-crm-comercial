@@ -551,6 +551,31 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
   }
 
   // processa a resposta da IA pra um chat (chamado pelo webhook quando o lead responde)
+  // mostra "digitando..." no WhatsApp do lead (e marca a última msg como lida)
+  async function mostrarDigitando(numeroCfg, ultimaMsgId) {
+    if (!ultimaMsgId) return;
+    try {
+      await graphPost(numeroCfg, {
+        messaging_product: "whatsapp",
+        status: "read",
+        message_id: ultimaMsgId,
+        typing_indicator: { type: "text" },
+      });
+    } catch (e) { /* se a Meta não aceitar, segue sem travar */ }
+  }
+
+  // calcula um tempo "humano" de digitação pelo tamanho da resposta
+  // curta (~até 120 chars) ~8s; longa (~400+ chars) ~14s; escala no meio
+  function tempoDigitacao(texto) {
+    const n = (texto || "").length;
+    const min = 8000, max = 14000;
+    const baixo = 120, alto = 400;
+    if (n <= baixo) return min;
+    if (n >= alto) return max;
+    const frac = (n - baixo) / (alto - baixo);
+    return Math.round(min + frac * (max - min));
+  }
+
   async function rodarIA(chat, numeroCfg) {
     try {
       const ia = (db.oficial.ias || []).find((x) => x.id === chat.iaId);
@@ -568,6 +593,10 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
       }
 
       if (resposta) {
+        // efeito humano: mostra "digitando..." e espera um tempo proporcional ao tamanho
+        const espera = tempoDigitacao(resposta);
+        await mostrarDigitando(numeroCfg, chat.ultimaMsgLeadId);
+        await new Promise((r) => setTimeout(r, espera));
         await enviarTextoOficial(numeroCfg, chat.numero, resposta);
         const ts = Date.now();
         chat.mensagens.push({ role: "me", content: resposta, ts, porIA: true });
@@ -1195,6 +1224,7 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
 
             const ts = m.timestamp ? Number(m.timestamp) * 1000 : Date.now();
             chat.mensagens.push({ role: "them", content, ts });
+            chat.ultimaMsgLeadId = m.id || null; // pro indicador "digitando"
             if (chat.mensagens.length > 300) chat.mensagens = chat.mensagens.slice(-300);
             chat.naoLidas = (chat.naoLidas || 0) + 1;
             chat.atualizadoEm = ts;
