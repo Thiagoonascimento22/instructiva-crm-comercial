@@ -2689,6 +2689,7 @@ function InboxOficial({ isGer, showToast, onIrParaEvolution }) {
             </select>
           </div>
         )}
+        <div className="of-inbox-items">
         {(() => {
           const lista = chats.filter((c) => {
             if (filtroVend === "todos") return true;
@@ -2723,6 +2724,7 @@ function InboxOficial({ isGer, showToast, onIrParaEvolution }) {
           </button>
           ));
         })()}
+        </div>
       </div>
 
       <div className="of-inbox-conv">

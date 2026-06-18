@@ -2626,10 +2626,11 @@ h1, h2, h3, h4, .topbar .greet, .panel-h h3, .login-card .ttl, .login-card h2, .
 .canal-aba.oficial.on { color: var(--of-green-d); border-bottom-color: var(--of-green); }
 
 /* INBOX oficial */
-.of-inbox { display: grid; grid-template-columns: 330px 1fr; gap: 0; border: 1px solid var(--line); border-radius: 14px; overflow: hidden; height: calc(100vh - 230px); min-height: 480px; background: var(--card); }
+.of-inbox { display: grid; grid-template-columns: 330px 1fr; gap: 0; border: 1px solid var(--line); border-radius: 14px; overflow: hidden; height: calc(100vh - 150px); min-height: 520px; background: var(--card); }
 @media (max-width: 860px) { .of-inbox { grid-template-columns: 1fr; } .of-inbox-conv { display: none; } }
 .of-inbox-list { border-right: 1px solid var(--line); display: flex; flex-direction: column; overflow: hidden; }
-.of-inbox-search { display: flex; align-items: center; gap: 8px; padding: 12px 14px; border-bottom: 1px solid var(--line); }
+.of-inbox-items { flex: 1; overflow-y: auto; min-height: 0; }
+.of-inbox-search { flex: none; display: flex; align-items: center; gap: 8px; padding: 12px 14px; border-bottom: 1px solid var(--line); }
 .of-inbox-search .ico { width: 16px; height: 16px; color: var(--faint); }
 .of-inbox-search input { border: none; background: none; outline: none; flex: 1; font-size: 13.5px; color: var(--text); }
 .of-chat-item { display: flex; gap: 11px; align-items: center; padding: 12px 14px; border: none; border-bottom: 1px solid var(--line-2); background: none; cursor: pointer; text-align: left; width: 100%; transition: .12s; }
@@ -2652,7 +2653,7 @@ h1, h2, h3, h4, .topbar .greet, .panel-h h3, .login-card .ttl, .login-card h2, .
 .of-conv-info b { font-size: 14.5px; }
 .of-conv-info span { font-size: 12px; color: var(--faint); }
 .of-reassign { width: 170px; padding: 7px 10px; font-size: 12.5px; }
-.of-conv-msgs { flex: 1; overflow-y: auto; padding: 18px 16px; display: flex; flex-direction: column; gap: 8px; background: var(--surface-2); }
+.of-conv-msgs { flex: 1; min-height: 0; overflow-y: auto; padding: 18px 16px; display: flex; flex-direction: column; gap: 8px; background: var(--surface-2); }
 .of-msg { display: flex; }
 .of-msg.me { justify-content: flex-end; }
 .of-msg-bubble { max-width: 72%; padding: 9px 13px; border-radius: 13px; font-size: 13.5px; line-height: 1.45; position: relative; box-shadow: var(--shadow-sm); }
