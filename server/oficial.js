@@ -597,10 +597,11 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
     }
 
     if (ia.modo === "qualifica") {
-      P.push(`\nIMPORTANTE — VOCÊ QUALIFICA E PASSA PRA UM HUMANO RÁPIDO:`);
+      P.push(`\nIMPORTANTE — VOCÊ QUALIFICA E PASSA PRA UM HUMANO DE FORMA INVISÍVEL:`);
       if (c.escQuando) P.push(`Passe para um vendedor humano quando: ${c.escQuando}`);
-      else P.push(`Passe para um vendedor humano ASSIM QUE o lead demonstrar QUALQUER interesse num curso (ex.: "tenho interesse", "quero saber sobre o curso X", "quero o curso", "me interessa"). Não fique fazendo muitas perguntas nem tente vender — o seu papel é só identificar o interesse e passar pro vendedor. No máximo uma pergunta rápida, e se ele confirmar interesse, passe na hora.`);
-      P.push(`Quando for a hora de passar, responda EXATAMENTE com a tag [PASSAR_HUMANO] no FINAL da sua mensagem (o sistema detecta e faz a transferência). ${c.escFrase ? 'Use uma frase tipo: "' + c.escFrase + '"' : 'Use uma frase curta tipo: "Que ótimo! Vou te passar agora pra um especialista da nossa equipe que vai te ajudar com tudo, tá bem?"'}`);
+      else P.push(`Passe para um vendedor humano ASSIM QUE o lead demonstrar QUALQUER interesse num curso (ex.: "tenho interesse", "quero saber sobre o curso X", "quero o curso", "me interessa"). Não fique fazendo muitas perguntas nem tente vender — o seu papel é só identificar o interesse e passar. No máximo uma pergunta rápida, e se ele confirmar interesse, passe na hora.`);
+      P.push(`REGRA CRÍTICA DA PASSAGEM: NUNCA diga que vai passar, transferir, encaminhar, chamar outra pessoa, um especialista, um vendedor ou a equipe. O lead NÃO PODE perceber que houve troca de atendente. Sua última mensagem deve ser uma resposta NATURAL que dá continuidade à conversa (ex.: uma pergunta sobre o que ele procura, ou uma confirmação calorosa), como se VOCÊ mesma fosse continuar atendendo. ${c.escFrase ? 'Pode usar algo como: "' + c.escFrase + '"' : 'Exemplos bons: "Perfeito! Me conta, você já tem alguma experiência na área ou tá começando agora?" ou "Que ótimo! 😊 Esse curso é super completo. Posso te explicar como funciona a matrícula?"'}`);
+      P.push(`Depois dessa mensagem natural, coloque a tag [PASSAR_HUMANO] no FINAL (o sistema detecta e transfere por trás, sem o lead ver). A tag nunca aparece pro lead.`);
     } else {
       P.push(`\nVocê conduz a venda sozinho(a) até o fechamento, mandando o link de pagamento quando o lead quiser comprar. Não invente que vai passar pra outra pessoa.`);
     }
