@@ -25,6 +25,9 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
     if (!Array.isArray(db.oficial.campanhas)) db.oficial.campanhas = [];
     // campanhas: [{ id, nome, numeroId, template, enviados, falhas, total, criadoEm }]
     if (typeof db.oficial.rrCursor !== "number") db.oficial.rrCursor = 0;
+    if (!Array.isArray(db.oficial.ias)) db.oficial.ias = [];
+    // ias: [{ id, nome, ativa, modo, persona, playbook, gatilhoHandoff, criadoEm }]
+    //   modo: "fecha" (IA vende sozinha) | "qualifica" (IA conversa e passa pro vendedor)
     if (!db.oficial.verifyToken) {
       db.oficial.verifyToken = "instructiva_" + Math.random().toString(36).slice(2, 10);
     }
@@ -429,6 +432,62 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
      DISPARO EM MASSA
      body: { numeroId, template, idioma, contatos:[{telefone,nome,variaveis:[...]}], nomeCampanha }
      ============================================================ */
+  /* ============================================================
+     IAs DO CANAL OFICIAL (cérebro) — Fase 1: cadastro
+     ============================================================ */
+  function iaPublica(ia) {
+    return {
+      id: ia.id, nome: ia.nome, ativa: !!ia.ativa, modo: ia.modo,
+      persona: ia.persona || "", playbook: ia.playbook || "",
+      gatilhoHandoff: ia.gatilhoHandoff || "", criadoEm: ia.criadoEm,
+    };
+  }
+
+  app.get("/api/oficial/ias", auth, gerenteOnly, (req, res) => {
+    res.json((db.oficial.ias || []).map(iaPublica));
+  });
+
+  app.post("/api/oficial/ias", auth, gerenteOnly, (req, res) => {
+    const b = req.body || {};
+    const nome = String(b.nome || "").trim();
+    if (!nome) return res.status(400).json({ error: "Dê um nome pra IA" });
+    const modo = b.modo === "qualifica" ? "qualifica" : "fecha";
+    const ia = {
+      id: proximoId("ia"),
+      nome: nome.slice(0, 80),
+      ativa: b.ativa !== false,
+      modo,
+      persona: String(b.persona || "").trim().slice(0, 8000),
+      playbook: String(b.playbook || "").trim().slice(0, 12000),
+      gatilhoHandoff: String(b.gatilhoHandoff || "").trim().slice(0, 4000),
+      criadoEm: Date.now(),
+    };
+    db.oficial.ias.unshift(ia);
+    salvar();
+    res.json(iaPublica(ia));
+  });
+
+  app.put("/api/oficial/ias/:id", auth, gerenteOnly, (req, res) => {
+    const ia = (db.oficial.ias || []).find((x) => x.id === req.params.id);
+    if (!ia) return res.status(404).json({ error: "IA não encontrada" });
+    const b = req.body || {};
+    if (b.nome !== undefined) { const n = String(b.nome).trim(); if (n) ia.nome = n.slice(0, 80); }
+    if (b.modo !== undefined) ia.modo = b.modo === "qualifica" ? "qualifica" : "fecha";
+    if (b.ativa !== undefined) ia.ativa = !!b.ativa;
+    if (b.persona !== undefined) ia.persona = String(b.persona).trim().slice(0, 8000);
+    if (b.playbook !== undefined) ia.playbook = String(b.playbook).trim().slice(0, 12000);
+    if (b.gatilhoHandoff !== undefined) ia.gatilhoHandoff = String(b.gatilhoHandoff).trim().slice(0, 4000);
+    salvar();
+    res.json(iaPublica(ia));
+  });
+
+  app.delete("/api/oficial/ias/:id", auth, gerenteOnly, (req, res) => {
+    const antes = (db.oficial.ias || []).length;
+    db.oficial.ias = (db.oficial.ias || []).filter((x) => x.id !== req.params.id);
+    salvar();
+    res.json({ ok: true, removida: antes !== db.oficial.ias.length });
+  });
+
   app.post("/api/oficial/disparar", auth, gerenteOnly, async (req, res) => {
     const b = req.body || {};
     const numeroCfg = acharNumero(b.numeroId);
