@@ -182,6 +182,45 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
     });
   }
 
+  // faz upload de um arquivo (Buffer) pro Meta e devolve o media_id
+  async function uploadMidiaMeta(numeroCfg, buffer, mimeType, filename) {
+    const form = new FormData();
+    form.append("messaging_product", "whatsapp");
+    const blob = new Blob([buffer], { type: mimeType });
+    form.append("file", blob, filename || "arquivo");
+    const r = await fetch(`${GRAPH}/${numeroCfg.phoneNumberId}/media`, {
+      method: "POST",
+      headers: { Authorization: "Bearer " + numeroCfg.token },
+      body: form,
+    });
+    let data = null;
+    try { data = await r.json(); } catch (_) {}
+    if (!r.ok || !data || !data.id) {
+      const msg = (data && data.error && data.error.message) || ("Erro upload mídia " + r.status);
+      throw new Error(msg);
+    }
+    return data.id;
+  }
+
+  // envia mídia (imagem/áudio/vídeo/documento) já com media_id
+  async function enviarMidiaOficial(numeroCfg, telefone, tipo, mediaId, caption, filename) {
+    const payload = { messaging_product: "whatsapp", to: telefone, type: tipo };
+    const obj = { id: mediaId };
+    if (caption && (tipo === "image" || tipo === "video" || tipo === "document")) obj.caption = caption;
+    if (tipo === "document" && filename) obj.filename = filename;
+    payload[tipo] = obj;
+    return graphPost(numeroCfg, payload);
+  }
+
+  // descobre o "type" do WhatsApp a partir do mime
+  function tipoPorMime(mime) {
+    const m = String(mime || "").toLowerCase();
+    if (m.startsWith("image/")) return "image";
+    if (m.startsWith("video/")) return "video";
+    if (m.startsWith("audio/")) return "audio";
+    return "document";
+  }
+
   /* monta os components do template a partir das variáveis do lead */
   function montarComponents(template, variaveis) {
     // variaveis: array de strings pro corpo ({{1}}, {{2}}...)
@@ -389,6 +428,57 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
       res.status(500).json({ error: e.message });
     }
   });
+  // estatísticas gerais do canal oficial (pra Monitoria): disparos, IA, atendimento
+  app.get("/api/oficial/stats", auth, gerenteOnly, (req, res) => {
+    const desde = req.query.desde ? Number(req.query.desde) : 0;
+    const ate = req.query.ate ? Number(req.query.ate) : Date.now();
+    const campanhas = (db.oficial.campanhas || []).filter((c) => {
+      const t = c.criadoEm || 0;
+      return t >= desde && t <= ate;
+    });
+    // disparos
+    let enviados = 0, entregues = 0, lidos = 0, responderam = 0, falhas = 0;
+    campanhas.forEach((c) => {
+      enviados += c.enviados || 0;
+      entregues += c.entregues || 0;
+      lidos += c.lidos || 0;
+      responderam += c.responderam || 0;
+      falhas += c.falhas || 0;
+    });
+    // chats do oficial no período
+    const chats = Object.values(db.waChats).filter((c) => c.canal === "oficial");
+    let iaAtendendo = 0, iaPassou = 0, comVendedor = 0, semDono = 0, msgsIA = 0;
+    chats.forEach((c) => {
+      const ult = c.atualizadoEm || 0;
+      if (ult < desde || ult > ate) return;
+      if (c.iaId && !c.iaPausada) iaAtendendo++;
+      // IA passou = tem nota de handoff
+      const passou = (c.notas || []).some((n) => n.tipo === "ia_handoff" && (n.ts || 0) >= desde && (n.ts || 0) <= ate);
+      if (passou) iaPassou++;
+      if (c.vendedorId) comVendedor++;
+      else if (!c.iaId || c.iaPausada) semDono++;
+      msgsIA += (c.mensagens || []).filter((m) => m.porIA && m.ts >= desde && m.ts <= ate).length;
+    });
+    // desempenho por IA
+    const iasMap = {};
+    (db.oficial.ias || []).forEach((ia) => { iasMap[ia.id] = { id: ia.id, nome: ia.nome, modo: ia.modo, atendendo: 0, passou: 0, msgs: 0 }; });
+    chats.forEach((c) => {
+      if (!c.iaId || !iasMap[c.iaId]) return;
+      const ult = c.atualizadoEm || 0;
+      if (ult < desde || ult > ate) return;
+      if (c.iaId && !c.iaPausada) iasMap[c.iaId].atendendo++;
+      if ((c.notas || []).some((n) => n.tipo === "ia_handoff")) iasMap[c.iaId].passou++;
+      iasMap[c.iaId].msgs += (c.mensagens || []).filter((m) => m.porIA).length;
+    });
+    const taxaResp = enviados ? Math.round((responderam / enviados) * 100) : 0;
+    res.json({
+      disparos: { enviados, entregues, lidos, responderam, falhas, taxaResp, campanhas: campanhas.length },
+      atendimento: { iaAtendendo, iaPassou, comVendedor, semDono, msgsIA },
+      ias: Object.values(iasMap),
+      desde, ate,
+    });
+  });
+
   app.get("/api/oficial/vendedores", auth, gerenteOnly, (req, res) => {
     const lista = db.users
       .filter((u) => u.role === "vendedor" && u.ativo)
@@ -1100,6 +1190,49 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
       res.json({ ok: true });
     } catch (e) {
       // erro típico: janela de 24h fechada (precisa de template)
+      res.status(400).json({ error: e.message });
+    }
+  });
+
+  /* enviar mídia (áudio/imagem/vídeo/arquivo) numa conversa do oficial.
+     Recebe o arquivo em base64; faz upload pro Meta e envia. */
+  app.post("/api/oficial/chats/:id/midia", auth, async (req, res) => {
+    const chat = db.waChats[req.params.id];
+    if (!chat || chat.canal !== "oficial") return res.status(404).json({ error: "Conversa não encontrada" });
+    if (req.user.role !== "gerente" && chat.vendedorId !== req.user.id) {
+      return res.status(403).json({ error: "Sem acesso a essa conversa" });
+    }
+    if (chat.iaId && !chat.iaPausada) {
+      return res.status(409).json({ error: "Pause a IA para assumir esta conversa." });
+    }
+    const b = req.body || {};
+    const base64 = String(b.base64 || "");
+    const mime = String(b.mime || "application/octet-stream");
+    const filename = String(b.filename || "arquivo");
+    const caption = String(b.caption || "").trim();
+    if (!base64) return res.status(400).json({ error: "Arquivo vazio" });
+
+    let buffer;
+    try { buffer = Buffer.from(base64, "base64"); }
+    catch (_) { return res.status(400).json({ error: "Arquivo inválido" }); }
+    if (buffer.length > 16 * 1024 * 1024) return res.status(400).json({ error: "Arquivo passa de 16MB" });
+
+    const numeroCfg = acharNumero(chat.numeroOficialId);
+    if (!numeroCfg) return res.status(400).json({ error: "Número de origem não encontrado" });
+
+    try {
+      const tipo = tipoPorMime(mime);
+      const mediaId = await uploadMidiaMeta(numeroCfg, buffer, mime, filename);
+      await enviarMidiaOficial(numeroCfg, chat.numero, tipo, mediaId, caption, filename);
+      const ts = Date.now();
+      const rotulo = tipo === "image" ? "📷 Foto" : tipo === "audio" ? "🎤 Áudio" : tipo === "video" ? "🎬 Vídeo" : "📄 " + filename;
+      chat.mensagens.push({ role: "me", content: caption ? rotulo + ": " + caption : rotulo, ts, midia: { tipo, mediaId, filename, mime } });
+      if (chat.iaId && !chat.iaPausada) chat.iaPausada = true;
+      if (chat.mensagens.length > 300) chat.mensagens = chat.mensagens.slice(-300);
+      chat.atualizadoEm = ts;
+      salvar();
+      res.json({ ok: true });
+    } catch (e) {
       res.status(400).json({ error: e.message });
     }
   });

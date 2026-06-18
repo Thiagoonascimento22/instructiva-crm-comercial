@@ -2508,8 +2508,15 @@ function InboxOficial({ isGer, showToast, onIrParaEvolution }) {
   const [texto, setTexto] = useState("");
   const [busca, setBusca] = useState("");
   const [vendedores, setVendedores] = useState([]);
+  const [filtroVend, setFiltroVend] = useState("todos");
   const [showTransfer, setShowTransfer] = useState(false);
   const [pedindoSuporte, setPedindoSuporte] = useState(false);
+  const [showEmojiOf, setShowEmojiOf] = useState(false);
+  const [gravandoOf, setGravandoOf] = useState(false);
+  const [enviandoMidiaOf, setEnviandoMidiaOf] = useState(false);
+  const fileRefOf = useRef(null);
+  const mediaRecOf = useRef(null);
+  const chunksOf = useRef([]);
   const fimRef = useRef(null);
 
   const carregarLista = () => api.ofChats(busca).then(setChats).catch(() => {});
@@ -2539,6 +2546,58 @@ function InboxOficial({ isGer, showToast, onIrParaEvolution }) {
       await api.ofEnviar(sel, t);
       api.ofChat(sel).then(setConversa).catch(() => {});
     } catch (e) { showToast(e.message); setTexto(t); }
+  }
+  // enviar um arquivo (imagem/vídeo/doc) escolhido
+  async function onArquivoOf(file) {
+    if (!file || !sel) return;
+    if (file.size > 16 * 1024 * 1024) { showToast("✗ Arquivo passa de 16MB"); return; }
+    setEnviandoMidiaOf(true);
+    try {
+      const base64 = await new Promise((res, rej) => {
+        const r = new FileReader();
+        r.onload = () => res(String(r.result).split(",")[1]);
+        r.onerror = rej;
+        r.readAsDataURL(file);
+      });
+      await api.ofEnviarMidia(sel, { base64, mime: file.type || "application/octet-stream", filename: file.name || "arquivo" });
+      api.ofChat(sel).then(setConversa).catch(() => {});
+    } catch (e) { showToast(e.message || "Não consegui enviar o arquivo"); }
+    setEnviandoMidiaOf(false);
+  }
+  // gravar e enviar áudio
+  async function toggleGravarOf() {
+    if (gravandoOf) {
+      try { mediaRecOf.current && mediaRecOf.current.stop(); } catch (_) {}
+      return;
+    }
+    if (!navigator.mediaDevices || !window.MediaRecorder) { showToast("✗ Seu navegador não permite gravar áudio aqui"); return; }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mr = new MediaRecorder(stream);
+      chunksOf.current = [];
+      mr.ondataavailable = (e) => { if (e.data.size > 0) chunksOf.current.push(e.data); };
+      mr.onstop = async () => {
+        stream.getTracks().forEach((t) => t.stop());
+        setGravandoOf(false);
+        const blob = new Blob(chunksOf.current, { type: "audio/ogg" });
+        if (blob.size < 800) return; // muito curto, ignora
+        setEnviandoMidiaOf(true);
+        try {
+          const base64 = await new Promise((res, rej) => {
+            const r = new FileReader();
+            r.onload = () => res(String(r.result).split(",")[1]);
+            r.onerror = rej;
+            r.readAsDataURL(blob);
+          });
+          await api.ofEnviarMidia(sel, { base64, mime: "audio/ogg", filename: "audio.ogg" });
+          api.ofChat(sel).then(setConversa).catch(() => {});
+        } catch (e) { showToast(e.message || "Não consegui enviar o áudio"); }
+        setEnviandoMidiaOf(false);
+      };
+      mediaRecOf.current = mr;
+      mr.start();
+      setGravandoOf(true);
+    } catch (e) { showToast("✗ Não consegui acessar o microfone"); }
   }
   async function transferir(vendedorId) {
     if (!sel || !vendedorId) return;
@@ -2620,13 +2679,30 @@ function InboxOficial({ isGer, showToast, onIrParaEvolution }) {
           <input placeholder="Buscar por nome ou número" value={busca} onChange={(e) => setBusca(e.target.value)} />
           {isGer && <button className="of-limpar-btn" title="Limpar conversas" onClick={limpar}><I.trash className="ico" /></button>}
         </div>
-        {chats.length === 0 ? (
-          <div className="of-inbox-empty">
-            <I.chat className="ico-empty" />
-            <p>Nenhuma conversa ainda.</p>
-            <p className="panel-sub">Quando um lead responder ao disparo, ele aparece aqui.</p>
+        {isGer && vendedores.length > 0 && (
+          <div style={{ padding: "0 12px 10px" }}>
+            <select className="select" style={{ width: "100%" }} value={filtroVend} onChange={(e) => setFiltroVend(e.target.value)}>
+              <option value="todos">Todos os vendedores</option>
+              <option value="ia">🤖 Em atendimento por IA</option>
+              <option value="sem">Aguardando distribuição</option>
+              {vendedores.map((v) => <option key={v.id} value={v.id}>{v.nome}</option>)}
+            </select>
           </div>
-        ) : chats.map((c) => (
+        )}
+        {(() => {
+          const lista = chats.filter((c) => {
+            if (filtroVend === "todos") return true;
+            if (filtroVend === "ia") return c.comIA;
+            if (filtroVend === "sem") return !c.vendedorId && !c.comIA;
+            return c.vendedorId === filtroVend;
+          });
+          return lista.length === 0 ? (
+            <div className="of-inbox-empty">
+              <I.chat className="ico-empty" />
+              <p>Nenhuma conversa {filtroVend !== "todos" ? "nesse filtro" : "ainda"}.</p>
+              {filtroVend === "todos" && <p className="panel-sub">Quando um lead responder ao disparo, ele aparece aqui.</p>}
+            </div>
+          ) : lista.map((c) => (
           <button key={c.id} className={sel === c.id ? "of-chat-item on" : "of-chat-item"} onClick={() => setSel(c.id)}>
             <div className="of-chat-av">{iniciais(c.nome)}</div>
             <div className="of-chat-mid">
@@ -2645,7 +2721,8 @@ function InboxOficial({ isGer, showToast, onIrParaEvolution }) {
               {c.naoLidas > 0 && <span className="of-chat-badge">{c.naoLidas}</span>}
             </div>
           </button>
-        ))}
+          ));
+        })()}
       </div>
 
       <div className="of-inbox-conv">
@@ -2734,14 +2811,31 @@ function InboxOficial({ isGer, showToast, onIrParaEvolution }) {
                 )}
               </div>
             ) : (
-              <div className="of-conv-input">
+              <div className="of-conv-input" style={{ position: "relative" }}>
+                {showEmojiOf && (
+                  <div className="wa-emoji-pop" style={{ bottom: "100%", marginBottom: 8 }}>
+                    {EMOJIS.map((e, i) => (
+                      <button type="button" key={e + i} className="wa-emoji" onClick={() => setTexto((t) => t + e)}>{e}</button>
+                    ))}
+                  </div>
+                )}
+                <input ref={fileRefOf} type="file" hidden onChange={(e) => { onArquivoOf(e.target.files[0]); e.target.value = ""; }} accept="image/*,video/*,audio/*,application/pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.zip" />
+                <button type="button" className="of-comp-ico" onClick={() => fileRefOf.current && fileRefOf.current.click()} disabled={enviandoMidiaOf} title="Anexar arquivo"><I.clip className="ico" /></button>
+                <button type="button" className="of-comp-ico" onClick={() => setShowEmojiOf((v) => !v)} title="Emojis">😊</button>
                 <input
-                  placeholder="Escreva uma mensagem…"
+                  placeholder={enviandoMidiaOf ? "Enviando…" : gravandoOf ? "Gravando áudio…" : "Escreva uma mensagem…"}
                   value={texto}
                   onChange={(e) => setTexto(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && enviar()}
+                  onKeyDown={(e) => { if (e.key === "Enter") { enviar(); setShowEmojiOf(false); } }}
+                  disabled={gravandoOf}
                 />
-                <button className="btn btn-primary" onClick={enviar}><I.send className="ico" /></button>
+                {texto.trim() ? (
+                  <button className="btn btn-primary" onClick={() => { enviar(); setShowEmojiOf(false); }}><I.send className="ico" /></button>
+                ) : (
+                  <button type="button" className={gravandoOf ? "of-comp-ico grav" : "of-comp-ico"} onClick={toggleGravarOf} disabled={enviandoMidiaOf} title={gravandoOf ? "Parar e enviar" : "Gravar áudio"}>
+                    {gravandoOf ? <I.send className="ico" /> : <I.mic className="ico" />}
+                  </button>
+                )}
               </div>
             )}
           </>
@@ -3059,10 +3153,10 @@ function WhatsApp({ user, showToast, target, onTargetUsed, recarregarSol }) {
         </div></div>
       ) : (
       <>
-      <div style={{ display: "flex", justifyContent: "space-between", gap: 10, marginBottom: 14, flexWrap: "wrap" }}>
-        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+      <div className="wa-toolbar">
+        <div className="wa-toolbar-left">
           {isGer && (
-            <select className="select" style={{ width: 230 }} value={filtro} onChange={(e) => setFiltro(e.target.value)}>
+            <select className="select" style={{ minWidth: 200 }} value={filtro} onChange={(e) => setFiltro(e.target.value)}>
               <option value="todas">Todos os vendedores</option>
               {vendedoresWA.map((v) => <option key={v.id} value={v.id}>{v.nome}</option>)}
             </select>
@@ -3073,19 +3167,17 @@ function WhatsApp({ user, showToast, target, onTargetUsed, recarregarSol }) {
           {!isGer && minha && minha.estado === "open" && (
             <span style={{ fontSize: 13, color: "var(--fechou)", fontWeight: 600, display: "flex", alignItems: "center", gap: 6 }}><span className="wa-dot on" /> WhatsApp conectado</span>
           )}
-          <div className="wa-filtros">
-            <button type="button" className={"wa-filtro" + (filtroAtivo === "ativas" ? " on" : "")} onClick={() => escolherFiltro("ativas")}>Ativas</button>
-            <button type="button" className={"wa-filtro" + (filtroAtivo === "aguardando" ? " on" : "")} onClick={() => escolherFiltro("aguardando")}>
-              Aguardando{aguardandoCount ? <span className="wa-filtro-cnt">{aguardandoCount}</span> : null}
-            </button>
-            <button type="button" className={"wa-filtro" + (filtroAtivo === "arquivadas" ? " on" : "")} onClick={() => escolherFiltro("arquivadas")}>
-              <I.arquivar style={{ width: 13, height: 13 }} /> Arquivadas
-            </button>
-          </div>
         </div>
-        <div style={{ display: "flex", gap: 8 }}>
-          {isGer && <button className="btn" onClick={() => setShowCfg(true)}><I.cog style={{ width: 15, height: 15 }} /> Configurar conexão</button>}
-        </div>
+        {isGer && <button className="btn" onClick={() => setShowCfg(true)}><I.cog style={{ width: 15, height: 15 }} /> Configurar conexão</button>}
+      </div>
+      <div className="wa-filtros wa-filtros-row">
+        <button type="button" className={"wa-filtro" + (filtroAtivo === "ativas" ? " on" : "")} onClick={() => escolherFiltro("ativas")}>Ativas</button>
+        <button type="button" className={"wa-filtro" + (filtroAtivo === "aguardando" ? " on" : "")} onClick={() => escolherFiltro("aguardando")}>
+          Aguardando{aguardandoCount ? <span className="wa-filtro-cnt">{aguardandoCount}</span> : null}
+        </button>
+        <button type="button" className={"wa-filtro" + (filtroAtivo === "arquivadas" ? " on" : "")} onClick={() => escolherFiltro("arquivadas")}>
+          <I.arquivar style={{ width: 13, height: 13 }} /> Arquivadas
+        </button>
       </div>
 
       <div className="wa-grid">
@@ -4539,6 +4631,7 @@ function Monitoria({ user, showToast }) {
   const [ate, setAte] = useState("");
   const [vendFiltro, setVendFiltro] = useState(isGer ? "" : user.id);
   const [det, setDet] = useState(null);
+  const [ofStats, setOfStats] = useState(null);
 
   const alvo = isGer ? vendFiltro : user.id;
 
@@ -4548,6 +4641,7 @@ function Monitoria({ user, showToast }) {
     try { setDados(await api.monitoria(ini, fim)); }
     catch (e) { if (!silencioso) showToast("✗ " + e.message); }
     finally { if (!silencioso) setLoading(false); }
+    if (isGer) { api.ofStats(ini, fim).then(setOfStats).catch(() => setOfStats(null)); }
   }
   useEffect(() => { carregar(false); /* eslint-disable-next-line */ }, [preset, de, ate]);
   useEffect(() => {
@@ -4632,6 +4726,45 @@ function Monitoria({ user, showToast }) {
         <div className="mon-mini"><div className="lab">Taxa de resposta</div><div className="num">{time.taxaResposta || 0}%</div></div>
         <div className="mon-mini"><div className="lab">Conversas atendidas</div><div className="num">{time.atendidas || 0} de {time.conversas || 0}</div></div>
       </div>
+
+      {isGer && ofStats && (
+        <div className="panel" style={{ marginBottom: 16 }}>
+          <div className="panel-h">
+            <h3>Disparo Oficial &amp; IA<span className="panel-sub">desempenho do canal oficial no período</span></h3>
+          </div>
+          <div style={{ padding: "0 18px 18px" }}>
+            <div className="mon-of-grid">
+              <div className="mon-of-card"><div className="n">{ofStats.disparos.enviados.toLocaleString("pt-BR")}</div><div className="l">Disparos enviados</div></div>
+              <div className="mon-of-card"><div className="n">{ofStats.disparos.entregues.toLocaleString("pt-BR")}</div><div className="l">Entregues</div></div>
+              <div className="mon-of-card"><div className="n">{ofStats.disparos.lidos.toLocaleString("pt-BR")}</div><div className="l">Lidos</div></div>
+              <div className="mon-of-card destaque"><div className="n">{ofStats.disparos.responderam.toLocaleString("pt-BR")}</div><div className="l">Responderam</div></div>
+              <div className="mon-of-card"><div className="n">{ofStats.disparos.taxaResp}%</div><div className="l">Taxa de resposta</div></div>
+            </div>
+            <div className="mon-of-grid" style={{ marginTop: 12 }}>
+              <div className="mon-of-card ia"><div className="n">{ofStats.atendimento.iaAtendendo}</div><div className="l">🤖 IA atendendo agora</div></div>
+              <div className="mon-of-card ia"><div className="n">{ofStats.atendimento.iaPassou}</div><div className="l">IA passou pro vendedor</div></div>
+              <div className="mon-of-card ia"><div className="n">{ofStats.atendimento.msgsIA.toLocaleString("pt-BR")}</div><div className="l">Mensagens da IA</div></div>
+              <div className="mon-of-card"><div className="n">{ofStats.atendimento.comVendedor}</div><div className="l">Com vendedor</div></div>
+              <div className="mon-of-card"><div className="n">{ofStats.atendimento.semDono}</div><div className="l">Aguardando</div></div>
+            </div>
+            {ofStats.ias.filter((ia) => ia.atendendo > 0 || ia.passou > 0 || ia.msgs > 0).length > 0 && (
+              <div style={{ marginTop: 16 }}>
+                <div className="panel-sub" style={{ marginBottom: 8, fontWeight: 600 }}>Por agente de IA</div>
+                {ofStats.ias.filter((ia) => ia.atendendo > 0 || ia.passou > 0 || ia.msgs > 0).map((ia) => (
+                  <div key={ia.id} className="mon-of-ia-row">
+                    <span className="nm"><I.spark className="ico" /> {ia.nome}<span className="modo">{ia.modo === "qualifica" ? "qualifica" : "fecha"}</span></span>
+                    <span className="vals">
+                      <span><b>{ia.atendendo}</b> atendendo</span>
+                      <span><b>{ia.passou}</b> passou</span>
+                      <span><b>{ia.msgs.toLocaleString("pt-BR")}</b> msgs</span>
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {vazio ? (
         <div className="panel"><div className="dash-empty">
