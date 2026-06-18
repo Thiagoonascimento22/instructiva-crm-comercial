@@ -2632,6 +2632,8 @@ function InboxOficial({ isGer, showToast, onIrParaEvolution }) {
             <div className="of-chat-mid">
               <div className="of-chat-nm">
                 {c.nome}
+                {c.comIA && <span className="of-pill" style={{ background: "#ede9fe", color: "#6d28d9", borderColor: "#ddd6fe" }}>🤖 IA atendendo</span>}
+                {c.iaPassou && <span className="of-pill" style={{ background: "#eafaf0", color: "#1a9d54", borderColor: "#aee3c4" }}>✓ IA passou</span>}
                 {c.origemDisparo && <span className="of-pill">{c.campanha || "Disparo"}</span>}
               </div>
               <div className="of-chat-last">{c.ultima ? (c.ultima.role === "me" ? "Você: " : "") + c.ultima.content : "—"}</div>

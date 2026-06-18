@@ -609,6 +609,9 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
       if (passar) {
         chat.iaPausada = true; // IA para de responder
         atribuirLead(chat);     // distribui pra um vendedor humano
+        chat.respondeu = true;  // garante visibilidade pro vendedor
+        chat.naoLidas = (chat.naoLidas || 0) + 1; // aparece como novo pra ele
+        chat.atualizadoEm = Date.now(); // sobe pro topo da lista
         if (!Array.isArray(chat.notas)) chat.notas = [];
         chat.notas.push({ tipo: "ia_handoff", texto: `${ia.nome} (IA) qualificou e passou pro vendedor${chat.vendedorNome ? " " + chat.vendedorNome : ""}`, ts: Date.now(), por: ia.nome });
       }
@@ -998,9 +1001,17 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
     const incluirEncerrados = String(req.query.encerrados || "") === "1";
     if (!incluirEncerrados) chats = chats.filter((c) => !c.encerrado);
     if (req.user.role !== "gerente") {
-      // vendedor: só os atribuídos a ele E que o lead já respondeu
-      // (conversa de disparo sem resposta fica invisível pro vendedor)
-      chats = chats.filter((c) => c.vendedorId === req.user.id && (!c.origemDisparo || c.respondeu));
+      // vendedor só vê conversas:
+      //  - atribuídas a ele
+      //  - que o lead já respondeu (disparo sem resposta fica invisível)
+      //  - e que NÃO estejam sob comando de uma IA ativa
+      //    (enquanto a IA atende, é privado do gestor; ao passar pro vendedor,
+      //     a IA pausa e atribui, então a conversa aparece JÁ com todo o histórico)
+      chats = chats.filter((c) =>
+        c.vendedorId === req.user.id &&
+        (!c.origemDisparo || c.respondeu) &&
+        !(c.iaId && !c.iaPausada)
+      );
     } else if (req.query.numeroId && req.query.numeroId !== "todos") {
       chats = chats.filter((c) => c.numeroOficialId === req.query.numeroId);
     }
@@ -1026,6 +1037,8 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
           vendedorId: c.vendedorId || null,
           vendedorNome: v ? v.nome : "",
           numeroOficialId: c.numeroOficialId,
+          comIA: !!(c.iaId && !c.iaPausada),
+          iaPassou: !!(c.iaId && c.iaPausada && c.vendedorId),
           ultima: ultima ? { role: ultima.role, content: String(ultima.content || "").slice(0, 80), ts: ultima.ts } : null,
         };
       });
@@ -1038,6 +1051,10 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
     if (!chat || chat.canal !== "oficial") return res.status(404).json({ error: "Conversa não encontrada" });
     if (req.user.role !== "gerente" && chat.vendedorId !== req.user.id) {
       return res.status(403).json({ error: "Sem acesso a essa conversa" });
+    }
+    // enquanto a IA está no comando, a conversa é privada do gestor
+    if (req.user.role !== "gerente" && chat.iaId && !chat.iaPausada) {
+      return res.status(403).json({ error: "Conversa em atendimento automático" });
     }
     chat.naoLidas = 0;
     salvar();
