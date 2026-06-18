@@ -1247,8 +1247,9 @@ function OficialIAs({ showToast }) {
                   <b className="sol-quem">{ia.nome}</b>
                 </div>
                 <div className="sol-meta" style={{ marginTop: 4 }}>
-                  {ia.persona ? "Persona definida" : "Sem persona"} · {ia.playbook ? "playbook definido" : "sem playbook"}
-                  {ia.modo === "qualifica" && (ia.gatilhoHandoff ? " · gatilho definido" : " · sem gatilho de entrega")}
+                  {(ia.config && ia.config.quemEla) ? "Persona definida" : "Sem persona"} · {(ia.config && (ia.config.pbAbertura || ia.config.pbQualificacao)) ? "playbook definido" : "sem playbook"}
+                  {ia.modo === "qualifica" && ((ia.config && ia.config.escQuando) ? " · gatilho definido" : " · sem gatilho de entrega")}
+                  {(ia.conhecimento && ia.conhecimento.length > 0) ? ` · ${ia.conhecimento.length} arquivo(s)` : ""}
                 </div>
               </div>
               <div className="sol-acoes">
@@ -1290,6 +1291,33 @@ function ModalIA({ ia, showToast, onClose, onSaved }) {
   });
   const [kb, setKb] = useState(ia.conhecimento ? ia.conhecimento.map((k) => ({ ...k, texto: "" })) : []);
   const set = (k, v) => setC((s) => ({ ...s, [k]: v }));
+
+  // preview ao vivo
+  const [pvMsgs, setPvMsgs] = useState([]);
+  const [pvInput, setPvInput] = useState("");
+  const [pvLoad, setPvLoad] = useState(false);
+  const pvFimRef = useRef(null);
+  useEffect(() => { if (pvFimRef.current) pvFimRef.current.scrollIntoView({ behavior: "smooth" }); }, [pvMsgs, pvLoad]);
+
+  async function pvEnviar() {
+    const txt = pvInput.trim();
+    if (!txt || pvLoad) return;
+    const novas = [...pvMsgs, { role: "them", content: txt }];
+    setPvMsgs(novas); setPvInput(""); setPvLoad(true);
+    try {
+      const r = await api.ofPreviewIA({
+        nome: nome.trim(), modo, config: c,
+        conhecimento: kb.filter((x) => x.texto).map((x) => ({ id: x.id, secao: x.secao, nome: x.nome, texto: x.texto })),
+        historico: novas,
+      });
+      const add = [];
+      if (r.resposta) add.push({ role: "me", content: r.resposta });
+      if (r.passar) add.push({ role: "sys", content: "→ Aqui a IA passaria a conversa pro vendedor." });
+      setPvMsgs([...novas, ...add]);
+    } catch (e) {
+      setPvMsgs([...novas, { role: "sys", content: "Erro: " + e.message }]);
+    } finally { setPvLoad(false); }
+  }
 
   const SECOES = [
     { g: "GERAL", itens: [
@@ -1619,16 +1647,29 @@ function ModalIA({ ia, showToast, onClose, onSaved }) {
           <aside className="agx-preview">
             <div className="agx-preview-head">
               <span>▷ Preview ao vivo</span>
-              <button className="agx-reset" disabled>↻ Resetar</button>
+              <button className="agx-reset" onClick={() => setPvMsgs([])} style={{ cursor: "pointer" }}>↻ Resetar</button>
             </div>
             <div className="agx-preview-body">
-              <div className="agx-preview-empty">
-                O preview ao vivo entra na próxima fase — aqui você vai testar a conversa da {nome.trim() || "IA"} em tempo real, com tudo que configurou.
-              </div>
+              {pvMsgs.length === 0 && (
+                <div className="agx-preview-empty">
+                  Mande uma mensagem como se fosse o lead e veja a {nome.trim() || "IA"} responder em tempo real, usando tudo que você configurou.
+                </div>
+              )}
+              {pvMsgs.map((m, i) => (
+                m.role === "sys" ? (
+                  <div key={i} style={{ textAlign: "center", fontSize: 12, color: "var(--muted,#999)", margin: "10px 0" }}>{m.content}</div>
+                ) : (
+                  <div key={i} style={{ display: "flex", justifyContent: m.role === "them" ? "flex-end" : "flex-start", marginBottom: 8 }}>
+                    <div style={{ maxWidth: "82%", padding: "8px 11px", borderRadius: 12, fontSize: 13.5, lineHeight: 1.5, whiteSpace: "pre-wrap", background: m.role === "them" ? "#6347e8" : "var(--bg3,#ececf0)", color: m.role === "them" ? "#fff" : "var(--text,#222)" }}>{m.content}</div>
+                  </div>
+                )
+              ))}
+              {pvLoad && <div style={{ fontSize: 12.5, color: "var(--muted,#999)", padding: "4px 2px" }}>{(nome.trim() || "IA")} digitando…</div>}
+              <div ref={pvFimRef} />
             </div>
             <div className="agx-preview-input">
-              <input className="agx-input" placeholder="Digite uma mensagem..." disabled />
-              <button className="agx-send" disabled>➤</button>
+              <input className="agx-input" placeholder="Digite como o lead..." value={pvInput} onChange={(e) => setPvInput(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") pvEnviar(); }} disabled={pvLoad} />
+              <button className="agx-send" onClick={pvEnviar} disabled={pvLoad || !pvInput.trim()} style={{ cursor: "pointer", opacity: pvLoad || !pvInput.trim() ? 0.5 : 1 }}>➤</button>
             </div>
           </aside>
         </div>
@@ -1742,7 +1783,13 @@ function ModalDisparo({ numeros, showToast, onClose, onDone }) {
   const [textoManual, setTextoManual] = useState("");
   const [nomeCampanha, setNomeCampanha] = useState("");
   const [enviando, setEnviando] = useState(false);
+  const [ias, setIas] = useState([]);
+  const [iaId, setIaId] = useState("");
   const fileRef = useRef(null);
+
+  useEffect(() => {
+    api.ofIAs().then((lista) => setIas((lista || []).filter((x) => x.ativa))).catch(() => setIas([]));
+  }, []);
 
   useEffect(() => {
     if (!numeroId) return;
@@ -1789,7 +1836,7 @@ function ModalDisparo({ numeros, showToast, onClose, onDone }) {
     try {
       const r = await api.ofDisparar({
         numeroId, template: template.name, idioma: template.language,
-        nomeCampanha: nomeCampanha || template.name, contatos,
+        nomeCampanha: nomeCampanha || template.name, contatos, iaId: iaId || null,
       });
       showToast(`Disparo iniciado para ${r.total} contato(s)!`);
       onDone();
@@ -1889,6 +1936,24 @@ function ModalDisparo({ numeros, showToast, onClose, onDone }) {
                 <div className="dispm-rev"><span>📱 Número</span><b>{numeroSel ? numeroSel.apelido : "—"}</b></div>
                 <div className="dispm-rev"><span>💬 Template</span><b>{template ? template.name : "—"}</b></div>
                 <div className="dispm-rev"><span>👥 Contatos</span><b>{contatos.length}</b></div>
+              </div>
+              <div className="dispm-campo">
+                <label>Quem atende quem responder?</label>
+                <select className="input" value={iaId} onChange={(e) => setIaId(e.target.value)}>
+                  <option value="">👤 Vendedores (distribuição normal)</option>
+                  {ias.map((ia) => (
+                    <option key={ia.id} value={ia.id}>🤖 {ia.nome} {ia.modo === "qualifica" ? "(qualifica e passa)" : "(fecha sozinha)"}</option>
+                  ))}
+                </select>
+                {iaId ? (
+                  <div style={{ fontSize: 12.5, color: "var(--muted)", marginTop: 6 }}>
+                    A IA vai responder automaticamente quem responder a esse disparo. Os vendedores não recebem (a não ser que a IA passe).
+                  </div>
+                ) : (
+                  <div style={{ fontSize: 12.5, color: "var(--muted)", marginTop: 6 }}>
+                    Quem responder cai direto pros vendedores, como sempre.
+                  </div>
+                )}
               </div>
               <div className="dispm-campo">
                 <label>Nome da campanha (opcional)</label>

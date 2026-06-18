@@ -119,6 +119,7 @@ export const api = {
   ofEditarIA: (id, dados) => req("PUT", "/api/oficial/ias/" + id, dados),
   ofExcluirIA: (id) => req("DELETE", "/api/oficial/ias/" + id),
   ofExtrairArquivo: (nome, base64) => req("POST", "/api/oficial/ias/extrair", { nome, base64 }),
+  ofPreviewIA: (dados) => req("POST", "/api/oficial/ias/preview", dados),
 
   // Monitoria
   horario: () => req("GET", "/api/horario"),

@@ -437,6 +437,156 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
      ============================================================ */
   function lim(s, n) { return String(s == null ? "" : s).slice(0, n); }
 
+  const TOM_LABEL = {
+    amigavel: "amigável e próximo", profissional: "profissional",
+    descontraido: "descontraído", consultivo: "consultivo", direto: "direto e objetivo",
+  };
+
+  // monta o prompt-sistema da IA a partir de toda a config + base de conhecimento
+  function montarSystemPrompt(ia, nomeLead) {
+    const c = ia.config || {};
+    const P = [];
+    P.push(`Você é ${ia.nome}, um(a) atendente de vendas que conversa com leads pelo WhatsApp.`);
+    P.push(`Seu tom de voz é ${TOM_LABEL[c.tomVoz] || "amigável e próximo"}.`);
+    if (nomeLead) P.push(`O nome do lead com quem você fala é: ${nomeLead}.`);
+    if (c.objetivo) P.push(`SEU OBJETIVO PRINCIPAL: ${c.objetivo}`);
+
+    if (c.quemEla) P.push(`\nQUEM VOCÊ É:\n${c.quemEla}`);
+    if (c.comoEscreve) P.push(`\nCOMO VOCÊ ESCREVE:\n${c.comoEscreve}`);
+    if (c.sempreFaz) P.push(`\nVOCÊ SEMPRE:\n${c.sempreFaz}`);
+    if (c.nuncaFaz) P.push(`\nVOCÊ NUNCA:\n${c.nuncaFaz}`);
+
+    if (Array.isArray(c.cursos) && c.cursos.length) {
+      P.push(`\nCURSOS E OFERTAS QUE VOCÊ VENDE:`);
+      c.cursos.forEach((cur) => {
+        const linhas = [];
+        if (cur.nome) linhas.push(`Curso: ${cur.nome}`);
+        if (cur.carga) linhas.push(`Carga horária: ${cur.carga}`);
+        if (cur.garantia) linhas.push(`Garantia: ${cur.garantia}`);
+        if (cur.certificado) linhas.push(`Certificado: ${cur.certificado}`);
+        if (cur.paraQuem) linhas.push(`Para quem é: ${cur.paraQuem}`);
+        if (cur.diferencial) linhas.push(`Diferencial: ${cur.diferencial}`);
+        if (cur.descricao) linhas.push(`Descrição: ${cur.descricao}`);
+        (cur.ofertas || []).forEach((o) => {
+          const partes = [o.nome, o.valor, o.obs].filter(Boolean).join(" — ");
+          linhas.push(`Oferta: ${partes}${o.link ? " | Link: " + o.link : ""}`);
+        });
+        P.push("- " + linhas.join("\n  "));
+      });
+    }
+
+    if (Array.isArray(c.objecoes) && c.objecoes.length) {
+      P.push(`\nCOMO RESPONDER OBJEÇÕES:`);
+      c.objecoes.forEach((o) => { if (o.objecao) P.push(`- Se disser "${o.objecao}": ${o.resposta || ""}`); });
+    }
+
+    if (Array.isArray(c.faq) && c.faq.length) {
+      P.push(`\nPERGUNTAS FREQUENTES:`);
+      c.faq.forEach((q) => { if (q.pergunta) P.push(`- P: ${q.pergunta}\n  R: ${q.resposta || ""}`); });
+    }
+
+    const etapas = [
+      ["Abertura (primeira mensagem)", c.pbAbertura],
+      ["Qualificação", c.pbQualificacao],
+      ["Apresentação do curso", c.pbApresentacao],
+      ["Quando soltar o preço", c.pbPreco],
+      ["Fechamento", c.pbFechamento],
+      ["Recuperação (se sumir)", c.pbRecuperacao],
+    ].filter(([, v]) => v);
+    if (etapas.length) {
+      P.push(`\nROTEIRO DA CONVERSA (siga essa ordem):`);
+      etapas.forEach(([t, v], i) => P.push(`${i + 1}. ${t}: ${v}`));
+    }
+
+    // base de conhecimento dos arquivos anexados
+    const kb = (ia.conhecimento || []).filter((k) => k.texto);
+    if (kb.length) {
+      P.push(`\nBASE DE CONHECIMENTO (material de referência — use para responder com precisão, não invente):`);
+      kb.forEach((k) => { P.push(`\n--- ${k.nome} ---\n${lim(k.texto, 40000)}`); });
+    }
+
+    if (ia.modo === "qualifica") {
+      P.push(`\nIMPORTANTE — VOCÊ QUALIFICA E PASSA PRA UM HUMANO:`);
+      if (c.escQuando) P.push(`Passe para um vendedor humano quando: ${c.escQuando}`);
+      else P.push(`Passe para um vendedor humano quando o lead demonstrar real interesse de compra ou pedir pra falar com alguém.`);
+      P.push(`Quando for a hora de passar, responda EXATAMENTE com a tag [PASSAR_HUMANO] no FINAL da sua mensagem (o sistema detecta e faz a transferência). ${c.escFrase ? 'Use uma frase tipo: "' + c.escFrase + '"' : ""}`);
+    } else {
+      P.push(`\nVocê conduz a venda sozinho(a) até o fechamento, mandando o link de pagamento quando o lead quiser comprar. Não invente que vai passar pra outra pessoa.`);
+    }
+    if (c.encerrarCriterios) P.push(`\nEncerre/pare de insistir quando: ${c.encerrarCriterios}`);
+
+    P.push(`\nREGRAS GERAIS: Responda como mensagem de WhatsApp (curto, natural, humano). Uma ideia por mensagem. Nunca diga que é uma IA ou robô. Nunca invente preços, links ou informações que não estão acima.`);
+    return P.join("\n");
+  }
+
+  // chama a API da Anthropic e devolve o texto da resposta
+  async function chamarClaude(systemPrompt, historico) {
+    const key = process.env.ANTHROPIC_API_KEY;
+    if (!key) throw new Error("ANTHROPIC_API_KEY não configurada");
+    const messages = historico.map((m) => ({
+      role: m.role === "them" ? "user" : "assistant",
+      content: m.content || "",
+    })).filter((m) => m.content);
+    // garante que começa com user
+    while (messages.length && messages[0].role !== "user") messages.shift();
+    if (!messages.length) return "";
+    const r = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-api-key": key,
+        "anthropic-version": "2023-06-01",
+      },
+      body: JSON.stringify({
+        model: "claude-sonnet-4-6",
+        max_tokens: 1024,
+        system: systemPrompt,
+        messages,
+      }),
+    });
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error((data.error && data.error.message) || "Erro Claude " + r.status);
+    const txt = (data.content || []).filter((b) => b.type === "text").map((b) => b.text).join("\n").trim();
+    return txt;
+  }
+
+  // processa a resposta da IA pra um chat (chamado pelo webhook quando o lead responde)
+  async function rodarIA(chat, numeroCfg) {
+    try {
+      const ia = (db.oficial.ias || []).find((x) => x.id === chat.iaId);
+      if (!ia || !ia.ativa) return;
+      const system = montarSystemPrompt(ia, chat.nome);
+      const histDireto = (chat.mensagens || []).slice(-24);
+      let resposta = await chamarClaude(system, histDireto);
+      if (!resposta) return;
+
+      // detecta handoff
+      let passar = false;
+      if (resposta.includes("[PASSAR_HUMANO]")) {
+        passar = true;
+        resposta = resposta.replace(/\[PASSAR_HUMANO\]/g, "").trim();
+      }
+
+      if (resposta) {
+        await enviarTextoOficial(numeroCfg, chat.numero, resposta);
+        const ts = Date.now();
+        chat.mensagens.push({ role: "me", content: resposta, ts, porIA: true });
+        if (chat.mensagens.length > 300) chat.mensagens = chat.mensagens.slice(-300);
+        chat.atualizadoEm = ts;
+      }
+
+      if (passar) {
+        chat.iaPausada = true; // IA para de responder
+        atribuirLead(chat);     // distribui pra um vendedor humano
+        if (!Array.isArray(chat.notas)) chat.notas = [];
+        chat.notas.push({ tipo: "ia_handoff", texto: `${ia.nome} (IA) qualificou e passou pro vendedor${chat.vendedorNome ? " " + chat.vendedorNome : ""}`, ts: Date.now(), por: ia.nome });
+      }
+      salvar();
+    } catch (e) {
+      console.error("Erro rodarIA:", e.message);
+    }
+  }
+
   function configVazia() {
     return {
       // GERAL
@@ -556,6 +706,28 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
     res.json({ ok: true, removida: antes !== db.oficial.ias.length });
   });
 
+  // PREVIEW: testa a IA com a config atual (sem salvar, sem WhatsApp)
+  app.post("/api/oficial/ias/preview", auth, gerenteOnly, async (req, res) => {
+    const b = req.body || {};
+    const iaFake = {
+      nome: String(b.nome || "IA").trim() || "IA",
+      modo: b.modo === "qualifica" ? "qualifica" : "fecha",
+      config: sanitizaConfig(b.config),
+      conhecimento: sanitizaConhecimento(b.conhecimento),
+    };
+    const historico = Array.isArray(b.historico) ? b.historico.slice(-24) : [];
+    if (!historico.length) return res.status(400).json({ error: "Sem mensagens" });
+    try {
+      const system = montarSystemPrompt(iaFake, b.nomeLead || "");
+      let resposta = await chamarClaude(system, historico);
+      let passar = false;
+      if (resposta.includes("[PASSAR_HUMANO]")) { passar = true; resposta = resposta.replace(/\[PASSAR_HUMANO\]/g, "").trim(); }
+      res.json({ ok: true, resposta, passar });
+    } catch (e) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
   // extrai texto de um arquivo enviado (base64) — TXT/MD/CSV nativo; PDF/DOCX virá na próxima fase
   app.post("/api/oficial/ias/extrair", auth, gerenteOnly, (req, res) => {
     const b = req.body || {};
@@ -591,11 +763,18 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
     if (contatos.length === 0) return res.status(400).json({ error: "Nenhum contato na lista" });
     if (contatos.length > 5000) return res.status(400).json({ error: "Máximo de 5000 por disparo" });
 
+    // IA opcional pra essa campanha (se vier, os leads que responderem caem pra IA)
+    const iaId = String(b.iaId || "").trim();
+    const iaCampanha = iaId ? (db.oficial.ias || []).find((x) => x.id === iaId && x.ativa) : null;
+    if (iaId && !iaCampanha) return res.status(400).json({ error: "IA selecionada não existe ou está pausada" });
+
     const campanha = {
       id: proximoId("camp"),
       nome: String(b.nomeCampanha || templateName).trim(),
       numeroId: numeroCfg.id,
       template: templateName,
+      iaId: iaCampanha ? iaCampanha.id : null,
+      iaNome: iaCampanha ? iaCampanha.nome : null,
       enviados: 0,    // aceitos pela Meta (sent)
       entregues: 0,   // delivered (via webhook de status)
       lidos: 0,       // read (via webhook de status)
@@ -630,6 +809,9 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
           chat.origemDisparo = true;
           chat.campanha = campanha.nome;
           chat.campanhaId = campanha.id;
+          // etiqueta de IA da campanha: última campanha vence (manual reseta IA)
+          chat.iaId = campanha.iaId || null;
+          chat.iaPausada = false;
           if (chat.respondeu === undefined) chat.respondeu = false;
           const ts = Date.now();
           chat.mensagens.push({ role: "me", content: `[disparo] ${templateName}`, ts, template: true });
@@ -992,8 +1174,12 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
               chat.respondeu = true;
             }
 
-            // ===== DISTRIBUIÇÃO: lead respondeu -> dá pra um vendedor ativo =====
-            if (!chat.vendedorId) {
+            // ===== IA por campanha OU distribuição pro vendedor =====
+            const temIA = chat.iaId && !chat.iaPausada;
+            if (temIA) {
+              // responde de forma assíncrona (não trava o webhook; a Meta espera 200 rápido)
+              rodarIA(chat, numeroCfg);
+            } else if (!chat.vendedorId) {
               atribuirLead(chat);
             }
           }
