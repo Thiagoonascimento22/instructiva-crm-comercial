@@ -936,18 +936,21 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
     res.json({ ok: true, total: pendentes.length, mensagem: pendentes.length + " conversa(s) sendo respondida(s) pela IA" });
     // processa em segundo plano, com pausa entre cada (não trava e não estoura rate limit)
     (async () => {
+      let respondidos = 0, semNumero = 0;
       for (const chat of pendentes) {
         try {
-          const numeroCfg = acharNumero(chat.numeroId);
-          if (!numeroCfg) continue;
+          // o número do chat fica em numeroOficialId (fallback p/ numeroId por garantia)
+          const numeroCfg = acharNumero(chat.numeroOficialId) || acharNumero(chat.numeroId);
+          if (!numeroCfg) { semNumero++; continue; }
           await rodarIA(chat, numeroCfg);
+          respondidos++;
           salvar();
           await new Promise((r) => setTimeout(r, 1500)); // respira entre uma e outra
         } catch (e) {
           console.error("Erro ao responder pendente:", e.message);
         }
       }
-      console.log("[oficial] IA terminou de responder os pendentes:", pendentes.length);
+      console.log(`[oficial] IA pendentes: ${respondidos} respondidos, ${semNumero} sem número (de ${pendentes.length})`);
     })();
   });
 
