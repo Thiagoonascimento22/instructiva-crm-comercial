@@ -2724,15 +2724,26 @@ function InboxOficial({ isGer, showToast, onIrParaEvolution }) {
               ))}
               <div ref={fimRef} />
             </div>
-            <div className="of-conv-input">
-              <input
-                placeholder="Escreva uma mensagem…"
-                value={texto}
-                onChange={(e) => setTexto(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && enviar()}
-              />
-              <button className="btn btn-primary" onClick={enviar}><I.send className="ico" /></button>
-            </div>
+            {conversa.temIA && !conversa.iaPausada ? (
+              <div className="of-conv-input" style={{ justifyContent: "center", gap: 10, background: "#f5f3ff", border: "1px solid #ddd6fe", borderRadius: 12 }}>
+                <span style={{ color: "#6d28d9", fontSize: 13.5, fontWeight: 600 }}>🤖 A IA está atendendo este lead.</span>
+                {isGer && (
+                  <button className="btn btn-sm" style={{ background: "#6d28d9", color: "#fff", border: "none" }} onClick={() => alternarIAConversa()}>
+                    Pausar IA e assumir
+                  </button>
+                )}
+              </div>
+            ) : (
+              <div className="of-conv-input">
+                <input
+                  placeholder="Escreva uma mensagem…"
+                  value={texto}
+                  onChange={(e) => setTexto(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && enviar()}
+                />
+                <button className="btn btn-primary" onClick={enviar}><I.send className="ico" /></button>
+              </div>
+            )}
           </>
         )}
       </div>

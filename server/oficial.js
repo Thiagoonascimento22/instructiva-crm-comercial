@@ -507,10 +507,10 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
     }
 
     if (ia.modo === "qualifica") {
-      P.push(`\nIMPORTANTE — VOCÊ QUALIFICA E PASSA PRA UM HUMANO:`);
+      P.push(`\nIMPORTANTE — VOCÊ QUALIFICA E PASSA PRA UM HUMANO RÁPIDO:`);
       if (c.escQuando) P.push(`Passe para um vendedor humano quando: ${c.escQuando}`);
-      else P.push(`Passe para um vendedor humano quando o lead demonstrar real interesse de compra ou pedir pra falar com alguém.`);
-      P.push(`Quando for a hora de passar, responda EXATAMENTE com a tag [PASSAR_HUMANO] no FINAL da sua mensagem (o sistema detecta e faz a transferência). ${c.escFrase ? 'Use uma frase tipo: "' + c.escFrase + '"' : ""}`);
+      else P.push(`Passe para um vendedor humano ASSIM QUE o lead demonstrar QUALQUER interesse num curso (ex.: "tenho interesse", "quero saber sobre o curso X", "quero o curso", "me interessa"). Não fique fazendo muitas perguntas nem tente vender — o seu papel é só identificar o interesse e passar pro vendedor. No máximo uma pergunta rápida, e se ele confirmar interesse, passe na hora.`);
+      P.push(`Quando for a hora de passar, responda EXATAMENTE com a tag [PASSAR_HUMANO] no FINAL da sua mensagem (o sistema detecta e faz a transferência). ${c.escFrase ? 'Use uma frase tipo: "' + c.escFrase + '"' : 'Use uma frase curta tipo: "Que ótimo! Vou te passar agora pra um especialista da nossa equipe que vai te ajudar com tudo, tá bem?"'}`);
     } else {
       P.push(`\nVocê conduz a venda sozinho(a) até o fechamento, mandando o link de pagamento quando o lead quiser comprar. Não invente que vai passar pra outra pessoa.`);
     }
@@ -1052,7 +1052,7 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
     if (req.user.role !== "gerente" && chat.vendedorId !== req.user.id) {
       return res.status(403).json({ error: "Sem acesso a essa conversa" });
     }
-    // enquanto a IA está no comando, a conversa é privada do gestor
+    // enquanto a IA está no comando, o VENDEDOR não vê (gestor acompanha)
     if (req.user.role !== "gerente" && chat.iaId && !chat.iaPausada) {
       return res.status(403).json({ error: "Conversa em atendimento automático" });
     }
@@ -1080,6 +1080,10 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
     if (!chat || chat.canal !== "oficial") return res.status(404).json({ error: "Conversa não encontrada" });
     if (req.user.role !== "gerente" && chat.vendedorId !== req.user.id) {
       return res.status(403).json({ error: "Sem acesso a essa conversa" });
+    }
+    // enquanto a IA está atendendo, ninguém digita — precisa pausar a IA antes
+    if (chat.iaId && !chat.iaPausada) {
+      return res.status(409).json({ error: "Pause a IA para assumir esta conversa." });
     }
     const texto = String((req.body && req.body.texto) || "").trim();
     if (!texto) return res.status(400).json({ error: "Mensagem vazia" });
