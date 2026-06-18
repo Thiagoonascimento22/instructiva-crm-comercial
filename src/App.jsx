@@ -4272,6 +4272,7 @@ function SolicitacaoForm({ onClose, onSaved, defaults }) {
 function PaginaSolicitacoes({ showToast, readonly }) {
   const [lista, setLista] = useState(null);
   const [rel, setRel] = useState(null);
+  const [novoChamado, setNovoChamado] = useState(false);
   const [filtro, setFiltro] = useState("todas");
   const [periodo, setPeriodo] = useState("30");
   const [ia, setIa] = useState(null);
@@ -4369,7 +4370,10 @@ function PaginaSolicitacoes({ showToast, readonly }) {
       </div>
 
       <div className="panel">
-        <div className="panel-h"><h3>Fila de solicitações<span className="panel-sub">trabalhe os pedidos e atualize o status</span></h3></div>
+        <div className="panel-h">
+          <h3>Fila de solicitações<span className="panel-sub">trabalhe os pedidos e atualize o status</span></h3>
+          {readonly && <button className="btn btn-primary btn-sm" onClick={() => setNovoChamado(true)}><I.suporte className="ico" /> Abrir chamado</button>}
+        </div>
         <div className="ia-periodo" style={{ padding: "0 18px 14px" }}>
           <span className="lbl">Status:</span>
           {filBtn("todas", "Todas")}{filBtn("aberta", "Abertas")}{filBtn("andamento", "Em andamento")}{filBtn("resolvida", "Resolvidas")}
@@ -4380,6 +4384,13 @@ function PaginaSolicitacoes({ showToast, readonly }) {
           {(lista || []).map((s) => <SolicitacaoRow key={s.id} s={s} onMudar={mudar} readonly={readonly} />)}
         </div>
       </div>
+
+      {novoChamado && (
+        <SolicitacaoForm
+          onClose={() => setNovoChamado(false)}
+          onSaved={() => { setNovoChamado(false); showToast("✓ Chamado enviado pro suporte"); carregarLista(); carregarRel(); }}
+        />
+      )}
     </div>
   );
 }
