@@ -3,6 +3,92 @@ import { createPortal } from "react-dom";
 import { api, getToken, setToken } from "./api.js";
 import { LOGO_FULL, LOGO_LIGHT } from "./logos.js";
 
+const AGX_CSS = `
+.agx-overlay{position:fixed;inset:0;background:rgba(20,20,30,.55);display:flex;align-items:center;justify-content:center;z-index:9999;padding:24px}
+.agx-modal{width:min(1180px,96vw);height:min(860px,94vh);background:var(--card,#fff);border-radius:18px;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 24px 80px rgba(0,0,0,.35)}
+.agx-head{display:flex;align-items:center;justify-content:space-between;padding:16px 20px;border-bottom:1px solid var(--border,#ececf0)}
+.agx-head-l{display:flex;align-items:center;gap:12px}
+.agx-avatar{width:44px;height:44px;border-radius:12px;background:linear-gradient(135deg,#7c5cf0,#6347e8);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:15px}
+.agx-title{font-size:18px;font-weight:700;color:var(--text,#1a1a1a)}
+.agx-sub{font-size:12.5px;color:var(--muted,#8a8a92);margin-top:1px}
+.agx-head-r{display:flex;align-items:center;gap:10px}
+.agx-btn-ghost{background:var(--bg2,#f4f4f6);border:1px solid var(--border,#e6e6ea);color:var(--text,#333);padding:9px 14px;border-radius:10px;font-size:13.5px;font-weight:600;cursor:pointer}
+.agx-btn-ghost:hover{background:var(--bg3,#ececef)}
+.agx-btn-primary{background:#6347e8;border:none;color:#fff;padding:9px 16px;border-radius:10px;font-size:13.5px;font-weight:600;cursor:pointer}
+.agx-btn-primary:hover{background:#5638d8}
+.agx-btn-primary:disabled,.agx-btn-ghost:disabled{opacity:.6;cursor:default}
+.agx-x{width:36px;height:36px;border-radius:9px;border:1px solid var(--border,#e6e6ea);background:var(--card,#fff);font-size:18px;color:var(--muted,#888);cursor:pointer;display:flex;align-items:center;justify-content:center}
+.agx-x:hover{background:var(--bg2,#f4f4f6)}
+.agx-progress{display:flex;align-items:center;gap:12px;padding:11px 20px;border-bottom:1px solid var(--border,#ececf0)}
+.agx-progress-lb{font-size:13px;color:var(--muted,#8a8a92);min-width:80px}
+.agx-progress-bar{flex:1;height:7px;background:var(--bg3,#ededf0);border-radius:99px;overflow:hidden}
+.agx-progress-fill{height:100%;background:#6347e8;border-radius:99px;transition:width .3s}
+.agx-progress-pct{font-size:13px;font-weight:700;color:#6347e8;min-width:38px;text-align:right}
+.agx-body{flex:1;display:grid;grid-template-columns:212px 1fr 300px;min-height:0}
+.agx-side{border-right:1px solid var(--border,#ececf0);padding:14px 12px;overflow-y:auto;background:var(--bg1,#fafafb)}
+.agx-side-grupo{margin-bottom:14px}
+.agx-side-g{font-size:11px;font-weight:700;letter-spacing:.04em;color:var(--muted,#a0a0a8);padding:6px 10px 4px}
+.agx-side-item{display:flex;align-items:center;gap:9px;width:100%;padding:9px 10px;border:none;background:transparent;border-radius:10px;cursor:pointer;color:var(--text,#3a3a3a);font-size:14px;text-align:left;margin-bottom:2px}
+.agx-side-item:hover{background:var(--bg2,#f0f0f3)}
+.agx-side-item.on{background:#fff;color:#6347e8;font-weight:600;box-shadow:0 1px 3px rgba(0,0,0,.06)}
+.agx-side-ico{width:17px;height:17px;flex-shrink:0}
+.agx-side-lb{flex:1}
+.agx-dot{width:20px;height:20px;border-radius:50%;background:var(--bg3,#e8e8ec);color:var(--muted,#a8a8b0);font-size:11px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.agx-dot.ok{background:#d9f5e4;color:#1a9d54}
+.agx-main{padding:22px 26px;overflow-y:auto;min-width:0}
+.agx-preview{border-left:1px solid var(--border,#ececf0);display:flex;flex-direction:column;background:var(--bg1,#fafafb);min-width:0}
+.agx-preview-head{display:flex;align-items:center;justify-content:space-between;padding:14px 16px;border-bottom:1px solid var(--border,#ececf0);font-size:14px;font-weight:600;color:var(--text,#333)}
+.agx-reset{background:var(--bg2,#f0f0f3);border:1px solid var(--border,#e6e6ea);color:var(--muted,#888);font-size:12px;padding:5px 10px;border-radius:8px;cursor:default}
+.agx-preview-body{flex:1;padding:18px 16px;overflow-y:auto}
+.agx-preview-empty{font-size:13px;color:var(--muted,#9a9aa2);text-align:center;margin-top:30px;line-height:1.6}
+.agx-preview-input{display:flex;gap:8px;padding:12px;border-top:1px solid var(--border,#ececf0)}
+.agx-preview-input .agx-input{flex:1;margin:0}
+.agx-send{width:40px;background:#6347e8;border:none;border-radius:10px;color:#fff;cursor:default;opacity:.6}
+.agx-h{font-size:16px;font-weight:700;color:var(--text,#1a1a1a);margin:0 0 4px}
+.agx-psub{font-size:13px;color:var(--muted,#8a8a92);margin:0 0 14px}
+.agx-field{margin-bottom:14px}
+.agx-field label{display:block;font-size:13px;font-weight:600;color:var(--text2,#555);margin-bottom:5px}
+.agx-input{width:100%;border:1px solid var(--border,#e2e2e8);background:var(--bg1,#fafafb);border-radius:10px;padding:10px 12px;font-size:14px;color:var(--text,#222);font-family:inherit;box-sizing:border-box;resize:vertical}
+.agx-input:focus{outline:none;border-color:#6347e8;background:var(--card,#fff)}
+.agx-grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.agx-sep{height:1px;background:var(--border,#ececf0);margin:18px 0}
+.agx-up{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;border:1.5px dashed var(--border2,#d2d2da);border-radius:14px;padding:26px;cursor:pointer;background:var(--bg1,#fafafb);transition:.15s}
+.agx-up:hover{border-color:#6347e8;background:#f5f3ff}
+.agx-up-ic{width:30px;height:30px;color:var(--muted,#7a7a82);margin-bottom:4px}
+.agx-up-t{font-size:15px;font-weight:700;color:var(--text,#333)}
+.agx-up-s{font-size:12.5px;color:var(--muted,#9a9aa2)}
+.agx-ou{text-align:center;font-size:11.5px;font-weight:700;letter-spacing:.05em;color:var(--muted,#a8a8b0);margin:20px 0;position:relative}
+.agx-ou::before,.agx-ou::after{content:"";position:absolute;top:50%;width:30%;height:1px;background:var(--border,#ececf0)}
+.agx-ou::before{left:0}.agx-ou::after{right:0}
+.agx-card{border:1px solid var(--border,#e6e6ea);border-radius:14px;padding:16px;margin-bottom:14px;background:var(--bg1,#fbfbfc)}
+.agx-card-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
+.agx-card-tag{font-size:11px;font-weight:700;letter-spacing:.04em;color:#6347e8;background:#efeaff;padding:4px 10px;border-radius:7px}
+.agx-card-x{width:28px;height:28px;border-radius:8px;border:1px solid var(--border,#e6e6ea);background:var(--card,#fff);font-size:16px;color:var(--muted,#999);cursor:pointer}
+.agx-card-x:hover{background:#fdecec;color:#d04545;border-color:#f3caca}
+.agx-add{width:100%;border:1.5px dashed var(--border2,#cdcdd6);background:transparent;color:#6347e8;font-size:14px;font-weight:600;padding:13px;border-radius:12px;cursor:pointer}
+.agx-add:hover{background:#f5f3ff;border-color:#6347e8}
+.agx-ofertas-tit{font-size:11.5px;font-weight:700;letter-spacing:.04em;color:#1a9d54;border-left:3px solid #1a9d54;padding-left:8px;margin:16px 0 10px}
+.agx-oferta{border:1px solid var(--border,#eaeaee);border-radius:10px;padding:12px;margin-bottom:10px;background:var(--card,#fff)}
+.agx-add-oferta{width:100%;border:1.5px dashed #aee3c4;background:#f3fbf6;color:#1a9d54;font-size:13.5px;font-weight:600;padding:11px;border-radius:10px;cursor:pointer}
+.agx-add-oferta:hover{background:#e9f7ef}
+.agx-rem-link{background:none;border:none;color:#d04545;font-size:12px;cursor:pointer;padding:4px 0;margin-top:2px}
+.agx-kb-list{margin-top:12px;display:flex;flex-direction:column;gap:8px}
+.agx-kb-item{display:flex;align-items:center;gap:10px;border:1px solid var(--border,#e6e6ea);border-radius:10px;padding:10px 12px;background:var(--card,#fff)}
+.agx-kb-ic{width:18px;height:18px;color:#6347e8;flex-shrink:0}
+.agx-kb-info{flex:1;min-width:0}
+.agx-kb-info b{display:block;font-size:13.5px;color:var(--text,#333);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.agx-kb-info span{font-size:12px;color:var(--muted,#9a9aa2)}
+.agx-kb-x{width:26px;height:26px;border-radius:7px;border:1px solid var(--border,#e6e6ea);background:var(--card,#fff);font-size:15px;color:var(--muted,#999);cursor:pointer}
+.agx-kb-x:hover{background:#fdecec;color:#d04545}
+@media (prefers-color-scheme:dark){
+.agx-modal{--card:#1c1c22;--bg1:#222228;--bg2:#26262e;--bg3:#2e2e36;--border:#33333d;--border2:#3d3d47;--text:#e8e8ec;--text2:#c2c2ca;--muted:#8a8a94}
+.agx-side-item.on{background:#2a2a33;color:#a899f5}
+.agx-card-tag{background:#2e2747;color:#a899f5}
+.agx-up:hover,.agx-add:hover{background:#26213d}
+}
+`;
+
+
 /* Portal: renderiza no <body> pra modais cobrirem a tela toda (sem ficar presos a containers com overflow) */
 function Portal({ children }) {
   return createPortal(children, document.body);
@@ -1181,68 +1267,377 @@ function OficialIAs({ showToast }) {
 
 function ModalIA({ ia, showToast, onClose, onSaved }) {
   const editando = !!ia.id;
-  const [nome, setNome] = useState(ia.nome || "");
-  const [modo, setModo] = useState(ia.modo || "fecha");
-  const [persona, setPersona] = useState(ia.persona || "");
-  const [playbook, setPlaybook] = useState(ia.playbook || "");
-  const [gatilho, setGatilho] = useState(ia.gatilhoHandoff || "");
+  const [secao, setSecao] = useState("identidade");
   const [saving, setSaving] = useState(false);
 
+  const [nome, setNome] = useState(ia.nome || "");
+  const [modo, setModo] = useState(ia.modo || "fecha");
+  const cfg0 = ia.config || {};
+  const [c, setC] = useState({
+    tomVoz: cfg0.tomVoz || "amigavel", objetivo: cfg0.objetivo || "",
+    agentePadrao: !!cfg0.agentePadrao, autoResponder: !!cfg0.autoResponder,
+    quemEla: cfg0.quemEla || "", comoEscreve: cfg0.comoEscreve || "",
+    sempreFaz: cfg0.sempreFaz || "", nuncaFaz: cfg0.nuncaFaz || "",
+    cursos: Array.isArray(cfg0.cursos) ? cfg0.cursos : [],
+    objecoes: Array.isArray(cfg0.objecoes) ? cfg0.objecoes : [],
+    faq: Array.isArray(cfg0.faq) ? cfg0.faq : [],
+    pbAbertura: cfg0.pbAbertura || "", pbQualificacao: cfg0.pbQualificacao || "",
+    pbApresentacao: cfg0.pbApresentacao || "", pbPreco: cfg0.pbPreco || "",
+    pbFechamento: cfg0.pbFechamento || "", pbRecuperacao: cfg0.pbRecuperacao || "",
+    escQuando: cfg0.escQuando || "", escFrase: cfg0.escFrase || "",
+    escNome: cfg0.escNome || "", escTelefone: cfg0.escTelefone || "",
+    encerrarCriterios: cfg0.encerrarCriterios || "",
+  });
+  const [kb, setKb] = useState(ia.conhecimento ? ia.conhecimento.map((k) => ({ ...k, texto: "" })) : []);
+  const set = (k, v) => setC((s) => ({ ...s, [k]: v }));
+
+  const SECOES = [
+    { g: "GERAL", itens: [
+      { k: "identidade", lb: "Identidade", ic: I.estrela },
+      { k: "persona", lb: "Persona", ic: I.users },
+    ]},
+    { g: "CONHECIMENTO", itens: [
+      { k: "cursos", lb: "Cursos", ic: I.pipe },
+      { k: "objecoes", lb: "Objeções", ic: I.suporte },
+      { k: "faq", lb: "FAQ", ic: I.chat },
+    ]},
+    { g: "FLUXO", itens: [
+      { k: "playbook", lb: "Playbook", ic: I.send },
+      { k: "escalacao", lb: "Escalação", ic: I.out },
+    ]},
+  ];
+
+  function secaoPreenchida(k) {
+    if (k === "identidade") return !!(nome.trim() && c.objetivo.trim());
+    if (k === "persona") return !!(c.quemEla.trim() || c.comoEscreve.trim());
+    if (k === "cursos") return c.cursos.length > 0 || kb.some((x) => x.secao === "cursos");
+    if (k === "objecoes") return c.objecoes.length > 0 || kb.some((x) => x.secao === "objecoes");
+    if (k === "faq") return c.faq.length > 0 || kb.some((x) => x.secao === "faq");
+    if (k === "playbook") return !!(c.pbAbertura.trim() || c.pbQualificacao.trim() || kb.some((x) => x.secao === "playbook"));
+    if (k === "escalacao") return !!(c.escQuando.trim() || c.encerrarCriterios.trim());
+    return false;
+  }
+  const totalSecoes = 7;
+  const feitas = ["identidade", "persona", "cursos", "objecoes", "faq", "playbook", "escalacao"].filter(secaoPreenchida).length;
+  const pct = Math.round((feitas / totalSecoes) * 100);
+
+  async function anexar(secaoKey, fileList) {
+    const arr = Array.from(fileList || []);
+    for (const file of arr) {
+      if (file.size > 6 * 1024 * 1024) { alert(`"${file.name}" passa de 6MB.`); continue; }
+      const reader = new FileReader();
+      reader.onload = async () => {
+        const base64 = String(reader.result).split(",")[1] || "";
+        try {
+          const r = await api.ofExtrairArquivo(file.name, base64);
+          setKb((k) => [...k, { id: "kb_" + Date.now() + Math.random().toString(36).slice(2, 6), secao: secaoKey, nome: r.nome, texto: r.texto, chars: (r.texto || "").length, criadoEm: Date.now() }]);
+          showToast("✓ " + file.name + " adicionado ao conhecimento");
+        } catch (e) { alert(e.message); }
+      };
+      reader.readAsDataURL(file);
+    }
+  }
+  const removerKb = (id) => setKb((k) => k.filter((x) => x.id !== id));
+
   async function salvar() {
-    if (!nome.trim()) { alert("Dê um nome pra IA"); return; }
+    if (!nome.trim()) { alert("Dê um nome pra IA"); setSecao("identidade"); return; }
     setSaving(true);
-    const dados = { nome: nome.trim(), modo, persona, playbook, gatilhoHandoff: gatilho };
+    const conhecimentoNovo = kb.filter((x) => x.texto).map((x) => ({ id: x.id, secao: x.secao, nome: x.nome, texto: x.texto, criadoEm: x.criadoEm }));
+    const conhecimentoExistente = (ia.conhecimento || []).filter((old) => kb.some((x) => x.id === old.id && !x.texto));
+    const dados = { nome: nome.trim(), modo, config: c, conhecimento: [...conhecimentoExistente, ...conhecimentoNovo] };
     try {
       if (editando) await api.ofEditarIA(ia.id, dados);
       else await api.ofCriarIA(dados);
-      showToast(editando ? "✓ IA atualizada" : "✓ IA criada");
+      showToast(editando ? "✓ Agente salvo" : "✓ Agente criado");
       onSaved();
     } catch (e) { alert(e.message); setSaving(false); }
   }
 
+  const kbDaSecao = (s) => kb.filter((x) => x.secao === s);
+
+  const Upload = ({ sec, titulo, sub }) => (
+    <label className="agx-up">
+      <input type="file" accept=".txt,.md,.csv,.pdf,.doc,.docx" multiple style={{ display: "none" }} onChange={(e) => { anexar(sec, e.target.files); e.target.value = ""; }} />
+      <I.out className="agx-up-ic" />
+      <div className="agx-up-t">{titulo || "Anexar PDF, DOC ou TXT"}</div>
+      <div className="agx-up-s">{sub || "Clique para selecionar"}</div>
+    </label>
+  );
+
+  const ListaKb = ({ sec }) => (
+    kbDaSecao(sec).length > 0 ? (
+      <div className="agx-kb-list">
+        {kbDaSecao(sec).map((k) => (
+          <div className="agx-kb-item" key={k.id}>
+            <I.pipe className="agx-kb-ic" />
+            <div className="agx-kb-info"><b>{k.nome}</b><span>{(k.chars || 0).toLocaleString("pt-BR")} caracteres lidos</span></div>
+            <button className="agx-kb-x" onClick={() => removerKb(k.id)} aria-label="Remover">×</button>
+          </div>
+        ))}
+      </div>
+    ) : null
+  );
+
   return createPortal(
-    <div className="modal" onClick={(e) => e.target === e.currentTarget && onClose()}>
-      <div className="modal-box" style={{ maxWidth: 640 }}>
-        <div className="mh">
-          <h3>{editando ? "Editar IA" : "Nova IA"}</h3>
-          <p>Treine como ela conversa. Quanto mais detalhe na persona e no playbook, melhor ela fica.</p>
-        </div>
-        <div className="mb">
-          <div className="field">
-            <label>Nome da IA *</label>
-            <input className="input" value={nome} onChange={(e) => setNome(e.target.value)} placeholder="Ex: Júlia — Vendas Inversor Solar" />
-          </div>
-          <div className="field">
-            <label>O que ela faz *</label>
-            <select className="select" value={modo} onChange={(e) => setModo(e.target.value)}>
-              <option value="fecha">Fecha a venda sozinha (não passa pro vendedor)</option>
-              <option value="qualifica">Qualifica e passa pro vendedor quando o lead esquenta</option>
-            </select>
-          </div>
-          <div className="field">
-            <label>Persona</label>
-            <textarea className="input" rows={5} value={persona} onChange={(e) => setPersona(e.target.value)} placeholder="Quem ela é, tom de voz, como se apresenta, o que ela vende, jeito de falar (ex: descontraída, usa emoji, trata por você)..." />
-          </div>
-          <div className="field">
-            <label>Playbook</label>
-            <textarea className="input" rows={6} value={playbook} onChange={(e) => setPlaybook(e.target.value)} placeholder="O passo a passo da conversa: como abre, o que pergunta, ordem de qualificação, preços e links, como lida com objeções, quando manda o link de compra..." />
-          </div>
-          {modo === "qualifica" && (
-            <div className="field">
-              <label>Quando passar pro vendedor</label>
-              <textarea className="input" rows={3} value={gatilho} onChange={(e) => setGatilho(e.target.value)} placeholder="Ex: quando o lead pedir o preço ou link, demonstrar que quer comprar, ou pedir pra falar com um humano." />
+    <div className="agx-overlay" onClick={(e) => e.target === e.currentTarget && onClose()}>
+      <style>{AGX_CSS}</style>
+      <div className="agx-modal">
+        <div className="agx-head">
+          <div className="agx-head-l">
+            <div className="agx-avatar">IA</div>
+            <div>
+              <div className="agx-title">{editando ? "Editar Agente" : "Criar Agente"}</div>
+              <div className="agx-sub">{feitas}/{totalSecoes} seções preenchidas</div>
             </div>
-          )}
+          </div>
+          <div className="agx-head-r">
+            <button className="agx-btn-ghost" onClick={salvar} disabled={saving} title="Salva no sistema">⤓ Exportar</button>
+            <button className="agx-btn-primary" onClick={salvar} disabled={saving}>{saving ? "Salvando..." : "✓ Salvar agente"}</button>
+            <button className="agx-x" onClick={onClose} aria-label="Fechar">×</button>
+          </div>
         </div>
-        <div className="mf">
-          <button className="btn" onClick={onClose} disabled={saving}>Cancelar</button>
-          <button className="btn btn-primary" onClick={salvar} disabled={saving}>{saving ? "Salvando..." : (editando ? "Salvar" : "Criar IA")}</button>
+
+        <div className="agx-progress">
+          <span className="agx-progress-lb">Completude</span>
+          <div className="agx-progress-bar"><div className="agx-progress-fill" style={{ width: pct + "%" }} /></div>
+          <span className="agx-progress-pct">{pct}%</span>
+        </div>
+
+        <div className="agx-body">
+          <aside className="agx-side">
+            {SECOES.map((grupo) => (
+              <div key={grupo.g} className="agx-side-grupo">
+                <div className="agx-side-g">{grupo.g}</div>
+                {grupo.itens.map((it) => {
+                  const Ico = it.ic;
+                  const on = secao === it.k;
+                  const ok = secaoPreenchida(it.k);
+                  return (
+                    <button key={it.k} className={"agx-side-item" + (on ? " on" : "")} onClick={() => setSecao(it.k)}>
+                      <Ico className="agx-side-ico" />
+                      <span className="agx-side-lb">{it.lb}</span>
+                      <span className={"agx-dot" + (ok ? " ok" : "")}>{ok ? "✓" : "−"}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            ))}
+          </aside>
+
+          <main className="agx-main">
+            {secao === "identidade" && (
+              <div>
+                <h4 className="agx-h">Identificação</h4>
+                <div className="agx-grid2">
+                  <div className="agx-field">
+                    <label>Nome do agente *</label>
+                    <input className="agx-input" value={nome} onChange={(e) => setNome(e.target.value)} placeholder="Ex: Clara — Inversor Solar" />
+                  </div>
+                  <div className="agx-field">
+                    <label>Tom de voz</label>
+                    <select className="agx-input" value={c.tomVoz} onChange={(e) => set("tomVoz", e.target.value)}>
+                      <option value="amigavel">Amigável e próximo</option>
+                      <option value="profissional">Profissional</option>
+                      <option value="descontraido">Descontraído</option>
+                      <option value="consultivo">Consultivo</option>
+                      <option value="direto">Direto e objetivo</option>
+                    </select>
+                  </div>
+                </div>
+                <div className="agx-field">
+                  <label>Objetivo principal *</label>
+                  <input className="agx-input" value={c.objetivo} onChange={(e) => set("objetivo", e.target.value)} placeholder="Ex: Conduzir o lead até a matrícula no curso de Reparo de Inversor" />
+                </div>
+                <div className="agx-sep" />
+                <h4 className="agx-h">O que ela faz</h4>
+                <div className="agx-field">
+                  <select className="agx-input" value={modo} onChange={(e) => setModo(e.target.value)}>
+                    <option value="fecha">Fecha a venda sozinha (não passa pro vendedor)</option>
+                    <option value="qualifica">Qualifica e passa pro vendedor quando o lead esquenta</option>
+                  </select>
+                </div>
+              </div>
+            )}
+
+            {secao === "persona" && (
+              <div>
+                <h4 className="agx-h">Personalidade</h4>
+                <div className="agx-field">
+                  <label>Quem ela é</label>
+                  <textarea className="agx-input" rows={4} value={c.quemEla} onChange={(e) => set("quemEla", e.target.value)} placeholder="Ex: Você é a Clara, consultora de vendas da Escola Instructiva..." />
+                </div>
+                <div className="agx-field">
+                  <label>Como escreve</label>
+                  <textarea className="agx-input" rows={3} value={c.comoEscreve} onChange={(e) => set("comoEscreve", e.target.value)} placeholder="Ex: Mensagens curtas, máx 3 linhas. Usa você. Sem formalidade." />
+                </div>
+                <div className="agx-sep" />
+                <h4 className="agx-h">Regras</h4>
+                <div className="agx-grid2">
+                  <div className="agx-field">
+                    <label>SEMPRE faz</label>
+                    <textarea className="agx-input" rows={5} value={c.sempreFaz} onChange={(e) => set("sempreFaz", e.target.value)} placeholder="- Pergunta o nome no começo&#10;- Confirma interesse antes do preço" />
+                  </div>
+                  <div className="agx-field">
+                    <label>NUNCA faz</label>
+                    <textarea className="agx-input" rows={5} value={c.nuncaFaz} onChange={(e) => set("nuncaFaz", e.target.value)} placeholder="- Inventa CPF ou e-mail&#10;- Promete o que não está no material" />
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {secao === "cursos" && (
+              <div>
+                <h4 className="agx-h">Cursos e ofertas</h4>
+                <p className="agx-psub">Anexe materiais (PDF, DOC, TXT) ou cadastre manualmente.</p>
+                <Upload sec="cursos" />
+                <ListaKb sec="cursos" />
+                <div className="agx-ou">OU CADASTRE MANUALMENTE</div>
+                {c.cursos.map((cur, i) => (
+                  <div className="agx-card" key={i}>
+                    <div className="agx-card-top"><span className="agx-card-tag">CURSO #{i + 1}</span>
+                      <button className="agx-card-x" onClick={() => set("cursos", c.cursos.filter((_, idx) => idx !== i))} aria-label="Remover">×</button>
+                    </div>
+                    {[["nome", "Nome do curso"], ["carga", "Carga horária"], ["garantia", "Garantia"], ["certificado", "Certificado"]].reduce((rows, _, idx, a) => { if (idx % 2 === 0) rows.push(a.slice(idx, idx + 2)); return rows; }, []).map((par, ri) => (
+                      <div className="agx-grid2" key={ri}>
+                        {par.map(([f, lb]) => (
+                          <div className="agx-field" key={f}><label>{lb}</label>
+                            <input className="agx-input" value={cur[f] || ""} onChange={(e) => set("cursos", c.cursos.map((x, idx) => idx === i ? { ...x, [f]: e.target.value } : x))} />
+                          </div>
+                        ))}
+                      </div>
+                    ))}
+                    <div className="agx-field"><label>Para quem é</label>
+                      <input className="agx-input" value={cur.paraQuem || ""} onChange={(e) => set("cursos", c.cursos.map((x, idx) => idx === i ? { ...x, paraQuem: e.target.value } : x))} />
+                    </div>
+                    <div className="agx-field"><label>Diferencial</label>
+                      <input className="agx-input" value={cur.diferencial || ""} onChange={(e) => set("cursos", c.cursos.map((x, idx) => idx === i ? { ...x, diferencial: e.target.value } : x))} />
+                    </div>
+                    <div className="agx-field"><label>Descrição completa</label>
+                      <textarea className="agx-input" rows={3} value={cur.descricao || ""} onChange={(e) => set("cursos", c.cursos.map((x, idx) => idx === i ? { ...x, descricao: e.target.value } : x))} />
+                    </div>
+                    <div className="agx-ofertas-tit">OFERTAS DISPONÍVEIS</div>
+                    {(cur.ofertas || []).map((of, oi) => (
+                      <div className="agx-oferta" key={oi}>
+                        <div className="agx-grid2">
+                          <div className="agx-field"><label>Nome da oferta</label><input className="agx-input" value={of.nome || ""} onChange={(e) => set("cursos", c.cursos.map((x, idx) => idx === i ? { ...x, ofertas: x.ofertas.map((y, yi) => yi === oi ? { ...y, nome: e.target.value } : y) } : x))} placeholder="Ex: À vista PIX" /></div>
+                          <div className="agx-field"><label>Valor</label><input className="agx-input" value={of.valor || ""} onChange={(e) => set("cursos", c.cursos.map((x, idx) => idx === i ? { ...x, ofertas: x.ofertas.map((y, yi) => yi === oi ? { ...y, valor: e.target.value } : y) } : x))} placeholder="Ex: R$ 1.497" /></div>
+                        </div>
+                        <div className="agx-field"><label>Link de pagamento</label><input className="agx-input" value={of.link || ""} onChange={(e) => set("cursos", c.cursos.map((x, idx) => idx === i ? { ...x, ofertas: x.ofertas.map((y, yi) => yi === oi ? { ...y, link: e.target.value } : y) } : x))} placeholder="https://..." /></div>
+                        <div className="agx-field"><label>Observação (parcelas, condições)</label><input className="agx-input" value={of.obs || ""} onChange={(e) => set("cursos", c.cursos.map((x, idx) => idx === i ? { ...x, ofertas: x.ofertas.map((y, yi) => yi === oi ? { ...y, obs: e.target.value } : y) } : x))} placeholder="Ex: ou 18x R$ 107,93" /></div>
+                        <button className="agx-rem-link" onClick={() => set("cursos", c.cursos.map((x, idx) => idx === i ? { ...x, ofertas: x.ofertas.filter((_, yi) => yi !== oi) } : x))}>remover oferta</button>
+                      </div>
+                    ))}
+                    <button className="agx-add-oferta" onClick={() => set("cursos", c.cursos.map((x, idx) => idx === i ? { ...x, ofertas: [...(x.ofertas || []), {}] } : x))}>+ Adicionar Oferta</button>
+                  </div>
+                ))}
+                <button className="agx-add" onClick={() => set("cursos", [...c.cursos, { ofertas: [] }])}>+ Adicionar Curso</button>
+              </div>
+            )}
+
+            {secao === "objecoes" && (
+              <div>
+                <h4 className="agx-h">Contorno de objeções</h4>
+                <p className="agx-psub">Ensine a IA a responder as objeções mais comuns.</p>
+                <Upload sec="objecoes" />
+                <ListaKb sec="objecoes" />
+                <div className="agx-ou">OU ADICIONE MANUALMENTE</div>
+                {c.objecoes.map((o, i) => (
+                  <div className="agx-card" key={i}>
+                    <div className="agx-card-top"><span className="agx-card-tag">OBJEÇÃO #{i + 1}</span>
+                      <button className="agx-card-x" onClick={() => set("objecoes", c.objecoes.filter((_, idx) => idx !== i))} aria-label="Remover">×</button>
+                    </div>
+                    <div className="agx-field"><label>O que o lead diz</label><input className="agx-input" value={o.objecao || ""} onChange={(e) => set("objecoes", c.objecoes.map((x, idx) => idx === i ? { ...x, objecao: e.target.value } : x))} placeholder='Ex: "Tá caro"' /></div>
+                    <div className="agx-field"><label>Como a IA responde</label><textarea className="agx-input" rows={3} value={o.resposta || ""} onChange={(e) => set("objecoes", c.objecoes.map((x, idx) => idx === i ? { ...x, resposta: e.target.value } : x))} /></div>
+                  </div>
+                ))}
+                <button className="agx-add" onClick={() => set("objecoes", [...c.objecoes, {}])}>+ Adicionar Objeção</button>
+              </div>
+            )}
+
+            {secao === "faq" && (
+              <div>
+                <h4 className="agx-h">Perguntas frequentes</h4>
+                <p className="agx-psub">Perguntas que sempre aparecem nos atendimentos.</p>
+                <Upload sec="faq" />
+                <ListaKb sec="faq" />
+                <div className="agx-ou">OU ADICIONE MANUALMENTE</div>
+                {c.faq.map((q, i) => (
+                  <div className="agx-card" key={i}>
+                    <div className="agx-card-top"><span className="agx-card-tag">PERGUNTA #{i + 1}</span>
+                      <button className="agx-card-x" onClick={() => set("faq", c.faq.filter((_, idx) => idx !== i))} aria-label="Remover">×</button>
+                    </div>
+                    <div className="agx-field"><label>Pergunta</label><input className="agx-input" value={q.pergunta || ""} onChange={(e) => set("faq", c.faq.map((x, idx) => idx === i ? { ...x, pergunta: e.target.value } : x))} /></div>
+                    <div className="agx-field"><label>Resposta</label><textarea className="agx-input" rows={3} value={q.resposta || ""} onChange={(e) => set("faq", c.faq.map((x, idx) => idx === i ? { ...x, resposta: e.target.value } : x))} /></div>
+                  </div>
+                ))}
+                <button className="agx-add" onClick={() => set("faq", [...c.faq, {}])}>+ Adicionar Pergunta</button>
+              </div>
+            )}
+
+            {secao === "playbook" && (
+              <div>
+                <h4 className="agx-h">Script de vendas</h4>
+                <p className="agx-psub">Como conduzir a venda do começo ao fim.</p>
+                <Upload sec="playbook" titulo="Anexar PDF, DOC ou TXT" />
+                <ListaKb sec="playbook" />
+                <div className="agx-ou">OU PREENCHA AS ETAPAS</div>
+                {[["pbAbertura", "1. Primeira mensagem (abertura)"], ["pbQualificacao", "2. Qualificação (perguntas-chave)"], ["pbApresentacao", "3. Apresentação do curso"], ["pbPreco", "4. Quando soltar o preço"], ["pbFechamento", "5. Fechamento"], ["pbRecuperacao", "6. Recuperação (se ele sumir)"]].map(([f, lb]) => (
+                  <div className="agx-field" key={f}><label>{lb}</label>
+                    <textarea className="agx-input" rows={3} value={c[f]} onChange={(e) => set(f, e.target.value)} />
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {secao === "escalacao" && (
+              <div>
+                <h4 className="agx-h">Escalação e encerramento</h4>
+                <p className="agx-psub">Quando a IA deve passar para um humano ou encerrar.</p>
+                {modo === "qualifica" && (
+                  <>
+                    <div className="agx-field"><label>Quando passar pra humano</label>
+                      <textarea className="agx-input" rows={4} value={c.escQuando} onChange={(e) => set("escQuando", e.target.value)} placeholder="Ex: quando o lead pedir preço/link, demonstrar que quer comprar, ou pedir pra falar com um humano." />
+                    </div>
+                    <div className="agx-field"><label>Como passar (frase padrão)</label>
+                      <textarea className="agx-input" rows={2} value={c.escFrase} onChange={(e) => set("escFrase", e.target.value)} placeholder="Ex: Vou te passar agora pro nosso especialista, só um instante 😊" />
+                    </div>
+                    <div className="agx-grid2">
+                      <div className="agx-field"><label>Nome do humano</label><input className="agx-input" value={c.escNome} onChange={(e) => set("escNome", e.target.value)} /></div>
+                      <div className="agx-field"><label>Telefone/WhatsApp</label><input className="agx-input" value={c.escTelefone} onChange={(e) => set("escTelefone", e.target.value)} /></div>
+                    </div>
+                    <div className="agx-sep" />
+                  </>
+                )}
+                <h4 className="agx-h">Encerramento</h4>
+                <div className="agx-field"><label>Critérios de encerramento</label>
+                  <textarea className="agx-input" rows={4} value={c.encerrarCriterios} onChange={(e) => set("encerrarCriterios", e.target.value)} placeholder="Ex: encerra quando o lead comprar, dizer que não tem interesse, ou ficar 2 dias sem responder após o follow-up." />
+                </div>
+              </div>
+            )}
+          </main>
+
+          <aside className="agx-preview">
+            <div className="agx-preview-head">
+              <span>▷ Preview ao vivo</span>
+              <button className="agx-reset" disabled>↻ Resetar</button>
+            </div>
+            <div className="agx-preview-body">
+              <div className="agx-preview-empty">
+                O preview ao vivo entra na próxima fase — aqui você vai testar a conversa da {nome.trim() || "IA"} em tempo real, com tudo que configurou.
+              </div>
+            </div>
+            <div className="agx-preview-input">
+              <input className="agx-input" placeholder="Digite uma mensagem..." disabled />
+              <button className="agx-send" disabled>➤</button>
+            </div>
+          </aside>
         </div>
       </div>
     </div>,
     document.body
   );
 }
+
 
 /* ---------- DISPARO EM MASSA ---------- */
 /* ---------- DISPARO EM MASSA (assistente em etapas) ---------- */

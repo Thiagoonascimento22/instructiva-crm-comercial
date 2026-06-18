@@ -433,13 +433,84 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
      body: { numeroId, template, idioma, contatos:[{telefone,nome,variaveis:[...]}], nomeCampanha }
      ============================================================ */
   /* ============================================================
-     IAs DO CANAL OFICIAL (cérebro) — Fase 1: cadastro
+     IAs DO CANAL OFICIAL (cérebro) — config rica + base de conhecimento
      ============================================================ */
+  function lim(s, n) { return String(s == null ? "" : s).slice(0, n); }
+
+  function configVazia() {
+    return {
+      // GERAL
+      tomVoz: "amigavel", objetivo: "", agentePadrao: false, autoResponder: false,
+      // PERSONA
+      quemEla: "", comoEscreve: "", sempreFaz: "", nuncaFaz: "",
+      // CONHECIMENTO
+      cursos: [],        // [{ nome, carga, garantia, certificado, paraQuem, diferencial, descricao, ofertas:[{nome,valor,link,obs}] }]
+      objecoes: [],      // [{ objecao, resposta }]
+      faq: [],           // [{ pergunta, resposta }]
+      // FLUXO (playbook por etapas)
+      pbAbertura: "", pbQualificacao: "", pbApresentacao: "", pbPreco: "", pbFechamento: "", pbRecuperacao: "",
+      // ESCALAÇÃO / ENCERRAMENTO
+      escQuando: "", escFrase: "", escNome: "", escTelefone: "", encerrarCriterios: "",
+    };
+  }
+
+  function sanitizaConfig(raw) {
+    const c = configVazia();
+    const b = raw || {};
+    c.tomVoz = lim(b.tomVoz || "amigavel", 40);
+    c.objetivo = lim(b.objetivo, 2000);
+    c.agentePadrao = !!b.agentePadrao;
+    c.autoResponder = !!b.autoResponder;
+    c.quemEla = lim(b.quemEla, 6000);
+    c.comoEscreve = lim(b.comoEscreve, 3000);
+    c.sempreFaz = lim(b.sempreFaz, 4000);
+    c.nuncaFaz = lim(b.nuncaFaz, 4000);
+    c.cursos = Array.isArray(b.cursos) ? b.cursos.slice(0, 30).map((x) => ({
+      nome: lim(x.nome, 200), carga: lim(x.carga, 100), garantia: lim(x.garantia, 200),
+      certificado: lim(x.certificado, 200), paraQuem: lim(x.paraQuem, 600),
+      diferencial: lim(x.diferencial, 600), descricao: lim(x.descricao, 4000),
+      ofertas: Array.isArray(x.ofertas) ? x.ofertas.slice(0, 20).map((o) => ({
+        nome: lim(o.nome, 200), valor: lim(o.valor, 100), link: lim(o.link, 500), obs: lim(o.obs, 300),
+      })) : [],
+    })) : [];
+    c.objecoes = Array.isArray(b.objecoes) ? b.objecoes.slice(0, 50).map((x) => ({
+      objecao: lim(x.objecao, 300), resposta: lim(x.resposta, 2000),
+    })) : [];
+    c.faq = Array.isArray(b.faq) ? b.faq.slice(0, 80).map((x) => ({
+      pergunta: lim(x.pergunta, 300), resposta: lim(x.resposta, 2000),
+    })) : [];
+    c.pbAbertura = lim(b.pbAbertura, 3000);
+    c.pbQualificacao = lim(b.pbQualificacao, 3000);
+    c.pbApresentacao = lim(b.pbApresentacao, 3000);
+    c.pbPreco = lim(b.pbPreco, 3000);
+    c.pbFechamento = lim(b.pbFechamento, 3000);
+    c.pbRecuperacao = lim(b.pbRecuperacao, 3000);
+    c.escQuando = lim(b.escQuando, 3000);
+    c.escFrase = lim(b.escFrase, 1000);
+    c.escNome = lim(b.escNome, 120);
+    c.escTelefone = lim(b.escTelefone, 40);
+    c.encerrarCriterios = lim(b.encerrarCriterios, 2000);
+    return c;
+  }
+
+  // base de conhecimento extraída de arquivos: [{ id, secao, nome, texto, criadoEm }]
+  function sanitizaConhecimento(arr) {
+    if (!Array.isArray(arr)) return [];
+    return arr.slice(0, 60).map((k) => ({
+      id: k.id || proximoId("kb"),
+      secao: lim(k.secao || "cursos", 30),
+      nome: lim(k.nome, 200),
+      texto: lim(k.texto, 200000),
+      criadoEm: k.criadoEm || Date.now(),
+    }));
+  }
+
   function iaPublica(ia) {
     return {
       id: ia.id, nome: ia.nome, ativa: !!ia.ativa, modo: ia.modo,
-      persona: ia.persona || "", playbook: ia.playbook || "",
-      gatilhoHandoff: ia.gatilhoHandoff || "", criadoEm: ia.criadoEm,
+      config: ia.config || configVazia(),
+      conhecimento: (ia.conhecimento || []).map((k) => ({ id: k.id, secao: k.secao, nome: k.nome, chars: (k.texto || "").length, criadoEm: k.criadoEm })),
+      criadoEm: ia.criadoEm,
     };
   }
 
@@ -451,15 +522,13 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
     const b = req.body || {};
     const nome = String(b.nome || "").trim();
     if (!nome) return res.status(400).json({ error: "Dê um nome pra IA" });
-    const modo = b.modo === "qualifica" ? "qualifica" : "fecha";
     const ia = {
       id: proximoId("ia"),
       nome: nome.slice(0, 80),
       ativa: b.ativa !== false,
-      modo,
-      persona: String(b.persona || "").trim().slice(0, 8000),
-      playbook: String(b.playbook || "").trim().slice(0, 12000),
-      gatilhoHandoff: String(b.gatilhoHandoff || "").trim().slice(0, 4000),
+      modo: b.modo === "qualifica" ? "qualifica" : "fecha",
+      config: sanitizaConfig(b.config),
+      conhecimento: sanitizaConhecimento(b.conhecimento),
       criadoEm: Date.now(),
     };
     db.oficial.ias.unshift(ia);
@@ -474,9 +543,8 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
     if (b.nome !== undefined) { const n = String(b.nome).trim(); if (n) ia.nome = n.slice(0, 80); }
     if (b.modo !== undefined) ia.modo = b.modo === "qualifica" ? "qualifica" : "fecha";
     if (b.ativa !== undefined) ia.ativa = !!b.ativa;
-    if (b.persona !== undefined) ia.persona = String(b.persona).trim().slice(0, 8000);
-    if (b.playbook !== undefined) ia.playbook = String(b.playbook).trim().slice(0, 12000);
-    if (b.gatilhoHandoff !== undefined) ia.gatilhoHandoff = String(b.gatilhoHandoff).trim().slice(0, 4000);
+    if (b.config !== undefined) ia.config = sanitizaConfig(b.config);
+    if (b.conhecimento !== undefined) ia.conhecimento = sanitizaConhecimento(b.conhecimento);
     salvar();
     res.json(iaPublica(ia));
   });
@@ -487,6 +555,29 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
     salvar();
     res.json({ ok: true, removida: antes !== db.oficial.ias.length });
   });
+
+  // extrai texto de um arquivo enviado (base64) — TXT/MD/CSV nativo; PDF/DOCX virá na próxima fase
+  app.post("/api/oficial/ias/extrair", auth, gerenteOnly, (req, res) => {
+    const b = req.body || {};
+    const nome = String(b.nome || "arquivo").trim();
+    const base64 = String(b.base64 || "");
+    if (!base64) return res.status(400).json({ error: "Arquivo vazio" });
+    const lower = nome.toLowerCase();
+    let buf;
+    try { buf = Buffer.from(base64, "base64"); }
+    catch (_) { return res.status(400).json({ error: "Arquivo inválido" }); }
+    if (buf.length > 6 * 1024 * 1024) return res.status(400).json({ error: "Arquivo passa de 6MB" });
+
+    const ehTexto = lower.endsWith(".txt") || lower.endsWith(".md") || lower.endsWith(".csv") || lower.endsWith(".text");
+    if (ehTexto) {
+      const texto = buf.toString("utf8").slice(0, 200000);
+      return res.json({ ok: true, nome, texto, tipo: "texto" });
+    }
+    // PDF/DOCX: ainda não extraímos aqui (evita lib que quebra no Railway).
+    return res.status(415).json({ error: "Por enquanto só leio TXT/MD/CSV. Pra PDF/DOC, cole o conteúdo no campo de texto — em breve liberamos o PDF." });
+  });
+
+
 
   app.post("/api/oficial/disparar", auth, gerenteOnly, async (req, res) => {
     const b = req.body || {};
