@@ -1106,14 +1106,141 @@ function PaginaOficial({ showToast }) {
         <button className={aba === "numeros" ? "of-tab on" : "of-tab"} onClick={() => setAba("numeros")}>
           <I.wa className="ico" /> Números
         </button>
+        <button className={aba === "ia" ? "of-tab on" : "of-tab"} onClick={() => setAba("ia")}>
+          <I.spark className="ico" /> IA
+        </button>
       </div>
       <div className="of-body">
         {aba === "disparo" && <OficialDisparo showToast={showToast} />}
         {aba === "vendedores" && <OficialVendedores showToast={showToast} />}
         {aba === "templates" && <OficialTemplates showToast={showToast} />}
         {aba === "numeros" && <OficialNumeros showToast={showToast} />}
+        {aba === "ia" && <OficialIAs showToast={showToast} />}
       </div>
     </div>
+  );
+}
+
+/* ---------- IA: cérebro do canal oficial (Fase 1: cadastro) ---------- */
+function OficialIAs({ showToast }) {
+  const [ias, setIas] = useState(null);
+  const [editar, setEditar] = useState(null); // objeto IA em edição, ou {} pra nova
+
+  const carregar = () => api.ofIAs().then(setIas).catch(() => setIas([]));
+  useEffect(() => { carregar(); }, []);
+
+  async function excluir(ia) {
+    if (!confirm(`Excluir a IA "${ia.nome}"?`)) return;
+    try { await api.ofExcluirIA(ia.id); showToast("IA excluída"); carregar(); }
+    catch (e) { showToast("✗ " + e.message); }
+  }
+  async function alternarAtiva(ia) {
+    try { await api.ofEditarIA(ia.id, { ativa: !ia.ativa }); carregar(); }
+    catch (e) { showToast("✗ " + e.message); }
+  }
+
+  return (
+    <div>
+      <div className="panel">
+        <div className="panel-h">
+          <h3>Atendentes de IA<span className="panel-sub">o cérebro que conversa com os leads do disparo</span></h3>
+          <button className="btn btn-primary btn-sm" onClick={() => setEditar({})}><I.plus className="ico" /> Nova IA</button>
+        </div>
+        <div style={{ padding: "0 18px 18px" }}>
+          <div className="ia-aviso" style={{ marginBottom: 14, fontSize: 13, color: "var(--muted)", background: "var(--bg2)", border: "1px solid var(--border)", borderRadius: 10, padding: "10px 12px" }}>
+            Aqui você só <b>cria e treina</b> a IA. Ela ainda não responde sozinha — isso entra na próxima fase. Cada IA é ligada a um disparo na hora de criar a campanha.
+          </div>
+          {!ias && <div className="spin" />}
+          {ias && ias.length === 0 && <div className="dash-empty">Nenhuma IA ainda. Clique em <b>Nova IA</b> pra criar a primeira.</div>}
+          {(ias || []).map((ia) => (
+            <div className="sol-row big" key={ia.id} style={{ alignItems: "center" }}>
+              <div className="sol-info">
+                <div className="sol-top">
+                  <span className={"sol-st " + (ia.ativa ? "resolvida" : "aberta")}>{ia.ativa ? "ativa" : "pausada"}</span>
+                  <span className="of-pill">{ia.modo === "qualifica" ? "Qualifica → vendedor" : "Fecha sozinha"}</span>
+                  <b className="sol-quem">{ia.nome}</b>
+                </div>
+                <div className="sol-meta" style={{ marginTop: 4 }}>
+                  {ia.persona ? "Persona definida" : "Sem persona"} · {ia.playbook ? "playbook definido" : "sem playbook"}
+                  {ia.modo === "qualifica" && (ia.gatilhoHandoff ? " · gatilho definido" : " · sem gatilho de entrega")}
+                </div>
+              </div>
+              <div className="sol-acoes">
+                <button className="btn btn-sm" onClick={() => alternarAtiva(ia)}>{ia.ativa ? "Pausar" : "Ativar"}</button>
+                <button className="btn btn-sm" onClick={() => setEditar(ia)}>Editar</button>
+                <button className="btn btn-sm" onClick={() => excluir(ia)}><I.trash style={{ width: 14, height: 14 }} /></button>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+      {editar && <ModalIA ia={editar} showToast={showToast} onClose={() => setEditar(null)} onSaved={() => { setEditar(null); carregar(); }} />}
+    </div>
+  );
+}
+
+function ModalIA({ ia, showToast, onClose, onSaved }) {
+  const editando = !!ia.id;
+  const [nome, setNome] = useState(ia.nome || "");
+  const [modo, setModo] = useState(ia.modo || "fecha");
+  const [persona, setPersona] = useState(ia.persona || "");
+  const [playbook, setPlaybook] = useState(ia.playbook || "");
+  const [gatilho, setGatilho] = useState(ia.gatilhoHandoff || "");
+  const [saving, setSaving] = useState(false);
+
+  async function salvar() {
+    if (!nome.trim()) { alert("Dê um nome pra IA"); return; }
+    setSaving(true);
+    const dados = { nome: nome.trim(), modo, persona, playbook, gatilhoHandoff: gatilho };
+    try {
+      if (editando) await api.ofEditarIA(ia.id, dados);
+      else await api.ofCriarIA(dados);
+      showToast(editando ? "✓ IA atualizada" : "✓ IA criada");
+      onSaved();
+    } catch (e) { alert(e.message); setSaving(false); }
+  }
+
+  return createPortal(
+    <div className="modal" onClick={(e) => e.target === e.currentTarget && onClose()}>
+      <div className="modal-box" style={{ maxWidth: 640 }}>
+        <div className="mh">
+          <h3>{editando ? "Editar IA" : "Nova IA"}</h3>
+          <p>Treine como ela conversa. Quanto mais detalhe na persona e no playbook, melhor ela fica.</p>
+        </div>
+        <div className="mb">
+          <div className="field">
+            <label>Nome da IA *</label>
+            <input className="input" value={nome} onChange={(e) => setNome(e.target.value)} placeholder="Ex: Júlia — Vendas Inversor Solar" />
+          </div>
+          <div className="field">
+            <label>O que ela faz *</label>
+            <select className="select" value={modo} onChange={(e) => setModo(e.target.value)}>
+              <option value="fecha">Fecha a venda sozinha (não passa pro vendedor)</option>
+              <option value="qualifica">Qualifica e passa pro vendedor quando o lead esquenta</option>
+            </select>
+          </div>
+          <div className="field">
+            <label>Persona</label>
+            <textarea className="input" rows={5} value={persona} onChange={(e) => setPersona(e.target.value)} placeholder="Quem ela é, tom de voz, como se apresenta, o que ela vende, jeito de falar (ex: descontraída, usa emoji, trata por você)..." />
+          </div>
+          <div className="field">
+            <label>Playbook</label>
+            <textarea className="input" rows={6} value={playbook} onChange={(e) => setPlaybook(e.target.value)} placeholder="O passo a passo da conversa: como abre, o que pergunta, ordem de qualificação, preços e links, como lida com objeções, quando manda o link de compra..." />
+          </div>
+          {modo === "qualifica" && (
+            <div className="field">
+              <label>Quando passar pro vendedor</label>
+              <textarea className="input" rows={3} value={gatilho} onChange={(e) => setGatilho(e.target.value)} placeholder="Ex: quando o lead pedir o preço ou link, demonstrar que quer comprar, ou pedir pra falar com um humano." />
+            </div>
+          )}
+        </div>
+        <div className="mf">
+          <button className="btn" onClick={onClose} disabled={saving}>Cancelar</button>
+          <button className="btn btn-primary" onClick={salvar} disabled={saving}>{saving ? "Salvando..." : (editando ? "Salvar" : "Criar IA")}</button>
+        </div>
+      </div>
+    </div>,
+    document.body
   );
 }
 
