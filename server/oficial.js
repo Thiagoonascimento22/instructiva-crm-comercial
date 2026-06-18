@@ -678,6 +678,9 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
     if (c.encerrarCriterios) P.push(`\nEncerre/pare de insistir quando: ${c.encerrarCriterios}`);
 
     P.push(`\nREGRAS GERAIS: Responda como mensagem de WhatsApp (curto, natural, humano). Uma ideia por mensagem. Nunca diga que é uma IA ou robô. Nunca invente preços, links ou informações que não estão acima.`);
+    P.push(`\nEMOJIS PROIBIDOS (NUNCA use, em hipótese nenhuma): 🚀 🔥 💪 💯 😎 🤩 ❤️ 👏 ⚡. Use no máximo emojis simples e calorosos como 🙂 😊 👍, e só de vez em quando — nunca em toda mensagem.`);
+    P.push(`\nSE O LEAD MANDAR FIGURINHA/STICKER (aparece como "[sticker]"), GIF ou reação: NÃO diga que "adorou o sticker" nem comente a figurinha como se a tivesse visto (você não vê o conteúdo dela). Apenas responda de forma leve e natural dando continuidade à conversa (ex.: "Hahah 😊" ou retome o assunto de antes). Não invente que viu imagem, figurinha ou vídeo.`);
+    P.push(`\nNÃO encerre a conversa cedo demais nem fique se despedindo ("tenha um ótimo dia", "até a próxima") enquanto houver qualquer chance de interesse. Só se despeça se o lead claramente encerrar ou pedir pra parar.`);
     return P.join("\n");
   }
 
@@ -1559,6 +1562,7 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
               content = "📄 " + midiaFilename;
               midiaTipo = "document"; mediaIdMeta = m.document && m.document.id;
             }
+            else if (m.type === "sticker") content = "[figurinha]";
             else content = "[" + m.type + "]";
 
             // baixa o arquivo de mídia (foto, áudio, vídeo, documento) pro volume
