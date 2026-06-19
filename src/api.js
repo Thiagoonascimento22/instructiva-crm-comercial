@@ -127,6 +127,7 @@ export const api = {
   // IAs do Canal Oficial (cérebro)
   ofIAs: () => req("GET", "/api/oficial/ias"),
   ofCriarIA: (dados) => req("POST", "/api/oficial/ias", dados),
+  ofDuplicarIA: (id, nome) => req("POST", "/api/oficial/ias/" + id + "/duplicar", { nome }),
   ofEditarIA: (id, dados) => req("PUT", "/api/oficial/ias/" + id, dados),
   ofExcluirIA: (id) => req("DELETE", "/api/oficial/ias/" + id),
   ofExtrairArquivo: (nome, base64) => req("POST", "/api/oficial/ias/extrair", { nome, base64 }),

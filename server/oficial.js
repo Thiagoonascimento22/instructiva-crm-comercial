@@ -902,6 +902,27 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
     res.json(iaPublica(ia));
   });
 
+  // duplica uma IA existente (copia toda a base, só muda o nome)
+  app.post("/api/oficial/ias/:id/duplicar", auth, gerenteOnly, (req, res) => {
+    const orig = (db.oficial.ias || []).find((x) => x.id === req.params.id);
+    if (!orig) return res.status(404).json({ error: "IA não encontrada" });
+    const b = req.body || {};
+    const novoNome = String(b.nome || (orig.nome + " (cópia)")).trim().slice(0, 80);
+    const copia = {
+      id: proximoId("ia"),
+      nome: novoNome,
+      ativa: orig.ativa !== false,
+      modo: orig.modo,
+      // cópia profunda da config e do conhecimento (mesma base, nome diferente)
+      config: JSON.parse(JSON.stringify(orig.config || {})),
+      conhecimento: JSON.parse(JSON.stringify(orig.conhecimento || {})),
+      criadoEm: Date.now(),
+    };
+    db.oficial.ias.unshift(copia);
+    salvar();
+    res.json(iaPublica(copia));
+  });
+
   app.put("/api/oficial/ias/:id", auth, gerenteOnly, (req, res) => {
     const ia = (db.oficial.ias || []).find((x) => x.id === req.params.id);
     if (!ia) return res.status(404).json({ error: "IA não encontrada" });

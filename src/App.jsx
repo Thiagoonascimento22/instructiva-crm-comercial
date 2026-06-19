@@ -1251,6 +1251,13 @@ function OficialIAs({ showToast }) {
     try { await api.ofExcluirIA(ia.id); showToast("IA excluída"); carregar(); }
     catch (e) { showToast("✗ " + e.message); }
   }
+  async function duplicar(ia) {
+    const nome = prompt(`Vai criar uma cópia idêntica de "${ia.nome}" (mesma base de conhecimento).\n\nQual o nome da nova IA?`, "Clara");
+    if (nome === null) return; // cancelou
+    const nomeFinal = nome.trim() || (ia.nome + " (cópia)");
+    try { await api.ofDuplicarIA(ia.id, nomeFinal); showToast(`✓ IA "${nomeFinal}" criada`); carregar(); }
+    catch (e) { showToast("✗ " + e.message); }
+  }
   async function alternarAtiva(ia) {
     try { await api.ofEditarIA(ia.id, { ativa: !ia.ativa }); carregar(); }
     catch (e) { showToast("✗ " + e.message); }
@@ -1314,6 +1321,7 @@ function OficialIAs({ showToast }) {
               <div className="sol-acoes">
                 <button className="btn btn-sm" onClick={() => alternarAtiva(ia)}>{ia.ativa ? "Pausar" : "Ativar"}</button>
                 <button className="btn btn-sm" onClick={() => setEditar(ia)}>Editar</button>
+                <button className="btn btn-sm" onClick={() => duplicar(ia)} title="Criar uma cópia desta IA com outro nome">Duplicar</button>
                 <button className="btn btn-sm" onClick={() => excluir(ia)}><I.trash style={{ width: 14, height: 14 }} /></button>
               </div>
             </div>
