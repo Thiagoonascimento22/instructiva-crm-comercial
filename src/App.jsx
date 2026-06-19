@@ -1760,6 +1760,13 @@ function OficialDisparo({ showToast }) {
   useEffect(() => {
     carregarCampanhas();
     api.ofNumeros().then((ns) => setNumeros(ns.filter((n) => n.ativo))).catch(() => {});
+    // atualiza os números do disparo automaticamente a cada 10s (recontando do servidor)
+    const t = setInterval(async () => {
+      if (document.hidden) return; // não atualiza se a aba estiver em segundo plano
+      try { await api.ofRecontar(); } catch (e) {}
+      carregarCampanhas();
+    }, 10000);
+    return () => clearInterval(t);
   }, []);
 
   async function excluirCampanha(c) {
@@ -1798,7 +1805,12 @@ function OficialDisparo({ showToast }) {
       <div className="disp-camps">
         <div className="disp-camps-head">
           <h3>Campanhas</h3>
-          <button className="btn btn-sm" onClick={async () => { try { await api.ofRecontar(); } catch (e) {} carregarCampanhas(); }}><I.refresh className="ico" /> Atualizar</button>
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <span style={{ fontSize: 12, color: "var(--muted)", display: "flex", alignItems: "center", gap: 5 }}>
+              <span style={{ width: 7, height: 7, borderRadius: "50%", background: "#1a9d54", display: "inline-block", animation: "pulse 2s infinite" }} /> atualizando sozinho
+            </span>
+            <button className="btn btn-sm" onClick={async () => { try { await api.ofRecontar(); } catch (e) {} carregarCampanhas(); }}><I.refresh className="ico" /> Atualizar agora</button>
+          </div>
         </div>
         {campanhas.length === 0 ? (
           <div className="disp-vazio">
