@@ -1861,6 +1861,7 @@ function ModalDisparo({ numeros, showToast, onClose, onDone }) {
   const [contatos, setContatos] = useState([]);
   const [textoManual, setTextoManual] = useState("");
   const [nomeCampanha, setNomeCampanha] = useState("");
+  const [pularRecebidos, setPularRecebidos] = useState(false);
   const [enviando, setEnviando] = useState(false);
   const [ias, setIas] = useState([]);
   const [iaId, setIaId] = useState("");
@@ -1916,6 +1917,7 @@ function ModalDisparo({ numeros, showToast, onClose, onDone }) {
       const r = await api.ofDisparar({
         numeroId, template: template.name, idioma: template.language,
         nomeCampanha: nomeCampanha || template.name, contatos, iaId: iaId || null,
+        pularRecebidos,
       });
       showToast(`Disparo iniciado para ${r.total} contato(s)!`);
       onDone();
@@ -2037,6 +2039,15 @@ function ModalDisparo({ numeros, showToast, onClose, onDone }) {
               <div className="dispm-campo">
                 <label>Nome da campanha (opcional)</label>
                 <input className="input" placeholder="Ex: Disparo Inversor Solar" value={nomeCampanha} onChange={(e) => setNomeCampanha(e.target.value)} />
+              </div>
+              <div className="dispm-campo">
+                <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", fontWeight: 600 }}>
+                  <input type="checkbox" checked={pularRecebidos} onChange={(e) => setPularRecebidos(e.target.checked)} style={{ width: 17, height: 17, cursor: "pointer" }} />
+                  Pular quem já recebeu (retomar disparo)
+                </label>
+                <span style={{ fontSize: 12, color: "var(--muted)", marginTop: 4, display: "block" }}>
+                  Marque se está re-disparando uma lista que travou no meio. O sistema envia só pra quem ainda NÃO recebeu por este número, evitando mensagens repetidas.
+                </span>
               </div>
               <div className="dispm-previa">
                 <span className="dispm-previa-lab">Prévia</span>

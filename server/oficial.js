@@ -1134,10 +1134,29 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
     // responde já e dispara em background (não trava a tela)
     res.json({ ok: true, campanhaId: campanha.id, total: contatos.length });
 
+    // OPÇÃO "pular quem já recebeu": pra retomar um disparo que parou no meio.
+    // Se ligado, ignora contatos que JÁ têm um chat de disparo nesse mesmo número
+    // que já recebeu o template (tem mensagem role "me" com template).
+    const pularRecebidos = b.pularRecebidos === true;
+    const jaReceberam = new Set();
+    if (pularRecebidos) {
+      for (const ch of Object.values(db.waChats || {})) {
+        if (ch && ch.canal === "oficial" && ch.numeroOficialId === numeroCfg.id && ch.origemDisparo) {
+          const tel = normalizaTelefone(ch.numero);
+          if (tel && (ch.mensagens || []).some((m) => m.role === "me" && m.template)) {
+            jaReceberam.add(tel);
+          }
+        }
+      }
+    }
+
     (async () => {
+      let pulados = 0;
       for (const c of contatos) {
         const telefone = normalizaTelefone(c.telefone);
         if (!telefone) { campanha.falhas++; continue; }
+        // retomar: pula quem já recebeu esse disparo nesse número
+        if (pularRecebidos && jaReceberam.has(telefone)) { pulados++; campanha.total--; continue; }
         const nome = (c.nome || "").trim() || telefone;
         try {
           const resp = await enviarTemplate(numeroCfg, telefone, templateName, idioma, c.variaveis || []);
@@ -1169,7 +1188,7 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
         // ritmo: pequena pausa pra proteger a reputação do número
         await new Promise((r) => setTimeout(r, 120));
       }
-      console.log(`Campanha ${campanha.nome}: ${campanha.enviados} enviados, ${campanha.falhas} falhas`);
+      console.log(`Campanha ${campanha.nome}: ${campanha.enviados} enviados, ${campanha.falhas} falhas${pularRecebidos ? `, ${pulados} pulados (já tinham recebido)` : ""}`);
       salvar();
     })();
   });
