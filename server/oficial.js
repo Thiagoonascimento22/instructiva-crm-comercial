@@ -1118,6 +1118,7 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
       nome: String(b.nomeCampanha || templateName).trim(),
       numeroId: numeroCfg.id,
       template: templateName,
+      idioma,
       iaId: iaCampanha ? iaCampanha.id : null,
       iaNome: iaCampanha ? iaCampanha.nome : null,
       enviados: 0,    // aceitos pela Meta (sent)
@@ -1126,6 +1127,9 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
       responderam: 0, // leads que mandaram msg de volta
       falhas: 0,
       total: contatos.length,
+      // fila salva no banco: lista de quem ainda falta enviar (sobrevive a reinício)
+      pendentes: contatos.map((c) => ({ telefone: c.telefone, nome: c.nome || "", variaveis: c.variaveis || [] })),
+      status: "rodando", // rodando | concluida | parada
       criadoEm: Date.now(),
     };
     db.oficial.campanhas.unshift(campanha);
@@ -1134,68 +1138,138 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
     // responde já e dispara em background (não trava a tela)
     res.json({ ok: true, campanhaId: campanha.id, total: contatos.length });
 
-    // OPÇÃO "pular quem já recebeu": pra retomar um disparo que parou no meio.
-    // Se ligado, ignora contatos que JÁ têm um chat de disparo nesse mesmo número
-    // que já recebeu o template (tem mensagem role "me" com template).
+    // OPÇÃO "pular quem já recebeu": remove da fila quem já recebeu esse disparo nesse número
     const pularRecebidos = b.pularRecebidos === true;
-    const jaReceberam = new Set();
     if (pularRecebidos) {
+      const jaReceberam = new Set();
       for (const ch of Object.values(db.waChats || {})) {
         if (ch && ch.canal === "oficial" && ch.numeroOficialId === numeroCfg.id && ch.origemDisparo) {
           const tel = normalizaTelefone(ch.numero);
-          if (tel && (ch.mensagens || []).some((m) => m.role === "me" && m.template)) {
-            jaReceberam.add(tel);
-          }
+          if (tel && (ch.mensagens || []).some((m) => m.role === "me" && m.template)) jaReceberam.add(tel);
         }
       }
+      const antes = campanha.pendentes.length;
+      campanha.pendentes = campanha.pendentes.filter((c) => {
+        const tel = normalizaTelefone(c.telefone);
+        return tel && !jaReceberam.has(tel);
+      });
+      campanha.total = campanha.pendentes.length;
+      console.log(`[oficial] ${campanha.nome}: ${antes - campanha.pendentes.length} pulados (já receberam)`);
+      salvar();
     }
 
-    (async () => {
-      let pulados = 0;
-      for (const c of contatos) {
-        const telefone = normalizaTelefone(c.telefone);
-        if (!telefone) { campanha.falhas++; continue; }
-        // retomar: pula quem já recebeu esse disparo nesse número
-        if (pularRecebidos && jaReceberam.has(telefone)) { pulados++; campanha.total--; continue; }
-        const nome = (c.nome || "").trim() || telefone;
-        try {
-          const resp = await enviarTemplate(numeroCfg, telefone, templateName, idioma, c.variaveis || []);
-          campanha.enviados++;
-          // guarda o messageId -> campanha, pra contar delivered/read no webhook de status
-          const mid = resp && resp.messages && resp.messages[0] && resp.messages[0].id;
-          if (mid) {
-            if (!db.oficial.msgCampanha) db.oficial.msgCampanha = {};
-            db.oficial.msgCampanha[mid] = campanha.id;
-          }
-          // cria o chat já (marcado como veio de disparo) — sem dono ainda;
-          // o dono é definido quando o lead RESPONDER (no webhook)
-          const chat = acharOuCriarChat(numeroCfg.id, telefone, nome);
-          chat.origemDisparo = true;
-          chat.campanha = campanha.nome;
-          chat.campanhaId = campanha.id;
-          // etiqueta de IA da campanha: última campanha vence (manual reseta IA)
-          chat.iaId = campanha.iaId || null;
-          chat.iaPausada = false;
-          if (chat.respondeu === undefined) chat.respondeu = false;
-          const ts = Date.now();
-          chat.mensagens.push({ role: "me", content: `[disparo] ${templateName}`, ts, template: true });
-          chat.atualizadoEm = ts;
-        } catch (e) {
-          campanha.falhas++;
-          console.error("Falha disparo p/", telefone, ":", e.message);
-        }
+    // processa a fila salva (sobrevive a reinício -> dá pra retomar)
+    processarFilaCampanha(campanha.id, numeroCfg);
+  });
+
+  // ---- processa os pendentes de uma campanha (consome a fila salva no banco) ----
+  // Como vai removendo cada contato da lista 'pendentes' conforme envia e salva,
+  // se o servidor reiniciar no meio, os que sobraram continuam no banco e dá pra retomar.
+  async function processarFilaCampanha(campanhaId, numeroCfg) {
+    const campanha = (db.oficial.campanhas || []).find((x) => x.id === campanhaId);
+    if (!campanha) return;
+    if (campanha._rodando) return; // evita rodar a mesma fila duas vezes ao mesmo tempo
+    campanha._rodando = true;
+    campanha.status = "rodando";
+    const templateName = campanha.template;
+    const idioma = campanha.idioma || "pt_BR";
+
+    while (campanha.pendentes && campanha.pendentes.length > 0) {
+      const c = campanha.pendentes[0]; // pega o primeiro
+      const telefone = normalizaTelefone(c.telefone);
+      if (!telefone) {
+        campanha.falhas++;
+        campanha.pendentes.shift();
         salvar();
-        // ritmo: pequena pausa pra proteger a reputação do número
-        await new Promise((r) => setTimeout(r, 120));
+        continue;
       }
-      console.log(`Campanha ${campanha.nome}: ${campanha.enviados} enviados, ${campanha.falhas} falhas${pularRecebidos ? `, ${pulados} pulados (já tinham recebido)` : ""}`);
+      const nome = (c.nome || "").trim() || telefone;
+      try {
+        const resp = await enviarTemplate(numeroCfg, telefone, templateName, idioma, c.variaveis || []);
+        campanha.enviados++;
+        const mid = resp && resp.messages && resp.messages[0] && resp.messages[0].id;
+        if (mid) {
+          if (!db.oficial.msgCampanha) db.oficial.msgCampanha = {};
+          db.oficial.msgCampanha[mid] = campanha.id;
+        }
+        const chat = acharOuCriarChat(numeroCfg.id, telefone, nome);
+        chat.origemDisparo = true;
+        chat.campanha = campanha.nome;
+        chat.campanhaId = campanha.id;
+        chat.iaId = campanha.iaId || null;
+        chat.iaPausada = false;
+        if (chat.respondeu === undefined) chat.respondeu = false;
+        const ts = Date.now();
+        chat.mensagens.push({ role: "me", content: `[disparo] ${templateName}`, ts, template: true });
+        chat.atualizadoEm = ts;
+      } catch (e) {
+        campanha.falhas++;
+        console.error("Falha disparo p/", telefone, ":", e.message);
+      }
+      campanha.pendentes.shift(); // remove o que acabou de processar (enviado ou falho)
       salvar();
-    })();
+      await new Promise((r) => setTimeout(r, 120)); // ritmo pra proteger o número
+    }
+    campanha.status = "concluida";
+    campanha._rodando = false;
+    delete campanha.pendentes; // limpa a fila vazia
+    console.log(`Campanha ${campanha.nome}: ${campanha.enviados} enviados, ${campanha.falhas} falhas — concluída`);
+    salvar();
+  }
+
+  /* retomar uma campanha que parou no meio (ex: servidor reiniciou) */
+  app.post("/api/oficial/campanhas/:id/retomar", auth, gerenteOnly, (req, res) => {
+    const campanha = (db.oficial.campanhas || []).find((x) => x.id === req.params.id);
+    if (!campanha) return res.status(404).json({ error: "Campanha não encontrada" });
+    if (!campanha.pendentes || campanha.pendentes.length === 0) {
+      return res.status(400).json({ error: "Essa campanha não tem envios pendentes (já terminou)" });
+    }
+    const numeroCfg = acharNumero(campanha.numeroId);
+    if (!numeroCfg) return res.status(400).json({ error: "Número da campanha não encontrado" });
+    if (!numeroCfg.ativo) return res.status(400).json({ error: "O número dessa campanha está inativo" });
+    const faltam = campanha.pendentes.length;
+    processarFilaCampanha(campanha.id, numeroCfg); // continua de onde parou
+    res.json({ ok: true, faltam, mensagem: `Retomando: ${faltam} envio(s) pendente(s)` });
+  });
+
+  /* RE-DISPARAR: reenvia o template pra quem recebeu essa campanha mas NÃO respondeu.
+     Reconstrói a lista a partir das conversas salvas (não precisa colar nada de novo). */
+  app.post("/api/oficial/campanhas/:id/redisparar", auth, gerenteOnly, (req, res) => {
+    const campanha = (db.oficial.campanhas || []).find((x) => x.id === req.params.id);
+    if (!campanha) return res.status(404).json({ error: "Campanha não encontrada" });
+    const numeroCfg = acharNumero(campanha.numeroId);
+    if (!numeroCfg) return res.status(400).json({ error: "Número da campanha não encontrado" });
+    if (!numeroCfg.ativo) return res.status(400).json({ error: "O número dessa campanha está inativo" });
+
+    // reconstrói a lista: todos os chats dessa campanha que NÃO responderam
+    const alvo = [];
+    for (const ch of Object.values(db.waChats || {})) {
+      if (ch && ch.canal === "oficial" && ch.campanhaId === campanha.id && !ch.respondeu) {
+        const tel = normalizaTelefone(ch.numero);
+        if (tel) alvo.push({ telefone: tel, nome: ch.nome || "", variaveis: [] });
+      }
+    }
+    if (alvo.length === 0) {
+      return res.status(400).json({ error: "Ninguém pra re-disparar (todos já responderam ou não há registros)" });
+    }
+
+    // cria a fila de pendentes na própria campanha e processa (com retomar automático)
+    campanha.pendentes = alvo;
+    campanha.total = (campanha.total || 0) + alvo.length;
+    campanha.status = "rodando";
+    salvar();
+    processarFilaCampanha(campanha.id, numeroCfg);
+    res.json({ ok: true, total: alvo.length, mensagem: `Re-disparando pra ${alvo.length} contato(s) que não responderam` });
   });
 
   /* histórico de campanhas */
   app.get("/api/oficial/campanhas", auth, gerenteOnly, (req, res) => {
-    res.json((db.oficial.campanhas || []).slice(0, 50));
+    // não manda a lista enorme de pendentes pro front — só a contagem, pra mostrar o botão Retomar
+    const lista = (db.oficial.campanhas || []).slice(0, 50).map((c) => {
+      const { pendentes, _rodando, ...resto } = c;
+      return { ...resto, pendentes: pendentes && pendentes.length ? pendentes.length : 0, rodando: !!_rodando };
+    });
+    res.json(lista);
   });
 
   /* recalcula "responderam" de todas as campanhas com base nas conversas atuais.
@@ -1716,6 +1790,23 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
   });
 
   console.log("✓ Canal Oficial (Cloud API) instalado");
+
+  // RETOMAR AUTOMÁTICO: se o servidor reiniciou com campanhas que tinham envios
+  // pendentes, continua de onde parou sozinho (espera 5s pra tudo carregar).
+  setTimeout(() => {
+    const pendentes = (db.oficial.campanhas || []).filter((c) => c.pendentes && c.pendentes.length > 0 && c.status !== "parada");
+    if (pendentes.length > 0) {
+      console.log(`[oficial] Retomando ${pendentes.length} campanha(s) com envios pendentes após reinício...`);
+      for (const camp of pendentes) {
+        const numeroCfg = acharNumero(camp.numeroId);
+        if (numeroCfg && numeroCfg.ativo) {
+          processarFilaCampanha(camp.id, numeroCfg);
+        } else {
+          console.log(`[oficial] Campanha ${camp.nome}: número inativo, não retomou`);
+        }
+      }
+    }
+  }, 5000);
 
   // devolve a função de init pro index chamar DEPOIS do loadDB()
   return { garantirEstrutura };
