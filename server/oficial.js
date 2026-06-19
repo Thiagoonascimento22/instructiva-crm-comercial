@@ -678,6 +678,7 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
     if (c.encerrarCriterios) P.push(`\nEncerre/pare de insistir quando: ${c.encerrarCriterios}`);
 
     P.push(`\nREGRAS GERAIS: Responda como mensagem de WhatsApp (curto, natural, humano). Uma ideia por mensagem. Nunca diga que é uma IA ou robô. Nunca invente preços, links ou informações que não estão acima.`);
+    P.push(`\nNOME DO LEAD — REGRA CRÍTICA: só use o nome do lead se ele REALMENTE disse o nome dele nesta conversa. Se ele ainda não disse o nome, NÃO invente, NÃO chute, NÃO use nenhum nome — fale sem nome. NUNCA use nomes de exemplo. Se não tem certeza do nome, não use nome nenhum. Usar um nome errado é um erro grave.`);
     P.push(`\nEMOJIS PROIBIDOS (NUNCA use, em hipótese nenhuma): 🚀 🔥 💪 💯 😎 🤩 ❤️ 👏 ⚡. Use no máximo emojis simples e calorosos como 🙂 😊 👍, e só de vez em quando — nunca em toda mensagem.`);
     P.push(`\nSE O LEAD MANDAR FIGURINHA/STICKER (aparece como "[sticker]"), GIF ou reação: NÃO diga que "adorou o sticker" nem comente a figurinha como se a tivesse visto (você não vê o conteúdo dela). Apenas responda de forma leve e natural dando continuidade à conversa (ex.: "Hahah 😊" ou retome o assunto de antes). Não invente que viu imagem, figurinha ou vídeo.`);
     P.push(`\nNÃO encerre a conversa cedo demais nem fique se despedindo ("tenha um ótimo dia", "até a próxima") enquanto houver qualquer chance de interesse. Só se despeça se o lead claramente encerrar ou pedir pra parar.`);
@@ -757,6 +758,22 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
       if (resposta.includes("[PASSAR_HUMANO]")) {
         passar = true;
         resposta = resposta.replace(/\[PASSAR_HUMANO\]/g, "").trim();
+      }
+
+      // REFORÇO (modo qualifica): se o lead deu sinal claro de compra e a IA não passou sozinha,
+      // o sistema força a passagem pro vendedor humano (GPT-4o-mini às vezes esquece a tag)
+      if (!passar && ia.modo === "qualifica") {
+        const ultLead = [...(chat.mensagens || [])].reverse().find((m) => m.role === "them");
+        const txtLead = ((ultLead && (ultLead.transcricao || ultLead.content)) || "").toLowerCase();
+        const sinaisCompra = [
+          "quero comprar", "quero o curso", "vou comprar", "como pago", "como faço pra pagar",
+          "forma de pagamento", "formas de pagamento", "parcel", "cartão", "cartao", "boleto",
+          "pix", "no débito", "debito", "à vista", "a vista", "quanto custa", "qual o valor",
+          "qual valor", "preço", "preco", "me manda o link", "manda o link", "quero entrar",
+          "quero me inscrever", "quero fazer", "tenho interesse", "me interessei", "fechar",
+          "dinheiro", "pode dividir", "quantas vezes",
+        ];
+        if (sinaisCompra.some((s) => txtLead.includes(s))) passar = true;
       }
 
       if (resposta) {
