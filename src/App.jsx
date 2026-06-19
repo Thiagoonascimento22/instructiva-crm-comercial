@@ -1769,6 +1769,21 @@ function OficialDisparo({ showToast }) {
     return () => clearInterval(t);
   }, []);
 
+  async function redispararCampanha(c) {
+    if (!confirm(`Re-disparar a campanha "${c.nome}"?\n\nVai reenviar o template pra TODO MUNDO que recebeu mas ainda não respondeu (não manda pra quem já respondeu).`)) return;
+    try {
+      const r = await api.ofRedispararCampanha(c.id);
+      showToast(`↻ ${r.mensagem || "Re-disparando"}`);
+      setTimeout(carregarCampanhas, 1500);
+    } catch (e) { showToast("✗ " + e.message); }
+  }
+  async function retomarCampanha(c) {
+    try {
+      const r = await api.ofRetomarCampanha(c.id);
+      showToast(`▶ ${r.mensagem || "Retomando disparo"}`);
+      setTimeout(carregarCampanhas, 1500);
+    } catch (e) { showToast("✗ " + e.message); }
+  }
   async function excluirCampanha(c) {
     const apagar = confirm(
       `Excluir a campanha "${c.nome}"?\n\nOK = exclui TAMBÉM as conversas dela.\nCancelar = mantém as conversas.`
@@ -1809,6 +1824,7 @@ function OficialDisparo({ showToast }) {
             <span style={{ fontSize: 12, color: "var(--muted)", display: "flex", alignItems: "center", gap: 5 }}>
               <span style={{ width: 7, height: 7, borderRadius: "50%", background: "#1a9d54", display: "inline-block", animation: "pulse 2s infinite" }} /> atualizando sozinho
             </span>
+            <button className="btn btn-sm" title="Baixa um arquivo com todos os números que já receberam disparo (pra cruzar com sua planilha)" onClick={() => { window.open("/api/oficial/export-recebidos?token=" + encodeURIComponent(localStorage.getItem("token") || ""), "_blank"); }}>⬇ Baixar quem já recebeu</button>
             <button className="btn btn-sm" onClick={async () => { try { await api.ofRecontar(); } catch (e) {} carregarCampanhas(); }}><I.refresh className="ico" /> Atualizar agora</button>
           </div>
         </div>
@@ -1837,6 +1853,25 @@ function OficialDisparo({ showToast }) {
                     {c.falhas > 0 && <div><span className="disp-camp-n err">{c.falhas}</span><span className="disp-camp-l">erros</span></div>}
                   </div>
                   <div className="disp-camp-bar"><div style={{ width: pctResp + "%" }} /></div>
+                  {c.pendentes > 0 && (
+                    <button
+                      className="btn btn-sm"
+                      style={{ marginTop: 10, width: "100%", background: "#fff4e6", color: "#c2410c", border: "1px solid #fdba74", fontWeight: 700 }}
+                      onClick={(e) => { e.stopPropagation(); retomarCampanha(c); }}
+                    >
+                      ▶ Retomar disparo ({c.pendentes} faltando)
+                    </button>
+                  )}
+                  {!c.pendentes && (c.enviados > 0) && (
+                    <button
+                      className="btn btn-sm"
+                      style={{ marginTop: 10, width: "100%", background: "#eef2ff", color: "#4338ca", border: "1px solid #c7d2fe", fontWeight: 700 }}
+                      onClick={(e) => { e.stopPropagation(); redispararCampanha(c); }}
+                      title="Reenvia o template pra quem recebeu mas ainda não respondeu"
+                    >
+                      ↻ Re-disparar pra quem não respondeu
+                    </button>
+                  )}
                 </div>
               );
             })}

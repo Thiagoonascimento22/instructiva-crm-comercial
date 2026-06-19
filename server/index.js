@@ -180,15 +180,51 @@ function loadDB() {
       console.log("Banco novo criado. Admin: gerente / admin123");
     }
   } catch (e) {
-    console.error("Erro ao ler banco, criando novo:", e.message);
+    console.error("Erro ao ler banco:", e.message);
+    // PROTEÇÃO CRÍTICA: se o arquivo existe mas deu erro de leitura (ex: JSON
+    // corrompido), NÃO sobrescreve com vazio — isso apagaria tudo. Em vez disso:
+    // 1) salva uma cópia do arquivo problemático pra recuperação manual
+    // 2) tenta restaurar do último backup automático
+    // 3) só usa banco vazio em memória, SEM gravar por cima do arquivo real.
+    try {
+      if (fs.existsSync(DB_PATH)) {
+        const corrompido = DB_PATH + ".corrompido." + Date.now();
+        fs.copyFileSync(DB_PATH, corrompido);
+        console.error("Arquivo problemático salvo em:", corrompido);
+      }
+      // tenta restaurar do backup mais recente
+      const dir = path.dirname(DB_PATH);
+      const backups = fs.readdirSync(dir)
+        .filter((f) => f.startsWith("crm.backup."))
+        .sort()
+        .reverse();
+      for (const bkp of backups) {
+        try {
+          const raw = fs.readFileSync(path.join(dir, bkp), "utf8");
+          db = JSON.parse(raw); // se parsear, é um backup bom
+          console.log("✓ Banco restaurado do backup:", bkp);
+          saveDB(); // grava o backup restaurado como banco atual
+          return;
+        } catch (_) { /* esse backup também tá ruim, tenta o próximo */ }
+      }
+    } catch (e2) {
+      console.error("Falha na recuperação:", e2.message);
+    }
+    // se chegou aqui, não tinha backup bom — usa vazio SÓ na memória, NÃO grava
+    console.error("ATENÇÃO: usando banco vazio em memória. Arquivo NÃO foi sobrescrito.");
     db = dbVazio();
-    saveDB();
   }
 }
 
 function saveDB() {
   try {
-    fs.writeFileSync(DB_PATH, JSON.stringify(db, null, 2));
+    const json = JSON.stringify(db, null, 2);
+    // SALVAMENTO SEGURO: grava primeiro num arquivo temporário e só depois
+    // renomeia por cima do real. rename é atômico — se o servidor reiniciar no
+    // meio, o arquivo real continua intacto (nunca fica pela metade/corrompido).
+    const tmp = DB_PATH + ".tmp";
+    fs.writeFileSync(tmp, json);
+    fs.renameSync(tmp, DB_PATH);
   } catch (e) {
     console.error("Erro ao salvar banco:", e.message);
   }
@@ -1911,4 +1947,25 @@ aguardarVolume().then(() => {
   canalOficial.garantirEstrutura(); // cria db.oficial depois de carregar o banco
   resetAdminSeNecessario();
   app.listen(PORT, () => console.log("✓ CRM Comercial rodando na porta", PORT));
+
+  // BACKUP AUTOMÁTICO: a cada 10 min salva uma cópia do banco e mantém as
+  // últimas 12 (≈2h de histórico). Se o banco corromper, o loadDB restaura daqui.
+  function fazerBackup() {
+    try {
+      if (!db || !db.users) return; // não faz backup de banco vazio/sem carregar
+      const dir = path.dirname(DB_PATH);
+      const nome = "crm.backup." + new Date().toISOString().replace(/[:.]/g, "-") + ".json";
+      fs.writeFileSync(path.join(dir, nome), JSON.stringify(db, null, 2));
+      // limpa backups antigos (mantém os 12 mais recentes)
+      const backups = fs.readdirSync(dir).filter((f) => f.startsWith("crm.backup.")).sort();
+      while (backups.length > 12) {
+        const velho = backups.shift();
+        try { fs.unlinkSync(path.join(dir, velho)); } catch (_) {}
+      }
+    } catch (e) {
+      console.error("Erro no backup automático:", e.message);
+    }
+  }
+  fazerBackup(); // um backup logo ao subir
+  setInterval(fazerBackup, 10 * 60 * 1000); // e a cada 10 minutos
 });
