@@ -1015,6 +1015,55 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
     res.json({ ok: true, iaPausada: chat.iaPausada });
   });
 
+  // pausar a IA em TODAS as conversas que já existem agora (de uma vez).
+  // Útil antes de um disparo novo: as conversas antigas ficam congeladas
+  // (a IA não responde mais nelas), mas as NOVAS conversas do disparo
+  // continuam com a IA respondendo normalmente.
+  app.post("/api/oficial/chats/pausar-todas-atuais", auth, gerenteOnly, (req, res) => {
+    let total = 0;
+    for (const chat of Object.values(db.waChats || {})) {
+      if (!chat || chat.canal !== "oficial") continue;
+      if (chat.iaPausada) continue; // já estava pausada, pula
+      chat.iaPausada = true;
+      total++;
+      if (!Array.isArray(chat.notas)) chat.notas = [];
+      chat.notas.push({
+        tipo: "ia_pausada",
+        texto: `${req.user.nome} pausou a IA em massa (antes de novo disparo)`,
+        ts: Date.now(), por: req.user.nome,
+      });
+      if (chat.notas.length > 100) chat.notas = chat.notas.slice(-100);
+    }
+    salvar();
+    res.json({ ok: true, pausadas: total });
+  });
+
+  // EXPORTAR a base de conhecimento de uma IA (backup do treinamento).
+  // Baixa um arquivo .json com toda a configuração da agente (persona,
+  // cursos, objeções, FAQ, playbook, escalação). Serve de backup e pra
+  // recriar a IA depois se precisar. Token via query pra funcionar no download.
+  app.get("/api/oficial/ias/:id/exportar", (req, res) => {
+    const t = String(req.query.token || (req.headers.authorization || "").replace("Bearer ", "")).trim();
+    const user = (db.users || []).find((u) => u.token && u.token === t);
+    if (!user || !user.ativo || user.role !== "gerente") {
+      return res.status(401).send("Não autorizado");
+    }
+    const ia = (db.oficial.ias || []).find((x) => x.id === req.params.id);
+    if (!ia) return res.status(404).send("IA não encontrada");
+    const exportData = {
+      _tipo: "base-conhecimento-instructiva",
+      _versao: 1,
+      _exportadoEm: new Date().toISOString(),
+      nome: ia.nome,
+      modo: ia.modo,
+      config: ia.config || {},
+    };
+    const nomeArq = "base-conhecimento-" + String(ia.nome || "ia").toLowerCase().replace(/[^a-z0-9]+/g, "-") + ".json";
+    res.setHeader("Content-Type", "application/json; charset=utf-8");
+    res.setHeader("Content-Disposition", 'attachment; filename="' + nomeArq + '"');
+    res.send(JSON.stringify(exportData, null, 2));
+  });
+
   // PREVIEW: testa a IA com a config atual (sem salvar, sem WhatsApp)
   app.post("/api/oficial/ias/preview", auth, gerenteOnly, async (req, res) => {
     const b = req.body || {};

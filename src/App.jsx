@@ -1213,6 +1213,7 @@ function OficialIAs({ showToast }) {
   const [editar, setEditar] = useState(null); // objeto IA em edição, ou {} pra nova
   const [globalAtiva, setGlobalAtiva] = useState(true);
   const [pendentes, setPendentes] = useState(0);
+  const [pausandoAtuais, setPausandoAtuais] = useState(false);
   const [respondendoPend, setRespondendoPend] = useState(false);
 
   const carregar = () => api.ofIAs().then(setIas).catch(() => setIas([]));
@@ -1262,6 +1263,26 @@ function OficialIAs({ showToast }) {
     try { await api.ofEditarIA(ia.id, { ativa: !ia.ativa }); carregar(); }
     catch (e) { showToast("✗ " + e.message); }
   }
+  function exportarBase(ia) {
+    // abre o download da base de conhecimento (.json) em nova aba
+    window.open(api.ofUrlExportarIA(ia.id), "_blank");
+  }
+  async function pausarConversasAtuais() {
+    const ok = window.confirm(
+      "Isso vai PAUSAR a IA em TODAS as conversas que já existem agora.\n\n" +
+      "As conversas antigas ficam congeladas (a IA não responde mais nelas).\n" +
+      "As conversas NOVAS de um próximo disparo continuam com a IA respondendo normalmente.\n\n" +
+      "Quer continuar?"
+    );
+    if (!ok) return;
+    setPausandoAtuais(true);
+    try {
+      const r = await api.ofPausarTodasAtuais();
+      showToast(`✓ IA pausada em ${r.pausadas} conversa(s) atual(is)`);
+      carregar();
+    } catch (e) { showToast("✗ " + e.message); }
+    finally { setPausandoAtuais(false); }
+  }
 
   return (
     <div>
@@ -1289,6 +1310,15 @@ function OficialIAs({ showToast }) {
                 : { background: "#eafaf0", color: "#1a9d54", border: "1px solid #aee3c4" }}
             >
               {globalAtiva ? "⏸ Parar todas as IAs" : "▶ Religar IAs"}
+            </button>
+            <button
+              className="btn btn-sm"
+              onClick={pausarConversasAtuais}
+              disabled={pausandoAtuais}
+              title="Pausa a IA em todas as conversas que já existem agora. Útil antes de um disparo novo: as antigas ficam quietas, as novas respondem."
+              style={{ background: "#fff7e6", color: "#b9770e", border: "1px solid #f0d088", fontWeight: 600 }}
+            >
+              {pausandoAtuais ? "Pausando…" : "⏸ Pausar IA nas conversas atuais"}
             </button>
             <button className="btn btn-primary btn-sm" onClick={() => setEditar({})}><I.plus className="ico" /> Nova IA</button>
           </div>
@@ -1322,6 +1352,7 @@ function OficialIAs({ showToast }) {
                 <button className="btn btn-sm" onClick={() => alternarAtiva(ia)}>{ia.ativa ? "Pausar" : "Ativar"}</button>
                 <button className="btn btn-sm" onClick={() => setEditar(ia)}>Editar</button>
                 <button className="btn btn-sm" onClick={() => duplicar(ia)} title="Criar uma cópia desta IA com outro nome">Duplicar</button>
+                <button className="btn btn-sm" onClick={() => exportarBase(ia)} title="Baixar a base de conhecimento desta IA (backup do treinamento)">Exportar</button>
                 <button className="btn btn-sm" onClick={() => excluir(ia)}><I.trash style={{ width: 14, height: 14 }} /></button>
               </div>
             </div>

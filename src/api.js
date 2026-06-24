@@ -137,6 +137,9 @@ export const api = {
   ofIAGlobal: () => req("GET", "/api/oficial/ia-global"),
   ofSetIAGlobal: (ativa) => req("POST", "/api/oficial/ia-global", { ativa }),
   ofPausarIAChat: (id, pausar) => req("POST", "/api/oficial/chats/" + encodeURIComponent(id) + "/ia", { pausar }),
+  ofPausarTodasAtuais: () => req("POST", "/api/oficial/chats/pausar-todas-atuais"),
+  // monta a URL de download da base de conhecimento (token vai na query)
+  ofUrlExportarIA: (id) => "/api/oficial/ias/" + encodeURIComponent(id) + "/exportar?token=" + encodeURIComponent(getToken()),
 
   // Monitoria
   horario: () => req("GET", "/api/horario"),
