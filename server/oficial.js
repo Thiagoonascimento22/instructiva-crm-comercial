@@ -1936,6 +1936,14 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
             } else if (st.status === "failed") {
               camp.falhas = (camp.falhas || 0) + 1;
               if (camp.enviados > 0) camp.enviados--;
+              // captura o MOTIVO da falha de entrega (vem em st.errors) — antes a gente jogava fora
+              const err = (st.errors && st.errors[0]) || {};
+              const motivo = err.message || err.title
+                || (err.error_data && err.error_data.details)
+                || ("erro " + (err.code || "?"));
+              camp.ultimoErro = (err.code ? "(#" + err.code + ") " : "") + motivo;
+              camp.ultimoErroEm = Date.now();
+              console.error("Falha ENTREGA camp '" + camp.nome + "' p/ " + (st.recipient_id || "?") + " : " + camp.ultimoErro);
             }
           }
         }

@@ -1803,6 +1803,18 @@ function explicaErroMeta(msg) {
     return "As variáveis do template não batem (a quantidade de {{ }} é diferente do que foi enviado).";
   if (/access token|oauth|expired|session has expired|token.*invalid/i.test(m))
     return "Token da Meta inválido ou expirado. Atualize o Token da Meta (botão 🔑 no topo da aba Números).";
+  if (/131049|healthy ecosystem|ecosystem engagement/i.test(m))
+    return "A Meta ACEITOU mas NÃO entregou, pra \"manter o engajamento saudável\" (131049) — é bloqueio de qualidade/frequência de MARKETING. Muito comum em número novo + template de marketing. Saídas: testar com um template UTILITY (não marketing), esperar o número ganhar reputação, ou espaçar os envios.";
+  if (/131026|message undeliverable|undeliverable/i.test(m))
+    return "Mensagem não entregue (131026): o número de destino não consegue receber — WhatsApp não instalado nesse número, número inválido, ou não aceita mensagem de empresa. Testa com outro celular que tenha WhatsApp ativo.";
+  if (/131047|re-?engagement|more than 24/i.test(m))
+    return "Fora da janela de 24h (131047): só template aprovado entrega. Confere o template.";
+  if (/131056|pair rate limit|too many messages/i.test(m))
+    return "Muitas mensagens pro mesmo número em pouco tempo (131056). Espera um pouco e tenta de novo.";
+  if (/131051|unsupported message type/i.test(m))
+    return "Tipo de mensagem não suportado (131051).";
+  if (/470|131050|message failed to send because/i.test(m))
+    return "A Meta bloqueou a entrega (qualidade/limite do número). Número novo tem limite baixo e reputação sendo formada — tende a melhorar conforme entrega mais. Se for teste, tente template UTILITY.";
   return "A Meta recusou o envio. Erro: " + m;
 }
 
