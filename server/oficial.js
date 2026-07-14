@@ -1332,6 +1332,8 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
         chat.atualizadoEm = ts;
       } catch (e) {
         campanha.falhas++;
+        campanha.ultimoErro = (e && e.message) || String(e);
+        campanha.ultimoErroEm = Date.now();
         console.error("Falha disparo p/", telefone, ":", e.message);
       }
       campanha.pendentes.shift(); // remove o que acabou de processar (enviado ou falho)

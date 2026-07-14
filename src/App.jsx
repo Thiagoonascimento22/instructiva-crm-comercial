@@ -1794,6 +1794,24 @@ function ModalIA({ ia, showToast, onClose, onSaved }) {
 /* ---------- DISPARO EM MASSA ---------- */
 /* ---------- DISPARO EM MASSA (assistente em etapas) ---------- */
 /* ---------- DISPARO (aba de abertura + modal moderno) ---------- */
+/* traduz os erros mais comuns da Meta num aviso claro (com o caminho da correção) */
+function explicaErroMeta(msg) {
+  const m = String(msg || "");
+  if (/131030|not in allowed list|allowed recipient|recipient.*not.*list/i.test(m))
+    return "Número em MODO DE TESTE: a Meta só entrega pra números que você adicionou na lista de teste (painel Meta → WhatsApp → API Setup → campo \"To\"). Adicione o seu número lá — ou saia do modo de teste (verificar o negócio + adicionar forma de pagamento).";
+  if (/131042|payment|billing|method.*payment/i.test(m))
+    return "Sem forma de pagamento válida na conta da Meta (erro de pagamento / 131042). Adicione ou valide o método de pagamento no nível da WABA / Business Manager.";
+  if (/133010|not registered|register.*number/i.test(m))
+    return "Número não registrado na Cloud API. No número, clique no botão 🔑 (Registrar) e informe o PIN de 6 dígitos da verificação em 2 etapas.";
+  if (/132001|template.*(not exist|does not exist)|does not exist/i.test(m))
+    return "Esse template não existe nessa WABA (ou o nome/idioma está diferente). Confira na aba Templates.";
+  if (/132000|number of parameters|parameter.*mismatch|expected.*parameters/i.test(m))
+    return "As variáveis do template não batem (a quantidade de {{ }} é diferente do que foi enviado).";
+  if (/access token|oauth|expired|session has expired|token.*invalid/i.test(m))
+    return "Token da Meta inválido ou expirado. Atualize o Token da Meta (botão 🔑 no topo da aba Números).";
+  return "A Meta recusou o envio. Erro: " + m;
+}
+
 function OficialDisparo({ isGer = true, showToast }) {
   const [campanhas, setCampanhas] = useState([]);
   const [campSel, setCampSel] = useState(null);
@@ -1901,6 +1919,14 @@ function OficialDisparo({ isGer = true, showToast }) {
                     {c.falhas > 0 && <div><span className="disp-camp-n err">{c.falhas}</span><span className="disp-camp-l">erros</span></div>}
                   </div>
                   <div className="disp-camp-bar"><div style={{ width: pctResp + "%" }} /></div>
+                  {c.falhas > 0 && c.ultimoErro && (
+                    <div
+                      title={c.ultimoErro}
+                      style={{ marginTop: 10, fontSize: 12.5, lineHeight: 1.4, color: "#b91c1c", background: "#fef2f2", border: "1px solid #fecaca", borderRadius: 8, padding: "8px 10px" }}
+                    >
+                      ⚠️ {explicaErroMeta(c.ultimoErro)}
+                    </div>
+                  )}
                   {c.pendentes > 0 && (
                     <button
                       className="btn btn-sm"
