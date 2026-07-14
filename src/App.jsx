@@ -259,7 +259,7 @@ export default function App() {
   const badgeSol = minhasSol.filter((s) => s.status === "resolvida" && !s.resolvidoVisto).length;
   const titulos = {
     painel: { t: "Sistema Comercial", s: "Acompanhe a produtividade e a agilidade do time" },
-    whatsapp: { t: "WhatsApp", s: "Acompanhe as conversas dos atendentes" },
+    whatsapp: { t: "Caixa de entrada", s: "Suas conversas — não oficial e oficial, num só lugar" },
     oficial: { t: "Disparo Oficial", s: "Disparo em massa e distribuição automática de leads" },
     minhasSolicitacoes: { t: "Minhas solicitações", s: "Acompanhe seus pedidos ao suporte" },
     ia: { t: "Análise Inteligente", s: "A IA avalia a qualidade do atendimento" },
@@ -280,7 +280,7 @@ export default function App() {
         </div>
         <nav className="nav">
           {!isSuporte && <NavBtn ic={I.dash} label={isGer ? "Monitoria" : "Meu Painel"} active={view === "painel"} onClick={() => setView("painel")} />}
-          {!isSuporte && <NavBtn ic={I.wa} label="WhatsApp" active={view === "whatsapp"} onClick={() => setView("whatsapp")} />}
+          {!isSuporte && <NavBtn ic={I.wa} label={isGer ? "WhatsApp" : "Caixa de entrada"} active={view === "whatsapp"} onClick={() => setView("whatsapp")} />}
           {(isGer || isVend) && <NavBtn ic={I.send} label="Disparo Oficial" active={view === "oficial"} onClick={() => setView("oficial")} />}
           {!isGer && !isSuporte && <NavBtn ic={I.suporte} label="Minhas solicitações" active={view === "minhasSolicitacoes"} badge={badgeSol} onClick={() => setView("minhasSolicitacoes")} />}
           {isGer && <NavBtn ic={I.spark} label="Análise IA" active={view === "ia"} onClick={() => setView("ia")} />}
@@ -1192,11 +1192,6 @@ function PaginaOficial({ user, showToast }) {
         <button className={aba === "templates" ? "of-tab on" : "of-tab"} onClick={() => setAba("templates")}>
           <I.chat className="ico" /> Templates
         </button>
-        {!isGer && (
-          <button className={aba === "conversas" ? "of-tab on" : "of-tab"} onClick={() => setAba("conversas")}>
-            <I.wa className="ico" /> Conversas
-          </button>
-        )}
         {isGer && (
           <button className={aba === "numeros" ? "of-tab on" : "of-tab"} onClick={() => setAba("numeros")}>
             <I.wa className="ico" /> Números
@@ -1212,7 +1207,6 @@ function PaginaOficial({ user, showToast }) {
         {aba === "disparo" && <OficialDisparo isGer={isGer} showToast={showToast} />}
         {isGer && aba === "vendedores" && <OficialVendedores showToast={showToast} />}
         {aba === "templates" && <OficialTemplates isGer={isGer} showToast={showToast} />}
-        {!isGer && aba === "conversas" && <InboxOficial isGer={false} showToast={showToast} onIrParaEvolution={() => {}} />}
         {isGer && aba === "numeros" && <OficialNumeros showToast={showToast} />}
         {isGer && aba === "ia" && <OficialIAs showToast={showToast} />}
       </div>
@@ -1871,7 +1865,7 @@ function OficialDisparo({ isGer = true, showToast }) {
         <div className="disp-hero-l">
           <div className="disp-hero-eyebrow">CANAL OFICIAL · META</div>
           <h2 className="disp-hero-titulo">{isGer ? "Dispare e distribua leads no automático" : "Dispare pelo seu número e atenda seus leads"}</h2>
-          <p className="disp-hero-sub">{isGer ? "Envie um template aprovado para sua lista. Quem responder cai direto na fila dos vendedores ativos." : "Envie um template aprovado pra sua lista. Quem responder cai direto pra você, na aba Conversas."}</p>
+          <p className="disp-hero-sub">{isGer ? "Envie um template aprovado para sua lista. Quem responder cai direto na fila dos vendedores ativos." : "Envie um template aprovado pra sua lista. Quem responder cai direto pra você, na Caixa de entrada (aba Oficial)."}</p>
           <button className="disp-cta" onClick={() => { if (!numeros.length) return showToast(isGer ? "Cadastre um número na aba Números primeiro" : "Você ainda não tem um número vinculado. Peça pro gerente vincular o seu número oficial."); setAbrir(true); }}>
             <I.send className="ico" /> Novo disparo
           </button>
@@ -2150,7 +2144,7 @@ function ModalDisparo({ isGer = true, numeros, showToast, onClose, onDone }) {
                   </>
                 ) : (
                   <div style={{ fontSize: 13, color: "var(--muted)", marginTop: 2, padding: "10px 12px", background: "var(--of-soft, #f1f5f9)", borderRadius: 8 }}>
-                    👤 Quem responder cai <b>direto pra você</b>, na aba <b>Conversas</b>.
+                    👤 Quem responder cai <b>direto pra você</b>, na <b>Caixa de entrada</b> (aba Oficial).
                   </div>
                 )}
               </div>
@@ -2835,10 +2829,24 @@ function InboxOficial({ isGer, showToast, onIrParaEvolution }) {
     if (!texto.trim() || !sel) return;
     const t = texto;
     setTexto("");
+    // mostra a mensagem NA HORA (não espera o servidor/refresh)
+    const idAtual = sel;
+    setConversa((c) => (c && c.id === idAtual)
+      ? { ...c, mensagens: [...(c.mensagens || []), { role: "me", content: t, ts: Date.now(), _pendente: true }] }
+      : c);
     try {
       await api.ofEnviar(sel, t);
+      // reconcilia com o servidor (troca a otimista pela real)
       api.ofChat(sel).then(setConversa).catch(() => {});
-    } catch (e) { showToast(e.message); setTexto(t); }
+      carregarLista();
+    } catch (e) {
+      showToast(e.message);
+      setTexto(t);
+      // desfaz a mensagem otimista se o envio falhou
+      setConversa((c) => (c && c.id === idAtual)
+        ? { ...c, mensagens: (c.mensagens || []).filter((m) => !(m._pendente && m.content === t)) }
+        : c);
+    }
   }
   // enviar um arquivo (imagem/vídeo/doc) escolhido
   async function onArquivoOf(file) {
@@ -3046,11 +3054,6 @@ function InboxOficial({ isGer, showToast, onIrParaEvolution }) {
                     <I.spark className="ico" /> {conversa.iaPausada ? "Retomar IA" : "Pausar IA"}
                   </button>
                 )}
-                {!isGer && (
-                  <button className="of-acao-btn" title="Abrir conversa com este lead pelo seu WhatsApp" onClick={() => chamarPeloMeu()}>
-                    <I.wa className="ico" /> Meu número
-                  </button>
-                )}
                 <button className="of-acao-btn" title="Transferir para outro vendedor" onClick={() => setShowTransfer((v) => !v)}>
                   <I.users className="ico" /> Transferir
                 </button>
@@ -3153,7 +3156,7 @@ function InboxOficial({ isGer, showToast, onIrParaEvolution }) {
 
 function WhatsApp({ user, showToast, target, onTargetUsed, recarregarSol }) {
   const isGer = user.role === "gerente";
-  const [canalAba, setCanalAba] = useState("evolution"); // evolution | oficial
+  const [canalAba, setCanalAba] = useState(user.role === "gerente" ? "evolution" : "oficial"); // evolution | oficial
   const [chats, setChats] = useState([]);
   const [usersMap, setUsersMap] = useState({});
   const [usersArr, setUsersArr] = useState([]);
@@ -3435,10 +3438,10 @@ function WhatsApp({ user, showToast, target, onTargetUsed, recarregarSol }) {
     <div className="wa-page">
       <div className="canal-abas">
         <button className={canalAba === "evolution" ? "canal-aba on" : "canal-aba"} onClick={() => setCanalAba("evolution")}>
-          <I.wa className="ico" /> {isGer ? "WhatsApp dos vendedores" : "Meu WhatsApp"}
+          <I.wa className="ico" /> {isGer ? "Não oficial (vendedores)" : "Não oficial"}
         </button>
         <button className={canalAba === "oficial" ? "canal-aba on oficial" : "canal-aba oficial"} onClick={() => setCanalAba("oficial")}>
-          <I.send className="ico" /> Oficial · Disparo
+          <I.send className="ico" /> Oficial
         </button>
       </div>
 
@@ -3447,7 +3450,7 @@ function WhatsApp({ user, showToast, target, onTargetUsed, recarregarSol }) {
       ) : semEvolution ? (
         <div className="wa-grid"><div className="wa-none">
           <I.wa className="ico" />
-          <div><b>Seu WhatsApp (Evolution) ainda não foi vinculado.</b><br />Peça pra gerente cadastrar o seu número, ou use a aba <b>Oficial · Disparo</b> acima.</div>
+          <div><b>Seu WhatsApp (não oficial) ainda não foi vinculado.</b><br />Peça pra gerente cadastrar o seu número, ou use a aba <b>Oficial</b> aqui em cima.</div>
         </div></div>
       ) : (
       <>
