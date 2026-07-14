@@ -85,6 +85,8 @@ export const api = {
 
   // Canal Oficial (WhatsApp Cloud API)
   ofNumeros: () => req("GET", "/api/oficial/numeros"),
+  ofTokenGlobalStatus: () => req("GET", "/api/oficial/token-global"),
+  ofSetTokenGlobal: (token) => req("POST", "/api/oficial/token-global", { token }),
   ofCriarNumero: (dados) => req("POST", "/api/oficial/numeros", dados),
   ofEditarNumero: (id, dados) => req("PUT", "/api/oficial/numeros/" + id, dados),
   ofExcluirNumero: (id) => req("DELETE", "/api/oficial/numeros/" + id),

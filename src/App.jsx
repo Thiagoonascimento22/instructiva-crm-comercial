@@ -281,7 +281,7 @@ export default function App() {
         <nav className="nav">
           {!isSuporte && <NavBtn ic={I.dash} label={isGer ? "Monitoria" : "Meu Painel"} active={view === "painel"} onClick={() => setView("painel")} />}
           {!isSuporte && <NavBtn ic={I.wa} label="WhatsApp" active={view === "whatsapp"} onClick={() => setView("whatsapp")} />}
-          {isGer && <NavBtn ic={I.send} label="Disparo Oficial" active={view === "oficial"} onClick={() => setView("oficial")} />}
+          {(isGer || isVend) && <NavBtn ic={I.send} label="Disparo Oficial" active={view === "oficial"} onClick={() => setView("oficial")} />}
           {!isGer && !isSuporte && <NavBtn ic={I.suporte} label="Minhas solicitações" active={view === "minhasSolicitacoes"} badge={badgeSol} onClick={() => setView("minhasSolicitacoes")} />}
           {isGer && <NavBtn ic={I.spark} label="Análise IA" active={view === "ia"} onClick={() => setView("ia")} />}
           {isGer && <NavBtn ic={I.estrela} label="NPS" active={view === "nps"} onClick={() => setView("nps")} />}
@@ -315,7 +315,7 @@ export default function App() {
         <div className="content">
           {view === "painel" && !isSuporte && <Monitoria user={user} showToast={showToast} />}
           {view === "whatsapp" && !isSuporte && <WhatsApp user={user} showToast={showToast} target={waTarget} onTargetUsed={() => setWaTarget(null)} recarregarSol={carregarMinhasSol} />}
-          {view === "oficial" && isGer && <PaginaOficial showToast={showToast} />}
+          {view === "oficial" && (isGer || isVend) && <PaginaOficial user={user} showToast={showToast} />}
           {view === "minhasSolicitacoes" && !isGer && !isSuporte && <PaginaMinhasSolicitacoes itens={minhasSol} recarregar={carregarMinhasSol} showToast={showToast} />}
           {view === "ia" && isGer && <PaginaIA user={user} showToast={showToast} />}
           {view === "nps" && isGer && <PaginaNPS showToast={showToast} />}
@@ -1175,7 +1175,8 @@ const EMOJIS = ["😀","😅","😂","🙂","😉","😍","😎","🤝","👍","
 /* ============================================================
    CANAL OFICIAL — TELAS (gerente: disparo/vendedores/números)
    ============================================================ */
-function PaginaOficial({ showToast }) {
+function PaginaOficial({ user, showToast }) {
+  const isGer = !user || user.role === "gerente";
   const [aba, setAba] = useState("disparo");
   return (
     <div className="of-wrap">
@@ -1183,25 +1184,37 @@ function PaginaOficial({ showToast }) {
         <button className={aba === "disparo" ? "of-tab on" : "of-tab"} onClick={() => setAba("disparo")}>
           <I.send className="ico" /> Disparo
         </button>
-        <button className={aba === "vendedores" ? "of-tab on" : "of-tab"} onClick={() => setAba("vendedores")}>
-          <I.users className="ico" /> Vendedores
-        </button>
+        {isGer && (
+          <button className={aba === "vendedores" ? "of-tab on" : "of-tab"} onClick={() => setAba("vendedores")}>
+            <I.users className="ico" /> Vendedores
+          </button>
+        )}
         <button className={aba === "templates" ? "of-tab on" : "of-tab"} onClick={() => setAba("templates")}>
           <I.chat className="ico" /> Templates
         </button>
-        <button className={aba === "numeros" ? "of-tab on" : "of-tab"} onClick={() => setAba("numeros")}>
-          <I.wa className="ico" /> Números
-        </button>
-        <button className={aba === "ia" ? "of-tab on" : "of-tab"} onClick={() => setAba("ia")}>
-          <I.spark className="ico" /> IA
-        </button>
+        {!isGer && (
+          <button className={aba === "conversas" ? "of-tab on" : "of-tab"} onClick={() => setAba("conversas")}>
+            <I.wa className="ico" /> Conversas
+          </button>
+        )}
+        {isGer && (
+          <button className={aba === "numeros" ? "of-tab on" : "of-tab"} onClick={() => setAba("numeros")}>
+            <I.wa className="ico" /> Números
+          </button>
+        )}
+        {isGer && (
+          <button className={aba === "ia" ? "of-tab on" : "of-tab"} onClick={() => setAba("ia")}>
+            <I.spark className="ico" /> IA
+          </button>
+        )}
       </div>
       <div className="of-body">
-        {aba === "disparo" && <OficialDisparo showToast={showToast} />}
-        {aba === "vendedores" && <OficialVendedores showToast={showToast} />}
-        {aba === "templates" && <OficialTemplates showToast={showToast} />}
-        {aba === "numeros" && <OficialNumeros showToast={showToast} />}
-        {aba === "ia" && <OficialIAs showToast={showToast} />}
+        {aba === "disparo" && <OficialDisparo isGer={isGer} showToast={showToast} />}
+        {isGer && aba === "vendedores" && <OficialVendedores showToast={showToast} />}
+        {aba === "templates" && <OficialTemplates isGer={isGer} showToast={showToast} />}
+        {!isGer && aba === "conversas" && <InboxOficial isGer={false} showToast={showToast} onIrParaEvolution={() => {}} />}
+        {isGer && aba === "numeros" && <OficialNumeros showToast={showToast} />}
+        {isGer && aba === "ia" && <OficialIAs showToast={showToast} />}
       </div>
     </div>
   );
@@ -1781,7 +1794,7 @@ function ModalIA({ ia, showToast, onClose, onSaved }) {
 /* ---------- DISPARO EM MASSA ---------- */
 /* ---------- DISPARO EM MASSA (assistente em etapas) ---------- */
 /* ---------- DISPARO (aba de abertura + modal moderno) ---------- */
-function OficialDisparo({ showToast }) {
+function OficialDisparo({ isGer = true, showToast }) {
   const [campanhas, setCampanhas] = useState([]);
   const [campSel, setCampSel] = useState(null);
   const [abrir, setAbrir] = useState(false);
@@ -1839,9 +1852,9 @@ function OficialDisparo({ showToast }) {
       <div className="disp-hero">
         <div className="disp-hero-l">
           <div className="disp-hero-eyebrow">CANAL OFICIAL · META</div>
-          <h2 className="disp-hero-titulo">Dispare e distribua leads no automático</h2>
-          <p className="disp-hero-sub">Envie um template aprovado para sua lista. Quem responder cai direto na fila dos vendedores ativos.</p>
-          <button className="disp-cta" onClick={() => { if (!numeros.length) return showToast("Cadastre um número na aba Números primeiro"); setAbrir(true); }}>
+          <h2 className="disp-hero-titulo">{isGer ? "Dispare e distribua leads no automático" : "Dispare pelo seu número e atenda seus leads"}</h2>
+          <p className="disp-hero-sub">{isGer ? "Envie um template aprovado para sua lista. Quem responder cai direto na fila dos vendedores ativos." : "Envie um template aprovado pra sua lista. Quem responder cai direto pra você, na aba Conversas."}</p>
+          <button className="disp-cta" onClick={() => { if (!numeros.length) return showToast(isGer ? "Cadastre um número na aba Números primeiro" : "Você ainda não tem um número vinculado. Peça pro gerente vincular o seu número oficial."); setAbrir(true); }}>
             <I.send className="ico" /> Novo disparo
           </button>
         </div>
@@ -1855,10 +1868,14 @@ function OficialDisparo({ showToast }) {
             <span style={{ fontSize: 12, color: "var(--muted)", display: "flex", alignItems: "center", gap: 5 }}>
               <span style={{ width: 7, height: 7, borderRadius: "50%", background: "#1a9d54", display: "inline-block", animation: "pulse 2s infinite" }} /> atualizando sozinho
             </span>
-            <button className="btn btn-sm" title="Baixa um arquivo com todos os números que já receberam disparo (pra cruzar com sua planilha)" onClick={() => { window.open("/api/oficial/export-recebidos?token=" + encodeURIComponent(localStorage.getItem("token") || ""), "_blank"); }}>⬇ Baixar quem já recebeu</button>
             <button className="btn btn-sm" onClick={async () => { try { await api.ofRecontar(); } catch (e) {} carregarCampanhas(); }}><I.refresh className="ico" /> Atualizar agora</button>
           </div>
         </div>
+        {isGer && (
+          <div style={{ marginBottom: 8 }}>
+            <button className="btn btn-sm" title="Baixa um arquivo com todos os números que já receberam disparo (pra cruzar com sua planilha)" onClick={() => { window.open("/api/oficial/export-recebidos?token=" + encodeURIComponent(localStorage.getItem("token") || ""), "_blank"); }}>⬇ Baixar quem já recebeu</button>
+          </div>
+        )}
         {campanhas.length === 0 ? (
           <div className="disp-vazio">
             <I.send className="ico-empty" />
@@ -1910,14 +1927,14 @@ function OficialDisparo({ showToast }) {
         )}
       </div>
 
-      {abrir && <ModalDisparo numeros={numeros} showToast={showToast} onClose={() => setAbrir(false)} onDone={() => { setAbrir(false); setTimeout(carregarCampanhas, 1500); }} />}
+      {abrir && <ModalDisparo isGer={isGer} numeros={numeros} showToast={showToast} onClose={() => setAbrir(false)} onDone={() => { setAbrir(false); setTimeout(carregarCampanhas, 1500); }} />}
       {campSel && <ModalMetricas camp={campSel} onClose={() => setCampSel(null)} />}
     </div>
   );
 }
 
 /* ---------- MODAL DE DISPARO (passo a passo moderno) ---------- */
-function ModalDisparo({ numeros, showToast, onClose, onDone }) {
+function ModalDisparo({ isGer = true, numeros, showToast, onClose, onDone }) {
   const [passo, setPasso] = useState(1);
   const [numeroId, setNumeroId] = useState(numeros[0] ? numeros[0].id : "");
   const [templates, setTemplates] = useState([]);
@@ -1934,8 +1951,9 @@ function ModalDisparo({ numeros, showToast, onClose, onDone }) {
   const fileRef = useRef(null);
 
   useEffect(() => {
+    if (!isGer) { setIas([]); return; }
     api.ofIAs().then((lista) => setIas((lista || []).filter((x) => x.ativa))).catch(() => setIas([]));
-  }, []);
+  }, [isGer]);
 
   useEffect(() => {
     if (!numeroId) return;
@@ -2086,19 +2104,27 @@ function ModalDisparo({ numeros, showToast, onClose, onDone }) {
               </div>
               <div className="dispm-campo">
                 <label>Quem atende quem responder?</label>
-                <select className="input" value={iaId} onChange={(e) => setIaId(e.target.value)}>
-                  <option value="">👤 Vendedores (distribuição normal)</option>
-                  {ias.map((ia) => (
-                    <option key={ia.id} value={ia.id}>🤖 {ia.nome} {ia.modo === "qualifica" ? "(qualifica e passa)" : "(fecha sozinha)"}</option>
-                  ))}
-                </select>
-                {iaId ? (
-                  <div style={{ fontSize: 12.5, color: "var(--muted)", marginTop: 6 }}>
-                    A IA vai responder automaticamente quem responder a esse disparo. Os vendedores não recebem (a não ser que a IA passe).
-                  </div>
+                {isGer ? (
+                  <>
+                    <select className="input" value={iaId} onChange={(e) => setIaId(e.target.value)}>
+                      <option value="">👤 Vendedores (distribuição normal)</option>
+                      {ias.map((ia) => (
+                        <option key={ia.id} value={ia.id}>🤖 {ia.nome} {ia.modo === "qualifica" ? "(qualifica e passa)" : "(fecha sozinha)"}</option>
+                      ))}
+                    </select>
+                    {iaId ? (
+                      <div style={{ fontSize: 12.5, color: "var(--muted)", marginTop: 6 }}>
+                        A IA vai responder automaticamente quem responder a esse disparo. Os vendedores não recebem (a não ser que a IA passe).
+                      </div>
+                    ) : (
+                      <div style={{ fontSize: 12.5, color: "var(--muted)", marginTop: 6 }}>
+                        Quem responder cai direto pros vendedores, como sempre.
+                      </div>
+                    )}
+                  </>
                 ) : (
-                  <div style={{ fontSize: 12.5, color: "var(--muted)", marginTop: 6 }}>
-                    Quem responder cai direto pros vendedores, como sempre.
+                  <div style={{ fontSize: 13, color: "var(--muted)", marginTop: 2, padding: "10px 12px", background: "var(--of-soft, #f1f5f9)", borderRadius: 8 }}>
+                    👤 Quem responder cai <b>direto pra você</b>, na aba <b>Conversas</b>.
                   </div>
                 )}
               </div>
@@ -2272,7 +2298,7 @@ function OficialVendedores({ showToast }) {
 
 /* ---------- NÚMEROS (pool da Cloud API) ---------- */
 /* ---------- TEMPLATES (listar + criar) ---------- */
-function OficialTemplates({ showToast }) {
+function OficialTemplates({ isGer = true, showToast }) {
   const [numeros, setNumeros] = useState([]);
   const [numeroId, setNumeroId] = useState("");
   const [lista, setLista] = useState([]);
@@ -2313,7 +2339,7 @@ function OficialTemplates({ showToast }) {
     return (
       <div className="dash-empty">
         <I.chat className="ico-empty" />
-        <p>Cadastre um número primeiro (aba Números).</p>
+        <p>{isGer ? "Cadastre um número primeiro (aba Números)." : "Você ainda não tem um número vinculado. Peça pro gerente vincular o seu número oficial."}</p>
       </div>
     );
   }
@@ -2407,16 +2433,38 @@ function OficialNumeros({ showToast }) {
   const [webhook, setWebhook] = useState(null);
   const [verWebhook, setVerWebhook] = useState(false);
   const [testando, setTestando] = useState(null);
+  const [vendedores, setVendedores] = useState([]);
+  const [tokenDef, setTokenDef] = useState(false);
+  const [tokenForm, setTokenForm] = useState(null); // { token: "" } quando abre o modal do token global
+  const [salvandoToken, setSalvandoToken] = useState(false);
 
   const carregar = () => api.ofNumeros().then(setNumeros).catch((e) => showToast(e.message));
   useEffect(() => {
     carregar();
     api.ofWebhookInfo(window.location.origin).then(setWebhook).catch(() => {});
+    api.ofVendedoresLista().then(setVendedores).catch(() => {});
+    api.ofTokenGlobalStatus().then((r) => setTokenDef(!!r.definido)).catch(() => {});
   }, []);
 
+  async function salvarTokenGlobal() {
+    if (!tokenForm.token.trim()) return showToast("Cole o token permanente da Meta");
+    setSalvandoToken(true);
+    try {
+      await api.ofSetTokenGlobal(tokenForm.token.trim());
+      setTokenDef(true);
+      setTokenForm(null);
+      carregar();
+      showToast("✅ Token da Meta salvo! Vale pra todos os números.");
+    } catch (e) { showToast("❌ " + e.message); }
+    finally { setSalvandoToken(false); }
+  }
+
   async function salvar() {
-    if (!form.apelido || !form.phoneNumberId || !form.token) {
-      return showToast("Preencha apelido, Phone Number ID e Token");
+    if (!form.apelido || !form.phoneNumberId) {
+      return showToast("Preencha apelido e Phone Number ID");
+    }
+    if (!form.id && !form.token && !tokenDef) {
+      return showToast("Configure o Token da Meta (botão no topo) ou informe um token pra este número");
     }
     try {
       if (form.id) await api.ofEditarNumero(form.id, form);
@@ -2490,9 +2538,12 @@ function OficialNumeros({ showToast }) {
           <h3 className="onum-titulo">Números oficiais</h3>
           <p className="onum-sub">WhatsApp Cloud API conectados à sua conta Meta</p>
         </div>
-        <div style={{ display: "flex", gap: 10 }}>
+        <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+          <button className={tokenDef ? "onum-btn-ghost" : "onum-add"} onClick={() => setTokenForm({ token: "" })} title="Token permanente da Meta (mesma conta da empresa). Vale pra todos os números.">
+            🔑 Token da Meta {tokenDef ? "✓" : "(configurar)"}
+          </button>
           <button className="onum-btn-ghost" onClick={diagnostico} title="Verificar se as respostas estão chegando">🔍 Diagnóstico</button>
-          <button className="onum-add" onClick={() => setForm({ apelido: "", numero: "", phoneNumberId: "", wabaId: "", token: "" })}>
+          <button className="onum-add" onClick={() => setForm({ apelido: "", numero: "", phoneNumberId: "", wabaId: "", token: "", vendedorId: "" })}>
             <I.plus className="ico" /> Adicionar número
           </button>
         </div>
@@ -2504,7 +2555,7 @@ function OficialNumeros({ showToast }) {
           <div className="onum-vazio-ico"><I.wa className="ico" /></div>
           <b>Nenhum número conectado ainda</b>
           <p>Conecte um número da sua conta Meta para começar a disparar.</p>
-          <button className="onum-add" onClick={() => setForm({ apelido: "", numero: "", phoneNumberId: "", wabaId: "", token: "" })}>
+          <button className="onum-add" onClick={() => setForm({ apelido: "", numero: "", phoneNumberId: "", wabaId: "", token: "", vendedorId: "" })}>
             <I.plus className="ico" /> Adicionar número
           </button>
         </div>
@@ -2522,6 +2573,9 @@ function OficialNumeros({ showToast }) {
                 </div>
                 <span className="onum-card-num">{n.numero || "número não informado"}</span>
                 <span className="onum-card-id">ID {n.phoneNumberId}</span>
+                <span className="onum-card-id" style={{ marginTop: 2 }}>
+                  {n.vendedorId ? <>👤 Vendedor: <b style={{ color: "var(--brand)" }}>{n.vendedorNome || "—"}</b></> : <span style={{ opacity: .7 }}>🔀 Sem dono (distribuição por %)</span>}
+                </span>
               </div>
               <div className="onum-card-acoes">
                 <button className="onum-acao" onClick={() => assinarWebhook(n)} title="Ativar recebimento de respostas (webhook)"><I.link className="ico" /></button>
@@ -2568,6 +2622,37 @@ function OficialNumeros({ showToast }) {
         </div>
       )}
 
+      {/* modal: token global da Meta */}
+      {tokenForm && (
+        <Portal>
+        <div className="modal" onClick={(e) => e.target === e.currentTarget && setTokenForm(null)}>
+          <div className="onum-modal">
+            <button className="onum-modal-x" onClick={() => setTokenForm(null)}><I.x /></button>
+            <div className="onum-modal-head">
+              <div className="onum-modal-ico">🔑</div>
+              <div>
+                <h3>Token da Meta (global)</h3>
+                <p>Um token permanente da conta da empresa (mesma BM). Vale pra todos os números — não precisa colar em cada um.</p>
+              </div>
+            </div>
+            <div className="onum-modal-body">
+              <div className="onum-dica" style={{ marginBottom: 12 }}>
+                Use um <b>token permanente de Usuário do Sistema</b> (Business Manager → Configurações → Usuários do sistema), com as permissões <b>whatsapp_business_messaging</b> e <b>whatsapp_business_management</b>. Não use o token temporário de 24h do painel de teste.
+              </div>
+              <div className="onum-f">
+                <label>Access Token {tokenDef && <i>(já existe um salvo — colar aqui substitui)</i>}</label>
+                <input className="mono" placeholder="EAA..." value={tokenForm.token} onChange={(e) => setTokenForm({ token: e.target.value })} autoFocus />
+              </div>
+            </div>
+            <div className="onum-modal-foot">
+              <button className="onum-btn-ghost" onClick={() => setTokenForm(null)}>Cancelar</button>
+              <button className="onum-btn-save" onClick={salvarTokenGlobal} disabled={salvandoToken}>{salvandoToken ? "Salvando…" : "Salvar token"}</button>
+            </div>
+          </div>
+        </div>
+        </Portal>
+      )}
+
       {/* modal adicionar/editar */}
       {form && (
         <Portal>
@@ -2592,9 +2677,20 @@ function OficialNumeros({ showToast }) {
                 <input placeholder="+55 44 99755-0996" value={form.numero} onChange={(e) => setForm({ ...form, numero: e.target.value })} />
               </div>
 
+              <div className="onum-f">
+                <label>Vendedor dono deste número <i>(quem dispara e atende por ele)</i></label>
+                <select className="input" value={form.vendedorId || ""} onChange={(e) => setForm({ ...form, vendedorId: e.target.value })}>
+                  <option value="">🔀 Nenhum — distribuição automática por % (modelo antigo)</option>
+                  {vendedores.map((v) => <option key={v.id} value={v.id}>👤 {v.nome}</option>)}
+                </select>
+                <div className="onum-dica" style={{ marginTop: 8 }}>
+                  Ao vincular um vendedor, <b>só ele</b> vê este número, cria os templates dele e dispara por ele — e todo lead que responder cai <b>direto pra ele</b>.
+                </div>
+              </div>
+
               <div className="onum-divisor"><span>Credenciais da Meta</span></div>
               <div className="onum-dica">
-                💡 Você encontra esses dados no <b>Meta for Developers</b> → seu app → <b>WhatsApp → Configuração da API</b>. Use sempre o botão de copiar (não digite à mão).
+                💡 Você encontra esses dados no <b>Meta for Developers</b> → seu app → <b>WhatsApp → Configuração da API</b>. Use sempre o botão de copiar (não digite à mão).{tokenDef && " O Token já está configurado no topo e vale pra todos os números — só preencha o Access Token abaixo se este número usar um token diferente."}
               </div>
 
               <div className="onum-f">
@@ -2606,8 +2702,8 @@ function OficialNumeros({ showToast }) {
                 <input className="mono" placeholder="Ex: 751745137996849" value={form.wabaId} onChange={(e) => setForm({ ...form, wabaId: e.target.value })} />
               </div>
               <div className="onum-f">
-                <label>Access Token {form.id && <i>(deixe vazio pra manter o atual)</i>}</label>
-                <input className="mono" placeholder="EAA..." value={form.token} onChange={(e) => setForm({ ...form, token: e.target.value })} />
+                <label>Access Token {tokenDef ? <i>(opcional — usa o Token da Meta global se vazio)</i> : (form.id && <i>(deixe vazio pra manter o atual)</i>)}</label>
+                <input className="mono" placeholder={tokenDef ? "deixe vazio pra usar o token global" : "EAA..."} value={form.token} onChange={(e) => setForm({ ...form, token: e.target.value })} />
               </div>
             </div>
 

@@ -21,7 +21,12 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
   function garantirEstrutura() {
     if (!db.oficial || typeof db.oficial !== "object") db.oficial = {};
     if (!Array.isArray(db.oficial.numeros)) db.oficial.numeros = [];
-    // numeros: [{ id, apelido, numero, phoneNumberId, wabaId, token, ativo }]
+    // numeros: [{ id, apelido, numero, phoneNumberId, wabaId, token, vendedorId, ativo }]
+    //   vendedorId: dono do número (vendedor). Quando setado, os leads que
+    //   responderem caem DIRETO nele e ele pode disparar/criar templates nesse número.
+    // token GLOBAL da Meta (mesma BM/conta da empresa) — cada número usa este token
+    // se não tiver um token próprio. Assim não precisa colar o token em cada número.
+    if (typeof db.oficial.tokenGlobal !== "string") db.oficial.tokenGlobal = "";
     if (!Array.isArray(db.oficial.campanhas)) db.oficial.campanhas = [];
     // campanhas: [{ id, nome, numeroId, template, enviados, falhas, total, criadoEm }]
     if (typeof db.oficial.rrCursor !== "number") db.oficial.rrCursor = 0;
@@ -40,8 +45,29 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
   function acharNumero(id) {
     return (db.oficial.numeros || []).find((n) => n.id === id) || null;
   }
+  // token efetivo do número: o próprio (se tiver) ou o token global da empresa
+  function tokenDe(n) {
+    return (n && n.token) || (db.oficial && db.oficial.tokenGlobal) || "";
+  }
   function numeroPublico(n) {
-    return { id: n.id, apelido: n.apelido, numero: n.numero, phoneNumberId: n.phoneNumberId, wabaId: n.wabaId, ativo: n.ativo, temToken: !!n.token };
+    const dono = n.vendedorId ? (db.users || []).find((u) => u.id === n.vendedorId) : null;
+    return {
+      id: n.id, apelido: n.apelido, numero: n.numero,
+      phoneNumberId: n.phoneNumberId, wabaId: n.wabaId, ativo: n.ativo,
+      temToken: !!tokenDe(n),
+      vendedorId: n.vendedorId || null,
+      vendedorNome: dono ? dono.nome : "",
+    };
+  }
+  // número que o usuário logado pode ver/usar:
+  //  - gerente: qualquer número
+  //  - vendedor: só os números vinculados a ele (n.vendedorId === user.id)
+  function numeroPermitido(req, id) {
+    const n = acharNumero(id);
+    if (!n) return null;
+    if (req.user.role === "gerente") return n;
+    if (req.user.role === "vendedor" && n.vendedorId === req.user.id) return n;
+    return null;
   }
 
   /* ---- só dígitos no telefone ---- */
@@ -105,6 +131,21 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
   function atribuirLead(chat) {
     // já tem dono? mantém
     if (chat.vendedorId) return chat.vendedorId;
+    // MODELO "1 número por vendedor": se o número tem dono, o lead vai DIRETO pra ele
+    const numeroCfg = acharNumero(chat.numeroOficialId);
+    if (numeroCfg && numeroCfg.vendedorId) {
+      const dono = db.users.find(
+        (u) => u.id === numeroCfg.vendedorId && u.role === "vendedor" && u.ativo
+      );
+      if (dono) {
+        chat.vendedorId = dono.id;
+        chat.vendedorNome = dono.nome;
+        chat.atribuidoEm = Date.now();
+        dono.oficialLeadsRecebidos = (dono.oficialLeadsRecebidos || 0) + 1;
+        return dono.id;
+      }
+    }
+    // número sem dono (pool antigo) -> cai na distribuição ponderada de sempre
     const v = escolherVendedor();
     if (!v) return null; // ninguém ativo -> fica na fila sem dono
     chat.vendedorId = v.id;
@@ -160,7 +201,7 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: "Bearer " + numeroCfg.token,
+        Authorization: "Bearer " + tokenDe(numeroCfg),
       },
       body: JSON.stringify(payload),
     });
@@ -190,7 +231,7 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
     form.append("file", blob, filename || "arquivo");
     const r = await fetch(`${GRAPH}/${numeroCfg.phoneNumberId}/media`, {
       method: "POST",
-      headers: { Authorization: "Bearer " + numeroCfg.token },
+      headers: { Authorization: "Bearer " + tokenDe(numeroCfg) },
       body: form,
     });
     let data = null;
@@ -238,14 +279,14 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
     try {
       // passo 1: pega a URL temporária do arquivo
       const r1 = await fetch(`${GRAPH}/${mediaId}`, {
-        headers: { Authorization: "Bearer " + numeroCfg.token },
+        headers: { Authorization: "Bearer " + tokenDe(numeroCfg) },
       });
       if (!r1.ok) return null;
       const meta = await r1.json();
       if (!meta || !meta.url) return null;
       // passo 2: baixa os bytes (precisa do token também)
       const r2 = await fetch(meta.url, {
-        headers: { Authorization: "Bearer " + numeroCfg.token },
+        headers: { Authorization: "Bearer " + tokenDe(numeroCfg) },
       });
       if (!r2.ok) return null;
       const ab = await r2.arrayBuffer();
@@ -320,17 +361,37 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
   /* ============================================================
      ROTAS — POOL DE NÚMEROS (gerente)
      ============================================================ */
-  app.get("/api/oficial/numeros", auth, gerenteOnly, (req, res) => {
-    res.json((db.oficial.numeros || []).map(numeroPublico));
+  app.get("/api/oficial/numeros", auth, (req, res) => {
+    let lista = db.oficial.numeros || [];
+    // vendedor só enxerga os números vinculados a ele
+    if (req.user.role !== "gerente") {
+      lista = lista.filter((n) => n.vendedorId === req.user.id);
+    }
+    res.json(lista.map(numeroPublico));
+  });
+
+  /* ---- TOKEN GLOBAL da Meta (mesma BM da empresa) — só gerente ---- */
+  // devolve só se está definido (nunca devolve o token em si)
+  app.get("/api/oficial/token-global", auth, gerenteOnly, (req, res) => {
+    res.json({ definido: !!db.oficial.tokenGlobal });
+  });
+  app.post("/api/oficial/token-global", auth, gerenteOnly, async (req, res) => {
+    const t = String((req.body && req.body.token) || "").trim();
+    if (!t) return res.status(400).json({ error: "Cole o token permanente da Meta" });
+    db.oficial.tokenGlobal = t;
+    salvar();
+    // com o token novo, re-assina todas as WABAs no webhook (silencioso)
+    for (const n of db.oficial.numeros || []) { try { await assinarWebhook(n); } catch (_) {} }
+    res.json({ ok: true, definido: true });
   });
 
   /* assina a WABA no webhook (silencioso, não quebra se falhar) */
   async function assinarWebhook(n) {
-    if (!n || !n.wabaId || !n.token) return false;
+    if (!n || !n.wabaId || !tokenDe(n)) return false;
     try {
       const r = await fetch(`${GRAPH}/${n.wabaId}/subscribed_apps`, {
         method: "POST",
-        headers: { Authorization: `Bearer ${n.token}`, "Content-Type": "application/json" },
+        headers: { Authorization: `Bearer ${tokenDe(n)}`, "Content-Type": "application/json" },
       });
       if (r.ok) { n.webhookAssinado = true; n.webhookAssinadoEm = Date.now(); return true; }
     } catch (e) {}
@@ -344,12 +405,21 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
     const phoneNumberId = String(b.phoneNumberId || "").trim();
     const wabaId = String(b.wabaId || "").trim();
     const token = String(b.token || "").trim();
-    if (!apelido || !phoneNumberId || !token) {
-      return res.status(400).json({ error: "Informe apelido, Phone Number ID e Token" });
+    const vendedorId = String(b.vendedorId || "").trim() || null;
+    if (!apelido || !phoneNumberId) {
+      return res.status(400).json({ error: "Informe apelido e Phone Number ID" });
+    }
+    // token pode vir vazio SE já houver token global configurado
+    if (!token && !db.oficial.tokenGlobal) {
+      return res.status(400).json({ error: "Configure o Token da Meta (botão no topo) ou informe um token para este número" });
+    }
+    if (vendedorId && !db.users.some((u) => u.id === vendedorId && u.role === "vendedor")) {
+      return res.status(400).json({ error: "Vendedor inválido" });
     }
     const novo = {
       id: proximoId("num"),
       apelido, numero, phoneNumberId, wabaId, token,
+      vendedorId,
       ativo: true,
     };
     db.oficial.numeros.push(novo);
@@ -368,6 +438,13 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
     if (b.wabaId !== undefined) n.wabaId = String(b.wabaId).trim();
     if (b.token !== undefined && b.token) n.token = String(b.token).trim();
     if (b.ativo !== undefined) n.ativo = !!b.ativo;
+    if (b.vendedorId !== undefined) {
+      const vid = String(b.vendedorId || "").trim() || null;
+      if (vid && !db.users.some((u) => u.id === vid && u.role === "vendedor")) {
+        return res.status(400).json({ error: "Vendedor inválido" });
+      }
+      n.vendedorId = vid;
+    }
     await assinarWebhook(n); // re-assina ao editar (caso token tenha mudado)
     salvar();
     res.json(numeroPublico(n));
@@ -386,11 +463,11 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
     const n = acharNumero(req.params.id);
     if (!n) return res.status(404).json({ error: "Número não encontrado" });
     if (!n.wabaId) return res.status(400).json({ error: "Esse número não tem WABA ID configurado" });
-    if (!n.token) return res.status(400).json({ error: "Esse número não tem token configurado" });
+    if (!tokenDe(n)) return res.status(400).json({ error: "Sem token: configure o Token da Meta (topo) ou o token deste número" });
     try {
       const r = await fetch(`${GRAPH}/${n.wabaId}/subscribed_apps`, {
         method: "POST",
-        headers: { Authorization: `Bearer ${n.token}`, "Content-Type": "application/json" },
+        headers: { Authorization: `Bearer ${tokenDe(n)}`, "Content-Type": "application/json" },
       });
       const data = await r.json().catch(() => ({}));
       if (!r.ok) {
@@ -412,11 +489,11 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
     if (!n) return res.status(404).json({ error: "Número não encontrado" });
     const pin = String((req.body && req.body.pin) || "").replace(/\D/g, "");
     if (pin.length !== 6) return res.status(400).json({ error: "O PIN precisa ter 6 dígitos" });
-    if (!n.token) return res.status(400).json({ error: "Esse número não tem token configurado" });
+    if (!tokenDe(n)) return res.status(400).json({ error: "Sem token: configure o Token da Meta (topo) ou o token deste número" });
     try {
       const r = await fetch(`${GRAPH}/${n.phoneNumberId}/register`, {
         method: "POST",
-        headers: { Authorization: `Bearer ${n.token}`, "Content-Type": "application/json" },
+        headers: { Authorization: `Bearer ${tokenDe(n)}`, "Content-Type": "application/json" },
         body: JSON.stringify({ messaging_product: "whatsapp", pin }),
       });
       const data = await r.json().catch(() => ({}));
@@ -438,14 +515,14 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
   });
 
   /* ---- testa um número: lê os templates aprovados da WABA ---- */
-  app.get("/api/oficial/numeros/:id/templates", auth, gerenteOnly, async (req, res) => {
-    const n = acharNumero(req.params.id);
+  app.get("/api/oficial/numeros/:id/templates", auth, async (req, res) => {
+    const n = numeroPermitido(req, req.params.id);
     if (!n) return res.status(404).json({ error: "Número não encontrado" });
     if (!n.wabaId) return res.status(400).json({ error: "Esse número não tem WABA ID configurado" });
     try {
       const r = await fetch(
         `${GRAPH}/${n.wabaId}/message_templates?fields=name,status,category,language,components&limit=100`,
-        { headers: { Authorization: "Bearer " + n.token } }
+        { headers: { Authorization: "Bearer " + tokenDe(n) } }
       );
       const data = await r.json();
       if (!r.ok) {
@@ -466,8 +543,8 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
   });
 
   /* ---- criar um template novo na Meta (fica pendente até a Meta aprovar) ---- */
-  app.post("/api/oficial/numeros/:id/templates", auth, gerenteOnly, async (req, res) => {
-    const n = acharNumero(req.params.id);
+  app.post("/api/oficial/numeros/:id/templates", auth, async (req, res) => {
+    const n = numeroPermitido(req, req.params.id);
     if (!n) return res.status(404).json({ error: "Número não encontrado" });
     if (!n.wabaId) return res.status(400).json({ error: "Esse número não tem WABA ID configurado" });
     const b = req.body || {};
@@ -479,7 +556,7 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
     try {
       const r = await fetch(`${GRAPH}/${n.wabaId}/message_templates`, {
         method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: "Bearer " + n.token },
+        headers: { "Content-Type": "application/json", Authorization: "Bearer " + tokenDe(n) },
         body: JSON.stringify({
           name: nome,
           language: idioma,
@@ -1145,10 +1222,10 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
 
 
 
-  app.post("/api/oficial/disparar", auth, gerenteOnly, async (req, res) => {
+  app.post("/api/oficial/disparar", auth, async (req, res) => {
     const b = req.body || {};
-    const numeroCfg = acharNumero(b.numeroId);
-    if (!numeroCfg) return res.status(400).json({ error: "Escolha um número válido" });
+    const numeroCfg = numeroPermitido(req, b.numeroId);
+    if (!numeroCfg) return res.status(400).json({ error: "Escolha um número válido (ou você não tem acesso a ele)" });
     if (!numeroCfg.ativo) return res.status(400).json({ error: "Esse número está inativo" });
     const templateName = String(b.template || "").trim();
     if (!templateName) return res.status(400).json({ error: "Escolha um template" });
@@ -1157,8 +1234,8 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
     if (contatos.length === 0) return res.status(400).json({ error: "Nenhum contato na lista" });
     if (contatos.length > 5000) return res.status(400).json({ error: "Máximo de 5000 por disparo" });
 
-    // IA opcional pra essa campanha (se vier, os leads que responderem caem pra IA)
-    const iaId = String(b.iaId || "").trim();
+    // IA opcional pra essa campanha (só o gerente pode acoplar IA; vendedor dispara "puro")
+    const iaId = req.user.role === "gerente" ? String(b.iaId || "").trim() : "";
     const iaCampanha = iaId ? (db.oficial.ias || []).find((x) => x.id === iaId && x.ativa) : null;
     if (iaId && !iaCampanha) return res.status(400).json({ error: "IA selecionada não existe ou está pausada" });
 
@@ -1166,6 +1243,8 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
       id: proximoId("camp"),
       nome: String(b.nomeCampanha || templateName).trim(),
       numeroId: numeroCfg.id,
+      criadoPor: req.user.id,        // quem disparou (pro vendedor ver só as dele)
+      criadoPorNome: req.user.nome,
       template: templateName,
       idioma,
       iaId: iaCampanha ? iaCampanha.id : null,
@@ -1267,9 +1346,10 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
   }
 
   /* retomar uma campanha que parou no meio (ex: servidor reiniciou) */
-  app.post("/api/oficial/campanhas/:id/retomar", auth, gerenteOnly, (req, res) => {
+  app.post("/api/oficial/campanhas/:id/retomar", auth, (req, res) => {
     const campanha = (db.oficial.campanhas || []).find((x) => x.id === req.params.id);
     if (!campanha) return res.status(404).json({ error: "Campanha não encontrada" });
+    if (!campanhaDoUsuario(req, campanha)) return res.status(403).json({ error: "Essa campanha não é sua" });
     if (!campanha.pendentes || campanha.pendentes.length === 0) {
       return res.status(400).json({ error: "Essa campanha não tem envios pendentes (já terminou)" });
     }
@@ -1283,9 +1363,10 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
 
   /* RE-DISPARAR: reenvia o template pra quem recebeu essa campanha mas NÃO respondeu.
      Reconstrói a lista a partir das conversas salvas (não precisa colar nada de novo). */
-  app.post("/api/oficial/campanhas/:id/redisparar", auth, gerenteOnly, (req, res) => {
+  app.post("/api/oficial/campanhas/:id/redisparar", auth, (req, res) => {
     const campanha = (db.oficial.campanhas || []).find((x) => x.id === req.params.id);
     if (!campanha) return res.status(404).json({ error: "Campanha não encontrada" });
+    if (!campanhaDoUsuario(req, campanha)) return res.status(403).json({ error: "Essa campanha não é sua" });
     const numeroCfg = acharNumero(campanha.numeroId);
     if (!numeroCfg) return res.status(400).json({ error: "Número da campanha não encontrado" });
     if (!numeroCfg.ativo) return res.status(400).json({ error: "O número dessa campanha está inativo" });
@@ -1334,9 +1415,20 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
   });
 
   /* histórico de campanhas */
-  app.get("/api/oficial/campanhas", auth, gerenteOnly, (req, res) => {
+  // um vendedor só pode mexer numa campanha que é dele (criou) OU que saiu do número dele
+  function campanhaDoUsuario(req, campanha) {
+    if (req.user.role === "gerente") return true;
+    if (campanha.criadoPor === req.user.id) return true;
+    const n = acharNumero(campanha.numeroId);
+    return !!(n && n.vendedorId === req.user.id);
+  }
+  app.get("/api/oficial/campanhas", auth, (req, res) => {
+    let campanhas = db.oficial.campanhas || [];
+    if (req.user.role !== "gerente") {
+      campanhas = campanhas.filter((c) => campanhaDoUsuario(req, c));
+    }
     // não manda a lista enorme de pendentes pro front — só a contagem, pra mostrar o botão Retomar
-    const lista = (db.oficial.campanhas || []).slice(0, 50).map((c) => {
+    const lista = campanhas.slice(0, 50).map((c) => {
       const { pendentes, _rodando, ...resto } = c;
       return { ...resto, pendentes: pendentes && pendentes.length ? pendentes.length : 0, rodando: !!_rodando };
     });
@@ -1345,7 +1437,7 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
 
   /* recalcula "responderam" de todas as campanhas com base nas conversas atuais.
      Conserta campanhas antigas onde a resposta caiu numa conversa separada. */
-  app.post("/api/oficial/campanhas/recontar", auth, gerenteOnly, (req, res) => {
+  app.post("/api/oficial/campanhas/recontar", auth, (req, res) => {
     const nucleo = (t) => String(t || "").replace(/\D/g, "").slice(-8);
     // mapa: para cada campanha, conjunto de núcleos que receberam disparo
     const porCampanha = {}; // campId -> Set(nucleos disparados)
@@ -1382,10 +1474,11 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
   });
 
   /* excluir uma campanha (e, opcionalmente, as conversas que vieram dela) */
-  app.delete("/api/oficial/campanhas/:id", auth, gerenteOnly, (req, res) => {
+  app.delete("/api/oficial/campanhas/:id", auth, (req, res) => {
     const i = (db.oficial.campanhas || []).findIndex((c) => c.id === req.params.id);
     if (i < 0) return res.status(404).json({ error: "Campanha não encontrada" });
     const camp = db.oficial.campanhas[i];
+    if (!campanhaDoUsuario(req, camp)) return res.status(403).json({ error: "Essa campanha não é sua" });
     const apagarConversas = String(req.query.conversas || "") === "1";
     let conversasRemovidas = 0;
     if (apagarConversas) {
@@ -1638,10 +1731,10 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
     const numeros = [];
     for (const n of db.oficial.numeros || []) {
       let inscrito = null, erro = null;
-      if (n.wabaId && n.token) {
+      if (n.wabaId && tokenDe(n)) {
         try {
           const r = await fetch(`${GRAPH}/${n.wabaId}/subscribed_apps`, {
-            headers: { Authorization: `Bearer ${n.token}` },
+            headers: { Authorization: `Bearer ${tokenDe(n)}` },
           });
           const data = await r.json().catch(() => ({}));
           if (r.ok) inscrito = (data.data || []).length > 0;
