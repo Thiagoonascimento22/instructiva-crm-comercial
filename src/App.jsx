@@ -3001,7 +3001,10 @@ function InboxOficial({ isGer, showToast, onIrParaEvolution }) {
   const mediaRecOf = useRef(null);
   const chunksOf = useRef([]);
   const fimRef = useRef(null);
-
+  const msgsBoxRef = useRef(null);   // container rolável das mensagens
+  const nearBottomRef = useRef(true); // usuário está perto do fim?
+  const convIdRef = useRef(null);     // qual conversa está aberta
+  const msgCountRef = useRef(0);      // qtd de mensagens da última vez
   const carregarLista = () => api.ofChats(busca).then(setChats).catch(() => {});
   useEffect(() => {
     carregarLista();
@@ -3019,7 +3022,32 @@ function InboxOficial({ isGer, showToast, onIrParaEvolution }) {
     return () => clearInterval(t);
   }, [sel]);
 
-  useEffect(() => { if (fimRef.current) fimRef.current.scrollIntoView(); }, [conversa]);
+  // rola pro fim SÓ quando: abre a conversa, OU chega msg nova e a pessoa já estava no fim.
+  // se a pessoa rolou pra cima pra ler, NÃO puxa mais pra baixo.
+  useEffect(() => {
+    if (!conversa) { convIdRef.current = null; msgCountRef.current = 0; return; }
+    const count = (conversa.mensagens || []).length + (conversa.notas || []).length;
+    const abriuOutra = convIdRef.current !== conversa.id;
+    const chegouNova = count > msgCountRef.current;
+    convIdRef.current = conversa.id;
+    msgCountRef.current = count;
+    if (abriuOutra) {
+      // abriu outra conversa -> vai direto pro fim, sem animação
+      nearBottomRef.current = true;
+      if (fimRef.current) fimRef.current.scrollIntoView();
+    } else if (chegouNova && nearBottomRef.current) {
+      // msg nova e a pessoa estava no fim -> acompanha suave
+      if (fimRef.current) fimRef.current.scrollIntoView({ behavior: "smooth" });
+    }
+    // senão (poll sem novidade, ou a pessoa rolou pra cima): não mexe no scroll
+  }, [conversa]);
+
+  // acompanha se o usuário está perto do fim (pra decidir se pode auto-rolar)
+  function onScrollMsgs() {
+    const el = msgsBoxRef.current;
+    if (!el) return;
+    nearBottomRef.current = (el.scrollHeight - el.scrollTop - el.clientHeight) < 120;
+  }
 
   async function enviar() {
     if (!texto.trim() || !sel) return;
@@ -3276,7 +3304,7 @@ function InboxOficial({ isGer, showToast, onIrParaEvolution }) {
                 </div>
               )}
             </div>
-            <div className="of-conv-msgs">
+            <div className="of-conv-msgs" ref={msgsBoxRef} onScroll={onScrollMsgs}>
               {timeline.map((item, i) => (
                 item.tipo === "nota" ? (
                   <div key={i} className="of-nota">
@@ -3385,6 +3413,10 @@ function WhatsApp({ user, showToast, target, onTargetUsed, recarregarSol }) {
   const gravTimerRef = useRef(null);
   useEffect(() => { arqRef.current = verArquivadas; }, [verArquivadas]);
   const msgsEnd = useRef(null);
+  const waBoxRef = useRef(null);
+  const waNearBottom = useRef(true);
+  const waConvId = useRef(null);
+  const waCount = useRef(0);
   const selRef = useRef(null);
   const filtroRef = useRef("todas");
   const alvoRef = useRef(null);
@@ -3428,7 +3460,21 @@ function WhatsApp({ user, showToast, target, onTargetUsed, recarregarSol }) {
     // eslint-disable-next-line
   }, []);
 
-  useEffect(() => { if (msgsEnd.current) msgsEnd.current.scrollIntoView({ block: "end" }); }, [chat]);
+  useEffect(() => {
+    if (!chat) { waConvId.current = null; waCount.current = 0; return; }
+    const count = (chat.mensagens || []).length;
+    const abriuOutra = waConvId.current !== (chat.id || sel);
+    const chegouNova = count > waCount.current;
+    waConvId.current = chat.id || sel;
+    waCount.current = count;
+    if (abriuOutra) { waNearBottom.current = true; if (msgsEnd.current) msgsEnd.current.scrollIntoView({ block: "end" }); }
+    else if (chegouNova && waNearBottom.current) { if (msgsEnd.current) msgsEnd.current.scrollIntoView({ block: "end", behavior: "smooth" }); }
+  }, [chat]);
+  function onScrollWaMsgs() {
+    const el = waBoxRef.current;
+    if (!el) return;
+    waNearBottom.current = (el.scrollHeight - el.scrollTop - el.clientHeight) < 120;
+  }
   // busca no servidor (nome, número ou conteúdo das mensagens) com debounce
   useEffect(() => {
     const t = setTimeout(() => { carregarChats(true); }, 350);
@@ -3733,7 +3779,7 @@ function WhatsApp({ user, showToast, target, onTargetUsed, recarregarSol }) {
                 <I.x style={{ width: 18, height: 18 }} />
               </button>
             </div>
-            <div className="wa-msgs">
+            <div className="wa-msgs" ref={waBoxRef} onScroll={onScrollWaMsgs}>
               {chat.mensagens.map((m, i) => (
                 <div key={i} className={"wa-bubble " + (m.role === "me" ? "me" : "them") + (m.tipo && m.tipo !== "text" ? " com-midia" : "")}>
                   {m.tipo && m.tipo !== "text" ? (
