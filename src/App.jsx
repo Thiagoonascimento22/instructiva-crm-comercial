@@ -1197,6 +1197,9 @@ function PaginaOficial({ user, showToast }) {
             <I.wa className="ico" /> Números
           </button>
         )}
+        <button className={aba === "metricas" ? "of-tab on" : "of-tab"} onClick={() => setAba("metricas")}>
+          <I.cash className="ico" /> Métricas
+        </button>
         {isGer && (
           <button className={aba === "ia" ? "of-tab on" : "of-tab"} onClick={() => setAba("ia")}>
             <I.spark className="ico" /> IA
@@ -1208,6 +1211,7 @@ function PaginaOficial({ user, showToast }) {
         {isGer && aba === "vendedores" && <OficialVendedores showToast={showToast} />}
         {aba === "templates" && <OficialTemplates isGer={isGer} showToast={showToast} />}
         {isGer && aba === "numeros" && <OficialNumeros showToast={showToast} />}
+        {aba === "metricas" && <OficialMetricas showToast={showToast} />}
         {isGer && aba === "ia" && <OficialIAs showToast={showToast} />}
       </div>
     </div>
@@ -2458,6 +2462,149 @@ function OficialTemplates({ isGer = true, showToast }) {
   );
 }
 
+
+function OficialMetricas({ showToast }) {
+  const [dados, setDados] = useState(null); // { numeros, total }
+  const [carregando, setCarregando] = useState(true);
+  const [vals, setVals] = useState({});     // edições locais dos campos de R$
+  const [puxando, setPuxando] = useState(null);
+
+  const carregar = () => {
+    setCarregando(true);
+    api.ofMetricas()
+      .then((d) => { setDados(d); setCarregando(false); })
+      .catch((e) => { showToast(e.message); setCarregando(false); });
+  };
+  useEffect(() => { carregar(); }, []);
+  // sincroniza os inputs de R$ com o que veio do servidor
+  useEffect(() => {
+    if (!dados) return;
+    const v = {};
+    for (const m of dados.numeros) v[m.id] = { faturamento: m.faturamento, gasto: m.gasto };
+    setVals(v);
+  }, [dados]);
+
+  const brl = (n) => "R$ " + (Number(n) || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const parseNum = (s) => Math.max(0, Number(String(s).replace(/\./g, "").replace(",", ".").replace(/[^\d.]/g, "")) || 0);
+
+  async function salvar(id, campo) {
+    const valor = parseNum((vals[id] || {})[campo]);
+    try { await api.ofSalvarMetricas(id, { [campo]: valor }); carregar(); }
+    catch (e) { showToast(e.message); }
+  }
+  async function puxarGasto(id) {
+    setPuxando(id);
+    try {
+      const r = await api.ofPuxarGastoMeta(id, 30);
+      showToast("Gasto puxado da Meta (30 dias): " + brl(r.gasto));
+      carregar();
+    } catch (e) {
+      showToast("Não deu pra puxar da Meta: " + e.message + ". Digite o gasto na mão.");
+    } finally { setPuxando(null); }
+  }
+
+  const roiTxt = (roi) => roi === null ? "—" : (roi >= 0 ? "+" : "") + Math.round(roi * 100) + "%";
+  const corValor = (v) => (v > 0 ? "#16a34a" : v < 0 ? "#dc2626" : "var(--muted)");
+
+  if (carregando) return <div className="dash-empty"><p>Carregando métricas…</p></div>;
+  if (!dados || !dados.numeros.length) {
+    return (
+      <div className="dash-empty">
+        <I.cash className="ico-empty" />
+        <p>Nenhum número pra mostrar métricas ainda.</p>
+      </div>
+    );
+  }
+
+  const t = dados.total || {};
+  const mostrarTotais = dados.numeros.length > 1;
+  const cardStyle = { background: "var(--card, #fff)", border: "1px solid var(--linha, #eef0f4)", borderRadius: 14, padding: 16, marginBottom: 12 };
+  const inputR$ = { width: 120, padding: "7px 9px", border: "1px solid var(--linha, #e2e6ee)", borderRadius: 8, fontSize: 13.5, fontFamily: "inherit" };
+
+  return (
+    <div className="of-metricas">
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 8, marginBottom: 14 }}>
+        <div>
+          <h2 style={{ margin: 0, fontSize: 20 }}>Métricas por número</h2>
+          <p style={{ margin: "4px 0 0", color: "var(--muted)", fontSize: 13 }}>Gasto, faturamento e ROI de cada número. O faturamento você lança na mão.</p>
+        </div>
+        <button className="btn btn-sm" onClick={carregar}><I.refresh className="ico" /> Atualizar</button>
+      </div>
+
+      {/* totais (só quando tem mais de um número) */}
+      {mostrarTotais && (
+        <div style={{ ...cardStyle, display: "flex", gap: 22, flexWrap: "wrap", background: "linear-gradient(135deg, rgba(124,92,255,.08), rgba(124,92,255,.02))" }}>
+          <div><div style={{ fontSize: 12, color: "var(--muted)" }}>GASTO TOTAL</div><div style={{ fontSize: 20, fontWeight: 700, color: "#dc2626" }}>{brl(t.gasto)}</div></div>
+          <div><div style={{ fontSize: 12, color: "var(--muted)" }}>FATURAMENTO</div><div style={{ fontSize: 20, fontWeight: 700, color: "#16a34a" }}>{brl(t.faturamento)}</div></div>
+          <div><div style={{ fontSize: 12, color: "var(--muted)" }}>LUCRO</div><div style={{ fontSize: 20, fontWeight: 700, color: corValor(t.lucro) }}>{brl(t.lucro)}</div></div>
+          <div><div style={{ fontSize: 12, color: "var(--muted)" }}>ROI GERAL</div><div style={{ fontSize: 20, fontWeight: 700, color: t.roi === null ? "var(--muted)" : corValor(t.roi) }}>{roiTxt(t.roi)}</div></div>
+          <div style={{ marginLeft: "auto", alignSelf: "center", textAlign: "right" }}>
+            <div style={{ fontSize: 12, color: "var(--muted)" }}>ENVIADOS / ENTREGUES / RESPOSTAS</div>
+            <div style={{ fontSize: 15, fontWeight: 600 }}>{t.enviados} · {t.entregues} · {t.responderam}</div>
+          </div>
+        </div>
+      )}
+
+      {/* um card por número */}
+      {dados.numeros.map((m) => {
+        const v = vals[m.id] || { faturamento: m.faturamento, gasto: m.gasto };
+        return (
+          <div key={m.id} style={cardStyle}>
+            <div style={{ display: "flex", alignItems: "baseline", gap: 10, marginBottom: 12, flexWrap: "wrap" }}>
+              <b style={{ fontSize: 16 }}>{m.apelido}</b>
+              {m.vendedorNome
+                ? <span style={{ fontSize: 12.5, color: "var(--brand, #7c5cff)" }}>👤 {m.vendedorNome}</span>
+                : <span style={{ fontSize: 12.5, color: "var(--muted)" }}>🔀 sem dono</span>}
+              {m.numero && <span style={{ fontSize: 12.5, color: "var(--muted)" }}>{m.numero}</span>}
+            </div>
+
+            <div style={{ display: "flex", gap: 22, flexWrap: "wrap", alignItems: "flex-end" }}>
+              {/* GASTO — editável + puxar da meta */}
+              <div>
+                <div style={{ fontSize: 12, color: "var(--muted)", marginBottom: 4 }}>GASTO (Meta)</div>
+                <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                  <input style={inputR$} value={v.gasto}
+                    onChange={(e) => setVals({ ...vals, [m.id]: { ...v, gasto: e.target.value } })}
+                    onBlur={() => salvar(m.id, "gasto")} />
+                  <button className="btn btn-sm" title="Tentar puxar o gasto da Meta (últimos 30 dias)"
+                    disabled={puxando === m.id} onClick={() => puxarGasto(m.id)}>
+                    {puxando === m.id ? "…" : "↻ Meta"}
+                  </button>
+                </div>
+              </div>
+              {/* FATURAMENTO — na mão */}
+              <div>
+                <div style={{ fontSize: 12, color: "var(--muted)", marginBottom: 4 }}>FATURAMENTO</div>
+                <input style={inputR$} value={v.faturamento}
+                  onChange={(e) => setVals({ ...vals, [m.id]: { ...v, faturamento: e.target.value } })}
+                  onBlur={() => salvar(m.id, "faturamento")} />
+              </div>
+              {/* LUCRO */}
+              <div>
+                <div style={{ fontSize: 12, color: "var(--muted)", marginBottom: 4 }}>LUCRO</div>
+                <div style={{ fontSize: 19, fontWeight: 700, color: corValor(m.lucro) }}>{brl(m.lucro)}</div>
+              </div>
+              {/* ROI */}
+              <div>
+                <div style={{ fontSize: 12, color: "var(--muted)", marginBottom: 4 }}>ROI</div>
+                <div style={{ fontSize: 19, fontWeight: 700, color: m.roi === null ? "var(--muted)" : corValor(m.roi) }}>{roiTxt(m.roi)}</div>
+              </div>
+              {/* métricas de disparo/conversa */}
+              <div style={{ marginLeft: "auto", textAlign: "right", fontSize: 13, color: "var(--muted)", lineHeight: 1.7 }}>
+                <div><b style={{ color: "var(--txt, #111)" }}>{m.enviados}</b> enviados · <b style={{ color: "var(--txt, #111)" }}>{m.entregues}</b> entregues</div>
+                <div><b style={{ color: "var(--txt, #111)" }}>{m.conversas}</b> conversas · <b style={{ color: "var(--txt, #111)" }}>{m.responderam}</b> responderam{m.falhas ? <> · <span style={{ color: "#dc2626" }}>{m.falhas} falhas</span></> : null}</div>
+              </div>
+            </div>
+          </div>
+        );
+      })}
+
+      <p style={{ fontSize: 12, color: "var(--muted)", marginTop: 6 }}>
+        O botão <b>↻ Meta</b> tenta puxar o gasto direto da conta (últimos 30 dias). Se a tua conta não liberar esse dado, é só digitar o gasto na mão — o ROI recalcula sozinho.
+      </p>
+    </div>
+  );
+}
 
 function OficialNumeros({ showToast }) {
   const [numeros, setNumeros] = useState([]);

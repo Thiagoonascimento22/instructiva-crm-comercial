@@ -458,6 +458,88 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
     res.json({ ok: true });
   });
 
+  /* ---- MÉTRICAS por número (gasto / faturamento / ROI) ---- */
+  // salva faturamento e/ou gasto na mão (sem re-assinar webhook, é só valor)
+  app.post("/api/oficial/numeros/:id/metricas", auth, (req, res) => {
+    const n = numeroPermitido(req, req.params.id);
+    if (!n) return res.status(404).json({ error: "Número não encontrado (ou sem acesso)" });
+    const b = req.body || {};
+    if (b.faturamento !== undefined) n.faturamento = Math.max(0, Number(b.faturamento) || 0);
+    if (b.gasto !== undefined) n.gasto = Math.max(0, Number(b.gasto) || 0);
+    salvar();
+    res.json({ ok: true, faturamento: n.faturamento || 0, gasto: n.gasto || 0 });
+  });
+
+  // painel de métricas: junta o que o sistema sabe (disparos/conversas) + gasto/faturamento
+  app.get("/api/oficial/metricas", auth, (req, res) => {
+    const souGerente = req.user.role === "gerente";
+    let numerosBase = db.oficial.numeros || [];
+    if (!souGerente) numerosBase = numerosBase.filter((n) => n.vendedorId === req.user.id);
+    const chats = Object.values(db.waChats || {}).filter((c) => c.canal === "oficial");
+    const lista = numerosBase.map((n) => {
+      const camps = (db.oficial.campanhas || []).filter((c) => c.numeroId === n.id);
+      let enviados = 0, entregues = 0, falhas = 0;
+      for (const c of camps) { enviados += c.enviados || 0; entregues += c.entregues || 0; falhas += c.falhas || 0; }
+      const meus = chats.filter((c) => c.numeroOficialId === n.id);
+      const conversas = meus.length;
+      const responderam = meus.filter((c) => c.respondeu || c.vendedorId).length;
+      const faturamento = Number(n.faturamento) || 0;
+      const gasto = Number(n.gasto) || 0;
+      const lucro = faturamento - gasto;
+      const roi = gasto > 0 ? lucro / gasto : null; // razão: 1 = 100% de retorno
+      const dono = n.vendedorId ? (db.users || []).find((u) => u.id === n.vendedorId) : null;
+      return {
+        id: n.id, apelido: n.apelido, numero: n.numero,
+        vendedorNome: dono ? dono.nome : "",
+        gasto, faturamento, lucro, roi,
+        enviados, entregues, falhas, campanhas: camps.length,
+        conversas, responderam,
+      };
+    });
+    // totais
+    const tot = lista.reduce((a, m) => ({
+      gasto: a.gasto + m.gasto, faturamento: a.faturamento + m.faturamento,
+      enviados: a.enviados + m.enviados, entregues: a.entregues + m.entregues,
+      conversas: a.conversas + m.conversas, responderam: a.responderam + m.responderam,
+    }), { gasto: 0, faturamento: 0, enviados: 0, entregues: 0, conversas: 0, responderam: 0 });
+    tot.lucro = tot.faturamento - tot.gasto;
+    tot.roi = tot.gasto > 0 ? tot.lucro / tot.gasto : null;
+    res.json({ numeros: lista, total: tot });
+  });
+
+  // tenta puxar o GASTO da Meta (melhor esforço — depende da conta/plano; se falhar, digita na mão)
+  app.post("/api/oficial/numeros/:id/gasto-meta", auth, async (req, res) => {
+    const n = numeroPermitido(req, req.params.id);
+    if (!n) return res.status(404).json({ error: "Número não encontrado (ou sem acesso)" });
+    if (!n.wabaId) return res.status(400).json({ error: "Número sem WABA ID" });
+    if (!tokenDe(n)) return res.status(400).json({ error: "Número sem token (configure o Token da Meta)" });
+    const dias = Math.min(90, Math.max(1, parseInt((req.body && req.body.dias)) || 30));
+    const end = Math.floor(Date.now() / 1000);
+    const start = end - dias * 86400;
+    try {
+      const numeroLimpo = String(n.numero || "").replace(/\D/g, "");
+      let fields = `conversation_analytics.start(${start}).end(${end}).granularity(DAILY)`;
+      if (numeroLimpo) fields += `.phone_numbers([${numeroLimpo}])`;
+      fields += `.dimensions(["CONVERSATION_CATEGORY"])`;
+      const r = await fetch(`${GRAPH}/${n.wabaId}?fields=${encodeURIComponent(fields)}`, {
+        headers: { Authorization: "Bearer " + tokenDe(n) },
+      });
+      const data = await r.json().catch(() => ({}));
+      if (!r.ok) {
+        const msg = (data && data.error && data.error.message) || "A Meta não retornou o gasto";
+        return res.status(400).json({ error: msg });
+      }
+      let gasto = 0, conversas = 0;
+      const pts = ((((data.conversation_analytics || {}).data) || [])[0] || {}).data_points || [];
+      for (const p of pts) { gasto += Number(p.cost) || 0; conversas += Number(p.conversation) || 0; }
+      n.gasto = Math.round(gasto * 100) / 100;
+      salvar();
+      res.json({ ok: true, gasto: n.gasto, conversas, dias });
+    } catch (e) {
+      res.status(400).json({ error: "Erro ao consultar a Meta: " + (e.message || e) });
+    }
+  });
+
   /* ---- inscreve a WABA no webhook (faz a Meta enviar as respostas desse número) ---- */
   app.post("/api/oficial/numeros/:id/assinar-webhook", auth, gerenteOnly, async (req, res) => {
     const n = acharNumero(req.params.id);
