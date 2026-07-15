@@ -2468,14 +2468,17 @@ function OficialMetricas({ showToast }) {
   const [carregando, setCarregando] = useState(true);
   const [vals, setVals] = useState({});     // edições locais dos campos de R$
   const [puxando, setPuxando] = useState(null);
+  const [dias, setDias] = useState(30);     // período: 1 (hoje) / 7 / 30 / 90 / 0 (tudo)
+
+  const PERIODOS = [{ v: 1, l: "Hoje" }, { v: 7, l: "7 dias" }, { v: 30, l: "30 dias" }, { v: 90, l: "90 dias" }, { v: 0, l: "Tudo" }];
 
   const carregar = () => {
     setCarregando(true);
-    api.ofMetricas()
+    api.ofMetricas(dias)
       .then((d) => { setDados(d); setCarregando(false); })
       .catch((e) => { showToast(e.message); setCarregando(false); });
   };
-  useEffect(() => { carregar(); }, []);
+  useEffect(() => { carregar(); }, [dias]);
   // sincroniza os inputs de R$ com o que veio do servidor
   useEffect(() => {
     if (!dados) return;
@@ -2495,12 +2498,26 @@ function OficialMetricas({ showToast }) {
   async function puxarGasto(id) {
     setPuxando(id);
     try {
-      const r = await api.ofPuxarGastoMeta(id, 30);
-      showToast("Gasto puxado da Meta (30 dias): " + brl(r.gasto));
+      const r = await api.ofPuxarGastoMeta(id, dias || 30);
+      if (r.gasto > 0) showToast("Gasto puxado da Meta (" + (dias || 30) + " dias): " + brl(r.gasto));
+      else if (r.aviso) showToast(r.aviso);
       carregar();
+      return r;
     } catch (e) {
       showToast("Não deu pra puxar da Meta: " + e.message + ". Digite o gasto na mão.");
     } finally { setPuxando(null); }
+  }
+  async function puxarTodos() {
+    if (!dados) return;
+    let achou = 0;
+    for (const m of dados.numeros) {
+      setPuxando(m.id);
+      try { const r = await api.ofPuxarGastoMeta(m.id, dias || 30); if (r && r.gasto > 0) achou++; }
+      catch (e) { /* segue os outros */ }
+    }
+    setPuxando(null);
+    carregar();
+    showToast(achou > 0 ? ("Gasto puxado de " + achou + " número(s).") : "A Meta devolveu R$ 0 pra todos (atraso de 1–3 dias ou conta não expõe custo). Pode digitar na mão.");
   }
 
   const roiTxt = (roi) => roi === null ? "—" : (roi >= 0 ? "+" : "") + Math.round(roi * 100) + "%";
@@ -2528,7 +2545,22 @@ function OficialMetricas({ showToast }) {
           <h2 style={{ margin: 0, fontSize: 20 }}>Métricas por número</h2>
           <p style={{ margin: "4px 0 0", color: "var(--muted)", fontSize: 13 }}>Gasto, faturamento e ROI de cada número. O faturamento você lança na mão.</p>
         </div>
-        <button className="btn btn-sm" onClick={carregar}><I.refresh className="ico" /> Atualizar</button>
+        <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+          <div style={{ display: "inline-flex", background: "var(--soft, #f1f3f8)", borderRadius: 10, padding: 3 }}>
+            {PERIODOS.map((p) => (
+              <button key={p.v} onClick={() => setDias(p.v)}
+                style={{ border: "none", cursor: "pointer", padding: "6px 12px", borderRadius: 8, fontSize: 13, fontFamily: "inherit",
+                  background: dias === p.v ? "var(--brand, #7c5cff)" : "transparent",
+                  color: dias === p.v ? "#fff" : "var(--muted)", fontWeight: dias === p.v ? 600 : 500 }}>
+                {p.l}
+              </button>
+            ))}
+          </div>
+          <button className="btn btn-sm" title="Tentar puxar o gasto da Meta de todos os números, no período escolhido" onClick={puxarTodos} disabled={!!puxando}>
+            ↻ Puxar gasto de todos
+          </button>
+          <button className="btn btn-sm" onClick={carregar}><I.refresh className="ico" /> Atualizar</button>
+        </div>
       </div>
 
       {/* totais (só quando tem mais de um número) */}
@@ -2599,8 +2631,8 @@ function OficialMetricas({ showToast }) {
         );
       })}
 
-      <p style={{ fontSize: 12, color: "var(--muted)", marginTop: 6 }}>
-        O botão <b>↻ Meta</b> tenta puxar o gasto direto da conta (últimos 30 dias). Se a tua conta não liberar esse dado, é só digitar o gasto na mão — o ROI recalcula sozinho.
+      <p style={{ fontSize: 12, color: "var(--muted)", marginTop: 6, lineHeight: 1.6 }}>
+        O período (Hoje / 7 / 30 / 90 dias) filtra os <b>disparos e conversas</b> e a janela do <b>↻ Meta</b>. O <b>botão ↻ Meta</b> tenta puxar o gasto direto da conta — se a Meta devolver R$ 0 (custo por API costuma atrasar 1 a 3 dias, ou a conta não expõe), é só digitar o gasto na mão que o <b>ROI recalcula sozinho</b>. Gasto e faturamento são os valores lançados/puxados.
       </p>
     </div>
   );

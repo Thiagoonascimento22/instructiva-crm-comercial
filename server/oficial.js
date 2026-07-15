@@ -471,13 +471,17 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
   });
 
   // painel de métricas: junta o que o sistema sabe (disparos/conversas) + gasto/faturamento
+  // ?dias=N filtra disparos/conversas pelo período (0 ou vazio = tudo)
   app.get("/api/oficial/metricas", auth, (req, res) => {
     const souGerente = req.user.role === "gerente";
     let numerosBase = db.oficial.numeros || [];
     if (!souGerente) numerosBase = numerosBase.filter((n) => n.vendedorId === req.user.id);
-    const chats = Object.values(db.waChats || {}).filter((c) => c.canal === "oficial");
+    const dias = Math.max(0, parseInt(req.query.dias) || 0); // 0 = tudo
+    const cutoff = dias > 0 ? Date.now() - dias * 86400000 : 0;
+    const dentro = (ts) => !cutoff || (ts || 0) >= cutoff;
+    const chats = Object.values(db.waChats || {}).filter((c) => c.canal === "oficial" && dentro(c.atualizadoEm));
     const lista = numerosBase.map((n) => {
-      const camps = (db.oficial.campanhas || []).filter((c) => c.numeroId === n.id);
+      const camps = (db.oficial.campanhas || []).filter((c) => c.numeroId === n.id && dentro(c.criadoEm));
       let enviados = 0, entregues = 0, falhas = 0;
       for (const c of camps) { enviados += c.enviados || 0; entregues += c.entregues || 0; falhas += c.falhas || 0; }
       const meus = chats.filter((c) => c.numeroOficialId === n.id);
@@ -517,10 +521,9 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
     const end = Math.floor(Date.now() / 1000);
     const start = end - dias * 86400;
     try {
-      const numeroLimpo = String(n.numero || "").replace(/\D/g, "");
-      let fields = `conversation_analytics.start(${start}).end(${end}).granularity(DAILY)`;
-      if (numeroLimpo) fields += `.phone_numbers([${numeroLimpo}])`;
-      fields += `.dimensions(["CONVERSATION_CATEGORY"])`;
+      // consulta no nível da WABA (sem filtro de telefone -> bem mais robusto).
+      // se a WABA tem 1 número (teu caso), esse custo já é o custo dele.
+      const fields = `conversation_analytics.start(${start}).end(${end}).granularity(DAILY).dimensions(["CONVERSATION_CATEGORY"])`;
       const r = await fetch(`${GRAPH}/${n.wabaId}?fields=${encodeURIComponent(fields)}`, {
         headers: { Authorization: "Bearer " + tokenDe(n) },
       });
@@ -532,9 +535,14 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
       let gasto = 0, conversas = 0;
       const pts = ((((data.conversation_analytics || {}).data) || [])[0] || {}).data_points || [];
       for (const p of pts) { gasto += Number(p.cost) || 0; conversas += Number(p.conversation) || 0; }
-      n.gasto = Math.round(gasto * 100) / 100;
-      salvar();
-      res.json({ ok: true, gasto: n.gasto, conversas, dias });
+      gasto = Math.round(gasto * 100) / 100;
+      // NÃO sobrescreve um valor digitado na mão com 0
+      let salvou = false;
+      if (gasto > 0) { n.gasto = gasto; salvar(); salvou = true; }
+      const aviso = gasto > 0 ? null : (conversas > 0
+        ? `A Meta achou ${conversas} conversa(s) no período, mas devolveu custo R$ 0. O custo por API costuma atrasar 1 a 3 dias (ou essa conta não expõe custo via API). Confira no painel de cobrança e, se precisar, digite na mão.`
+        : "A Meta não retornou conversas/custo nesse período — pode ser atraso de agregação (1 a 3 dias) ou a conta não libera custo por API. Digite o gasto na mão.");
+      res.json({ ok: true, gasto, conversas, dias, salvou, aviso });
     } catch (e) {
       res.status(400).json({ error: "Erro ao consultar a Meta: " + (e.message || e) });
     }

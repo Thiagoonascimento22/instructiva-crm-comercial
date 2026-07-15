@@ -87,7 +87,7 @@ export const api = {
   ofNumeros: () => req("GET", "/api/oficial/numeros"),
   ofTokenGlobalStatus: () => req("GET", "/api/oficial/token-global"),
   ofSetTokenGlobal: (token) => req("POST", "/api/oficial/token-global", { token }),
-  ofMetricas: () => req("GET", "/api/oficial/metricas"),
+  ofMetricas: (dias) => req("GET", "/api/oficial/metricas" + (dias ? "?dias=" + dias : "")),
   ofSalvarMetricas: (id, dados) => req("POST", "/api/oficial/numeros/" + id + "/metricas", dados),
   ofPuxarGastoMeta: (id, dias) => req("POST", "/api/oficial/numeros/" + id + "/gasto-meta", { dias }),
   ofCriarNumero: (dados) => req("POST", "/api/oficial/numeros", dados),
