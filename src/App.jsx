@@ -1918,7 +1918,7 @@ function OficialDisparo({ isGer = true, showToast }) {
                   <div className="disp-camp-card-top">
                     <div className="disp-camp-nome">
                       <b>{c.nome}</b>
-                      <span>{new Date(c.criadoEm).toLocaleDateString("pt-BR")} · {c.template}</span>
+                      <span>{new Date(c.criadoEm).toLocaleDateString("pt-BR")} · {c.template}{c.criadoPorNome ? " · 👤 " + c.criadoPorNome : ""}</span>
                     </div>
                     <button className="disp-camp-x" title="Excluir" onClick={(e) => { e.stopPropagation(); excluirCampanha(c); }}><I.trash className="ico" /></button>
                   </div>
@@ -1930,11 +1930,8 @@ function OficialDisparo({ isGer = true, showToast }) {
                   </div>
                   <div className="disp-camp-bar"><div style={{ width: pctResp + "%" }} /></div>
                   {c.falhas > 0 && c.ultimoErro && (
-                    <div
-                      title={c.ultimoErro}
-                      style={{ marginTop: 10, fontSize: 12.5, lineHeight: 1.4, color: "#b91c1c", background: "#fef2f2", border: "1px solid #fecaca", borderRadius: 8, padding: "8px 10px" }}
-                    >
-                      ⚠️ {explicaErroMeta(c.ultimoErro)}
+                    <div style={{ marginTop: 8, fontSize: 12, color: "#b91c1c", display: "flex", alignItems: "center", gap: 5, cursor: "pointer" }}>
+                      ⚠️ {c.falhas} com erro — <u>toque pra ver o motivo</u>
                     </div>
                   )}
                   {c.pendentes > 0 && (
@@ -2221,7 +2218,15 @@ function ModalMetricas({ camp, onClose }) {
         <div className="mb">
           <div className="panel-sub" style={{ marginBottom: 14 }}>
             Template <b>{camp.template}</b> · {new Date(camp.criadoEm).toLocaleString("pt-BR")} · total {camp.total} contato(s)
+            {camp.criadoPorNome ? <> · disparado por <b>{camp.criadoPorNome}</b></> : null}
           </div>
+          {camp.falhas > 0 && camp.ultimoErro && (
+            <div style={{ marginBottom: 14, fontSize: 13, lineHeight: 1.5, color: "#b91c1c", background: "#fef2f2", border: "1px solid #fecaca", borderRadius: 10, padding: "12px 14px" }}>
+              <div style={{ fontWeight: 700, marginBottom: 4 }}>⚠️ Por que {camp.falhas} falhou</div>
+              {explicaErroMeta(camp.ultimoErro)}
+              <div style={{ marginTop: 6, fontSize: 11.5, opacity: .8 }}>Erro cru da Meta: {camp.ultimoErro}</div>
+            </div>
+          )}
           <div className="mm-big">
             <div className="mm-big-card"><span className="mm-big-n">{enviados}</span><span>Enviados</span></div>
             <div className="mm-big-card"><span className="mm-big-n ok">{camp.entregues || 0}</span><span>Entregues</span></div>
