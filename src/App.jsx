@@ -1831,6 +1831,7 @@ function OficialDisparo({ isGer = true, showToast }) {
   const [dataFiltro, setDataFiltro] = useState(hojeStr()); // "" = todas as datas
   const dataRef = useRef(dataFiltro);
   useEffect(() => { dataRef.current = dataFiltro; }, [dataFiltro]);
+  const [meuLimite, setMeuLimite] = useState(null); // só vendedor
 
   const rangeDe = (d) => {
     if (!d) return [0, 0];
@@ -1844,11 +1845,13 @@ function OficialDisparo({ isGer = true, showToast }) {
   useEffect(() => {
     carregarCampanhas();
     api.ofNumeros().then((ns) => setNumeros(ns.filter((n) => n.ativo))).catch(() => {});
+    if (!isGer) api.ofMeuLimite().then(setMeuLimite).catch(() => {});
     // atualiza os números do disparo automaticamente a cada 10s (recontando do servidor)
     const t = setInterval(async () => {
       if (document.hidden) return; // não atualiza se a aba estiver em segundo plano
       try { await api.ofRecontar(); } catch (e) {}
       carregarCampanhas();
+      if (!isGer) api.ofMeuLimite().then(setMeuLimite).catch(() => {});
     }, 10000);
     return () => clearInterval(t);
   }, []);
@@ -1910,6 +1913,13 @@ function OficialDisparo({ isGer = true, showToast }) {
           <button className="disp-cta" onClick={() => { if (!numeros.length) return showToast(isGer ? "Cadastre um número na aba Números primeiro" : "Você ainda não tem um número vinculado. Peça pro gerente vincular o seu número oficial."); setAbrir(true); }}>
             <I.send className="ico" /> Novo disparo
           </button>
+          {!isGer && meuLimite && !meuLimite.ilimitado && (
+            <div style={{ marginTop: 12, fontSize: 13.5, color: meuLimite.restante > 0 ? "var(--muted)" : "#dc2626" }}>
+              {meuLimite.restante > 0
+                ? <>📊 Você usou <b>{meuLimite.usado}</b> de <b>{meuLimite.limite}</b> disparos hoje · restam <b style={{ color: "var(--brand,#7c5cff)" }}>{meuLimite.restante}</b></>
+                : <>🚫 Você atingiu o limite de <b>{meuLimite.limite}</b> disparos hoje. Peça pro gerente liberar mais.</>}
+            </div>
+          )}
         </div>
       </div>
 
@@ -2010,8 +2020,77 @@ function OficialDisparo({ isGer = true, showToast }) {
         )}
       </div>
 
-      {abrir && <ModalDisparo isGer={isGer} numeros={numeros} showToast={showToast} onClose={() => setAbrir(false)} onDone={() => { setAbrir(false); setTimeout(carregarCampanhas, 1500); }} />}
+      {isGer && <LimitesVendedores showToast={showToast} />}
+
+      {abrir && <ModalDisparo isGer={isGer} numeros={numeros} showToast={showToast} onClose={() => setAbrir(false)} onDone={() => { setAbrir(false); setTimeout(carregarCampanhas, 1500); if (!isGer) setTimeout(() => api.ofMeuLimite().then(setMeuLimite).catch(() => {}), 1500); }} />}
       {campSel && <ModalMetricas camp={campSel} onClose={() => setCampSel(null)} />}
+    </div>
+  );
+}
+
+/* ---------- Painel do gerente: limite de disparos por vendedor ---------- */
+function LimitesVendedores({ showToast }) {
+  const [lista, setLista] = useState([]);
+  const [aberto, setAberto] = useState(false);
+  const [edit, setEdit] = useState({}); // { [id]: limiteDia }
+
+  const carregar = () => api.ofLimites().then((l) => {
+    setLista(l || []);
+    const e = {}; for (const v of (l || [])) e[v.id] = v.base;
+    setEdit(e);
+  }).catch(() => {});
+  useEffect(() => { if (aberto) carregar(); }, [aberto]);
+
+  async function salvarLimite(id) {
+    try { await api.ofSetLimite(id, { limiteDia: parseInt(edit[id]) || 0 }); showToast("Limite salvo"); carregar(); }
+    catch (e) { showToast(e.message); }
+  }
+  async function liberarHoje(id, nome) {
+    const q = prompt(`Liberar QUANTOS disparos a mais pra ${nome}, só hoje?`, "50");
+    if (q === null) return;
+    const n = parseInt(q); if (!n || n < 1) return;
+    try { const r = await api.ofSetLimite(id, { bonusHoje: n }); showToast(`Liberado +${n} pra ${nome} (limite hoje: ${r.limite})`); carregar(); }
+    catch (e) { showToast(e.message); }
+  }
+
+  return (
+    <div style={{ marginTop: 20, background: "var(--card,#fff)", border: "1px solid var(--linha,#eef0f4)", borderRadius: 14, padding: 16 }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", cursor: "pointer" }} onClick={() => setAberto((v) => !v)}>
+        <div>
+          <b style={{ fontSize: 15 }}>🚦 Limite de disparos por vendedor</b>
+          <div style={{ fontSize: 12.5, color: "var(--muted)", marginTop: 2 }}>Padrão: 100 por dia. Vendedor não dispara além do limite — só você libera.</div>
+        </div>
+        <span style={{ fontSize: 13, color: "var(--brand,#7c5cff)" }}>{aberto ? "▲ fechar" : "▼ abrir"}</span>
+      </div>
+      {aberto && (
+        <div style={{ marginTop: 14 }}>
+          {lista.length === 0 ? <div className="panel-sub">Nenhum vendedor ativo.</div> : (
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              {lista.map((v) => {
+                const noLimite = v.restante <= 0;
+                return (
+                  <div key={v.id} style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", padding: "10px 12px", border: "1px solid var(--linha,#eef0f4)", borderRadius: 10, background: noLimite ? "#fef2f2" : "transparent" }}>
+                    <div style={{ minWidth: 150, fontWeight: 600 }}>👤 {v.nome}</div>
+                    <div style={{ fontSize: 13, color: noLimite ? "#dc2626" : "var(--muted)" }}>
+                      Hoje: <b style={{ color: noLimite ? "#dc2626" : "var(--txt,#111)" }}>{v.usado}</b> / {v.limite}
+                      {v.bonus > 0 && <span style={{ color: "#16a34a" }}> (inclui +{v.bonus} liberado)</span>}
+                      {noLimite && <b> · no limite</b>}
+                    </div>
+                    <div style={{ marginLeft: "auto", display: "flex", gap: 6, alignItems: "center" }}>
+                      <span style={{ fontSize: 12, color: "var(--muted)" }}>Limite/dia:</span>
+                      <input type="number" value={edit[v.id] ?? v.base}
+                        onChange={(e) => setEdit({ ...edit, [v.id]: e.target.value })}
+                        style={{ width: 70, padding: "6px 8px", border: "1px solid var(--linha,#e2e6ee)", borderRadius: 8, fontSize: 13, fontFamily: "inherit" }} />
+                      <button className="btn btn-sm" onClick={() => salvarLimite(v.id)}>Salvar</button>
+                      <button className="btn btn-sm" style={{ background: "var(--brand,#7c5cff)", color: "#fff", borderColor: "transparent" }} onClick={() => liberarHoje(v.id, v.nome)}>+ Liberar hoje</button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }

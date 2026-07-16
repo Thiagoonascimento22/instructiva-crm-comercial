@@ -458,7 +458,35 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
     res.json({ ok: true });
   });
 
-  /* ---- MÉTRICAS por número (gasto / faturamento / ROI) ---- */
+  /* ---- LIMITE DIÁRIO de disparos por vendedor ---- */
+  // gerente vê todos os vendedores com o uso de hoje
+  app.get("/api/oficial/limites", auth, gerenteOnly, (req, res) => {
+    const vends = (db.users || []).filter((u) => u.role === "vendedor" && u.ativo);
+    res.json(vends.map((v) => ({ id: v.id, nome: v.nome, ...limiteInfo(v) })));
+  });
+  // gerente define o limite diário e/ou libera um extra só pra hoje
+  app.post("/api/oficial/vendedores/:id/limite", auth, gerenteOnly, (req, res) => {
+    const v = (db.users || []).find((u) => u.id === req.params.id && u.role === "vendedor");
+    if (!v) return res.status(404).json({ error: "Vendedor não encontrado" });
+    const b = req.body || {};
+    if (b.limiteDia !== undefined) v.limiteDisparoDia = Math.max(0, parseInt(b.limiteDia) || 0);
+    if (b.bonusHoje !== undefined) {
+      const q = Math.max(0, parseInt(b.bonusHoje) || 0);
+      // soma ao bônus de hoje (se já tinha) em vez de sobrescrever
+      const hoje = diaBR(Date.now());
+      const atual = (v.disparoBonus && v.disparoBonus.data === hoje) ? (v.disparoBonus.qtd || 0) : 0;
+      v.disparoBonus = { data: hoje, qtd: atual + q };
+    }
+    salvar();
+    res.json({ ok: true, id: v.id, nome: v.nome, ...limiteInfo(v) });
+  });
+  // vendedor vê o próprio limite/uso de hoje
+  app.get("/api/oficial/meu-limite", auth, (req, res) => {
+    if (req.user.role !== "vendedor") return res.json({ ilimitado: true });
+    res.json(limiteInfo(req.user));
+  });
+
+
   // salva faturamento e/ou gasto na mão (sem re-assinar webhook, é só valor)
   app.post("/api/oficial/numeros/:id/metricas", auth, (req, res) => {
     const n = numeroPermitido(req, req.params.id);
@@ -1312,6 +1340,23 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
 
 
 
+  // dia no fuso do Brasil (-3), pra o limite virar à meia-noite daqui (não à meia-noite UTC)
+  function diaBR(ts) {
+    const d = new Date((ts || 0) - 3 * 3600000);
+    return d.getUTCFullYear() + "-" + String(d.getUTCMonth() + 1).padStart(2, "0") + "-" + String(d.getUTCDate()).padStart(2, "0");
+  }
+  // quanto o vendedor já disparou hoje e qual o limite dele
+  function limiteInfo(vendedor) {
+    const hoje = diaBR(Date.now());
+    const usado = (db.oficial.campanhas || [])
+      .filter((c) => c.criadoPor === vendedor.id && diaBR(c.criadoEm || 0) === hoje)
+      .reduce((s, c) => s + (c.total || 0), 0);
+    const base = (typeof vendedor.limiteDisparoDia === "number") ? vendedor.limiteDisparoDia : 100;
+    const bonus = (vendedor.disparoBonus && vendedor.disparoBonus.data === hoje) ? (vendedor.disparoBonus.qtd || 0) : 0;
+    const limite = base + bonus;
+    return { usado, base, bonus, limite, restante: Math.max(0, limite - usado) };
+  }
+
   app.post("/api/oficial/disparar", auth, async (req, res) => {
     const b = req.body || {};
     const numeroCfg = numeroPermitido(req, b.numeroId);
@@ -1323,6 +1368,17 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
     const contatos = Array.isArray(b.contatos) ? b.contatos : [];
     if (contatos.length === 0) return res.status(400).json({ error: "Nenhum contato na lista" });
     if (contatos.length > 5000) return res.status(400).json({ error: "Máximo de 5000 por disparo" });
+
+    // LIMITE DIÁRIO por vendedor (gerente não tem limite). Só o gerente pode liberar mais.
+    if (req.user.role === "vendedor") {
+      const info = limiteInfo(req.user);
+      if (info.usado + contatos.length > info.limite) {
+        return res.status(403).json({
+          error: `Limite diário atingido: você já usou ${info.usado} de ${info.limite} disparos hoje e tentou enviar mais ${contatos.length}. Peça pro gerente liberar mais.`,
+          limiteAtingido: true, usado: info.usado, limite: info.limite, restante: info.restante,
+        });
+      }
+    }
 
     // IA opcional pra essa campanha (só o gerente pode acoplar IA; vendedor dispara "puro")
     const iaId = req.user.role === "gerente" ? String(b.iaId || "").trim() : "";
