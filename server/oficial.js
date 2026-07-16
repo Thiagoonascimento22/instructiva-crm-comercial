@@ -1519,8 +1519,17 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
     if (req.user.role !== "gerente") {
       campanhas = campanhas.filter((c) => campanhaDoUsuario(req, c));
     }
+    // filtro por data (de/ate em ms) — pro filtro de dia da tela
+    const de = parseInt(req.query.de) || 0;
+    const ate = parseInt(req.query.ate) || 0;
+    if (de || ate) {
+      campanhas = campanhas.filter((c) => (!de || (c.criadoEm || 0) >= de) && (!ate || (c.criadoEm || 0) <= ate));
+    }
+    // mais recentes primeiro
+    campanhas = campanhas.slice().sort((a, b) => (b.criadoEm || 0) - (a.criadoEm || 0));
+    const limite = (de || ate) ? 500 : 50;
     // não manda a lista enorme de pendentes pro front — só a contagem, pra mostrar o botão Retomar
-    const lista = campanhas.slice(0, 50).map((c) => {
+    const lista = campanhas.slice(0, limite).map((c) => {
       const { pendentes, _rodando, ...resto } = c;
       return { ...resto, pendentes: pendentes && pendentes.length ? pendentes.length : 0, rodando: !!_rodando };
     });

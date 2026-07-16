@@ -1827,8 +1827,20 @@ function OficialDisparo({ isGer = true, showToast }) {
   const [campSel, setCampSel] = useState(null);
   const [abrir, setAbrir] = useState(false);
   const [numeros, setNumeros] = useState([]);
+  const hojeStr = () => { const d = new Date(); return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0"); };
+  const [dataFiltro, setDataFiltro] = useState(hojeStr()); // "" = todas as datas
+  const dataRef = useRef(dataFiltro);
+  useEffect(() => { dataRef.current = dataFiltro; }, [dataFiltro]);
 
-  const carregarCampanhas = () => api.ofCampanhas().then(setCampanhas).catch(() => {});
+  const rangeDe = (d) => {
+    if (!d) return [0, 0];
+    const [y, m, dd] = d.split("-").map(Number);
+    return [new Date(y, m - 1, dd, 0, 0, 0, 0).getTime(), new Date(y, m - 1, dd, 23, 59, 59, 999).getTime()];
+  };
+  const carregarCampanhas = () => {
+    const [de, ate] = rangeDe(dataRef.current);
+    return api.ofCampanhas(de, ate).then(setCampanhas).catch(() => {});
+  };
   useEffect(() => {
     carregarCampanhas();
     api.ofNumeros().then((ns) => setNumeros(ns.filter((n) => n.ativo))).catch(() => {});
@@ -1840,6 +1852,19 @@ function OficialDisparo({ isGer = true, showToast }) {
     }, 10000);
     return () => clearInterval(t);
   }, []);
+  useEffect(() => { carregarCampanhas(); }, [dataFiltro]); // recarrega ao trocar a data
+
+  // resumo: quantos disparos e quantos enviados por pessoa (no filtro atual)
+  const resumoPessoas = useMemo(() => {
+    const map = {};
+    for (const c of campanhas) {
+      const nome = c.criadoPorNome || "—";
+      if (!map[nome]) map[nome] = { disparos: 0, enviados: 0 };
+      map[nome].disparos += 1;
+      map[nome].enviados += c.enviados || 0;
+    }
+    return Object.entries(map).map(([nome, v]) => ({ nome, ...v })).sort((a, b) => b.disparos - a.disparos);
+  }, [campanhas]);
 
   async function redispararCampanha(c) {
     if (!confirm(`Re-disparar a campanha "${c.nome}"?\n\nVai reenviar o template pra TODO MUNDO que recebeu mas ainda não respondeu (não manda pra quem já respondeu).`)) return;
@@ -1899,6 +1924,31 @@ function OficialDisparo({ isGer = true, showToast }) {
             <button className="btn btn-sm" onClick={async () => { try { await api.ofRecontar(); } catch (e) {} carregarCampanhas(); }}><I.refresh className="ico" /> Atualizar agora</button>
           </div>
         </div>
+        {/* filtro por dia + resumo de disparos por pessoa */}
+        <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 12 }}>
+          <span style={{ fontSize: 13, color: "var(--muted)" }}>📅 Filtrar por dia:</span>
+          <input type="date" value={dataFiltro} onChange={(e) => setDataFiltro(e.target.value)}
+            style={{ padding: "6px 10px", border: "1px solid var(--linha,#e2e6ee)", borderRadius: 8, fontSize: 13, fontFamily: "inherit" }} />
+          <button className="btn btn-sm" onClick={() => setDataFiltro(hojeStr())} style={dataFiltro === hojeStr() ? { background: "var(--brand,#7c5cff)", color: "#fff", borderColor: "transparent" } : {}}>Hoje</button>
+          <button className="btn btn-sm" onClick={() => setDataFiltro("")} style={dataFiltro === "" ? { background: "var(--brand,#7c5cff)", color: "#fff", borderColor: "transparent" } : {}}>Tudo</button>
+        </div>
+        {campanhas.length > 0 && (
+          <div style={{ marginBottom: 14 }}>
+            <div style={{ fontSize: 12.5, color: "var(--muted)", marginBottom: 6 }}>
+              Disparos por pessoa {dataFiltro ? "no dia" : "(tudo)"} — {campanhas.length} campanha(s) no total
+            </div>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              {resumoPessoas.map((p) => (
+                <div key={p.nome} style={{ background: "var(--card,#fff)", border: "1px solid var(--linha,#eef0f4)", borderRadius: 10, padding: "8px 12px", minWidth: 130 }}>
+                  <div style={{ fontSize: 13, fontWeight: 600 }}>👤 {p.nome}</div>
+                  <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 2 }}>
+                    <b style={{ color: "var(--brand,#7c5cff)", fontSize: 14 }}>{p.disparos}</b> disparo{p.disparos > 1 ? "s" : ""} · {p.enviados} enviados
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
         {isGer && (
           <div style={{ marginBottom: 8 }}>
             <button className="btn btn-sm" title="Baixa um arquivo com todos os números que já receberam disparo (pra cruzar com sua planilha)" onClick={() => { window.open("/api/oficial/export-recebidos?token=" + encodeURIComponent(localStorage.getItem("token") || ""), "_blank"); }}>⬇ Baixar quem já recebeu</button>
@@ -1907,7 +1957,7 @@ function OficialDisparo({ isGer = true, showToast }) {
         {campanhas.length === 0 ? (
           <div className="disp-vazio">
             <I.send className="ico-empty" />
-            <p>Nenhuma campanha ainda. Clique em <b>Novo disparo</b> para começar.</p>
+            <p>{dataFiltro ? "Nenhuma campanha nesse dia." : "Nenhuma campanha ainda."} Clique em <b>Novo disparo</b> para começar{dataFiltro ? ", ou veja outro dia / Tudo" : ""}.</p>
           </div>
         ) : (
           <div className="disp-camp-grid">

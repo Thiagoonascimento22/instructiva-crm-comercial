@@ -104,7 +104,7 @@ export const api = {
   ofEditarVendedor: (id, dados) => req("PUT", "/api/oficial/vendedores/" + id, dados),
   ofZerarContadores: () => req("POST", "/api/oficial/vendedores/zerar"),
   ofDisparar: (dados) => req("POST", "/api/oficial/disparar", dados),
-  ofCampanhas: () => req("GET", "/api/oficial/campanhas"),
+  ofCampanhas: (de, ate) => req("GET", "/api/oficial/campanhas" + ((de || ate) ? ("?de=" + (de || 0) + "&ate=" + (ate || 0)) : "")),
   ofRecontar: () => req("POST", "/api/oficial/campanhas/recontar"),
   ofExcluirCampanha: (id, apagarConversas) => req("DELETE", "/api/oficial/campanhas/" + id + (apagarConversas ? "?conversas=1" : "")),
   ofChats: (q, numeroId, campanhaId) =>
