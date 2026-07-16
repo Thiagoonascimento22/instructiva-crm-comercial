@@ -1819,8 +1819,31 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
       const mediaId = await uploadMidiaMeta(numeroCfg, buffer, mime, filename);
       await enviarMidiaOficial(numeroCfg, chat.numero, tipo, mediaId, caption, filename);
       const ts = Date.now();
+      // salva o arquivo enviado no volume TAMBÉM, pra conseguir EXIBIR de volta na conversa
+      let arquivoSalvo = null;
+      try {
+        if (MEDIA_DIR && fs && path) {
+          const ext = extPorMime(mime);
+          arquivoSalvo = "of_out_" + ts + "_" + Math.random().toString(36).slice(2, 8) + "." + ext;
+          fs.writeFileSync(path.join(MEDIA_DIR, arquivoSalvo), buffer);
+        }
+      } catch (_) { arquivoSalvo = null; }
       const rotulo = tipo === "image" ? "📷 Foto" : tipo === "audio" ? "🎤 Áudio" : tipo === "video" ? "🎬 Vídeo" : "📄 " + filename;
-      chat.mensagens.push({ role: "me", content: caption ? rotulo + ": " + caption : rotulo, ts, midia: { tipo, mediaId, filename, mime } });
+      const msgObj = { role: "me", content: caption || "", ts };
+      if (arquivoSalvo) {
+        // mesmo esquema da mídia recebida -> renderiza igual (imagem/vídeo/áudio/doc)
+        msgObj.tipo = tipo;
+        msgObj.arquivo = arquivoSalvo;
+        msgObj.mimetype = mime;
+        msgObj.filename = filename;
+        msgObj.mid = "ofout" + ts + Math.random().toString(36).slice(2, 6);
+        if (tipo === "document") msgObj.content = caption || filename;
+      } else {
+        // não deu pra salvar -> mantém o rótulo de texto (fallback antigo)
+        msgObj.content = caption ? rotulo + ": " + caption : rotulo;
+        msgObj.midia = { tipo, mediaId, filename, mime };
+      }
+      chat.mensagens.push(msgObj);
       if (chat.iaId && !chat.iaPausada) chat.iaPausada = true;
       if (chat.mensagens.length > 300) chat.mensagens = chat.mensagens.slice(-300);
       chat.atualizadoEm = ts;
@@ -2022,7 +2045,14 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
               content = "📄 " + midiaFilename;
               midiaTipo = "document"; mediaIdMeta = m.document && m.document.id;
             }
-            else if (m.type === "sticker") content = "[figurinha]";
+            else if (m.type === "sticker") {
+              content = "[figurinha]";
+              midiaTipo = "image"; mediaIdMeta = m.sticker && m.sticker.id;
+            }
+            else if (m.type === "reaction") {
+              const emoji = (m.reaction && m.reaction.emoji) || "";
+              content = emoji ? ("reagiu com " + emoji) : "removeu a reação";
+            }
             else content = "[" + m.type + "]";
 
             // baixa o arquivo de mídia (foto, áudio, vídeo, documento) pro volume
