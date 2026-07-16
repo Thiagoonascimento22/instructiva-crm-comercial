@@ -107,9 +107,9 @@ export const api = {
   ofCampanhas: () => req("GET", "/api/oficial/campanhas"),
   ofRecontar: () => req("POST", "/api/oficial/campanhas/recontar"),
   ofExcluirCampanha: (id, apagarConversas) => req("DELETE", "/api/oficial/campanhas/" + id + (apagarConversas ? "?conversas=1" : "")),
-  ofChats: (q, numeroId) =>
+  ofChats: (q, numeroId, campanhaId) =>
     req("GET", "/api/oficial/chats" + (() => {
-      const p = [q ? "q=" + encodeURIComponent(q) : "", numeroId ? "numeroId=" + encodeURIComponent(numeroId) : ""].filter(Boolean);
+      const p = [q ? "q=" + encodeURIComponent(q) : "", numeroId ? "numeroId=" + encodeURIComponent(numeroId) : "", campanhaId ? "campanhaId=" + encodeURIComponent(campanhaId) : ""].filter(Boolean);
       return p.length ? "?" + p.join("&") : "";
     })()),
   ofChat: (id) => req("GET", "/api/oficial/chats/" + encodeURIComponent(id)),

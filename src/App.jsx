@@ -2992,6 +2992,8 @@ function InboxOficial({ isGer, showToast, onIrParaEvolution }) {
   const [busca, setBusca] = useState("");
   const [vendedores, setVendedores] = useState([]);
   const [filtroVend, setFiltroVend] = useState("todos");
+  const [campanhas, setCampanhas] = useState([]);
+  const [campanhaFiltro, setCampanhaFiltro] = useState("todas");
   const [showTransfer, setShowTransfer] = useState(false);
   const [pedindoSuporte, setPedindoSuporte] = useState(false);
   const [showEmojiOf, setShowEmojiOf] = useState(false);
@@ -3005,14 +3007,16 @@ function InboxOficial({ isGer, showToast, onIrParaEvolution }) {
   const nearBottomRef = useRef(true); // usuário está perto do fim?
   const convIdRef = useRef(null);     // qual conversa está aberta
   const msgCountRef = useRef(0);      // qtd de mensagens da última vez
-  const carregarLista = () => api.ofChats(busca).then(setChats).catch(() => {});
+  const carregarLista = () => api.ofChats(busca, null, campanhaFiltro === "todas" ? null : campanhaFiltro).then(setChats).catch(() => {});
   useEffect(() => {
     carregarLista();
     const t = setInterval(carregarLista, 5000);
     // todos (gerente e vendedor) podem ver a lista pra transferir
     api.ofVendedoresLista().then(setVendedores).catch(() => {});
+    // campanhas pro filtro (o gerente vê todas; o vendedor, as dele)
+    api.ofCampanhas().then((cs) => setCampanhas(cs || [])).catch(() => {});
     return () => clearInterval(t);
-  }, [busca]);
+  }, [busca, campanhaFiltro]);
 
   useEffect(() => {
     if (!sel) { setConversa(null); return; }
@@ -3211,6 +3215,16 @@ function InboxOficial({ isGer, showToast, onIrParaEvolution }) {
               <option value="ia">🤖 Em atendimento por IA</option>
               <option value="sem">Aguardando distribuição</option>
               {vendedores.map((v) => <option key={v.id} value={v.id}>{v.nome}</option>)}
+            </select>
+          </div>
+        )}
+        {campanhas.length > 0 && (
+          <div style={{ padding: "0 12px 10px" }}>
+            <select className="select" style={{ width: "100%" }} value={campanhaFiltro} onChange={(e) => setCampanhaFiltro(e.target.value)} title="Ver só as conversas de um disparo específico">
+              <option value="todas">📣 Todas as campanhas</option>
+              {campanhas.map((c) => (
+                <option key={c.id} value={c.id}>{c.nome}{c.criadoPorNome ? " · " + c.criadoPorNome : ""}</option>
+              ))}
             </select>
           </div>
         )}

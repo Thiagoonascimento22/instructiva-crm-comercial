@@ -1610,6 +1610,10 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
     } else if (req.query.numeroId && req.query.numeroId !== "todos") {
       chats = chats.filter((c) => c.numeroOficialId === req.query.numeroId);
     }
+    // filtro por campanha (ex: ver só as conversas do disparo que EU fiz)
+    if (req.query.campanhaId && req.query.campanhaId !== "todas") {
+      chats = chats.filter((c) => c.campanhaId === req.query.campanhaId);
+    }
     if (q) {
       chats = chats.filter(
         (c) => (c.nome || "").toLowerCase().includes(q) || (c.numero || "").includes(q)
@@ -1621,6 +1625,7 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
       .map((c) => {
         const ultima = c.mensagens && c.mensagens.length ? c.mensagens[c.mensagens.length - 1] : null;
         const v = c.vendedorId ? db.users.find((u) => u.id === c.vendedorId) : null;
+        const camp = c.campanhaId ? (db.oficial.campanhas || []).find((x) => x.id === c.campanhaId) : null;
         return {
           id: c.id,
           numero: c.numero,
@@ -1629,6 +1634,8 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
           atualizadoEm: c.atualizadoEm || 0,
           origemDisparo: !!c.origemDisparo,
           campanha: c.campanha || "",
+          campanhaId: c.campanhaId || null,
+          campanhaNome: camp ? camp.nome : "",
           vendedorId: c.vendedorId || null,
           vendedorNome: v ? v.nome : "",
           numeroOficialId: c.numeroOficialId,
