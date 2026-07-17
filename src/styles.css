@@ -2922,6 +2922,13 @@ h1, h2, h3, h4, .topbar .greet, .panel-h h3, .login-card .ttl, .login-card h2, .
 .disp-status.ok .dot { background: #10b981; }
 .disp-status.run { background: rgba(245,158,11,.15); color: #b45309; }
 .disp-status.run .dot { background: #f59e0b; animation: pulse 1.6s infinite; }
+.disp-status.sched { background: rgba(124,58,237,.12); color: var(--brand); }
+.disp-status.sched .dot { background: var(--brand); }
+[data-theme="dark"] .disp-status.sched { color: #b79bff; }
+.disp-camp-card.sched { border-style: dashed; }
+.disp-sched-info { margin-top: 15px; padding: 13px 14px; background: rgba(124,58,237,.06); border: 1px solid rgba(124,58,237,.16); border-radius: 12px; }
+.disp-sched-when { font-size: 16px; font-weight: 800; color: var(--brand); }
+.disp-sched-sub { font-size: 12px; color: var(--muted); margin-top: 3px; }
 [data-theme="dark"] .disp-status.ok { color: #34e3b0; }
 [data-theme="dark"] .disp-status.run { color: #ffce85; }
 .disp-camp-x { background: none; border: none; color: var(--faint); cursor: pointer; padding: 3px; border-radius: 7px; opacity: 0; transition: .15s; display: flex; }

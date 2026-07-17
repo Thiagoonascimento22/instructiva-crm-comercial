@@ -1373,14 +1373,14 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
     const d = new Date((ts || 0) - 3 * 3600000);
     return d.getUTCFullYear() + "-" + String(d.getUTCMonth() + 1).padStart(2, "0") + "-" + String(d.getUTCDate()).padStart(2, "0");
   }
-  // quanto o vendedor já disparou hoje e qual o limite dele
-  function limiteInfo(vendedor) {
-    const hoje = diaBR(Date.now());
+  // quanto o vendedor já disparou num dia e qual o limite dele
+  function limiteInfo(vendedor, diaAlvo) {
+    const dia = diaAlvo || diaBR(Date.now());
     const usado = (db.oficial.campanhas || [])
-      .filter((c) => c.criadoPor === vendedor.id && diaBR(c.criadoEm || 0) === hoje)
+      .filter((c) => c.criadoPor === vendedor.id && c.status !== "cancelada" && diaBR(c.agendadoPara || c.criadoEm || 0) === dia)
       .reduce((s, c) => s + (c.total || 0), 0);
     const base = (typeof vendedor.limiteDisparoDia === "number") ? vendedor.limiteDisparoDia : 100;
-    const bonus = (vendedor.disparoBonus && vendedor.disparoBonus.data === hoje) ? (vendedor.disparoBonus.qtd || 0) : 0;
+    const bonus = (vendedor.disparoBonus && vendedor.disparoBonus.data === dia) ? (vendedor.disparoBonus.qtd || 0) : 0;
     const limite = base + bonus;
     return { usado, base, bonus, limite, restante: Math.max(0, limite - usado) };
   }
@@ -1397,12 +1397,21 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
     if (contatos.length === 0) return res.status(400).json({ error: "Nenhum contato na lista" });
     if (contatos.length > 5000) return res.status(400).json({ error: "Máximo de 5000 por disparo" });
 
-    // LIMITE DIÁRIO por vendedor (gerente não tem limite). Só o gerente pode liberar mais.
+    // AGENDAMENTO: se vier "agendarPara" (ms) no futuro, a campanha só dispara naquela hora
+    let agendadoPara = parseInt(b.agendarPara) || 0;
+    if (agendadoPara && agendadoPara < Date.now() + 30000) agendadoPara = 0; // no passado/agora -> dispara já
+    if (agendadoPara && agendadoPara > Date.now() + 366 * 86400000) {
+      return res.status(400).json({ error: "Data de agendamento muito longe (máx. 1 ano)" });
+    }
+
+    // LIMITE DIÁRIO por vendedor (gerente não tem limite). Conta no DIA em que vai disparar.
     if (req.user.role === "vendedor") {
-      const info = limiteInfo(req.user);
+      const diaAlvo = diaBR(agendadoPara || Date.now());
+      const info = limiteInfo(req.user, diaAlvo);
       if (info.usado + contatos.length > info.limite) {
+        const quando = agendadoPara ? "nesse dia" : "hoje";
         return res.status(403).json({
-          error: `Limite diário atingido: você já usou ${info.usado} de ${info.limite} disparos hoje e tentou enviar mais ${contatos.length}. Peça pro gerente liberar mais.`,
+          error: `Limite diário atingido: você já tem ${info.usado} de ${info.limite} disparos ${quando} e tentou somar mais ${contatos.length}. Peça pro gerente liberar mais.`,
           limiteAtingido: true, usado: info.usado, limite: info.limite, restante: info.restante,
         });
       }
@@ -1431,18 +1440,34 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
       total: contatos.length,
       // fila salva no banco: lista de quem ainda falta enviar (sobrevive a reinício)
       pendentes: contatos.map((c) => ({ telefone: c.telefone, nome: c.nome || "", variaveis: c.variaveis || [] })),
-      status: "rodando", // rodando | concluida | parada
+      pularRecebidos: b.pularRecebidos === true,
+      agendadoPara: agendadoPara || null,               // ms de quando vai disparar (null = agora)
+      status: agendadoPara ? "agendada" : "rodando",    // agendada | rodando | concluida | parada
       criadoEm: Date.now(),
     };
     db.oficial.campanhas.unshift(campanha);
     salvar();
 
+    // AGENDADA: não dispara agora — o agendador dispara na hora certa
+    if (agendadoPara) {
+      res.json({ ok: true, campanhaId: campanha.id, total: contatos.length, agendadoPara });
+      console.log(`[oficial] campanha AGENDADA "${campanha.nome}" p/ ${new Date(agendadoPara).toISOString()}`);
+      return;
+    }
+
     // responde já e dispara em background (não trava a tela)
     res.json({ ok: true, campanhaId: campanha.id, total: contatos.length });
+    dispararCampanhaAgora(campanha);
+  });
 
+  // ---- inicia (ou dispara na hora agendada) uma campanha: pula recebidos + consome a fila ----
+  function dispararCampanhaAgora(campanha) {
+    const numeroCfg = acharNumero(campanha.numeroId);
+    if (!numeroCfg) { campanha.status = "erro"; campanha.ultimoErro = "Número não existe mais"; salvar(); return; }
+    campanha.status = "rodando";
+    campanha.iniciadoEm = Date.now();
     // OPÇÃO "pular quem já recebeu": remove da fila quem já recebeu esse disparo nesse número
-    const pularRecebidos = b.pularRecebidos === true;
-    if (pularRecebidos) {
+    if (campanha.pularRecebidos) {
       const jaReceberam = new Set();
       for (const ch of Object.values(db.waChats || {})) {
         if (ch && ch.canal === "oficial" && ch.numeroOficialId === numeroCfg.id && ch.origemDisparo) {
@@ -1450,19 +1475,18 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
           if (tel && (ch.mensagens || []).some((m) => m.role === "me" && m.template)) jaReceberam.add(tel);
         }
       }
-      const antes = campanha.pendentes.length;
-      campanha.pendentes = campanha.pendentes.filter((c) => {
+      const antes = (campanha.pendentes || []).length;
+      campanha.pendentes = (campanha.pendentes || []).filter((c) => {
         const tel = normalizaTelefone(c.telefone);
         return tel && !jaReceberam.has(tel);
       });
       campanha.total = campanha.pendentes.length;
       console.log(`[oficial] ${campanha.nome}: ${antes - campanha.pendentes.length} pulados (já receberam)`);
-      salvar();
     }
-
+    salvar();
     // processa a fila salva (sobrevive a reinício -> dá pra retomar)
     processarFilaCampanha(campanha.id, numeroCfg);
-  });
+  }
 
   // ---- processa os pendentes de uma campanha (consome a fila salva no banco) ----
   // Como vai removendo cada contato da lista 'pendentes' conforme envia e salva,
@@ -2201,8 +2225,9 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
 
   // RETOMAR AUTOMÁTICO: se o servidor reiniciou com campanhas que tinham envios
   // pendentes, continua de onde parou sozinho (espera 5s pra tudo carregar).
+  // (as AGENDADAS ficam de fora — quem cuida delas é o agendador abaixo)
   setTimeout(() => {
-    const pendentes = (db.oficial.campanhas || []).filter((c) => c.pendentes && c.pendentes.length > 0 && c.status !== "parada");
+    const pendentes = (db.oficial.campanhas || []).filter((c) => c.pendentes && c.pendentes.length > 0 && c.status !== "parada" && c.status !== "agendada");
     if (pendentes.length > 0) {
       console.log(`[oficial] Retomando ${pendentes.length} campanha(s) com envios pendentes após reinício...`);
       for (const camp of pendentes) {
@@ -2215,6 +2240,22 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
       }
     }
   }, 5000);
+
+  // AGENDADOR: dispara as campanhas agendadas quando a hora chega (checa a cada 20s).
+  // Roda no servidor e é confiável: as campanhas ficam salvas no banco, então mesmo
+  // que o servidor reinicie, elas disparam na hora certa — e se ele estava fora na
+  // hora marcada, dispara assim que voltar (agendadoPara <= agora).
+  setInterval(() => {
+    try {
+      const agora = Date.now();
+      for (const camp of db.oficial.campanhas || []) {
+        if (camp.status === "agendada" && !camp._rodando && camp.agendadoPara && camp.agendadoPara <= agora) {
+          console.log(`[oficial] AGENDAMENTO disparando "${camp.nome}" (marcado p/ ${new Date(camp.agendadoPara).toISOString()})`);
+          dispararCampanhaAgora(camp);
+        }
+      }
+    } catch (e) { console.error("[oficial] agendador erro:", e.message); }
+  }, 20000);
 
   // devolve a função de init pro index chamar DEPOIS do loadDB()
   return { garantirEstrutura };

@@ -1975,44 +1975,53 @@ function OficialDisparo({ isGer = true, showToast }) {
               const rodando = c.pendentes > 0 && c.rodando;
               const parada = c.pendentes > 0 && !c.rodando;
               return (
-                <div key={c.id} className="disp-camp-card" onClick={() => setCampSel(c)}>
+                <div key={c.id} className={"disp-camp-card" + (c.status === "agendada" ? " sched" : "")} onClick={() => setCampSel(c)}>
                   <div className="disp-camp-card-top">
                     <div className="disp-camp-nome">
                       <b>{c.nome}</b>
                       <span>{c.template}{c.criadoPorNome ? " · " + c.criadoPorNome : ""} · {new Date(c.criadoEm).toLocaleDateString("pt-BR")}</span>
                     </div>
                     <div className="disp-camp-top-r">
-                      {c.pendentes > 0
-                        ? <span className="disp-status run"><span className="dot" /> {rodando ? "Enviando" : "Pausada"}</span>
-                        : <span className="disp-status ok"><span className="dot" /> Concluída</span>}
-                      <button className="disp-camp-x" title="Excluir" onClick={(e) => { e.stopPropagation(); excluirCampanha(c); }}><I.trash className="ico" /></button>
+                      {c.status === "agendada"
+                        ? <span className="disp-status sched"><span className="dot" /> Agendada</span>
+                        : c.pendentes > 0
+                          ? <span className="disp-status run"><span className="dot" /> {rodando ? "Enviando" : "Pausada"}</span>
+                          : <span className="disp-status ok"><span className="dot" /> Concluída</span>}
+                      <button className="disp-camp-x" title={c.status === "agendada" ? "Cancelar agendamento" : "Excluir"} onClick={(e) => { e.stopPropagation(); excluirCampanha(c); }}><I.trash className="ico" /></button>
                     </div>
                   </div>
 
-                  <div className="disp-prog">
-                    <div className="disp-prog-bar"><i style={{ width: Math.max(pctResp, c.enviados ? 2 : 0) + "%" }} /></div>
-                    <div className="disp-prog-lbl"><b>{pctResp}%</b> responderam · {c.entregues || 0} de {c.total || 0} entregues</div>
-                  </div>
-
-                  <div className="disp-camp-nums">
-                    <div><span className="disp-camp-n">{c.enviados || 0}</span><span className="disp-camp-l">enviados</span></div>
-                    <div><span className="disp-camp-n ok">{c.entregues || 0}</span><span className="disp-camp-l">entregues</span></div>
-                    <div><span className="disp-camp-n resp">{c.responderam || 0}</span><span className="disp-camp-l">responderam</span></div>
-                    {c.falhas > 0 && <div><span className="disp-camp-n err">{c.falhas}</span><span className="disp-camp-l">erros</span></div>}
-                  </div>
-
-                  {c.falhas > 0 && c.ultimoErro && (
-                    <div className="disp-camp-erroline">⚠️ {c.falhas} com erro — <u>toque pra ver o motivo</u></div>
-                  )}
-                  {c.pendentes > 0 && (
-                    <button className="disp-camp-acao retomar" onClick={(e) => { e.stopPropagation(); retomarCampanha(c); }}>
-                      ▶ Retomar disparo · {c.pendentes} faltando
-                    </button>
-                  )}
-                  {!c.pendentes && c.enviados > 0 && (
-                    <button className="disp-camp-acao redisp" onClick={(e) => { e.stopPropagation(); redispararCampanha(c); }} title="Reenvia o template pra quem recebeu mas ainda não respondeu">
-                      ↻ Re-disparar pra quem não respondeu
-                    </button>
+                  {c.status === "agendada" ? (
+                    <div className="disp-sched-info">
+                      <div className="disp-sched-when">⏰ {new Date(c.agendadoPara).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" })}</div>
+                      <div className="disp-sched-sub">{c.total} contato(s) na fila · dispara sozinho na hora</div>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="disp-prog">
+                        <div className="disp-prog-bar"><i style={{ width: Math.max(pctResp, c.enviados ? 2 : 0) + "%" }} /></div>
+                        <div className="disp-prog-lbl"><b>{pctResp}%</b> responderam · {c.entregues || 0} de {c.total || 0} entregues</div>
+                      </div>
+                      <div className="disp-camp-nums">
+                        <div><span className="disp-camp-n">{c.enviados || 0}</span><span className="disp-camp-l">enviados</span></div>
+                        <div><span className="disp-camp-n ok">{c.entregues || 0}</span><span className="disp-camp-l">entregues</span></div>
+                        <div><span className="disp-camp-n resp">{c.responderam || 0}</span><span className="disp-camp-l">responderam</span></div>
+                        {c.falhas > 0 && <div><span className="disp-camp-n err">{c.falhas}</span><span className="disp-camp-l">erros</span></div>}
+                      </div>
+                      {c.falhas > 0 && c.ultimoErro && (
+                        <div className="disp-camp-erroline">⚠️ {c.falhas} com erro — <u>toque pra ver o motivo</u></div>
+                      )}
+                      {c.pendentes > 0 && (
+                        <button className="disp-camp-acao retomar" onClick={(e) => { e.stopPropagation(); retomarCampanha(c); }}>
+                          ▶ Retomar disparo · {c.pendentes} faltando
+                        </button>
+                      )}
+                      {!c.pendentes && c.enviados > 0 && (
+                        <button className="disp-camp-acao redisp" onClick={(e) => { e.stopPropagation(); redispararCampanha(c); }} title="Reenvia o template pra quem recebeu mas ainda não respondeu">
+                          ↻ Re-disparar pra quem não respondeu
+                        </button>
+                      )}
+                    </>
                   )}
                 </div>
               );
@@ -2106,6 +2115,8 @@ function ModalDisparo({ isGer = true, numeros, showToast, onClose, onDone }) {
   const [textoManual, setTextoManual] = useState("");
   const [nomeCampanha, setNomeCampanha] = useState("");
   const [pularRecebidos, setPularRecebidos] = useState(false);
+  const [agendar, setAgendar] = useState(false);
+  const [dataHora, setDataHora] = useState("");
   const [enviando, setEnviando] = useState(false);
   const [ias, setIas] = useState([]);
   const [iaId, setIaId] = useState("");
@@ -2157,20 +2168,28 @@ function ModalDisparo({ isGer = true, numeros, showToast, onClose, onDone }) {
   }
 
   async function disparar() {
+    let agendarPara = 0;
+    if (agendar) {
+      if (!dataHora) { showToast("Escolha a data e a hora do agendamento"); return; }
+      agendarPara = new Date(dataHora).getTime();
+      if (!agendarPara || agendarPara < Date.now() + 60000) { showToast("O horário do agendamento precisa ser no futuro"); return; }
+    }
     setEnviando(true);
     try {
       const r = await api.ofDisparar({
         numeroId, template: template.name, idioma: template.language,
         nomeCampanha: nomeCampanha || template.name, contatos, iaId: iaId || null,
-        pularRecebidos,
+        pularRecebidos, agendarPara: agendarPara || undefined,
       });
-      showToast(`Disparo iniciado para ${r.total} contato(s)!`);
+      if (r.agendadoPara) showToast(`Disparo agendado para ${new Date(r.agendadoPara).toLocaleString("pt-BR")} · ${r.total} contato(s)`);
+      else showToast(`Disparo iniciado para ${r.total} contato(s)!`);
       onDone();
     } catch (e) { showToast(e.message); }
     finally { setEnviando(false); }
   }
 
   const numeroSel = numeros.find((n) => n.id === numeroId);
+  const minDataHora = () => { const d = new Date(Date.now() + 120000); const p = (n) => String(n).padStart(2, "0"); return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`; };
   const PASSOS = ["Número", "Mensagem", "Contatos", "Revisar"];
   const podeAvancar = passo === 1 ? !!numeroId : passo === 2 ? !!template : passo === 3 ? contatos.length > 0 : true;
 
@@ -2302,6 +2321,20 @@ function ModalDisparo({ isGer = true, numeros, showToast, onClose, onDone }) {
                   Marque se está re-disparando uma lista que travou no meio. O sistema envia só pra quem ainda NÃO recebeu por este número, evitando mensagens repetidas.
                 </span>
               </div>
+              <div className="dispm-campo">
+                <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", fontWeight: 600 }}>
+                  <input type="checkbox" checked={agendar} onChange={(e) => setAgendar(e.target.checked)} style={{ width: 17, height: 17, cursor: "pointer" }} />
+                  ⏰ Agendar disparo (enviar depois, na data e hora que eu escolher)
+                </label>
+                {agendar && (
+                  <div style={{ marginTop: 8 }}>
+                    <input type="datetime-local" className="input" value={dataHora} min={minDataHora()} onChange={(e) => setDataHora(e.target.value)} style={{ maxWidth: 280 }} />
+                    <span style={{ fontSize: 12, color: "var(--muted)", marginTop: 5, display: "block" }}>
+                      O disparo fica guardado e sai <b>sozinho na hora marcada</b> (horário do Brasil). Não precisa deixar nada aberto — o servidor dispara automaticamente.
+                    </span>
+                  </div>
+                )}
+              </div>
               <div className="dispm-previa">
                 <span className="dispm-previa-lab">Prévia</span>
                 <div className="dispm-previa-bolha">{template ? template.texto : ""}</div>
@@ -2317,7 +2350,7 @@ function ModalDisparo({ isGer = true, numeros, showToast, onClose, onDone }) {
             <button className="dispm-next" disabled={!podeAvancar} onClick={() => setPasso(passo + 1)}>Continuar →</button>
           ) : (
             <button className="dispm-next disparar" disabled={enviando} onClick={disparar}>
-              {enviando ? <><span className="spin" /> Disparando…</> : <>🚀 Disparar para {contatos.length}</>}
+              {enviando ? <><span className="spin" /> {agendar ? "Agendando…" : "Disparando…"}</> : (agendar ? <>⏰ Agendar para {contatos.length}</> : <>🚀 Disparar para {contatos.length}</>)}
             </button>
           )}
         </div>
