@@ -242,7 +242,7 @@ export default function App() {
     vistaInicial.current = true;
     // valida a aba restaurada: se não for permitida pro perfil, cai numa aba segura
     const porRole = {
-      gerente: ["whatsapp", "disparo", "templates", "numeros", "ia", "solicitacoes", "equipe", "config"],
+      gerente: ["whatsapp", "disparo", "templates", "numeros", "ia", "temperatura", "solicitacoes", "equipe", "config"],
       suporte: ["solicitacoes", "config"],
     };
     const permitidas = porRole[user.role] || ["whatsapp", "disparo", "templates", "minhasSolicitacoes", "config"];
@@ -282,6 +282,7 @@ export default function App() {
     templates: { t: "Templates", s: "Modelos de mensagem aprovados pela Meta" },
     numeros: { t: "Números", s: "Números oficiais conectados à sua conta Meta" },
     ia: { t: "Atendente IA", s: "SDR de IA que qualifica os leads e passa pro vendedor" },
+    temperatura: { t: "Temperatura", s: "Melhores horários e dias — quando os leads mais respondem" },
     minhasSolicitacoes: { t: "Minhas solicitações", s: "Acompanhe seus pedidos ao suporte" },
     solicitacoes: { t: "Solicitações de suporte", s: "Pedidos de ajuda dos vendedores e análise" },
     equipe: { t: "Equipe & Acessos", s: "Gerencie os atendentes e seus acessos" },
@@ -303,6 +304,7 @@ export default function App() {
           {(isGer || isVend) && <NavBtn ic={I.chat} label="Templates" active={view === "templates"} onClick={() => setView("templates")} />}
           {isGer && <NavBtn ic={I.wa} label="Números" active={view === "numeros"} onClick={() => setView("numeros")} />}
           {isGer && <NavBtn ic={I.spark} label="Atendente IA" active={view === "ia"} onClick={() => setView("ia")} />}
+          {isGer && <NavBtn ic={I.gauge} label="Temperatura" active={view === "temperatura"} onClick={() => setView("temperatura")} />}
           {!isGer && !isSuporte && <NavBtn ic={I.suporte} label="Minhas solicitações" active={view === "minhasSolicitacoes"} badge={badgeSol} onClick={() => setView("minhasSolicitacoes")} />}
           {(isGer || isSuporte) && <NavBtn ic={I.suporte} label="Solicitações" active={view === "solicitacoes"} onClick={() => setView("solicitacoes")} />}
           {isGer && <NavBtn ic={I.team} label="Equipe & Acessos" active={view === "equipe"} onClick={() => setView("equipe")} />}
@@ -337,6 +339,7 @@ export default function App() {
           {view === "templates" && (isGer || isVend) && <OficialTemplates isGer={isGer} showToast={showToast} />}
           {view === "numeros" && isGer && <OficialNumeros showToast={showToast} />}
           {view === "ia" && isGer && <OficialIAs showToast={showToast} />}
+          {view === "temperatura" && isGer && <OficialTemperatura showToast={showToast} />}
           {view === "minhasSolicitacoes" && !isGer && !isSuporte && <PaginaMinhasSolicitacoes itens={minhasSol} recarregar={carregarMinhasSol} showToast={showToast} />}
           {view === "solicitacoes" && (isGer || isSuporte) && <PaginaSolicitacoes showToast={showToast} readonly={isGer} />}
           {view === "equipe" && isGer && <Equipe showToast={showToast} meId={user.id} />}
