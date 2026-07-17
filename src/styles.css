@@ -3,11 +3,11 @@
    ============================================================ */
 :root {
   /* marca (compartilhada nos dois temas) */
-  --brand: #141414;
-  --brand-2: #3d3d3d;
-  --laranja: #141414;
-  --grad: linear-gradient(135deg, #2b2b2b 0%, #0a0a0a 100%);
-  --grad-violet: linear-gradient(135deg, #3d3d3d 0%, #6b6b6b 100%);
+  --brand: #059669;
+  --brand-2: #10b981;
+  --laranja: #059669;
+  --grad: linear-gradient(135deg, #10b981 0%, #059669 100%);
+  --grad-violet: linear-gradient(135deg, #34d399 0%, #6ee7b7 100%);
 
   /* hero IA — showpiece escuro nos dois temas */
   --ia-hero-bg:
@@ -16,9 +16,9 @@
     linear-gradient(120deg, #15131f, #1a1530 60%, #241a3a);
 
   /* ===== CLARO (padrão) ===== */
-  --indigo: #1f1f1f;
-  --indigo-600: #000000;
-  --violet: #3d3d3d;
+  --indigo: #059669;
+  --indigo-600: #047857;
+  --violet: #34d399;
   --mint: #10b981;
   --coral: #f43f5e;
   --amber: #f59e0b;
@@ -41,7 +41,7 @@
   --side-shadow: 1px 0 0 rgba(20, 22, 45, 0.06);
 
   --lead: #64748b;
-  --contato: #1f1f1f;
+  --contato: #059669;
   --negociando: #f59e0b;
   --fechou: #10b981;
   --perdeu: #f43f5e;
@@ -59,13 +59,13 @@
   --shadow-lg: 0 4px 16px -4px rgba(20, 22, 45, 0.1);
   --card-hover-shadow: 0 2px 8px -2px rgba(20, 22, 45, 0.08);
   --glow-violet: 0 2px 8px -2px rgba(99, 102, 241, 0.18);
-  --glow-brand: 0 2px 8px -2px rgba(20, 20, 20, 0.18);
+  --glow-brand: 0 2px 10px -2px rgba(16, 185, 129, 0.3);
   --num-glow: none;
   --sheen: linear-gradient(90deg, transparent, rgba(20, 22, 45, 0.04), transparent);
 
   --nav-hover: rgba(79, 70, 229, 0.06);
   --input-bg: #ffffff;
-  --input-focus-ring: rgba(20, 20, 20, 0.16);
+  --input-focus-ring: rgba(16, 185, 129, 0.22);
   --bubble-them: #ffffff;
   --th-bg: rgba(20, 22, 45, 0.03);
   --row-hover: rgba(79, 70, 229, 0.04);
@@ -81,12 +81,12 @@
 
 /* ===== ESCURO ===== */
 :root[data-theme="dark"] {
-  --brand: #f5f5f5;
-  --brand-2: #cfcfcf;
-  --grad: linear-gradient(135deg, #ffffff 0%, #d8d8d8 100%);
-  --indigo: #f0f0f0;
-  --indigo-600: #f0f0f0;
-  --violet: #a5b4fc;
+  --brand: #10b981;
+  --brand-2: #34d399;
+  --grad: linear-gradient(135deg, #34d399 0%, #10b981 100%);
+  --indigo: #34d399;
+  --indigo-600: #34d399;
+  --violet: #6ee7b7;
   --mint: #34e3b0;
   --coral: #ff5d73;
   --amber: #ffb547;
@@ -109,7 +109,7 @@
   --side-shadow: 24px 0 70px -34px rgba(0, 0, 0, 0.85);
 
   --lead: #8b90a6;
-  --contato: #f0f0f0;
+  --contato: #34d399;
   --negociando: #ffb547;
   --fechou: #34e3b0;
   --perdeu: #ff5d73;
@@ -137,7 +137,7 @@
 
   --nav-hover: rgba(255, 255, 255, 0.06);
   --input-bg: rgba(255, 255, 255, 0.04);
-  --input-focus-ring: rgba(255, 255, 255, 0.22);
+  --input-focus-ring: rgba(16, 185, 129, 0.35);
   --bubble-them: rgba(255, 255, 255, 0.06);
   --th-bg: rgba(255, 255, 255, 0.03);
   --row-hover: rgba(255, 255, 255, 0.035);
@@ -2406,10 +2406,10 @@ h1, h2, h3, h4, .topbar .greet, .panel-h h3, .login-card .ttl, .login-card h2, .
    Afeta SÓ o vendedor — gerente e suporte ficam inalterados.
    ============================================================ */
 .shell.tema-v {
-  --brand: #141414;
-  --brand-2: #3d3d3d;
-  --grad: linear-gradient(135deg, #2b2b2b 0%, #0a0a0a 100%);
-  --glow-brand: 0 10px 28px -12px rgba(20, 20, 20, 0.4);
+  --brand: #059669;
+  --brand-2: #10b981;
+  --grad: linear-gradient(135deg, #10b981 0%, #059669 100%);
+  --glow-brand: 0 10px 28px -12px rgba(16, 185, 129, 0.4);
   --r: 20px;
   --r-sm: 13px;
   /* sidebar escura premium (nos dois modos) */
@@ -3351,20 +3351,3 @@ input:focus-visible, textarea:focus-visible, select:focus-visible {
 .agx-docdel:hover { background: rgba(244,63,94,.1); color: var(--coral); }
 .agx-docdel .ico { width: 16px; height: 16px; }
 
-/* ===== accent PRETO: no modo escuro os botões/nav/badges viram claros, então o texto/ícone vira escuro pra NÃO SUMIR ===== */
-[data-theme="dark"] .nav button.active,
-[data-theme="dark"] .nav button.active .ico,
-[data-theme="dark"] .btn-primary,
-[data-theme="dark"] .btn-primary .ico,
-[data-theme="dark"] .btn-hero,
-[data-theme="dark"] .wa-bubble.me,
-[data-theme="dark"] .wa-badge,
-[data-theme="dark"] .onum-add,
-[data-theme="dark"] .onum-add .ico,
-[data-theme="dark"] .disp-cta,
-[data-theme="dark"] .disp-cta .ico,
-[data-theme="dark"] .dispm-next.disparar,
-[data-theme="dark"] .ia-tabs button.on,
-[data-theme="dark"] .onum-avatar-ph {
-  color: #141414 !important;
-}
