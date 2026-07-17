@@ -58,7 +58,39 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
       vendedorId: n.vendedorId || null,
       vendedorNome: dono ? dono.nome : "",
       quality: n.quality || null, // { rating, tier, atualizadoEm, anterior, mudouEm }
+      temFoto: !!n.fotoArquivo,
+      fotoAtualizadaEm: n.fotoAtualizadaEm || 0,
     };
+  }
+  // busca a URL da foto de perfil do WhatsApp Business do número
+  async function buscarFotoPerfilUrl(n) {
+    if (!n.phoneNumberId || !tokenDe(n)) return { url: null, erro: "número sem Phone Number ID ou token" };
+    try {
+      const r = await fetch(`${GRAPH}/${n.phoneNumberId}/whatsapp_business_profile?fields=profile_picture_url`, {
+        headers: { Authorization: "Bearer " + tokenDe(n) },
+      });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) return { url: null, erro: (d.error && d.error.message) || ("HTTP " + r.status) };
+      const url = (d.data && d.data[0] && d.data[0].profile_picture_url) || null;
+      return { url, erro: url ? null : "a Meta não retornou foto — esse número provavelmente não tem foto de perfil definida no WhatsApp Business" };
+    } catch (e) { return { url: null, erro: e.message }; }
+  }
+  // baixa a foto e salva no volume (pra servir depois, sem depender da URL da Meta que expira)
+  async function baixarFotoPerfil(n) {
+    const { url, erro } = await buscarFotoPerfilUrl(n);
+    if (!url) { if (erro) console.log(`[oficial] foto de ${n.apelido}: ${erro}`); return { ok: false, erro }; }
+    try {
+      const r = await fetch(url);
+      if (!r.ok) return { ok: false, erro: "erro ao baixar a imagem (HTTP " + r.status + ")" };
+      const buf = Buffer.from(await r.arrayBuffer());
+      const mime = r.headers.get("content-type") || "image/jpeg";
+      const ext = mime.includes("png") ? "png" : "jpg";
+      const arquivo = `perfil_${n.id}.${ext}`;
+      if (MEDIA_DIR && fs && path) fs.writeFileSync(path.join(MEDIA_DIR, arquivo), buf);
+      n.fotoArquivo = arquivo;
+      n.fotoAtualizadaEm = Date.now();
+      return { ok: true };
+    } catch (e) { return { ok: false, erro: e.message }; }
   }
   // puxa da Meta a qualidade e o limite de envio do número
   async function buscarQualidade(n) {
@@ -96,6 +128,7 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
     for (const n of db.oficial.numeros || []) {
       if (!n.phoneNumberId || !tokenDe(n)) continue;
       try { const q = await buscarQualidade(n); if (q && aplicarQualidade(n, q)) algum = true; } catch (_) {}
+      try { await baixarFotoPerfil(n); } catch (_) {} // aproveita e atualiza a foto de perfil
       await new Promise((r) => setTimeout(r, 400));
     }
     salvar();
@@ -580,8 +613,28 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
     const q = await buscarQualidade(n);
     if (!q) return res.status(400).json({ error: "Não consegui puxar a qualidade da Meta agora — tente de novo em instantes" });
     aplicarQualidade(n, q);
+    let fotoErro = null;
+    try { const f = await baixarFotoPerfil(n); if (!f.ok) fotoErro = f.erro; } catch (_) {}
     salvar();
-    res.json({ ok: true, quality: n.quality });
+    res.json({ ok: true, quality: n.quality, temFoto: !!n.fotoArquivo, fotoErro });
+  });
+  // serve a foto de perfil salva (pública — é a foto pública do WhatsApp Business)
+  app.get("/api/oficial/numeros/:id/foto", (req, res) => {
+    const n = acharNumero(req.params.id);
+    if (!n || !n.fotoArquivo || !MEDIA_DIR) return res.status(404).send("sem foto");
+    const p = path.join(MEDIA_DIR, n.fotoArquivo);
+    if (!fs.existsSync(p)) return res.status(404).send("sem foto");
+    res.setHeader("Cache-Control", "public, max-age=3600");
+    res.sendFile(p);
+  });
+  // puxa/atualiza a foto de perfil na hora (só a foto)
+  app.post("/api/oficial/numeros/:id/foto", auth, async (req, res) => {
+    const n = numeroPermitido(req, req.params.id);
+    if (!n) return res.status(404).json({ error: "Número não encontrado (ou sem acesso)" });
+    const f = await baixarFotoPerfil(n);
+    salvar();
+    if (!f.ok) return res.status(400).json({ error: f.erro || "Não consegui puxar a foto de perfil" });
+    res.json({ ok: true, fotoAtualizadaEm: n.fotoAtualizadaEm });
   });
   app.post("/api/oficial/qualidade-todos", auth, gerenteOnly, async (req, res) => {
     await atualizarQualidadeTodos();

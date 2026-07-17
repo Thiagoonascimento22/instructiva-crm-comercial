@@ -3179,11 +3179,14 @@ h1, h2, h3, h4, .topbar .greet, .panel-h h3, .login-card .ttl, .login-card h2, .
 .onum-cards { display: flex; flex-direction: column; gap: 12px; }
 .onum-card { display: flex; align-items: center; gap: 16px; padding: 18px 20px; background: var(--card); border: 1px solid var(--line); border-radius: 16px; transition: .16s; }
 .onum-card:hover { border-color: var(--of-green); box-shadow: var(--card-hover-shadow); }
-.onum-card-ico { width: 46px; height: 46px; border-radius: 13px; background: var(--of-green-soft); display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.onum-card-ico { width: 46px; height: 46px; border-radius: 13px; background: var(--of-green-soft); display: flex; align-items: center; justify-content: center; flex-shrink: 0; overflow: hidden; }
 .onum-card-ico .ico { width: 24px !important; height: 24px !important; color: var(--of-green-d); }
+.onum-ico-foto { width: 100%; height: 100%; object-fit: cover; }
 .onum-card-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
-.onum-card-top { display: flex; align-items: center; gap: 10px; }
+.onum-card-top { display: flex; align-items: center; gap: 10px; justify-content: space-between; }
 .onum-card-top b { font-size: 16px; color: var(--text); }
+.onum-avatar { width: 40px; height: 40px; border-radius: 50%; object-fit: cover; flex-shrink: 0; border: 2px solid var(--line); background: var(--surface-2); }
+.onum-avatar-ph { display: flex; align-items: center; justify-content: center; font-size: 17px; font-weight: 700; color: #fff; background: var(--grad); border: none; }
 .onum-status { display: inline-flex; align-items: center; gap: 5px; font-size: 11.5px; font-weight: 700; padding: 3px 10px; border-radius: 20px; }
 .onum-status i { width: 6px; height: 6px; border-radius: 50%; display: block; }
 .onum-status.on { background: var(--of-green-soft); color: var(--of-green-d); }

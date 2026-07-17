@@ -2959,8 +2959,13 @@ function OficialNumeros({ showToast }) {
 
   async function puxarQualidade(n) {
     setPuxandoQ(n.id);
-    try { await api.ofPuxarQualidade(n.id); carregar(); showToast("Qualidade atualizada"); }
-    catch (e) { showToast("Não deu pra puxar a qualidade: " + e.message); }
+    try {
+      const r = await api.ofPuxarQualidade(n.id);
+      carregar();
+      if (r && r.fotoErro) showToast("Qualidade atualizada. Foto: " + r.fotoErro);
+      else showToast("Qualidade e foto atualizadas");
+    }
+    catch (e) { showToast("Não deu pra puxar: " + e.message); }
     finally { setPuxandoQ(null); }
   }
   async function puxarQualidadeTodos() {
@@ -3075,8 +3080,8 @@ function OficialNumeros({ showToast }) {
             🔑 Token da Meta {tokenDef ? "✓" : "(configurar)"}
           </button>
           <button className="onum-btn-ghost" onClick={diagnostico} title="Verificar se as respostas estão chegando">🔍 Diagnóstico</button>
-          <button className="onum-btn-ghost" onClick={puxarQualidadeTodos} disabled={puxandoQ === "todos"} title="Puxar da Meta a qualidade (Alta/Média/Baixa) e o limite de todos os números">
-            {puxandoQ === "todos" ? "Atualizando…" : "🌡️ Atualizar qualidade"}
+          <button className="onum-btn-ghost" onClick={puxarQualidadeTodos} disabled={puxandoQ === "todos"} title="Puxar da Meta a qualidade, o limite e a foto de perfil de todos os números">
+            {puxandoQ === "todos" ? "Atualizando…" : "🌡️ Atualizar qualidade e fotos"}
           </button>
           <button className="onum-add" onClick={() => setForm({ apelido: "", numero: "", phoneNumberId: "", wabaId: "", token: "", vendedorId: "" })}>
             <I.plus className="ico" /> Adicionar número
@@ -3098,7 +3103,11 @@ function OficialNumeros({ showToast }) {
         <div className="onum-cards">
           {numeros.map((n) => (
             <div key={n.id} className="onum-card">
-              <div className="onum-card-ico"><I.wa className="ico" /></div>
+              <div className="onum-card-ico">
+                {n.temFoto
+                  ? <img src={"/api/oficial/numeros/" + n.id + "/foto?v=" + (n.fotoAtualizadaEm || 0)} className="onum-ico-foto" alt="" onError={(e) => { e.target.style.display = "none"; }} />
+                  : <I.wa className="ico" />}
+              </div>
               <div className="onum-card-info">
                 <div className="onum-card-top">
                   <b>{n.apelido}</b>
@@ -3114,7 +3123,7 @@ function OficialNumeros({ showToast }) {
                 <span style={{ marginTop: 6, display: "block" }}>{badgeQualidade(n.quality)}</span>
               </div>
               <div className="onum-card-acoes">
-                <button className="onum-acao" onClick={() => puxarQualidade(n)} title="Puxar a qualidade do número da Meta agora" disabled={puxandoQ === n.id}>
+                <button className="onum-acao" onClick={() => puxarQualidade(n)} title="Puxar da Meta a qualidade e a foto de perfil do número" disabled={puxandoQ === n.id}>
                   {puxandoQ === n.id ? <span className="spin" /> : "🌡️"}
                 </button>
                 <button className="onum-acao" onClick={() => assinarWebhook(n)} title="Ativar recebimento de respostas (webhook)"><I.link className="ico" /></button>
