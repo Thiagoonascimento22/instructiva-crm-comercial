@@ -3194,7 +3194,7 @@ h1, h2, h3, h4, .topbar .greet, .panel-h h3, .login-card .ttl, .login-card h2, .
 .onum-status.off { background: rgba(148,163,184,.15); color: var(--faint); }
 .onum-status.off i { background: var(--faint); }
 .onum-card-num { font-size: 13.5px; color: var(--muted); font-weight: 500; }
-.onum-card-id { font-size: 11.5px; color: var(--faint); font-family: var(--mono, ui-monospace, monospace); }
+.onum-card-id { font-size: 11.5px; color: var(--faint); font-family: inherit; font-variant-numeric: tabular-nums; }
 .onum-card-acoes { display: flex; gap: 7px; flex-shrink: 0; }
 .onum-acao { width: 38px; height: 38px; border-radius: 11px; border: 1px solid var(--line); background: var(--surface-2); color: var(--muted); display: flex; align-items: center; justify-content: center; cursor: pointer; transition: .14s; }
 .onum-acao:hover:not(:disabled) { border-color: var(--of-green); color: var(--of-green-d); background: var(--of-green-soft); }
@@ -3323,3 +3323,10 @@ input:focus-visible, textarea:focus-visible, select:focus-visible {
 /* botão primário com sombra colorida suave (dá destaque sem gritar) */
 .disp-cta, .onum-add { box-shadow: 0 6px 18px -6px rgba(124,58,237,.45); }
 .disp-cta:hover, .onum-add:hover { box-shadow: 0 10px 26px -8px rgba(124,58,237,.55); transform: translateY(-1px); }
+
+/* ===== CORREÇÃO: tamanho base do ícone (evita ícone gigante) ===== */
+.ico { width: 16px; height: 16px; flex-shrink: 0; }
+.onum-btn-ghost { display: inline-flex; align-items: center; gap: 8px; }
+.onum-btn-ghost .ico { width: 17px; height: 17px; }
+.onum-acao .ico { width: 17px; height: 17px; }
+.ico-inline { width: 13px !important; height: 13px !important; }
