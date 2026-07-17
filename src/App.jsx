@@ -3839,6 +3839,12 @@ function InboxOficial({ isGer, showToast, onIrParaEvolution }) {
               ))}
               <div ref={fimRef} />
             </div>
+            {conversa.iaUltimoErro && (
+              <div style={{ margin: "10px 14px 0", padding: "11px 14px", background: "#fef2f2", border: "1px solid #fecaca", borderRadius: 11, color: "#b91c1c", fontSize: 12.5, display: "flex", alignItems: "flex-start", gap: 8 }}>
+                <I.alert className="ico" style={{ flexShrink: 0, marginTop: 1 }} />
+                <span><b>A IA não respondeu.</b> {conversa.iaUltimoErro.motivo}</span>
+              </div>
+            )}
             {conversa.temIA && !conversa.iaPausada ? (
               <div className="of-conv-input" style={{ justifyContent: "center", gap: 10, background: "#f5f3ff", border: "1px solid #ddd6fe", borderRadius: 12 }}>
                 <span style={{ color: "#6d28d9", fontSize: 13.5, fontWeight: 600 }}>🤖 A IA está atendendo este lead.</span>

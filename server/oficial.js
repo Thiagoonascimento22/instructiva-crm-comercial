@@ -1093,10 +1093,16 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
   }
 
   async function rodarIA(chat, numeroCfg) {
+    const marcarErro = (motivo) => {
+      chat.iaUltimoErro = { motivo, ts: Date.now() };
+      salvar();
+      console.log(`[oficial] IA NÃO respondeu (${chat.numero}): ${motivo}`);
+    };
     try {
-      if (db.oficial.iaGlobalAtiva === false) return; // botão de pânico: IA geral desligada
+      if (db.oficial.iaGlobalAtiva === false) return marcarErro("O interruptor GERAL da IA está desligado (ligue na aba Atendente IA).");
       const ia = (db.oficial.ias || []).find((x) => x.id === chat.iaId);
-      if (!ia || !ia.ativa) return;
+      if (!ia) return marcarErro("A IA atribuída a esta conversa não existe mais.");
+      if (!ia.ativa) return marcarErro(`A IA "${ia.nome}" está DESATIVADA — ative ela na aba Atendente IA.`);
       const system = montarSystemPrompt(ia, chat.nome);
       const kb = await buscarConhecimento(ia, chat);
       const systemFinal = kb
@@ -1104,7 +1110,7 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
         : system;
       const histDireto = (chat.mensagens || []).slice(-24);
       let resposta = await chamarClaude(systemFinal, histDireto);
-      if (!resposta) return;
+      if (!resposta) return marcarErro("A OpenAI não retornou nenhuma resposta.");
 
       // detecta handoff
       let passar = false;
@@ -1139,6 +1145,7 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
         chat.mensagens.push({ role: "me", content: resposta, ts, porIA: true });
         if (chat.mensagens.length > 300) chat.mensagens = chat.mensagens.slice(-300);
         chat.atualizadoEm = ts;
+        chat.iaUltimoErro = null; // respondeu com sucesso -> limpa qualquer erro anterior
       }
 
       if (passar) {
@@ -1152,7 +1159,11 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
       }
       salvar();
     } catch (e) {
-      console.error("Erro rodarIA:", e.message);
+      const msg = e && e.message ? e.message : "erro desconhecido";
+      // erro comum de chave: deixa claro
+      if (/OPENAI_API_KEY/i.test(msg)) marcarErro("Falta configurar a OPENAI_API_KEY no Railway (a IA usa a OpenAI pra responder).");
+      else if (/quota|insufficient|billing|exceeded/i.test(msg)) marcarErro("Erro de cota/crédito na OpenAI: " + msg);
+      else marcarErro("Erro ao gerar resposta: " + msg);
     }
   }
 
@@ -2118,6 +2129,7 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
       vendedorNome: v ? v.nome : "",
       temIA: !!chat.iaId,
       iaPausada: !!chat.iaPausada,
+      iaUltimoErro: chat.iaUltimoErro || null,
       mensagens: chat.mensagens || [],
       notas: chat.notas || [], // notas internas (transferências etc) — lead não vê
     });
