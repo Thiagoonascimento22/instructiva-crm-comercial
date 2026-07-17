@@ -53,7 +53,7 @@ const AGX_CSS = `
 .agx-grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
 .agx-sep{height:1px;background:var(--border,#ececf0);margin:18px 0}
 .agx-up{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;border:1.5px dashed var(--border2,#d2d2da);border-radius:14px;padding:26px;cursor:pointer;background:var(--bg1,#fafafb);transition:.15s}
-.agx-up:hover{border-color:#6347e8;background:#f5f3ff}
+.agx-up:hover{border-color:var(--brand);background:var(--surface-2)}
 .agx-up-ic{width:30px;height:30px;color:var(--muted,#7a7a82);margin-bottom:4px}
 .agx-up-t{font-size:15px;font-weight:700;color:var(--text,#333)}
 .agx-up-s{font-size:12.5px;color:var(--muted,#9a9aa2)}
@@ -66,7 +66,7 @@ const AGX_CSS = `
 .agx-card-x{width:28px;height:28px;border-radius:8px;border:1px solid var(--border,#e6e6ea);background:var(--card,#fff);font-size:16px;color:var(--muted,#999);cursor:pointer}
 .agx-card-x:hover{background:#fdecec;color:#d04545;border-color:#f3caca}
 .agx-add{width:100%;border:1.5px dashed var(--border2,#cdcdd6);background:transparent;color:#6347e8;font-size:14px;font-weight:600;padding:13px;border-radius:12px;cursor:pointer}
-.agx-add:hover{background:#f5f3ff;border-color:#6347e8}
+.agx-add:hover{background:var(--surface-2);border-color:var(--brand)}
 .agx-ofertas-tit{font-size:11.5px;font-weight:700;letter-spacing:.04em;color:#1a9d54;border-left:3px solid #1a9d54;padding-left:8px;margin:16px 0 10px}
 .agx-oferta{border:1px solid var(--border,#eaeaee);border-radius:10px;padding:12px;margin-bottom:10px;background:var(--card,#fff)}
 .agx-add-oferta{width:100%;border:1.5px dashed #aee3c4;background:#f3fbf6;color:#1a9d54;font-size:13.5px;font-weight:600;padding:11px;border-radius:10px;cursor:pointer}
@@ -3761,7 +3761,7 @@ function InboxOficial({ isGer, showToast, onIrParaEvolution }) {
             <div className="of-chat-mid">
               <div className="of-chat-nm">
                 {c.nome}
-                {c.comIA && <span className="of-pill" style={{ background: "#ede9fe", color: "#6d28d9", borderColor: "#ddd6fe" }}>🤖 IA atendendo</span>}
+                {c.comIA && <span className="of-pill" style={{ background: "var(--surface-2)", color: "var(--brand)", borderColor: "var(--line)" }}>🤖 IA atendendo</span>}
                 {c.iaPassou && <span className="of-pill" style={{ background: "#eafaf0", color: "#1a9d54", borderColor: "#aee3c4" }}>✓ IA passou</span>}
                 {c.origemDisparo && <span className="of-pill">{c.campanha || "Disparo"}</span>}
               </div>
@@ -3886,10 +3886,10 @@ function InboxOficial({ isGer, showToast, onIrParaEvolution }) {
               </div>
             )}
             {conversa.temIA && !conversa.iaPausada ? (
-              <div className="of-conv-input" style={{ justifyContent: "center", gap: 10, background: "#f5f3ff", border: "1px solid #ddd6fe", borderRadius: 12 }}>
-                <span style={{ color: "#6d28d9", fontSize: 13.5, fontWeight: 600 }}>🤖 A IA está atendendo este lead.</span>
+              <div className="of-conv-input" style={{ justifyContent: "center", gap: 10, background: "var(--surface-2)", border: "1px solid var(--line)", borderRadius: 12 }}>
+                <span style={{ color: "var(--brand)", fontSize: 13.5, fontWeight: 600 }}>🤖 A IA está atendendo este lead.</span>
                 {isGer && (
-                  <button className="btn btn-sm" style={{ background: "#6d28d9", color: "#fff", border: "none" }} onClick={() => alternarIAConversa()}>
+                  <button className="btn btn-sm" style={{ background: "var(--brand)", color: "#fff", border: "none" }} onClick={() => alternarIAConversa()}>
                     Pausar IA e assumir
                   </button>
                 )}

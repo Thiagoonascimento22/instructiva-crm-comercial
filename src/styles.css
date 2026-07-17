@@ -3,11 +3,11 @@
    ============================================================ */
 :root {
   /* marca (compartilhada nos dois temas) */
-  --brand: #4f46e5;
-  --brand-2: #818cf8;
-  --laranja: #4f46e5;
-  --grad: linear-gradient(135deg, #6366f1 0%, #4338ca 100%);
-  --grad-violet: linear-gradient(135deg, #818cf8 0%, #a5b4fc 100%);
+  --brand: #141414;
+  --brand-2: #3d3d3d;
+  --laranja: #141414;
+  --grad: linear-gradient(135deg, #2b2b2b 0%, #0a0a0a 100%);
+  --grad-violet: linear-gradient(135deg, #3d3d3d 0%, #6b6b6b 100%);
 
   /* hero IA — showpiece escuro nos dois temas */
   --ia-hero-bg:
@@ -16,9 +16,9 @@
     linear-gradient(120deg, #15131f, #1a1530 60%, #241a3a);
 
   /* ===== CLARO (padrão) ===== */
-  --indigo: #6366f1;
-  --indigo-600: #4338ca;
-  --violet: #818cf8;
+  --indigo: #1f1f1f;
+  --indigo-600: #000000;
+  --violet: #3d3d3d;
   --mint: #10b981;
   --coral: #f43f5e;
   --amber: #f59e0b;
@@ -41,7 +41,7 @@
   --side-shadow: 1px 0 0 rgba(20, 22, 45, 0.06);
 
   --lead: #64748b;
-  --contato: #6366f1;
+  --contato: #1f1f1f;
   --negociando: #f59e0b;
   --fechou: #10b981;
   --perdeu: #f43f5e;
@@ -59,13 +59,13 @@
   --shadow-lg: 0 4px 16px -4px rgba(20, 22, 45, 0.1);
   --card-hover-shadow: 0 2px 8px -2px rgba(20, 22, 45, 0.08);
   --glow-violet: 0 2px 8px -2px rgba(99, 102, 241, 0.18);
-  --glow-brand: 0 2px 8px -2px rgba(79, 70, 229, 0.2);
+  --glow-brand: 0 2px 8px -2px rgba(20, 20, 20, 0.18);
   --num-glow: none;
   --sheen: linear-gradient(90deg, transparent, rgba(20, 22, 45, 0.04), transparent);
 
   --nav-hover: rgba(79, 70, 229, 0.06);
   --input-bg: #ffffff;
-  --input-focus-ring: rgba(79, 70, 229, 0.16);
+  --input-focus-ring: rgba(20, 20, 20, 0.16);
   --bubble-them: #ffffff;
   --th-bg: rgba(20, 22, 45, 0.03);
   --row-hover: rgba(79, 70, 229, 0.04);
@@ -81,8 +81,11 @@
 
 /* ===== ESCURO ===== */
 :root[data-theme="dark"] {
-  --indigo: #818cf8;
-  --indigo-600: #6366f1;
+  --brand: #f5f5f5;
+  --brand-2: #cfcfcf;
+  --grad: linear-gradient(135deg, #ffffff 0%, #d8d8d8 100%);
+  --indigo: #f0f0f0;
+  --indigo-600: #f0f0f0;
   --violet: #a5b4fc;
   --mint: #34e3b0;
   --coral: #ff5d73;
@@ -106,7 +109,7 @@
   --side-shadow: 24px 0 70px -34px rgba(0, 0, 0, 0.85);
 
   --lead: #8b90a6;
-  --contato: #818cf8;
+  --contato: #f0f0f0;
   --negociando: #ffb547;
   --fechou: #34e3b0;
   --perdeu: #ff5d73;
@@ -128,13 +131,13 @@
   --shadow-lg: 0 36px 80px -28px rgba(0, 0, 0, 0.8);
   --card-hover-shadow: 0 22px 52px -22px rgba(0, 0, 0, 0.7);
   --glow-violet: 0 0 36px -6px rgba(129, 140, 248, 0.5);
-  --glow-brand: 0 10px 30px -8px rgba(79, 70, 229, 0.55);
+  --glow-brand: 0 8px 22px -8px rgba(0, 0, 0, 0.5);
   --num-glow: 0 0 26px rgba(255, 255, 255, 0.1);
   --sheen: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.25), transparent);
 
   --nav-hover: rgba(255, 255, 255, 0.06);
   --input-bg: rgba(255, 255, 255, 0.04);
-  --input-focus-ring: rgba(79, 70, 229, 0.18);
+  --input-focus-ring: rgba(255, 255, 255, 0.22);
   --bubble-them: rgba(255, 255, 255, 0.06);
   --th-bg: rgba(255, 255, 255, 0.03);
   --row-hover: rgba(255, 255, 255, 0.035);
@@ -2006,7 +2009,7 @@ h1, h2, h3, h4, .topbar .greet, .panel-h h3, .login-card .ttl, .login-card h2, .
 .wa-bubble .t { opacity: 0.75; }
 .wa-readonly { background: var(--th-bg); border-top: 1px solid var(--glass-border); color: var(--muted); }
 .wa-badge { background: var(--grad); color: #fff; }
-.seller-tag { background: rgba(129, 140, 248,0.16); color: #818cf8; }
+.seller-tag { background: rgba(128,128,128,0.16); color: var(--text); }
 
 /* ---------- IA hero ---------- */
 .ia-hero { background: var(--ia-hero-bg); border: 1px solid var(--glass-border); box-shadow: var(--shadow-lg), inset 0 1px 0 rgba(255,255,255,0.06); }
@@ -2028,7 +2031,7 @@ h1, h2, h3, h4, .topbar .greet, .panel-h h3, .login-card .ttl, .login-card h2, .
 /* ---------- badges / tags / spinner ---------- */
 .badge { background: var(--th-bg); color: var(--muted); }
 .tag-role.ger { background: rgba(79, 70, 229,0.16); color: var(--brand); }
-.tag-role.ven { background: rgba(129, 140, 248,0.16); color: #818cf8; }
+.tag-role.ven { background: rgba(128,128,128,0.16); color: var(--text); }
 .spin { border-color: var(--line); border-top-color: var(--brand); }
 
 /* ---------- entrada (page load) ---------- */
@@ -2403,10 +2406,10 @@ h1, h2, h3, h4, .topbar .greet, .panel-h h3, .login-card .ttl, .login-card h2, .
    Afeta SÓ o vendedor — gerente e suporte ficam inalterados.
    ============================================================ */
 .shell.tema-v {
-  --brand: #6366f1;
-  --brand-2: #a78bfa;
-  --grad: linear-gradient(135deg, #a78bfa 0%, #4f46e5 100%);
-  --glow-brand: 0 14px 34px -12px rgba(79, 70, 229, 0.5);
+  --brand: #141414;
+  --brand-2: #3d3d3d;
+  --grad: linear-gradient(135deg, #2b2b2b 0%, #0a0a0a 100%);
+  --glow-brand: 0 10px 28px -12px rgba(20, 20, 20, 0.4);
   --r: 20px;
   --r-sm: 13px;
   /* sidebar escura premium (nos dois modos) */
@@ -2683,7 +2686,7 @@ h1, h2, h3, h4, .topbar .greet, .panel-h h3, .login-card .ttl, .login-card h2, .
 .mon-of-card.destaque .n { color: var(--brand); }
 .mon-of-card.ia { background: #f5f3ff; border-color: #ddd6fe; }
 [data-theme="dark"] .mon-of-card.ia { background: rgba(79, 70, 229,.12); border-color: rgba(79, 70, 229,.3); }
-.mon-of-card.ia .n { color: #4338ca; }
+.mon-of-card.ia .n { color: var(--brand); }
 [data-theme="dark"] .mon-of-card.ia .n { color: #b9a6ff; }
 .mon-of-ia-row { display: flex; justify-content: space-between; align-items: center; padding: 10px 14px; border: 1px solid var(--line); border-radius: 10px; margin-bottom: 8px; flex-wrap: wrap; gap: 8px; }
 .mon-of-ia-row .nm { display: inline-flex; align-items: center; gap: 8px; font-weight: 600; font-size: 14px; }
@@ -3347,3 +3350,21 @@ input:focus-visible, textarea:focus-visible, select:focus-visible {
 .agx-docdel { background: none; border: none; color: var(--faint); cursor: pointer; padding: 5px; border-radius: 7px; display: flex; flex-shrink: 0; transition: .15s; }
 .agx-docdel:hover { background: rgba(244,63,94,.1); color: var(--coral); }
 .agx-docdel .ico { width: 16px; height: 16px; }
+
+/* ===== accent PRETO: no modo escuro os botões/nav/badges viram claros, então o texto/ícone vira escuro pra NÃO SUMIR ===== */
+[data-theme="dark"] .nav button.active,
+[data-theme="dark"] .nav button.active .ico,
+[data-theme="dark"] .btn-primary,
+[data-theme="dark"] .btn-primary .ico,
+[data-theme="dark"] .btn-hero,
+[data-theme="dark"] .wa-bubble.me,
+[data-theme="dark"] .wa-badge,
+[data-theme="dark"] .onum-add,
+[data-theme="dark"] .onum-add .ico,
+[data-theme="dark"] .disp-cta,
+[data-theme="dark"] .disp-cta .ico,
+[data-theme="dark"] .dispm-next.disparar,
+[data-theme="dark"] .ia-tabs button.on,
+[data-theme="dark"] .onum-avatar-ph {
+  color: #141414 !important;
+}
