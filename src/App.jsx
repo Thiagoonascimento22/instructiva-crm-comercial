@@ -1998,7 +1998,7 @@ function OficialDisparo({ isGer = true, showToast }) {
       </div>
 
       {abrir && <ModalDisparo isGer={isGer} numeros={numeros} showToast={showToast} onClose={() => setAbrir(false)} onDone={() => { setAbrir(false); setTimeout(carregarCampanhas, 1500); if (!isGer) setTimeout(() => api.ofMeuLimite().then(setMeuLimite).catch(() => {}), 1500); }} />}
-      {campSel && <ModalMetricas camp={campSel} onClose={() => setCampSel(null)} onRetomar={retomarCampanha} onRedisparar={redispararCampanha} onExcluir={excluirCampanha} />}
+      {campSel && <ModalMetricas camp={campSel} isGer={isGer} onClose={() => setCampSel(null)} onRetomar={retomarCampanha} onRedisparar={redispararCampanha} onExcluir={excluirCampanha} />}
     </div>
   );
 }
@@ -2318,7 +2318,7 @@ function ModalDisparo({ isGer = true, numeros, showToast, onClose, onDone }) {
   );
 }
 
-function ModalMetricas({ camp, onClose, onRetomar, onRedisparar, onExcluir }) {
+function ModalMetricas({ camp, isGer = true, onClose, onRetomar, onRedisparar, onExcluir }) {
   const enviados = camp.enviados || 0;
   const linha = (lab, val, cor) => {
     const pct = enviados ? Math.round((val / enviados) * 100) : 0;
@@ -2380,9 +2380,11 @@ function ModalMetricas({ camp, onClose, onRetomar, onRedisparar, onExcluir }) {
             {!agendada && !camp.pendentes && camp.enviados > 0 && (
               <button className="disp-camp-acao redisp" onClick={() => { onRedisparar && onRedisparar(camp); onClose(); }}>↻ Re-disparar pra quem não respondeu</button>
             )}
-            <button className="mm-excluir" onClick={() => { onExcluir && onExcluir(camp); onClose(); }}>
-              <I.trash className="ico" /> {agendada ? "Cancelar agendamento" : "Excluir campanha"}
-            </button>
+            {isGer && (
+              <button className="mm-excluir" onClick={() => { onExcluir && onExcluir(camp); onClose(); }}>
+                <I.trash className="ico" /> {agendada ? "Cancelar agendamento" : "Excluir campanha"}
+              </button>
+            )}
           </div>
         </div>
       </div>

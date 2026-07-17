@@ -1683,11 +1683,10 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
   });
 
   /* excluir uma campanha (e, opcionalmente, as conversas que vieram dela) */
-  app.delete("/api/oficial/campanhas/:id", auth, (req, res) => {
+  app.delete("/api/oficial/campanhas/:id", auth, gerenteOnly, (req, res) => {
     const i = (db.oficial.campanhas || []).findIndex((c) => c.id === req.params.id);
     if (i < 0) return res.status(404).json({ error: "Campanha não encontrada" });
     const camp = db.oficial.campanhas[i];
-    if (!campanhaDoUsuario(req, camp)) return res.status(403).json({ error: "Essa campanha não é sua" });
     const apagarConversas = String(req.query.conversas || "") === "1";
     let conversasRemovidas = 0;
     if (apagarConversas) {
