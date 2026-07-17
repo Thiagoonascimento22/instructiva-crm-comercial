@@ -93,6 +93,7 @@ export const api = {
   ofLimites: () => req("GET", "/api/oficial/limites"),
   ofSetLimite: (id, dados) => req("POST", "/api/oficial/vendedores/" + id + "/limite", dados),
   ofMeuLimite: () => req("GET", "/api/oficial/meu-limite"),
+  ofTemperatura: (dias) => req("GET", "/api/oficial/temperatura" + (dias ? "?dias=" + dias : "")),
   ofCriarNumero: (dados) => req("POST", "/api/oficial/numeros", dados),
   ofEditarNumero: (id, dados) => req("PUT", "/api/oficial/numeros/" + id, dados),
   ofExcluirNumero: (id) => req("DELETE", "/api/oficial/numeros/" + id),

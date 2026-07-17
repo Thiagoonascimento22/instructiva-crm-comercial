@@ -458,6 +458,34 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
     res.json({ ok: true });
   });
 
+  /* ---- TEMPERATURA: em que horário os leads mais respondem ---- */
+  app.get("/api/oficial/temperatura", auth, (req, res) => {
+    const souGerente = req.user.role === "gerente";
+    const dias = Math.max(0, parseInt(req.query.dias) || 0); // 0 = tudo
+    const cutoff = dias > 0 ? Date.now() - dias * 86400000 : 0;
+    // hora/dia no fuso do Brasil (-3)
+    const horaBR = (ts) => { const d = new Date((ts || 0) - 3 * 3600000); return { hora: d.getUTCHours(), dia: d.getUTCDay() }; };
+    const byHour = new Array(24).fill(0);
+    const grid = Array.from({ length: 7 }, () => new Array(24).fill(0)); // [dia][hora]
+    let total = 0;
+    const chats = Object.values(db.waChats || {}).filter(
+      (c) => c.canal === "oficial" && (souGerente || c.vendedorId === req.user.id)
+    );
+    for (const c of chats) {
+      for (const m of (c.mensagens || [])) {
+        if (m.role !== "them") continue; // conta só as respostas do lead
+        const ts = m.ts || 0;
+        if (!ts || (cutoff && ts < cutoff)) continue;
+        const { hora, dia } = horaBR(ts);
+        byHour[hora]++; grid[dia][hora]++; total++;
+      }
+    }
+    let picoHora = 0; for (let h = 1; h < 24; h++) if (byHour[h] > byHour[picoHora]) picoHora = h;
+    const byDia = grid.map((r) => r.reduce((a, b) => a + b, 0));
+    let picoDia = 0; for (let d = 1; d < 7; d++) if (byDia[d] > byDia[picoDia]) picoDia = d;
+    res.json({ byHour, grid, byDia, total, picoHora, picoDia });
+  });
+
   /* ---- LIMITE DIÁRIO de disparos por vendedor ---- */
   // gerente vê todos os vendedores com o uso de hoje
   app.get("/api/oficial/limites", auth, gerenteOnly, (req, res) => {

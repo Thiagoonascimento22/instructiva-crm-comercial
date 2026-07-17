@@ -1200,6 +1200,9 @@ function PaginaOficial({ user, showToast }) {
         <button className={aba === "metricas" ? "of-tab on" : "of-tab"} onClick={() => setAba("metricas")}>
           <I.cash className="ico" /> Métricas
         </button>
+        <button className={aba === "temperatura" ? "of-tab on" : "of-tab"} onClick={() => setAba("temperatura")}>
+          <I.trend className="ico" /> Temperatura
+        </button>
         {isGer && (
           <button className={aba === "ia" ? "of-tab on" : "of-tab"} onClick={() => setAba("ia")}>
             <I.spark className="ico" /> IA
@@ -1212,6 +1215,7 @@ function PaginaOficial({ user, showToast }) {
         {aba === "templates" && <OficialTemplates isGer={isGer} showToast={showToast} />}
         {isGer && aba === "numeros" && <OficialNumeros showToast={showToast} />}
         {aba === "metricas" && <OficialMetricas showToast={showToast} />}
+        {aba === "temperatura" && <OficialTemperatura showToast={showToast} />}
         {isGer && aba === "ia" && <OficialIAs showToast={showToast} />}
       </div>
     </div>
@@ -2596,6 +2600,130 @@ function OficialTemplates({ isGer = true, showToast }) {
   );
 }
 
+
+function OficialTemperatura({ showToast }) {
+  const [dados, setDados] = useState(null);
+  const [carregando, setCarregando] = useState(true);
+  const [dias, setDias] = useState(30);
+  const PERIODOS = [{ v: 7, l: "7 dias" }, { v: 30, l: "30 dias" }, { v: 90, l: "90 dias" }, { v: 0, l: "Tudo" }];
+  const DIAS = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
+
+  useEffect(() => {
+    setCarregando(true);
+    api.ofTemperatura(dias).then((d) => { setDados(d); setCarregando(false); }).catch((e) => { showToast(e.message); setCarregando(false); });
+  }, [dias]);
+
+  // escala de calor: verde (pouco) -> amarelo -> laranja -> vermelho (muito)
+  const heat = (ratio) => {
+    if (ratio <= 0) return "#f1f5f9";
+    const hue = 140 - ratio * 140;
+    const light = 82 - ratio * 34;
+    return `hsl(${Math.round(hue)}, 78%, ${Math.round(light)}%)`;
+  };
+  const h2 = (h) => String(h).padStart(2, "0") + "h";
+
+  if (carregando) return <div className="dash-empty"><p>Carregando temperatura…</p></div>;
+  if (!dados || dados.total === 0) {
+    return (
+      <div className="dash-empty">
+        <I.trend className="ico-empty" />
+        <p>Ainda não há respostas de leads suficientes pra montar o mapa. Assim que os leads começarem a responder, o horário quente aparece aqui.</p>
+      </div>
+    );
+  }
+
+  const maxHora = Math.max(...dados.byHour, 1);
+  const maxCel = Math.max(...dados.grid.flat(), 1);
+  const maxDia = Math.max(...dados.byDia, 1);
+  const cardStyle = { background: "var(--card,#fff)", border: "1px solid var(--linha,#eef0f4)", borderRadius: 14, padding: 16, marginBottom: 14 };
+
+  return (
+    <div className="of-temp">
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 8, marginBottom: 14 }}>
+        <div>
+          <h2 style={{ margin: 0, fontSize: 20 }}>🌡️ Temperatura — quando os leads respondem</h2>
+          <p style={{ margin: "4px 0 0", color: "var(--muted)", fontSize: 13 }}>Horário (do Brasil) em que os leads mais mandam mensagem. Quanto mais vermelho, mais quente.</p>
+        </div>
+        <div style={{ display: "inline-flex", background: "var(--soft,#f1f3f8)", borderRadius: 10, padding: 3 }}>
+          {PERIODOS.map((p) => (
+            <button key={p.v} onClick={() => setDias(p.v)}
+              style={{ border: "none", cursor: "pointer", padding: "6px 12px", borderRadius: 8, fontSize: 13, fontFamily: "inherit",
+                background: dias === p.v ? "var(--brand,#7c5cff)" : "transparent", color: dias === p.v ? "#fff" : "var(--muted)", fontWeight: dias === p.v ? 600 : 500 }}>{p.l}</button>
+          ))}
+        </div>
+      </div>
+
+      {/* destaques */}
+      <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 14 }}>
+        <div style={{ ...cardStyle, marginBottom: 0, flex: 1, minWidth: 150, textAlign: "center", background: "linear-gradient(135deg,#fee2e2,#fff)" }}>
+          <div style={{ fontSize: 12, color: "var(--muted)" }}>HORÁRIO MAIS QUENTE</div>
+          <div style={{ fontSize: 26, fontWeight: 800, color: "#dc2626" }}>{h2(dados.picoHora)}</div>
+          <div style={{ fontSize: 12, color: "var(--muted)" }}>{dados.byHour[dados.picoHora]} respostas</div>
+        </div>
+        <div style={{ ...cardStyle, marginBottom: 0, flex: 1, minWidth: 150, textAlign: "center" }}>
+          <div style={{ fontSize: 12, color: "var(--muted)" }}>DIA MAIS QUENTE</div>
+          <div style={{ fontSize: 26, fontWeight: 800, color: "var(--brand,#7c5cff)" }}>{DIAS[dados.picoDia]}</div>
+          <div style={{ fontSize: 12, color: "var(--muted)" }}>{dados.byDia[dados.picoDia]} respostas</div>
+        </div>
+        <div style={{ ...cardStyle, marginBottom: 0, flex: 1, minWidth: 150, textAlign: "center" }}>
+          <div style={{ fontSize: 12, color: "var(--muted)" }}>TOTAL DE RESPOSTAS</div>
+          <div style={{ fontSize: 26, fontWeight: 800 }}>{dados.total}</div>
+          <div style={{ fontSize: 12, color: "var(--muted)" }}>no período</div>
+        </div>
+      </div>
+
+      {/* barras por hora (0-23) */}
+      <div style={cardStyle}>
+        <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 12 }}>Respostas por hora do dia</div>
+        <div style={{ display: "flex", alignItems: "flex-end", gap: 3, height: 130 }}>
+          {dados.byHour.map((v, h) => {
+            const r = v / maxHora;
+            return (
+              <div key={h} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "flex-end", height: "100%" }} title={`${h2(h)}: ${v} respostas`}>
+                <div style={{ fontSize: 9, color: "var(--muted)", marginBottom: 2 }}>{v > 0 && h === dados.picoHora ? v : ""}</div>
+                <div style={{ width: "100%", height: Math.max(v > 0 ? 4 : 0, r * 100) + "px", background: heat(r), borderRadius: "4px 4px 0 0", border: h === dados.picoHora ? "2px solid #dc2626" : "none" }} />
+                <div style={{ fontSize: 9, color: "var(--muted)", marginTop: 3 }}>{h % 3 === 0 ? h : ""}</div>
+              </div>
+            );
+          })}
+        </div>
+        <div style={{ textAlign: "center", fontSize: 11, color: "var(--muted)", marginTop: 4 }}>hora do dia (0–23)</div>
+      </div>
+
+      {/* heatmap dia da semana x hora */}
+      <div style={cardStyle}>
+        <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 12 }}>Mapa de calor — dia da semana × hora</div>
+        <div style={{ overflowX: "auto" }}>
+          <div style={{ display: "inline-block", minWidth: 640 }}>
+            {/* cabeçalho de horas */}
+            <div style={{ display: "flex", gap: 2, marginLeft: 42, marginBottom: 3 }}>
+              {Array.from({ length: 24 }, (_, h) => (
+                <div key={h} style={{ flex: 1, fontSize: 9, color: "var(--muted)", textAlign: "center" }}>{h % 3 === 0 ? h : ""}</div>
+              ))}
+            </div>
+            {dados.grid.map((linha, d) => (
+              <div key={d} style={{ display: "flex", alignItems: "center", gap: 2, marginBottom: 2 }}>
+                <div style={{ width: 40, fontSize: 11, color: "var(--muted)", textAlign: "right", paddingRight: 4, fontWeight: d === dados.picoDia ? 700 : 400 }}>{DIAS[d]}</div>
+                {linha.map((v, h) => (
+                  <div key={h} title={`${DIAS[d]} ${h2(h)}: ${v} respostas`}
+                    style={{ flex: 1, aspectRatio: "1", minWidth: 18, height: 20, background: heat(v / maxCel), borderRadius: 4, cursor: "default" }} />
+                ))}
+              </div>
+            ))}
+          </div>
+        </div>
+        {/* legenda */}
+        <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 12, fontSize: 11, color: "var(--muted)" }}>
+          <span>menos</span>
+          {[0, 0.25, 0.5, 0.75, 1].map((r) => <span key={r} style={{ width: 18, height: 14, borderRadius: 3, background: heat(r), display: "inline-block" }} />)}
+          <span>mais</span>
+        </div>
+      </div>
+
+      <p style={{ fontSize: 12, color: "var(--muted)" }}>Dica: concentre os disparos um pouco antes do horário mais quente pra pegar o lead no momento que ele costuma responder.</p>
+    </div>
+  );
+}
 
 function OficialMetricas({ showToast }) {
   const [dados, setDados] = useState(null); // { numeros, total }
