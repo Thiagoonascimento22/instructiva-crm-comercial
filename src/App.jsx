@@ -2911,6 +2911,30 @@ function OficialMetricas({ showToast }) {
   );
 }
 
+// badge da qualidade do número (vindo da Meta): Alta/Média/Baixa + limite + se subiu/caiu
+function badgeQualidade(q) {
+  if (!q || !q.rating || q.rating === "UNKNOWN") {
+    return <span style={{ fontSize: 11.5, color: "var(--faint)" }}>⚪ Qualidade: sem dado ainda</span>;
+  }
+  const map = {
+    GREEN: { l: "Alta", c: "#059669", bg: "rgba(16,185,129,.13)", e: "🟢" },
+    YELLOW: { l: "Média", c: "#b45309", bg: "rgba(245,158,11,.15)", e: "🟡" },
+    RED: { l: "Baixa", c: "#dc2626", bg: "rgba(244,63,94,.12)", e: "🔴" },
+  };
+  const m = map[q.rating] || map.RED;
+  const tierMap = { TIER_50: "50/dia", TIER_250: "250/dia", TIER_1K: "1 mil/dia", TIER_10K: "10 mil/dia", TIER_100K: "100 mil/dia", TIER_UNLIMITED: "ilimitado" };
+  const tier = tierMap[q.tier] || (q.tier ? String(q.tier).replace("TIER_", "") : "");
+  const rank = (r) => ({ GREEN: 3, YELLOW: 2, RED: 1 }[r] || 0);
+  const dir = q.anterior && q.anterior !== q.rating ? (rank(q.rating) > rank(q.anterior) ? { t: "↑ subiu", c: "#059669" } : { t: "↓ caiu", c: "#dc2626" }) : null;
+  return (
+    <span style={{ display: "inline-flex", alignItems: "center", gap: 6, flexWrap: "wrap", fontSize: 12 }}>
+      <span style={{ background: m.bg, color: m.c, fontWeight: 700, padding: "2px 9px", borderRadius: 20 }}>{m.e} Qualidade: {m.l}</span>
+      {tier && <span style={{ color: "var(--muted)" }}>· limite {tier}</span>}
+      {dir && <span style={{ color: dir.c, fontWeight: 700 }}>· {dir.t}</span>}
+    </span>
+  );
+}
+
 function OficialNumeros({ showToast }) {
   const [numeros, setNumeros] = useState([]);
   const [form, setForm] = useState(null);
@@ -2921,6 +2945,20 @@ function OficialNumeros({ showToast }) {
   const [tokenDef, setTokenDef] = useState(false);
   const [tokenForm, setTokenForm] = useState(null); // { token: "" } quando abre o modal do token global
   const [salvandoToken, setSalvandoToken] = useState(false);
+  const [puxandoQ, setPuxandoQ] = useState(null);
+
+  async function puxarQualidade(n) {
+    setPuxandoQ(n.id);
+    try { await api.ofPuxarQualidade(n.id); carregar(); showToast("Qualidade atualizada"); }
+    catch (e) { showToast("Não deu pra puxar a qualidade: " + e.message); }
+    finally { setPuxandoQ(null); }
+  }
+  async function puxarQualidadeTodos() {
+    setPuxandoQ("todos");
+    try { await api.ofQualidadeTodos(); carregar(); showToast("Qualidade de todos atualizada"); }
+    catch (e) { showToast(e.message); }
+    finally { setPuxandoQ(null); }
+  }
 
   const carregar = () => api.ofNumeros().then(setNumeros).catch((e) => showToast(e.message));
   useEffect(() => {
@@ -3027,6 +3065,9 @@ function OficialNumeros({ showToast }) {
             🔑 Token da Meta {tokenDef ? "✓" : "(configurar)"}
           </button>
           <button className="onum-btn-ghost" onClick={diagnostico} title="Verificar se as respostas estão chegando">🔍 Diagnóstico</button>
+          <button className="onum-btn-ghost" onClick={puxarQualidadeTodos} disabled={puxandoQ === "todos"} title="Puxar da Meta a qualidade (Alta/Média/Baixa) e o limite de todos os números">
+            {puxandoQ === "todos" ? "Atualizando…" : "🌡️ Atualizar qualidade"}
+          </button>
           <button className="onum-add" onClick={() => setForm({ apelido: "", numero: "", phoneNumberId: "", wabaId: "", token: "", vendedorId: "" })}>
             <I.plus className="ico" /> Adicionar número
           </button>
@@ -3060,8 +3101,12 @@ function OficialNumeros({ showToast }) {
                 <span className="onum-card-id" style={{ marginTop: 2 }}>
                   {n.vendedorId ? <>👤 Vendedor: <b style={{ color: "var(--brand)" }}>{n.vendedorNome || "—"}</b></> : <span style={{ opacity: .7 }}>🔀 Sem dono (distribuição por %)</span>}
                 </span>
+                <span style={{ marginTop: 6, display: "block" }}>{badgeQualidade(n.quality)}</span>
               </div>
               <div className="onum-card-acoes">
+                <button className="onum-acao" onClick={() => puxarQualidade(n)} title="Puxar a qualidade do número da Meta agora" disabled={puxandoQ === n.id}>
+                  {puxandoQ === n.id ? <span className="spin" /> : "🌡️"}
+                </button>
                 <button className="onum-acao" onClick={() => assinarWebhook(n)} title="Ativar recebimento de respostas (webhook)"><I.link className="ico" /></button>
                 <button className="onum-acao" onClick={() => registrar(n)} title="Registrar número na Cloud API (use se aparecer erro de envio)"><I.key className="ico" /></button>
                 <button className="onum-acao" onClick={() => testar(n)} title="Testar conexão" disabled={testando === n.id}>

@@ -57,7 +57,49 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
       temToken: !!tokenDe(n),
       vendedorId: n.vendedorId || null,
       vendedorNome: dono ? dono.nome : "",
+      quality: n.quality || null, // { rating, tier, atualizadoEm, anterior, mudouEm }
     };
+  }
+  // puxa da Meta a qualidade e o limite de envio do número
+  async function buscarQualidade(n) {
+    if (!n.phoneNumberId || !tokenDe(n)) return null;
+    try {
+      const r = await fetch(`${GRAPH}/${n.phoneNumberId}?fields=quality_rating,messaging_limit_tier,display_phone_number,verified_name,name_status`, {
+        headers: { Authorization: "Bearer " + tokenDe(n) },
+      });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) return null;
+      return {
+        rating: d.quality_rating || "UNKNOWN", // GREEN | YELLOW | RED | UNKNOWN
+        tier: d.messaging_limit_tier || "",     // TIER_250 | TIER_1K | TIER_10K | ...
+        nome: d.verified_name || "",
+        nameStatus: d.name_status || "",
+      };
+    } catch (e) { return null; }
+  }
+  // aplica a qualidade no número, guardando a anterior (pra mostrar se subiu/caiu)
+  function aplicarQualidade(n, q) {
+    if (!q) return false;
+    const antigo = n.quality || {};
+    const mudou = !!antigo.rating && antigo.rating !== q.rating;
+    n.quality = {
+      rating: q.rating, tier: q.tier, nome: q.nome, nameStatus: q.nameStatus,
+      atualizadoEm: Date.now(),
+      anterior: mudou ? antigo.rating : (antigo.anterior || null),
+      mudouEm: mudou ? Date.now() : (antigo.mudouEm || null),
+    };
+    if (mudou) console.log(`[oficial] QUALIDADE ${n.apelido}: ${antigo.rating} -> ${q.rating}`);
+    return mudou;
+  }
+  async function atualizarQualidadeTodos() {
+    let algum = false;
+    for (const n of db.oficial.numeros || []) {
+      if (!n.phoneNumberId || !tokenDe(n)) continue;
+      try { const q = await buscarQualidade(n); if (q && aplicarQualidade(n, q)) algum = true; } catch (_) {}
+      await new Promise((r) => setTimeout(r, 400));
+    }
+    salvar();
+    return algum;
   }
   // número que o usuário logado pode ver/usar:
   //  - gerente: qualquer número
@@ -514,11 +556,26 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
     res.json(limiteInfo(req.user));
   });
 
+  /* ---- QUALIDADE do número (Alta/Média/Baixa + limite de envio, direto da Meta) ---- */
+  app.post("/api/oficial/numeros/:id/qualidade", auth, async (req, res) => {
+    const n = numeroPermitido(req, req.params.id);
+    if (!n) return res.status(404).json({ error: "Número não encontrado (ou sem acesso)" });
+    if (!n.phoneNumberId) return res.status(400).json({ error: "Número sem Phone Number ID" });
+    if (!tokenDe(n)) return res.status(400).json({ error: "Número sem token (configure o Token da Meta)" });
+    const q = await buscarQualidade(n);
+    if (!q) return res.status(400).json({ error: "Não consegui puxar a qualidade da Meta agora — tente de novo em instantes" });
+    aplicarQualidade(n, q);
+    salvar();
+    res.json({ ok: true, quality: n.quality });
+  });
+  app.post("/api/oficial/qualidade-todos", auth, gerenteOnly, async (req, res) => {
+    await atualizarQualidadeTodos();
+    res.json({ ok: true, numeros: (db.oficial.numeros || []).map(numeroPublico) });
+  });
 
   // salva faturamento e/ou gasto na mão (sem re-assinar webhook, é só valor)
   app.post("/api/oficial/numeros/:id/metricas", auth, (req, res) => {
-    const n = numeroPermitido(req, req.params.id);
-    if (!n) return res.status(404).json({ error: "Número não encontrado (ou sem acesso)" });
+    const n = numeroPermitido(req, req.params.id);    if (!n) return res.status(404).json({ error: "Número não encontrado (ou sem acesso)" });
     const b = req.body || {};
     if (b.faturamento !== undefined) n.faturamento = Math.max(0, Number(b.faturamento) || 0);
     if (b.gasto !== undefined) n.gasto = Math.max(0, Number(b.gasto) || 0);
@@ -2048,6 +2105,12 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
       for (const entry of body.entry || []) {
         for (const ch of entry.changes || []) {
           const val = ch.value || {};
+          // QUALIDADE do número mudou (a Meta avisa quando sobe/cai) -> re-puxa de todos
+          if (ch.field === "phone_number_quality_update") {
+            console.log("[oficial] webhook de QUALIDADE recebido:", JSON.stringify(val).slice(0, 180));
+            try { await atualizarQualidadeTodos(); } catch (_) {}
+            continue;
+          }
           const phoneNumberId = (val.metadata && val.metadata.phone_number_id) || "";
           // acha qual número do pool recebeu
           const numeroCfg = (db.oficial.numeros || []).find((n) => n.phoneNumberId === phoneNumberId);
@@ -2255,6 +2318,12 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
       }
     } catch (e) { console.error("[oficial] agendador erro:", e.message); }
   }, 20000);
+
+  // QUALIDADE dos números: atualiza de tempos em tempos (a cada 3h) e uma vez logo ao subir.
+  // Assim o rating (Alta/Média/Baixa) e o limite ficam sempre atualizados no sistema,
+  // mesmo sem o webhook de qualidade estar ligado.
+  setTimeout(() => { atualizarQualidadeTodos().catch(() => {}); }, 15000);
+  setInterval(() => { atualizarQualidadeTodos().catch(() => {}); }, 3 * 3600000);
 
   // devolve a função de init pro index chamar DEPOIS do loadDB()
   return { garantirEstrutura };

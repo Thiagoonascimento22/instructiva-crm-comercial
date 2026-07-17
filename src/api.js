@@ -94,6 +94,8 @@ export const api = {
   ofSetLimite: (id, dados) => req("POST", "/api/oficial/vendedores/" + id + "/limite", dados),
   ofMeuLimite: () => req("GET", "/api/oficial/meu-limite"),
   ofTemperatura: (dias) => req("GET", "/api/oficial/temperatura" + (dias ? "?dias=" + dias : "")),
+  ofPuxarQualidade: (id) => req("POST", "/api/oficial/numeros/" + id + "/qualidade"),
+  ofQualidadeTodos: () => req("POST", "/api/oficial/qualidade-todos"),
   ofCriarNumero: (dados) => req("POST", "/api/oficial/numeros", dados),
   ofEditarNumero: (id, dados) => req("PUT", "/api/oficial/numeros/" + id, dados),
   ofExcluirNumero: (id) => req("DELETE", "/api/oficial/numeros/" + id),
