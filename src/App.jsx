@@ -1969,61 +1969,28 @@ function OficialDisparo({ isGer = true, showToast }) {
             <p>{dataFiltro ? "Nenhuma campanha nesse dia." : "Nenhuma campanha ainda."} Clique em <b>Novo disparo</b> para começar{dataFiltro ? ", ou veja outro dia / Tudo" : ""}.</p>
           </div>
         ) : (
-          <div className="disp-camp-grid">
+          <div className="disp-lista">
             {campanhas.map((c) => {
               const pctResp = c.enviados ? Math.round((c.responderam || 0) / c.enviados * 100) : 0;
               const rodando = c.pendentes > 0 && c.rodando;
-              const parada = c.pendentes > 0 && !c.rodando;
+              const agendada = c.status === "agendada";
+              const cls = agendada ? "sched" : c.pendentes > 0 ? "run" : "ok";
               return (
-                <div key={c.id} className={"disp-camp-card" + (c.status === "agendada" ? " sched" : "")} onClick={() => setCampSel(c)}>
-                  <div className="disp-camp-card-top">
-                    <div className="disp-camp-nome">
-                      <b>{c.nome}</b>
-                      <span>{c.template}{c.criadoPorNome ? " · " + c.criadoPorNome : ""} · {new Date(c.criadoEm).toLocaleDateString("pt-BR")}</span>
-                    </div>
-                    <div className="disp-camp-top-r">
-                      {c.status === "agendada"
-                        ? <span className="disp-status sched"><span className="dot" /> Agendada</span>
-                        : c.pendentes > 0
-                          ? <span className="disp-status run"><span className="dot" /> {rodando ? "Enviando" : "Pausada"}</span>
-                          : <span className="disp-status ok"><span className="dot" /> Concluída</span>}
-                      <button className="disp-camp-x" title={c.status === "agendada" ? "Cancelar agendamento" : "Excluir"} onClick={(e) => { e.stopPropagation(); excluirCampanha(c); }}><I.trash className="ico" /></button>
-                    </div>
-                  </div>
-
-                  {c.status === "agendada" ? (
-                    <div className="disp-sched-info">
-                      <div className="disp-sched-when">⏰ {new Date(c.agendadoPara).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" })}</div>
-                      <div className="disp-sched-sub">{c.total} contato(s) na fila · dispara sozinho na hora</div>
-                    </div>
-                  ) : (
-                    <>
-                      <div className="disp-prog">
-                        <div className="disp-prog-bar"><i style={{ width: Math.max(pctResp, c.enviados ? 2 : 0) + "%" }} /></div>
-                        <div className="disp-prog-lbl"><b>{pctResp}%</b> responderam · {c.entregues || 0} de {c.total || 0} entregues</div>
-                      </div>
-                      <div className="disp-camp-nums">
-                        <div><span className="disp-camp-n">{c.enviados || 0}</span><span className="disp-camp-l">enviados</span></div>
-                        <div><span className="disp-camp-n ok">{c.entregues || 0}</span><span className="disp-camp-l">entregues</span></div>
-                        <div><span className="disp-camp-n resp">{c.responderam || 0}</span><span className="disp-camp-l">responderam</span></div>
-                        {c.falhas > 0 && <div><span className="disp-camp-n err">{c.falhas}</span><span className="disp-camp-l">erros</span></div>}
-                      </div>
-                      {c.falhas > 0 && c.ultimoErro && (
-                        <div className="disp-camp-erroline">⚠️ {c.falhas} com erro — <u>toque pra ver o motivo</u></div>
-                      )}
-                      {c.pendentes > 0 && (
-                        <button className="disp-camp-acao retomar" onClick={(e) => { e.stopPropagation(); retomarCampanha(c); }}>
-                          ▶ Retomar disparo · {c.pendentes} faltando
-                        </button>
-                      )}
-                      {!c.pendentes && c.enviados > 0 && (
-                        <button className="disp-camp-acao redisp" onClick={(e) => { e.stopPropagation(); redispararCampanha(c); }} title="Reenvia o template pra quem recebeu mas ainda não respondeu">
-                          ↻ Re-disparar pra quem não respondeu
-                        </button>
-                      )}
-                    </>
-                  )}
-                </div>
+                <button key={c.id} className="disp-row" onClick={() => setCampSel(c)}>
+                  <span className={"disp-row-dot " + cls} />
+                  <span className="disp-row-main">
+                    <span className="disp-row-nome">{c.nome}</span>
+                    <span className="disp-row-meta">{c.template}{c.criadoPorNome ? " · " + c.criadoPorNome : ""}</span>
+                  </span>
+                  <span className="disp-row-info">
+                    {agendada
+                      ? <span className="disp-row-sched">⏰ {new Date(c.agendadoPara).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}</span>
+                      : <><b className="disp-row-resp">{c.responderam || 0}</b><span className="disp-row-resp-l">resp · {pctResp}%</span></>}
+                    {!agendada && c.falhas > 0 && <span className="disp-row-err">{c.falhas} erro{c.falhas > 1 ? "s" : ""}</span>}
+                  </span>
+                  <span className={"disp-row-pill " + cls}>{agendada ? "Agendada" : c.pendentes > 0 ? (rodando ? "Enviando" : "Pausada") : "Concluída"}</span>
+                  <I.chevron className="disp-row-arrow" />
+                </button>
               );
             })}
           </div>
@@ -2031,7 +1998,7 @@ function OficialDisparo({ isGer = true, showToast }) {
       </div>
 
       {abrir && <ModalDisparo isGer={isGer} numeros={numeros} showToast={showToast} onClose={() => setAbrir(false)} onDone={() => { setAbrir(false); setTimeout(carregarCampanhas, 1500); if (!isGer) setTimeout(() => api.ofMeuLimite().then(setMeuLimite).catch(() => {}), 1500); }} />}
-      {campSel && <ModalMetricas camp={campSel} onClose={() => setCampSel(null)} />}
+      {campSel && <ModalMetricas camp={campSel} onClose={() => setCampSel(null)} onRetomar={retomarCampanha} onRedisparar={redispararCampanha} onExcluir={excluirCampanha} />}
     </div>
   );
 }
@@ -2314,15 +2281,6 @@ function ModalDisparo({ isGer = true, numeros, showToast, onClose, onDone }) {
               </div>
               <div className="dispm-campo">
                 <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", fontWeight: 600 }}>
-                  <input type="checkbox" checked={pularRecebidos} onChange={(e) => setPularRecebidos(e.target.checked)} style={{ width: 17, height: 17, cursor: "pointer" }} />
-                  Pular quem já recebeu (retomar disparo)
-                </label>
-                <span style={{ fontSize: 12, color: "var(--muted)", marginTop: 4, display: "block" }}>
-                  Marque se está re-disparando uma lista que travou no meio. O sistema envia só pra quem ainda NÃO recebeu por este número, evitando mensagens repetidas.
-                </span>
-              </div>
-              <div className="dispm-campo">
-                <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", fontWeight: 600 }}>
                   <input type="checkbox" checked={agendar} onChange={(e) => setAgendar(e.target.checked)} style={{ width: 17, height: 17, cursor: "pointer" }} />
                   ⏰ Agendar disparo (enviar depois, na data e hora que eu escolher)
                 </label>
@@ -2360,7 +2318,7 @@ function ModalDisparo({ isGer = true, numeros, showToast, onClose, onDone }) {
   );
 }
 
-function ModalMetricas({ camp, onClose }) {
+function ModalMetricas({ camp, onClose, onRetomar, onRedisparar, onExcluir }) {
   const enviados = camp.enviados || 0;
   const linha = (lab, val, cor) => {
     const pct = enviados ? Math.round((val / enviados) * 100) : 0;
@@ -2371,6 +2329,7 @@ function ModalMetricas({ camp, onClose }) {
       </div>
     );
   };
+  const agendada = camp.status === "agendada";
   return (
     <Portal>
     <div className="modal" onClick={(e) => e.target === e.currentTarget && onClose()}>
@@ -2381,27 +2340,49 @@ function ModalMetricas({ camp, onClose }) {
             Template <b>{camp.template}</b> · {new Date(camp.criadoEm).toLocaleString("pt-BR")} · total {camp.total} contato(s)
             {camp.criadoPorNome ? <> · disparado por <b>{camp.criadoPorNome}</b></> : null}
           </div>
-          {camp.falhas > 0 && camp.ultimoErro && (
-            <div style={{ marginBottom: 14, fontSize: 13, lineHeight: 1.5, color: "#b91c1c", background: "#fef2f2", border: "1px solid #fecaca", borderRadius: 10, padding: "12px 14px" }}>
-              <div style={{ fontWeight: 700, marginBottom: 4 }}>⚠️ Por que {camp.falhas} falhou</div>
-              {explicaErroMeta(camp.ultimoErro)}
-              <div style={{ marginTop: 6, fontSize: 11.5, opacity: .8 }}>Erro cru da Meta: {camp.ultimoErro}</div>
+
+          {agendada ? (
+            <div className="disp-sched-info" style={{ marginTop: 0 }}>
+              <div className="disp-sched-when">⏰ {new Date(camp.agendadoPara).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" })}</div>
+              <div className="disp-sched-sub">{camp.total} contato(s) na fila · o servidor dispara sozinho na hora marcada</div>
             </div>
+          ) : (
+            <>
+              {camp.falhas > 0 && camp.ultimoErro && (
+                <div style={{ marginBottom: 14, fontSize: 13, lineHeight: 1.5, color: "#b91c1c", background: "#fef2f2", border: "1px solid #fecaca", borderRadius: 10, padding: "12px 14px" }}>
+                  <div style={{ fontWeight: 700, marginBottom: 4 }}>⚠️ Por que {camp.falhas} falhou</div>
+                  {explicaErroMeta(camp.ultimoErro)}
+                  <div style={{ marginTop: 6, fontSize: 11.5, opacity: .8 }}>Erro cru da Meta: {camp.ultimoErro}</div>
+                </div>
+              )}
+              <div className="mm-big">
+                <div className="mm-big-card"><span className="mm-big-n">{enviados}</span><span>Enviados</span></div>
+                <div className="mm-big-card"><span className="mm-big-n ok">{camp.entregues || 0}</span><span>Entregues</span></div>
+                <div className="mm-big-card"><span className="mm-big-n resp">{camp.responderam || 0}</span><span>Responderam</span></div>
+                <div className="mm-big-card"><span className="mm-big-n err">{camp.falhas || 0}</span><span>Erros</span></div>
+              </div>
+              <div className="mm-linhas">
+                {linha("Entregues", camp.entregues || 0, "var(--of-green)")}
+                {linha("Lidos", camp.lidos || 0, "var(--cyan)")}
+                {linha("Responderam", camp.responderam || 0, "var(--brand)")}
+                {linha("Erros", camp.falhas || 0, "var(--coral)")}
+              </div>
+              <div className="panel-sub" style={{ marginTop: 12, fontSize: 11.5 }}>
+                Entregues e lidos são atualizados pela Meta em tempo real conforme as mensagens chegam.
+              </div>
+            </>
           )}
-          <div className="mm-big">
-            <div className="mm-big-card"><span className="mm-big-n">{enviados}</span><span>Enviados</span></div>
-            <div className="mm-big-card"><span className="mm-big-n ok">{camp.entregues || 0}</span><span>Entregues</span></div>
-            <div className="mm-big-card"><span className="mm-big-n resp">{camp.responderam || 0}</span><span>Responderam</span></div>
-            <div className="mm-big-card"><span className="mm-big-n err">{camp.falhas || 0}</span><span>Erros</span></div>
-          </div>
-          <div className="mm-linhas">
-            {linha("Entregues", camp.entregues || 0, "var(--of-green)")}
-            {linha("Lidos", camp.lidos || 0, "var(--cyan)")}
-            {linha("Responderam", camp.responderam || 0, "var(--brand)")}
-            {linha("Erros", camp.falhas || 0, "var(--coral)")}
-          </div>
-          <div className="panel-sub" style={{ marginTop: 12, fontSize: 11.5 }}>
-            Entregues e lidos são atualizados pela Meta em tempo real conforme as mensagens chegam.
+
+          <div className="mm-acoes">
+            {!agendada && camp.pendentes > 0 && (
+              <button className="disp-camp-acao retomar" onClick={() => { onRetomar && onRetomar(camp); onClose(); }}>▶ Retomar disparo · {camp.pendentes} faltando</button>
+            )}
+            {!agendada && !camp.pendentes && camp.enviados > 0 && (
+              <button className="disp-camp-acao redisp" onClick={() => { onRedisparar && onRedisparar(camp); onClose(); }}>↻ Re-disparar pra quem não respondeu</button>
+            )}
+            <button className="mm-excluir" onClick={() => { onExcluir && onExcluir(camp); onClose(); }}>
+              <I.trash className="ico" /> {agendada ? "Cancelar agendamento" : "Excluir campanha"}
+            </button>
           </div>
         </div>
       </div>
