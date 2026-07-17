@@ -3334,6 +3334,8 @@ function InboxOficial({ isGer, showToast, onIrParaEvolution }) {
   const chunksOf = useRef([]);
   const fimRef = useRef(null);
   const msgsBoxRef = useRef(null);   // container rolável das mensagens
+  const taOfRef = useRef(null);      // campo de digitação (textarea multi-linha)
+  useEffect(() => { const el = taOfRef.current; if (el && !texto) el.style.height = "auto"; }, [texto]);
   const nearBottomRef = useRef(true); // usuário está perto do fim?
   const convIdRef = useRef(null);     // qual conversa está aberta
   const msgCountRef = useRef(0);      // qtd de mensagens da última vez
@@ -3691,11 +3693,17 @@ function InboxOficial({ isGer, showToast, onIrParaEvolution }) {
                 <input ref={fileRefOf} type="file" hidden onChange={(e) => { onArquivoOf(e.target.files[0]); e.target.value = ""; }} accept="image/*,video/*,audio/*,application/pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.zip" />
                 <button type="button" className="of-comp-ico" onClick={() => fileRefOf.current && fileRefOf.current.click()} disabled={enviandoMidiaOf} title="Anexar arquivo"><I.clip className="ico" /></button>
                 <button type="button" className="of-comp-ico" onClick={() => setShowEmojiOf((v) => !v)} title="Emojis">😊</button>
-                <input
-                  placeholder={enviandoMidiaOf ? "Enviando…" : gravandoOf ? "Gravando áudio…" : "Escreva uma mensagem…"}
+                <textarea
+                  ref={taOfRef}
+                  className="of-conv-ta"
+                  rows={1}
+                  placeholder={enviandoMidiaOf ? "Enviando…" : gravandoOf ? "Gravando áudio…" : "Escreva uma mensagem…  (Shift+Enter pula linha)"}
                   value={texto}
-                  onChange={(e) => setTexto(e.target.value)}
-                  onKeyDown={(e) => { if (e.key === "Enter") { enviar(); setShowEmojiOf(false); } }}
+                  onChange={(e) => { setTexto(e.target.value); e.target.style.height = "auto"; e.target.style.height = Math.min(e.target.scrollHeight, 140) + "px"; }}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); enviar(); setShowEmojiOf(false); if (taOfRef.current) taOfRef.current.style.height = "auto"; }
+                    // Shift+Enter -> quebra de linha (padrão do textarea)
+                  }}
                   disabled={gravandoOf}
                 />
                 {texto.trim() ? (
@@ -3758,6 +3766,8 @@ function WhatsApp({ user, showToast, target, onTargetUsed, recarregarSol }) {
   useEffect(() => { arqRef.current = verArquivadas; }, [verArquivadas]);
   const msgsEnd = useRef(null);
   const waBoxRef = useRef(null);
+  const taWaRef = useRef(null);
+  useEffect(() => { const el = taWaRef.current; if (el && !texto) el.style.height = "auto"; }, [texto]);
   const waNearBottom = useRef(true);
   const waConvId = useRef(null);
   const waCount = useRef(0);
@@ -4158,12 +4168,14 @@ function WhatsApp({ user, showToast, target, onTargetUsed, recarregarSol }) {
                   <input ref={fileRef} type="file" hidden onChange={onArquivoSelecionado} accept="image/*,video/*,application/pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.zip" />
                   <button type="button" className="wa-comp-ico" onClick={() => fileRef.current && fileRef.current.click()} disabled={enviandoMidia} title="Anexar arquivo"><I.clip style={{ width: 20, height: 20 }} /></button>
                   <button type="button" className="wa-comp-ico" onClick={() => setShowEmoji((v) => !v)} title="Emojis">😊</button>
-                  <input
-                    className="wa-comp-input"
+                  <textarea
+                    ref={taWaRef}
+                    className="wa-comp-input wa-comp-ta"
+                    rows={1}
                     value={texto}
-                    onChange={(e) => setTexto(e.target.value)}
-                    onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); enviar(); setShowEmoji(false); } }}
-                    placeholder={enviandoMidia ? "Enviando…" : "Escreva uma mensagem..."}
+                    onChange={(e) => { setTexto(e.target.value); e.target.style.height = "auto"; e.target.style.height = Math.min(e.target.scrollHeight, 140) + "px"; }}
+                    onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); enviar(); setShowEmoji(false); if (taWaRef.current) taWaRef.current.style.height = "auto"; } }}
+                    placeholder={enviandoMidia ? "Enviando…" : "Escreva uma mensagem...  (Shift+Enter pula linha)"}
                     disabled={enviandoMidia}
                   />
                   {texto.trim() ? (
