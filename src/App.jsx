@@ -3089,6 +3089,25 @@ function OficialNumeros({ showToast }) {
         </div>
       </div>
 
+      {/* alerta de queda de qualidade */}
+      {(() => {
+        const rank = (r) => ({ GREEN: 3, YELLOW: 2, RED: 1 }[r] || 0);
+        const lab = (r) => ({ GREEN: "Alta", YELLOW: "Média", RED: "Baixa" }[r] || r);
+        const caidos = (numeros || []).filter((n) => n.quality && n.quality.anterior && rank(n.quality.rating) < rank(n.quality.anterior));
+        if (!caidos.length) return null;
+        return (
+          <div className="onum-alerta">
+            <div className="onum-alerta-tit">⚠️ Atenção: {caidos.length} número{caidos.length > 1 ? "s caíram" : " caiu"} de qualidade</div>
+            <div className="onum-alerta-lista">
+              {caidos.map((n) => (
+                <span key={n.id} className="onum-alerta-item"><b>{n.apelido}</b>: {lab(n.quality.anterior)} → <b style={{ color: n.quality.rating === "RED" ? "#dc2626" : "#b45309" }}>{lab(n.quality.rating)}</b></span>
+              ))}
+            </div>
+            <div className="onum-alerta-dica">Segure o ritmo de disparo desse(s) número(s) e use templates UTILITY até a qualidade voltar, pra não ser restringido pela Meta.</div>
+          </div>
+        );
+      })()}
+
       {/* lista de números */}
       {numeros.length === 0 ? (
         <div className="onum-vazio">
@@ -3271,6 +3290,18 @@ function OficialNumeros({ showToast }) {
    INBOX OFICIAL — usado tanto pelo gerente quanto pelo vendedor
    ============================================================ */
 // renderiza mídia recebida do lead no oficial (áudio, imagem, vídeo, documento)
+// janela de atendimento de 24h do WhatsApp: conta 24h a partir da última msg do LEAD
+// (renova quando ele responde). Fora dela, só template entrega.
+function janela24h(ultimaEntradaTs) {
+  if (!ultimaEntradaTs) return null; // lead ainda não respondeu -> não há janela aberta
+  const fim = ultimaEntradaTs + 24 * 3600000;
+  const resta = fim - Date.now();
+  if (resta <= 0) return { aberta: false, urgente: false, texto: "fechada", fim };
+  const h = Math.floor(resta / 3600000);
+  const m = Math.floor((resta % 3600000) / 60000);
+  return { aberta: true, urgente: resta < 2 * 3600000, resta, texto: h > 0 ? `${h}h ${m}min` : `${m}min`, fim };
+}
+
 function Ticks({ status }) {
   if (!status) return null;
   if (status === "failed") return <span title="Não entregue" style={{ marginLeft: 4, color: "#e0483d", fontWeight: 800, fontSize: 11 }}>!</span>;
@@ -3355,6 +3386,8 @@ function InboxOficial({ isGer, showToast, onIrParaEvolution }) {
   const msgsBoxRef = useRef(null);   // container rolável das mensagens
   const taOfRef = useRef(null);      // campo de digitação (textarea multi-linha)
   useEffect(() => { const el = taOfRef.current; if (el && !texto) el.style.height = "auto"; }, [texto]);
+  const [, forcarTick] = useState(0); // faz a contagem de 24h atualizar sozinha
+  useEffect(() => { const t = setInterval(() => forcarTick((x) => x + 1), 30000); return () => clearInterval(t); }, []);
   const nearBottomRef = useRef(true); // usuário está perto do fim?
   const convIdRef = useRef(null);     // qual conversa está aberta
   const msgCountRef = useRef(0);      // qtd de mensagens da última vez
@@ -3610,6 +3643,13 @@ function InboxOficial({ isGer, showToast, onIrParaEvolution }) {
             <div className="of-chat-right">
               <span className="of-chat-hora">{c.atualizadoEm ? horaCurta(c.atualizadoEm) : ""}</span>
               {c.naoLidas > 0 && <span className="of-chat-badge">{c.naoLidas}</span>}
+              {(() => {
+                const jan = janela24h(c.ultimaEntrada);
+                if (!jan) return null;
+                if (!jan.aberta) return <span className="of-jan-mini fechada" title="Janela de 24h fechada — só template">🔒</span>;
+                if (jan.urgente) return <span className="of-jan-mini urg" title={"Janela fecha em " + jan.texto}>⏳ {jan.texto}</span>;
+                return null;
+              })()}
             </div>
           </button>
           ));
@@ -3632,6 +3672,15 @@ function InboxOficial({ isGer, showToast, onIrParaEvolution }) {
                 <span>{conversa.numero}{conversa.vendedorNome ? " · com " + conversa.vendedorNome : ""}</span>
               </div>
               {conversa.origemDisparo && conversa.campanha && <span className="of-pill">{conversa.campanha}</span>}
+              {(() => {
+                const ms = conversa.mensagens || [];
+                let ue = 0; for (let i = ms.length - 1; i >= 0; i--) { if (ms[i].role === "them") { ue = ms[i].ts || 0; break; } }
+                const jan = janela24h(ue);
+                if (!jan) return null;
+                return jan.aberta
+                  ? <span className={"of-janela" + (jan.urgente ? " urg" : "")} title="Tempo restante da janela de 24h do WhatsApp. Ela renova toda vez que o lead te responde. Dentro dela você manda mensagem livre; fora, só template.">⏳ {jan.texto} de janela</span>
+                  : <span className="of-janela fechada" title="Passou 24h desde a última mensagem do lead. Agora só template aprovado é entregue — a mensagem livre não chega.">🔒 Janela fechada · só template</span>;
+              })()}
               <div className="of-conv-acoes">
                 {isGer && conversa.temIA && (
                   <button

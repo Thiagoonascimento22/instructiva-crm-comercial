@@ -1919,6 +1919,9 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
       .slice(0, 500)
       .map((c) => {
         const ultima = c.mensagens && c.mensagens.length ? c.mensagens[c.mensagens.length - 1] : null;
+        // última mensagem do LEAD (role them) -> base da janela de 24h (renova quando ele fala)
+        let ultimaEntrada = 0;
+        if (c.mensagens) { for (let i = c.mensagens.length - 1; i >= 0; i--) { if (c.mensagens[i].role === "them") { ultimaEntrada = c.mensagens[i].ts || 0; break; } } }
         const v = c.vendedorId ? db.users.find((u) => u.id === c.vendedorId) : null;
         const camp = c.campanhaId ? (db.oficial.campanhas || []).find((x) => x.id === c.campanhaId) : null;
         return {
@@ -1927,6 +1930,7 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
           nome: c.nome,
           naoLidas: c.naoLidas || 0,
           atualizadoEm: c.atualizadoEm || 0,
+          ultimaEntrada, // ts da última msg do lead (pra janela de 24h)
           origemDisparo: !!c.origemDisparo,
           campanha: c.campanha || "",
           campanhaId: c.campanhaId || null,

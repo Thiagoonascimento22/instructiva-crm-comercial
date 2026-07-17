@@ -234,6 +234,31 @@ function saveSoon() {
   saveDB();
 }
 
+// BACKUP DIÁRIO do banco: copia o crm.json pra pasta backups/ com a data, e mantém
+// os últimos 14 dias (apaga os mais antigos). Roda ao subir e a cada 24h.
+const BACKUP_DIR = path.join(path.dirname(DB_PATH), "backups");
+function fazerBackup() {
+  try {
+    if (!fs.existsSync(DB_PATH)) return;
+    if (!fs.existsSync(BACKUP_DIR)) fs.mkdirSync(BACKUP_DIR, { recursive: true });
+    const d = new Date();
+    const dia = d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
+    const destino = path.join(BACKUP_DIR, `crm-${dia}.json`);
+    fs.copyFileSync(DB_PATH, destino); // um backup por dia (sobrescreve se já houver do dia)
+    // rotação: mantém os 14 mais recentes
+    const arquivos = fs.readdirSync(BACKUP_DIR).filter((f) => /^crm-\d{4}-\d{2}-\d{2}\.json$/.test(f)).sort();
+    while (arquivos.length > 14) {
+      const velho = arquivos.shift();
+      try { fs.unlinkSync(path.join(BACKUP_DIR, velho)); } catch (_) {}
+    }
+    console.log(`Backup do banco salvo: ${destino} (${arquivos.length} backups guardados)`);
+  } catch (e) {
+    console.error("Erro no backup do banco:", e.message);
+  }
+}
+setTimeout(fazerBackup, 20000);            // um backup ~20s depois de subir
+setInterval(fazerBackup, 24 * 3600000);    // e a cada 24h
+
 function proximoId(prefixo) {
   const n = db.seq++;
   saveSoon();
