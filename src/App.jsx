@@ -1393,7 +1393,41 @@ function ModalIA({ ia, showToast, onClose, onSaved }) {
   const editando = !!ia.id;
   const [secao, setSecao] = useState("identidade");
   const [saving, setSaving] = useState(false);
+  const [docs, setDocs] = useState(ia.docs || []);
+  const [subindoDoc, setSubindoDoc] = useState(false);
+  const [filaDoc, setFilaDoc] = useState({ feitos: 0, total: 0, atual: "" });
 
+  async function subirDocs(fileList) {
+    const arr = Array.from(fileList || []).filter((f) => /\.(docx?|pdf|txt|md|csv)$/i.test(f.name));
+    if (!arr.length) { alert("Envie arquivos DOCX, PDF, TXT, MD ou CSV."); return; }
+    if (!ia.id) { alert("Salve a IA primeiro (aba Identidade) pra depois anexar os documentos."); setSecao("identidade"); return; }
+    setSubindoDoc(true);
+    let feitos = 0;
+    for (const file of arr) {
+      setFilaDoc({ feitos, total: arr.length, atual: file.name });
+      if (file.size > 20 * 1024 * 1024) { alert(`"${file.name}" passa de 20MB.`); feitos++; continue; }
+      try {
+        const base64 = await new Promise((res, rej) => {
+          const rd = new FileReader();
+          rd.onload = () => res(String(rd.result).split(",")[1] || "");
+          rd.onerror = () => rej(new Error("Falha ao ler o arquivo"));
+          rd.readAsDataURL(file);
+        });
+        const r = await api.ofUploadDocIA(ia.id, { nome: file.name, base64 });
+        setDocs((d) => [...d, r.doc]);
+      } catch (e) { alert(`"${file.name}": ${e.message}`); }
+      feitos++;
+      setFilaDoc({ feitos, total: arr.length, atual: "" });
+    }
+    setSubindoDoc(false);
+    setFilaDoc({ feitos: 0, total: 0, atual: "" });
+    showToast(`${feitos} documento(s) processado(s)`);
+  }
+  async function removerDoc(docId) {
+    if (!confirm("Remover este documento da base de conhecimento da IA?")) return;
+    try { await api.ofDelDocIA(ia.id, docId); setDocs((d) => d.filter((x) => x.id !== docId)); showToast("Documento removido"); }
+    catch (e) { alert(e.message); }
+  }
   const [nome, setNome] = useState(ia.nome || "");
   const [modo, setModo] = useState(ia.modo || "fecha");
   const cfg0 = ia.config || {};
@@ -1448,6 +1482,7 @@ function ModalIA({ ia, showToast, onClose, onSaved }) {
       { k: "persona", lb: "Persona", ic: I.users },
     ]},
     { g: "CONHECIMENTO", itens: [
+      { k: "documentos", lb: "Documentos", ic: I.download },
       { k: "cursos", lb: "Cursos", ic: I.pipe },
       { k: "objecoes", lb: "Objeções", ic: I.suporte },
       { k: "faq", lb: "FAQ", ic: I.chat },
@@ -1460,6 +1495,7 @@ function ModalIA({ ia, showToast, onClose, onSaved }) {
 
   function secaoPreenchida(k) {
     if (k === "identidade") return !!(nome.trim() && c.objetivo.trim());
+    if (k === "documentos") return docs.length > 0;
     if (k === "persona") return !!(c.quemEla.trim() || c.comoEscreve.trim());
     if (k === "cursos") return c.cursos.length > 0 || kb.some((x) => x.secao === "cursos");
     if (k === "objecoes") return c.objecoes.length > 0 || kb.some((x) => x.secao === "objecoes");
@@ -1633,6 +1669,40 @@ function ModalIA({ ia, showToast, onClose, onSaved }) {
                     <textarea className="agx-input" rows={5} value={c.nuncaFaz} onChange={(e) => set("nuncaFaz", e.target.value)} placeholder="- Inventa CPF ou e-mail&#10;- Promete o que não está no material" />
                   </div>
                 </div>
+              </div>
+            )}
+
+            {secao === "documentos" && (
+              <div>
+                <h4 className="agx-h">Base de conhecimento (documentos)</h4>
+                <p className="agx-psub">Anexe <b>todos os materiais de treinamento</b> (DOCX, PDF, TXT). A IA lê tudo e, em cada conversa, consulta automaticamente os trechos relevantes — pode subir muita coisa sem pesar no custo.</p>
+
+                <label className={"agx-drop" + (subindoDoc ? " off" : "")}>
+                  <input type="file" multiple accept=".doc,.docx,.pdf,.txt,.md,.csv" style={{ display: "none" }} disabled={subindoDoc}
+                    onChange={(e) => { subirDocs(e.target.files); e.target.value = ""; }} />
+                  {subindoDoc
+                    ? <span><span className="spin" /> Lendo e indexando {filaDoc.atual ? "“" + filaDoc.atual + "”" : ""} … ({filaDoc.feitos}/{filaDoc.total})</span>
+                    : <span><I.download className="ico" /> Clique pra anexar documentos (pode selecionar vários)</span>}
+                </label>
+
+                {docs.length === 0 ? (
+                  <div className="agx-vazio-doc">Nenhum documento ainda. Anexe os arquivos que o professor preparou.</div>
+                ) : (
+                  <div className="agx-doclist">
+                    <div className="agx-doclist-top">{docs.length} documento(s) · {docs.reduce((s, d) => s + (d.nChunks || 0), 0)} trechos indexados</div>
+                    {docs.map((d) => (
+                      <div className="agx-docrow" key={d.id}>
+                        <I.chat className="ico agx-docico" />
+                        <div className="agx-docinfo">
+                          <b>{d.nome}</b>
+                          <span>{d.nChunks} trecho(s) · {Math.max(1, Math.round((d.tamanho || 0) / 1024))} KB</span>
+                        </div>
+                        <button className="agx-docdel" title="Remover" onClick={() => removerDoc(d.id)}><I.trash className="ico" /></button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                <p className="agx-psub" style={{ marginTop: 14 }}>Dica: dá pra misturar com as outras abas (Cursos, Objeções, FAQ) — mas se o professor já colocou tudo nos documentos, pode deixar só aqui.</p>
               </div>
             )}
 

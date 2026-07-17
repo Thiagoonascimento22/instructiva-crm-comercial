@@ -1098,8 +1098,12 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
       const ia = (db.oficial.ias || []).find((x) => x.id === chat.iaId);
       if (!ia || !ia.ativa) return;
       const system = montarSystemPrompt(ia, chat.nome);
+      const kb = await buscarConhecimento(ia, chat);
+      const systemFinal = kb
+        ? system + "\n\n===== BASE DE CONHECIMENTO (materiais de treinamento) =====\nConsulte os trechos abaixo pra responder com precisão sobre cursos, preços, processo e regras. Use como fonte de verdade. Se a resposta não estiver nos trechos, responda com o que você já sabe, SEM inventar dado que não tem.\n\n" + kb
+        : system;
       const histDireto = (chat.mensagens || []).slice(-24);
-      let resposta = await chamarClaude(system, histDireto);
+      let resposta = await chamarClaude(systemFinal, histDireto);
       if (!resposta) return;
 
       // detecta handoff
@@ -1225,6 +1229,7 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
       id: ia.id, nome: ia.nome, ativa: !!ia.ativa, modo: ia.modo,
       config: ia.config || configVazia(),
       conhecimento: (ia.conhecimento || []).map((k) => ({ id: k.id, secao: k.secao, nome: k.nome, chars: (k.texto || "").length, criadoEm: k.criadoEm })),
+      docs: (ia.docs || []).map((d) => ({ id: d.id, nome: d.nome, tamanho: d.tamanho, nChunks: d.nChunks, criadoEm: d.criadoEm })),
       criadoEm: ia.criadoEm,
     };
   }
@@ -1288,6 +1293,7 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
   app.delete("/api/oficial/ias/:id", auth, gerenteOnly, (req, res) => {
     const antes = (db.oficial.ias || []).length;
     db.oficial.ias = (db.oficial.ias || []).filter((x) => x.id !== req.params.id);
+    try { const p = kbPath(req.params.id); if (p && fs.existsSync(p)) fs.unlinkSync(p); } catch (_) {}
     salvar();
     res.json({ ok: true, removida: antes !== db.oficial.ias.length });
   });
@@ -1489,6 +1495,148 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
       return res.status(500).json({ error: "Não consegui processar o arquivo: " + e.message });
     }
   });
+
+  /* ================= BASE DE CONHECIMENTO (RAG) da IA =================
+     Anexa documentos (docx/pdf/txt), extrai o texto, quebra em pedaços,
+     gera embeddings e guarda num arquivo separado por IA. Na hora de responder,
+     a IA busca só os trechos mais relevantes daquela conversa. */
+  const KB_DIR = MEDIA_DIR ? path.join(MEDIA_DIR, "ia_kb") : null;
+  function kbPath(iaId) { return KB_DIR ? path.join(KB_DIR, "ia_" + iaId + ".json") : null; }
+  function kbLer(iaId) {
+    try { const p = kbPath(iaId); if (p && fs.existsSync(p)) return JSON.parse(fs.readFileSync(p, "utf8")); } catch (_) {}
+    return { chunks: [] };
+  }
+  function kbSalvar(iaId, kb) {
+    try {
+      if (!KB_DIR) return;
+      if (!fs.existsSync(KB_DIR)) fs.mkdirSync(KB_DIR, { recursive: true });
+      fs.writeFileSync(kbPath(iaId), JSON.stringify(kb));
+    } catch (e) { console.error("kbSalvar:", e.message); }
+  }
+  async function extrairTextoDoc(nome, buf) {
+    const lower = String(nome || "").toLowerCase();
+    if (lower.endsWith(".txt") || lower.endsWith(".md") || lower.endsWith(".csv") || lower.endsWith(".text")) {
+      return buf.toString("utf8");
+    }
+    if (lower.endsWith(".pdf")) {
+      const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
+      const doc = await pdfjs.getDocument({ data: new Uint8Array(buf), useSystemFonts: true, isEvalSupported: false }).promise;
+      let texto = ""; const maxPag = Math.min(doc.numPages, 400);
+      for (let i = 1; i <= maxPag; i++) { const page = await doc.getPage(i); const c = await page.getTextContent(); texto += c.items.map((it) => it.str).join(" ") + "\n"; }
+      return texto;
+    }
+    if (lower.endsWith(".docx") || lower.endsWith(".doc")) {
+      const { createRequire } = await import("module");
+      const mammoth = createRequire(import.meta.url)("mammoth");
+      const r = await mammoth.extractRawText({ buffer: buf });
+      return String(r.value || "");
+    }
+    throw new Error("Formato não suportado (use PDF, DOCX, TXT, MD ou CSV)");
+  }
+  function chunkTexto(texto, tam = 1600, over = 200) {
+    const limpo = String(texto).replace(/\r/g, "").replace(/[ \t]{2,}/g, " ").replace(/\n{3,}/g, "\n\n").trim();
+    const chunks = []; let i = 0;
+    while (i < limpo.length) {
+      let fim = Math.min(i + tam, limpo.length);
+      if (fim < limpo.length) {
+        const janela = limpo.slice(i, fim);
+        const corte = Math.max(janela.lastIndexOf("\n"), janela.lastIndexOf(". "), janela.lastIndexOf("! "), janela.lastIndexOf("? "));
+        if (corte > tam * 0.5) fim = i + corte + 1;
+      }
+      const pedaco = limpo.slice(i, fim).trim();
+      if (pedaco.length > 30) chunks.push(pedaco);
+      const prox = fim - over;
+      i = prox > i ? prox : fim;
+    }
+    return chunks;
+  }
+  async function embeddar(textos) {
+    const key = process.env.OPENAI_API_KEY;
+    if (!key) throw new Error("OPENAI_API_KEY não configurada");
+    const out = [];
+    for (let i = 0; i < textos.length; i += 96) {
+      const lote = textos.slice(i, i + 96);
+      const r = await fetch("https://api.openai.com/v1/embeddings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: "Bearer " + key },
+        body: JSON.stringify({ model: "text-embedding-3-small", input: lote, dimensions: 512 }),
+      });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error((d.error && d.error.message) || ("Erro embeddings " + r.status));
+      (d.data || []).forEach((x) => out.push(x.embedding));
+    }
+    return out;
+  }
+  function cosseno(a, b) {
+    let dot = 0, na = 0, nb = 0;
+    const n = Math.min(a.length, b.length);
+    for (let i = 0; i < n; i++) { dot += a[i] * b[i]; na += a[i] * a[i]; nb += b[i] * b[i]; }
+    return dot / (Math.sqrt(na) * Math.sqrt(nb) || 1);
+  }
+  // devolve os trechos mais relevantes da base pra conversa (string pronta pro prompt)
+  async function buscarConhecimento(ia, chat) {
+    try {
+      if (!ia || !ia.docs || !ia.docs.length) return "";
+      const kb = kbLer(ia.id);
+      if (!kb.chunks || !kb.chunks.length) return "";
+      const ultimas = (chat.mensagens || []).filter((m) => m.role === "them").slice(-3)
+        .map((m) => m.transcricao || m.content || "").join("\n").trim();
+      const consulta = (ultimas || (chat.mensagens || []).slice(-3).map((m) => m.content || "").join("\n")).trim();
+      if (!consulta) return "";
+      const [q] = await embeddar([consulta.slice(0, 2000)]);
+      const rank = kb.chunks.map((c) => ({ texto: c.texto, s: cosseno(q, c.emb) }))
+        .sort((a, b) => b.s - a.s).slice(0, 8);
+      return rank.map((r, i) => `[Trecho ${i + 1}]\n${r.texto}`).join("\n\n");
+    } catch (e) { console.error("buscarConhecimento:", e.message); return ""; }
+  }
+
+  // ---- anexa um documento à base de conhecimento da IA ----
+  app.post("/api/oficial/ias/:id/docs", auth, gerenteOnly, async (req, res) => {
+    const ia = (db.oficial.ias || []).find((x) => x.id === req.params.id);
+    if (!ia) return res.status(404).json({ error: "IA não encontrada" });
+    const b = req.body || {};
+    const nome = String(b.nome || "documento").trim();
+    const base64 = String(b.base64 || "");
+    if (!base64) return res.status(400).json({ error: "Arquivo vazio" });
+    let buf; try { buf = Buffer.from(base64, "base64"); } catch (_) { return res.status(400).json({ error: "Arquivo inválido" }); }
+    if (buf.length > 20 * 1024 * 1024) return res.status(400).json({ error: "Arquivo passa de 20MB" });
+    try {
+      const texto = await extrairTextoDoc(nome, buf);
+      if (!texto || texto.trim().length < 20) return res.status(422).json({ error: "Não consegui ler texto (pode ser PDF escaneado/imagem)." });
+      const pedacos = chunkTexto(texto);
+      if (!pedacos.length) return res.status(422).json({ error: "Documento sem conteúdo aproveitável." });
+      const embs = await embeddar(pedacos);
+      const docId = "doc_" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+      const kb = kbLer(ia.id);
+      pedacos.forEach((t, i) => kb.chunks.push({ docId, texto: t, emb: embs[i] }));
+      kbSalvar(ia.id, kb);
+      if (!Array.isArray(ia.docs)) ia.docs = [];
+      const doc = { id: docId, nome, tamanho: buf.length, nChunks: pedacos.length, criadoEm: Date.now() };
+      ia.docs.push(doc);
+      salvar();
+      console.log(`[oficial] IA ${ia.nome}: doc "${nome}" indexado (${pedacos.length} trechos)`);
+      res.json({ ok: true, doc });
+    } catch (e) {
+      console.error("upload doc IA:", e.message);
+      res.status(500).json({ error: "Não consegui processar: " + e.message });
+    }
+  });
+  app.get("/api/oficial/ias/:id/docs", auth, gerenteOnly, (req, res) => {
+    const ia = (db.oficial.ias || []).find((x) => x.id === req.params.id);
+    if (!ia) return res.status(404).json({ error: "IA não encontrada" });
+    res.json({ docs: ia.docs || [], totalChunks: (ia.docs || []).reduce((s, d) => s + (d.nChunks || 0), 0) });
+  });
+  app.delete("/api/oficial/ias/:id/docs/:docId", auth, gerenteOnly, (req, res) => {
+    const ia = (db.oficial.ias || []).find((x) => x.id === req.params.id);
+    if (!ia) return res.status(404).json({ error: "IA não encontrada" });
+    const kb = kbLer(ia.id);
+    kb.chunks = (kb.chunks || []).filter((c) => c.docId !== req.params.docId);
+    kbSalvar(ia.id, kb);
+    ia.docs = (ia.docs || []).filter((d) => d.id !== req.params.docId);
+    salvar();
+    res.json({ ok: true });
+  });
+
 
 
 
