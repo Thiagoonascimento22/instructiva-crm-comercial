@@ -1962,8 +1962,8 @@ function OficialDisparo({ isGer = true, showToast }) {
         <div className="disp-camps-head">
           <h3>Campanhas <span className="disp-count">{campanhas.length}</span></h3>
           <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-            <button className="btn btn-sm" title="Baixa uma planilha (CSV) com os leads dos seus disparos: telefone, nome, se respondeu e a campanha" onClick={() => { window.open("/api/oficial/meus-leads?token=" + encodeURIComponent(localStorage.getItem("token") || ""), "_blank"); }}>⬇ Exportar leads</button>
-            {isGer && <button className="btn btn-sm" title="Baixa um arquivo só com os números que já receberam disparo" onClick={() => { window.open("/api/oficial/export-recebidos?token=" + encodeURIComponent(localStorage.getItem("token") || ""), "_blank"); }}>Números que receberam</button>}
+            <button className="btn btn-sm" title="Baixa uma planilha (CSV) com os leads dos seus disparos: telefone, nome, se respondeu e a campanha" onClick={() => { window.open("/api/oficial/meus-leads?token=" + encodeURIComponent(getToken()), "_blank"); }}>⬇ Exportar leads</button>
+            {isGer && <button className="btn btn-sm" title="Baixa um arquivo só com os números que já receberam disparo" onClick={() => { window.open("/api/oficial/export-recebidos?token=" + encodeURIComponent(getToken()), "_blank"); }}>Números que receberam</button>}
           </div>
         </div>
         {campanhas.length === 0 ? (
@@ -2379,7 +2379,7 @@ function ModalMetricas({ camp, isGer = true, onClose, onRetomar, onRedisparar, o
           <div className="mm-acoes">
             {!agendada && (
               <button className="disp-camp-acao" style={{ background: "var(--surface-2)", color: "var(--text)", borderColor: "var(--line)" }}
-                onClick={() => { window.open("/api/oficial/campanhas/" + camp.id + "/leads?token=" + encodeURIComponent(localStorage.getItem("token") || ""), "_blank"); }}
+                onClick={() => { window.open("/api/oficial/campanhas/" + camp.id + "/leads?token=" + encodeURIComponent(getToken()), "_blank"); }}
                 title="Baixa a planilha (CSV) com os leads dessa campanha: telefone, nome, se respondeu">
                 ⬇ Exportar leads dessa campanha
               </button>
