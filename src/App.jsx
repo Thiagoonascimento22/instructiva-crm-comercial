@@ -200,7 +200,7 @@ function fmtEspera(seg) {
 export default function App() {
   const [booting, setBooting] = useState(true);
   const [user, setUser] = useState(null);
-  const [view, setView] = useState("painel");
+  const [view, setView] = useState("whatsapp");
   const [waTarget, setWaTarget] = useState(null);
   const [minhasSol, setMinhasSol] = useState([]);
   const carregarMinhasSol = () => { api.solicitacoes().then(setMinhasSol).catch(() => {}); };
@@ -246,7 +246,7 @@ export default function App() {
   function logout() {
     setToken("");
     setUser(null);
-    setView("painel");
+    setView("whatsapp");
   }
 
   if (booting) return <div className="login-wrap"><div className="spin" /></div>;
@@ -258,12 +258,11 @@ export default function App() {
   const isVend = !isGer && !isSuporte;
   const badgeSol = minhasSol.filter((s) => s.status === "resolvida" && !s.resolvidoVisto).length;
   const titulos = {
-    painel: { t: "Sistema Comercial", s: "Acompanhe a produtividade e a agilidade do time" },
     whatsapp: { t: "Caixa de entrada", s: "Suas conversas — não oficial e oficial, num só lugar" },
-    oficial: { t: "Disparo Oficial", s: "Disparo em massa e distribuição automática de leads" },
+    disparo: { t: "Disparo", s: "Disparo em massa pelo número oficial" },
+    templates: { t: "Templates", s: "Modelos de mensagem aprovados pela Meta" },
+    numeros: { t: "Números", s: "Números oficiais conectados à sua conta Meta" },
     minhasSolicitacoes: { t: "Minhas solicitações", s: "Acompanhe seus pedidos ao suporte" },
-    ia: { t: "Análise Inteligente", s: "A IA avalia a qualidade do atendimento" },
-    nps: { t: "NPS / Satisfação", s: "Notas da pesquisa, por vendedor e período" },
     solicitacoes: { t: "Solicitações de suporte", s: "Pedidos de ajuda dos vendedores e análise" },
     equipe: { t: "Equipe & Acessos", s: "Gerencie os atendentes e seus acessos" },
     config: { t: "Configurações", s: "Seus dados de acesso" },
@@ -279,12 +278,11 @@ export default function App() {
           <div className="tag">Sistema Comercial</div>
         </div>
         <nav className="nav">
-          {!isSuporte && <NavBtn ic={I.dash} label={isGer ? "Monitoria" : "Meu Painel"} active={view === "painel"} onClick={() => setView("painel")} />}
-          {!isSuporte && <NavBtn ic={I.wa} label={isGer ? "WhatsApp" : "Caixa de entrada"} active={view === "whatsapp"} onClick={() => setView("whatsapp")} />}
-          {(isGer || isVend) && <NavBtn ic={I.send} label="Disparo Oficial" active={view === "oficial"} onClick={() => setView("oficial")} />}
+          {!isSuporte && <NavBtn ic={I.wa} label="Caixa de entrada" active={view === "whatsapp"} onClick={() => setView("whatsapp")} />}
+          {(isGer || isVend) && <NavBtn ic={I.send} label="Disparo" active={view === "disparo"} onClick={() => setView("disparo")} />}
+          {(isGer || isVend) && <NavBtn ic={I.chat} label="Templates" active={view === "templates"} onClick={() => setView("templates")} />}
+          {isGer && <NavBtn ic={I.wa} label="Números" active={view === "numeros"} onClick={() => setView("numeros")} />}
           {!isGer && !isSuporte && <NavBtn ic={I.suporte} label="Minhas solicitações" active={view === "minhasSolicitacoes"} badge={badgeSol} onClick={() => setView("minhasSolicitacoes")} />}
-          {isGer && <NavBtn ic={I.spark} label="Análise IA" active={view === "ia"} onClick={() => setView("ia")} />}
-          {isGer && <NavBtn ic={I.estrela} label="NPS" active={view === "nps"} onClick={() => setView("nps")} />}
           {(isGer || isSuporte) && <NavBtn ic={I.suporte} label="Solicitações" active={view === "solicitacoes"} onClick={() => setView("solicitacoes")} />}
           {isGer && <NavBtn ic={I.team} label="Equipe & Acessos" active={view === "equipe"} onClick={() => setView("equipe")} />}
           <NavBtn ic={I.cog} label="Configurações" active={view === "config"} onClick={() => setView("config")} />
@@ -313,12 +311,11 @@ export default function App() {
           </div>
         </div>
         <div className="content">
-          {view === "painel" && !isSuporte && <Monitoria user={user} showToast={showToast} />}
           {view === "whatsapp" && !isSuporte && <WhatsApp user={user} showToast={showToast} target={waTarget} onTargetUsed={() => setWaTarget(null)} recarregarSol={carregarMinhasSol} />}
-          {view === "oficial" && (isGer || isVend) && <PaginaOficial user={user} showToast={showToast} />}
+          {view === "disparo" && (isGer || isVend) && <OficialDisparo isGer={isGer} showToast={showToast} />}
+          {view === "templates" && (isGer || isVend) && <OficialTemplates isGer={isGer} showToast={showToast} />}
+          {view === "numeros" && isGer && <OficialNumeros showToast={showToast} />}
           {view === "minhasSolicitacoes" && !isGer && !isSuporte && <PaginaMinhasSolicitacoes itens={minhasSol} recarregar={carregarMinhasSol} showToast={showToast} />}
-          {view === "ia" && isGer && <PaginaIA user={user} showToast={showToast} />}
-          {view === "nps" && isGer && <PaginaNPS showToast={showToast} />}
           {view === "solicitacoes" && (isGer || isSuporte) && <PaginaSolicitacoes showToast={showToast} readonly={isGer} />}
           {view === "equipe" && isGer && <Equipe showToast={showToast} meId={user.id} />}
           {view === "config" && <Config user={user} setUser={setUser} showToast={showToast} />}
