@@ -210,7 +210,10 @@ function fmtEspera(seg) {
 export default function App() {
   const [booting, setBooting] = useState(true);
   const [user, setUser] = useState(null);
-  const [view, setView] = useState("whatsapp");
+  const [view, setView] = useState(() => {
+    try { return localStorage.getItem("instructiva_view") || "whatsapp"; } catch (e) { return "whatsapp"; }
+  });
+  useEffect(() => { try { localStorage.setItem("instructiva_view", view); } catch (e) {} }, [view]);
   const [waTarget, setWaTarget] = useState(null);
   const [minhasSol, setMinhasSol] = useState([]);
   const carregarMinhasSol = () => { api.solicitacoes().then(setMinhasSol).catch(() => {}); };
@@ -237,7 +240,13 @@ export default function App() {
   useEffect(() => {
     if (!user || vistaInicial.current) return;
     vistaInicial.current = true;
-    if (user.role === "suporte") setView("solicitacoes");
+    // valida a aba restaurada: se não for permitida pro perfil, cai numa aba segura
+    const porRole = {
+      gerente: ["whatsapp", "disparo", "templates", "numeros", "ia", "solicitacoes", "equipe", "config"],
+      suporte: ["solicitacoes", "config"],
+    };
+    const permitidas = porRole[user.role] || ["whatsapp", "disparo", "templates", "minhasSolicitacoes", "config"];
+    if (!permitidas.includes(view)) setView(user.role === "suporte" ? "solicitacoes" : "whatsapp");
   }, [user]);
 
   useEffect(() => {
