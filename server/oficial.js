@@ -486,6 +486,21 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
         return res.status(400).json({ error: "Vendedor inválido" });
       }
       n.vendedorId = vid;
+      // RELIGA conversas travadas: ao definir o dono, joga as respostas que ficaram
+      // "sem dono" (aguardando distribuição) desse número direto pra esse vendedor.
+      if (vid) {
+        const dono = db.users.find((u) => u.id === vid);
+        let religadas = 0;
+        for (const ch of Object.values(db.waChats || {})) {
+          if (ch && ch.canal === "oficial" && ch.numeroOficialId === n.id && !ch.vendedorId && !(ch.iaId && !ch.iaPausada)) {
+            ch.vendedorId = vid;
+            ch.vendedorNome = dono ? dono.nome : "";
+            ch.atribuidoEm = Date.now();
+            religadas++;
+          }
+        }
+        if (religadas) console.log(`[oficial] número ${n.apelido}: ${religadas} conversa(s) sem dono religadas p/ ${dono ? dono.nome : vid}`);
+      }
     }
     await assinarWebhook(n); // re-assina ao editar (caso token tenha mudado)
     salvar();
