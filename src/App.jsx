@@ -272,6 +272,7 @@ export default function App() {
     disparo: { t: "Disparo", s: "Disparo em massa pelo número oficial" },
     templates: { t: "Templates", s: "Modelos de mensagem aprovados pela Meta" },
     numeros: { t: "Números", s: "Números oficiais conectados à sua conta Meta" },
+    ia: { t: "Atendente IA", s: "SDR de IA que qualifica os leads e passa pro vendedor" },
     minhasSolicitacoes: { t: "Minhas solicitações", s: "Acompanhe seus pedidos ao suporte" },
     solicitacoes: { t: "Solicitações de suporte", s: "Pedidos de ajuda dos vendedores e análise" },
     equipe: { t: "Equipe & Acessos", s: "Gerencie os atendentes e seus acessos" },
@@ -292,6 +293,7 @@ export default function App() {
           {(isGer || isVend) && <NavBtn ic={I.send} label="Disparo" active={view === "disparo"} onClick={() => setView("disparo")} />}
           {(isGer || isVend) && <NavBtn ic={I.chat} label="Templates" active={view === "templates"} onClick={() => setView("templates")} />}
           {isGer && <NavBtn ic={I.wa} label="Números" active={view === "numeros"} onClick={() => setView("numeros")} />}
+          {isGer && <NavBtn ic={I.spark} label="Atendente IA" active={view === "ia"} onClick={() => setView("ia")} />}
           {!isGer && !isSuporte && <NavBtn ic={I.suporte} label="Minhas solicitações" active={view === "minhasSolicitacoes"} badge={badgeSol} onClick={() => setView("minhasSolicitacoes")} />}
           {(isGer || isSuporte) && <NavBtn ic={I.suporte} label="Solicitações" active={view === "solicitacoes"} onClick={() => setView("solicitacoes")} />}
           {isGer && <NavBtn ic={I.team} label="Equipe & Acessos" active={view === "equipe"} onClick={() => setView("equipe")} />}
@@ -325,6 +327,7 @@ export default function App() {
           {view === "disparo" && (isGer || isVend) && <OficialDisparo isGer={isGer} showToast={showToast} />}
           {view === "templates" && (isGer || isVend) && <OficialTemplates isGer={isGer} showToast={showToast} />}
           {view === "numeros" && isGer && <OficialNumeros showToast={showToast} />}
+          {view === "ia" && isGer && <OficialIAs showToast={showToast} />}
           {view === "minhasSolicitacoes" && !isGer && !isSuporte && <PaginaMinhasSolicitacoes itens={minhasSol} recarregar={carregarMinhasSol} showToast={showToast} />}
           {view === "solicitacoes" && (isGer || isSuporte) && <PaginaSolicitacoes showToast={showToast} readonly={isGer} />}
           {view === "equipe" && isGer && <Equipe showToast={showToast} meId={user.id} />}
@@ -1925,7 +1928,7 @@ function OficialDisparo({ isGer = true, showToast }) {
           {!isGer && meuLimite && !meuLimite.ilimitado && (
             <span className="disp-limite-chip" style={{ color: meuLimite.restante > 0 ? "var(--muted)" : "#dc2626", background: meuLimite.restante > 0 ? "var(--surface-2, #f1f3f8)" : "#fef2f2" }}>
               {meuLimite.restante > 0
-                ? <>Usou <b>{meuLimite.usado}</b>/<b>{meuLimite.limite}</b> hoje · restam <b style={{ color: "var(--brand,#7c5cff)" }}>{meuLimite.restante}</b></>
+                ? <>Usou <b>{meuLimite.usado}</b>/<b>{meuLimite.limite}</b> hoje · restam <b style={{ color: "var(--brand,#4f46e5)" }}>{meuLimite.restante}</b></>
                 : <>🚫 Limite de <b>{meuLimite.limite}</b>/dia — peça pro gerente liberar</>}
             </span>
           )}
@@ -2048,7 +2051,7 @@ function LimitesVendedores({ showToast }) {
           <b style={{ fontSize: 15 }}><I.funnel className="ico-inline" /> Limite de disparos por vendedor</b>
           <div style={{ fontSize: 12.5, color: "var(--muted)", marginTop: 2 }}>Padrão: 100 por dia. Vendedor não dispara além do limite — só você libera.</div>
         </div>
-        <span style={{ fontSize: 13, color: "var(--brand,#7c5cff)" }}>{aberto ? "▲ fechar" : "▼ abrir"}</span>
+        <span style={{ fontSize: 13, color: "var(--brand,#4f46e5)" }}>{aberto ? "▲ fechar" : "▼ abrir"}</span>
       </div>
       {aberto && (
         <div style={{ padding: "2px 16px 16px" }}>
@@ -2070,7 +2073,7 @@ function LimitesVendedores({ showToast }) {
                         onChange={(e) => setEdit({ ...edit, [v.id]: e.target.value })}
                         style={{ width: 70, padding: "6px 8px", border: "1px solid var(--linha,#e2e6ee)", borderRadius: 8, fontSize: 13, fontFamily: "inherit" }} />
                       <button className="btn btn-sm" onClick={() => salvarLimite(v.id)}>Salvar</button>
-                      <button className="btn btn-sm" style={{ background: "var(--brand,#7c5cff)", color: "#fff", borderColor: "transparent" }} onClick={() => liberarHoje(v.id, v.nome)}>+ Liberar hoje</button>
+                      <button className="btn btn-sm" style={{ background: "var(--brand,#4f46e5)", color: "#fff", borderColor: "transparent" }} onClick={() => liberarHoje(v.id, v.nome)}>+ Liberar hoje</button>
                     </div>
                   </div>
                 );
@@ -2679,7 +2682,7 @@ function OficialTemperatura({ showToast }) {
           {PERIODOS.map((p) => (
             <button key={p.v} onClick={() => setDias(p.v)}
               style={{ border: "none", cursor: "pointer", padding: "6px 12px", borderRadius: 8, fontSize: 13, fontFamily: "inherit",
-                background: dias === p.v ? "var(--brand,#7c5cff)" : "transparent", color: dias === p.v ? "#fff" : "var(--muted)", fontWeight: dias === p.v ? 600 : 500 }}>{p.l}</button>
+                background: dias === p.v ? "var(--brand,#4f46e5)" : "transparent", color: dias === p.v ? "#fff" : "var(--muted)", fontWeight: dias === p.v ? 600 : 500 }}>{p.l}</button>
           ))}
         </div>
       </div>
@@ -2693,7 +2696,7 @@ function OficialTemperatura({ showToast }) {
         </div>
         <div style={{ ...cardStyle, marginBottom: 0, flex: 1, minWidth: 150, textAlign: "center" }}>
           <div style={{ fontSize: 12, color: "var(--muted)" }}>DIA MAIS QUENTE</div>
-          <div style={{ fontSize: 26, fontWeight: 800, color: "var(--brand,#7c5cff)" }}>{DIAS[dados.picoDia]}</div>
+          <div style={{ fontSize: 26, fontWeight: 800, color: "var(--brand,#4f46e5)" }}>{DIAS[dados.picoDia]}</div>
           <div style={{ fontSize: 12, color: "var(--muted)" }}>{dados.byDia[dados.picoDia]} respostas</div>
         </div>
         <div style={{ ...cardStyle, marginBottom: 0, flex: 1, minWidth: 150, textAlign: "center" }}>
@@ -2843,7 +2846,7 @@ function OficialMetricas({ showToast }) {
             {PERIODOS.map((p) => (
               <button key={p.v} onClick={() => setDias(p.v)}
                 style={{ border: "none", cursor: "pointer", padding: "6px 12px", borderRadius: 8, fontSize: 13, fontFamily: "inherit",
-                  background: dias === p.v ? "var(--brand, #7c5cff)" : "transparent",
+                  background: dias === p.v ? "var(--brand, #4f46e5)" : "transparent",
                   color: dias === p.v ? "#fff" : "var(--muted)", fontWeight: dias === p.v ? 600 : 500 }}>
                 {p.l}
               </button>
@@ -2858,7 +2861,7 @@ function OficialMetricas({ showToast }) {
 
       {/* totais (só quando tem mais de um número) */}
       {mostrarTotais && (
-        <div style={{ ...cardStyle, display: "flex", gap: 22, flexWrap: "wrap", background: "linear-gradient(135deg, rgba(124,92,255,.08), rgba(124,92,255,.02))" }}>
+        <div style={{ ...cardStyle, display: "flex", gap: 22, flexWrap: "wrap", background: "linear-gradient(135deg, rgba(99,102,241,.08), rgba(99,102,241,.02))" }}>
           <div><div style={{ fontSize: 12, color: "var(--muted)" }}>GASTO TOTAL</div><div style={{ fontSize: 20, fontWeight: 700, color: "#dc2626" }}>{brl(t.gasto)}</div></div>
           <div><div style={{ fontSize: 12, color: "var(--muted)" }}>FATURAMENTO</div><div style={{ fontSize: 20, fontWeight: 700, color: "#16a34a" }}>{brl(t.faturamento)}</div></div>
           <div><div style={{ fontSize: 12, color: "var(--muted)" }}>LUCRO</div><div style={{ fontSize: 20, fontWeight: 700, color: corValor(t.lucro) }}>{brl(t.lucro)}</div></div>
@@ -2878,7 +2881,7 @@ function OficialMetricas({ showToast }) {
             <div style={{ display: "flex", alignItems: "baseline", gap: 10, marginBottom: 12, flexWrap: "wrap" }}>
               <b style={{ fontSize: 16 }}>{m.apelido}</b>
               {m.vendedorNome
-                ? <span style={{ fontSize: 12.5, color: "var(--brand, #7c5cff)" }}>👤 {m.vendedorNome}</span>
+                ? <span style={{ fontSize: 12.5, color: "var(--brand, #4f46e5)" }}>👤 {m.vendedorNome}</span>
                 : <span style={{ fontSize: 12.5, color: "var(--muted)" }}>🔀 sem dono</span>}
               {m.numero && <span style={{ fontSize: 12.5, color: "var(--muted)" }}>{m.numero}</span>}
             </div>
