@@ -1972,43 +1972,45 @@ function OficialDisparo({ isGer = true, showToast }) {
           <div className="disp-camp-grid">
             {campanhas.map((c) => {
               const pctResp = c.enviados ? Math.round((c.responderam || 0) / c.enviados * 100) : 0;
+              const rodando = c.pendentes > 0 && c.rodando;
+              const parada = c.pendentes > 0 && !c.rodando;
               return (
                 <div key={c.id} className="disp-camp-card" onClick={() => setCampSel(c)}>
                   <div className="disp-camp-card-top">
                     <div className="disp-camp-nome">
                       <b>{c.nome}</b>
-                      <span>{new Date(c.criadoEm).toLocaleDateString("pt-BR")} · {c.template}{c.criadoPorNome ? " · 👤 " + c.criadoPorNome : ""}</span>
+                      <span>{c.template}{c.criadoPorNome ? " · " + c.criadoPorNome : ""} · {new Date(c.criadoEm).toLocaleDateString("pt-BR")}</span>
                     </div>
-                    <button className="disp-camp-x" title="Excluir" onClick={(e) => { e.stopPropagation(); excluirCampanha(c); }}><I.trash className="ico" /></button>
+                    <div className="disp-camp-top-r">
+                      {c.pendentes > 0
+                        ? <span className="disp-status run"><span className="dot" /> {rodando ? "Enviando" : "Pausada"}</span>
+                        : <span className="disp-status ok"><span className="dot" /> Concluída</span>}
+                      <button className="disp-camp-x" title="Excluir" onClick={(e) => { e.stopPropagation(); excluirCampanha(c); }}><I.trash className="ico" /></button>
+                    </div>
                   </div>
+
+                  <div className="disp-prog">
+                    <div className="disp-prog-bar"><i style={{ width: Math.max(pctResp, c.enviados ? 2 : 0) + "%" }} /></div>
+                    <div className="disp-prog-lbl"><b>{pctResp}%</b> responderam · {c.entregues || 0} de {c.total || 0} entregues</div>
+                  </div>
+
                   <div className="disp-camp-nums">
                     <div><span className="disp-camp-n">{c.enviados || 0}</span><span className="disp-camp-l">enviados</span></div>
                     <div><span className="disp-camp-n ok">{c.entregues || 0}</span><span className="disp-camp-l">entregues</span></div>
-                    <div><span className="disp-camp-n resp">{c.responderam || 0}</span><span className="disp-camp-l">resp.</span></div>
+                    <div><span className="disp-camp-n resp">{c.responderam || 0}</span><span className="disp-camp-l">responderam</span></div>
                     {c.falhas > 0 && <div><span className="disp-camp-n err">{c.falhas}</span><span className="disp-camp-l">erros</span></div>}
                   </div>
-                  <div className="disp-camp-bar"><div style={{ width: pctResp + "%" }} /></div>
+
                   {c.falhas > 0 && c.ultimoErro && (
-                    <div style={{ marginTop: 8, fontSize: 12, color: "#b91c1c", display: "flex", alignItems: "center", gap: 5, cursor: "pointer" }}>
-                      ⚠️ {c.falhas} com erro — <u>toque pra ver o motivo</u>
-                    </div>
+                    <div className="disp-camp-erroline">⚠️ {c.falhas} com erro — <u>toque pra ver o motivo</u></div>
                   )}
                   {c.pendentes > 0 && (
-                    <button
-                      className="btn btn-sm"
-                      style={{ marginTop: 10, width: "100%", background: "#fff4e6", color: "#c2410c", border: "1px solid #fdba74", fontWeight: 700 }}
-                      onClick={(e) => { e.stopPropagation(); retomarCampanha(c); }}
-                    >
-                      ▶ Retomar disparo ({c.pendentes} faltando)
+                    <button className="disp-camp-acao retomar" onClick={(e) => { e.stopPropagation(); retomarCampanha(c); }}>
+                      ▶ Retomar disparo · {c.pendentes} faltando
                     </button>
                   )}
-                  {!c.pendentes && (c.enviados > 0) && (
-                    <button
-                      className="btn btn-sm"
-                      style={{ marginTop: 10, width: "100%", background: "#eef2ff", color: "#4338ca", border: "1px solid #c7d2fe", fontWeight: 700 }}
-                      onClick={(e) => { e.stopPropagation(); redispararCampanha(c); }}
-                      title="Reenvia o template pra quem recebeu mas ainda não respondeu"
-                    >
+                  {!c.pendentes && c.enviados > 0 && (
+                    <button className="disp-camp-acao redisp" onClick={(e) => { e.stopPropagation(); redispararCampanha(c); }} title="Reenvia o template pra quem recebeu mas ainda não respondeu">
                       ↻ Re-disparar pra quem não respondeu
                     </button>
                   )}
@@ -3515,7 +3517,7 @@ function InboxOficial({ isGer, showToast, onIrParaEvolution }) {
             <div className="of-chat-mid">
               <div className="of-chat-nm">
                 {c.nome}
-                {c.comIA && <span className="of-pill" style={{ background: "#e6faf3", color: "#088f68", borderColor: "#a7f0d4" }}>🤖 IA atendendo</span>}
+                {c.comIA && <span className="of-pill" style={{ background: "#ede9fe", color: "#6d28d9", borderColor: "#ddd6fe" }}>🤖 IA atendendo</span>}
                 {c.iaPassou && <span className="of-pill" style={{ background: "#eafaf0", color: "#1a9d54", borderColor: "#aee3c4" }}>✓ IA passou</span>}
                 {c.origemDisparo && <span className="of-pill">{c.campanha || "Disparo"}</span>}
               </div>
@@ -3608,10 +3610,10 @@ function InboxOficial({ isGer, showToast, onIrParaEvolution }) {
               <div ref={fimRef} />
             </div>
             {conversa.temIA && !conversa.iaPausada ? (
-              <div className="of-conv-input" style={{ justifyContent: "center", gap: 10, background: "#f5f3ff", border: "1px solid #a7f0d4", borderRadius: 12 }}>
-                <span style={{ color: "#088f68", fontSize: 13.5, fontWeight: 600 }}>🤖 A IA está atendendo este lead.</span>
+              <div className="of-conv-input" style={{ justifyContent: "center", gap: 10, background: "#f5f3ff", border: "1px solid #ddd6fe", borderRadius: 12 }}>
+                <span style={{ color: "#6d28d9", fontSize: 13.5, fontWeight: 600 }}>🤖 A IA está atendendo este lead.</span>
                 {isGer && (
-                  <button className="btn btn-sm" style={{ background: "#088f68", color: "#fff", border: "none" }} onClick={() => alternarIAConversa()}>
+                  <button className="btn btn-sm" style={{ background: "#6d28d9", color: "#fff", border: "none" }} onClick={() => alternarIAConversa()}>
                     Pausar IA e assumir
                   </button>
                 )}
