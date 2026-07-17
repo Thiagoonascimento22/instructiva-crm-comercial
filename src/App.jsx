@@ -1833,6 +1833,7 @@ function OficialDisparo({ isGer = true, showToast }) {
   const dataRef = useRef(dataFiltro);
   useEffect(() => { dataRef.current = dataFiltro; }, [dataFiltro]);
   const [meuLimite, setMeuLimite] = useState(null); // só vendedor
+  const [showResumo, setShowResumo] = useState(true);
 
   const rangeDe = (d) => {
     if (!d) return [0, 0];
@@ -1905,66 +1906,63 @@ function OficialDisparo({ isGer = true, showToast }) {
 
   return (
     <div className="disp-page">
-      {/* hero / abertura */}
-      <div className="disp-hero">
-        <div className="disp-hero-l">
-          <div className="disp-hero-eyebrow">CANAL OFICIAL · META</div>
-          <h2 className="disp-hero-titulo">{isGer ? "Dispare e distribua leads no automático" : "Dispare pelo seu número e atenda seus leads"}</h2>
-          <p className="disp-hero-sub">{isGer ? "Envie um template aprovado para sua lista. Quem responder cai direto na fila dos vendedores ativos." : "Envie um template aprovado pra sua lista. Quem responder cai direto pra você, na Caixa de entrada (aba Oficial)."}</p>
+      {/* ação principal + status */}
+      <div className="disp-actions">
+        <div className="disp-actions-l">
           <button className="disp-cta" onClick={() => { if (!numeros.length) return showToast(isGer ? "Cadastre um número na aba Números primeiro" : "Você ainda não tem um número vinculado. Peça pro gerente vincular o seu número oficial."); setAbrir(true); }}>
             <I.send className="ico" /> Novo disparo
           </button>
           {!isGer && meuLimite && !meuLimite.ilimitado && (
-            <div style={{ marginTop: 12, fontSize: 13.5, color: meuLimite.restante > 0 ? "var(--muted)" : "#dc2626" }}>
+            <span className="disp-limite-chip" style={{ color: meuLimite.restante > 0 ? "var(--muted)" : "#dc2626", background: meuLimite.restante > 0 ? "var(--surface-2, #f1f3f8)" : "#fef2f2" }}>
               {meuLimite.restante > 0
-                ? <>📊 Você usou <b>{meuLimite.usado}</b> de <b>{meuLimite.limite}</b> disparos hoje · restam <b style={{ color: "var(--brand,#7c5cff)" }}>{meuLimite.restante}</b></>
-                : <>🚫 Você atingiu o limite de <b>{meuLimite.limite}</b> disparos hoje. Peça pro gerente liberar mais.</>}
+                ? <>Usou <b>{meuLimite.usado}</b>/<b>{meuLimite.limite}</b> hoje · restam <b style={{ color: "var(--brand,#7c5cff)" }}>{meuLimite.restante}</b></>
+                : <>🚫 Limite de <b>{meuLimite.limite}</b>/dia — peça pro gerente liberar</>}
+            </span>
+          )}
+        </div>
+        <div className="disp-actions-r">
+          <span className="disp-live"><span className="disp-live-dot" /> atualizando sozinho</span>
+          <button className="btn btn-sm" onClick={async () => { try { await api.ofRecontar(); } catch (e) {} carregarCampanhas(); }}><I.refresh className="ico" /> Atualizar</button>
+        </div>
+      </div>
+
+      {/* filtro por dia */}
+      <div className="disp-filtro">
+        <span className="disp-filtro-lbl">Filtrar por dia</span>
+        <input type="date" value={dataFiltro} onChange={(e) => setDataFiltro(e.target.value)} className="disp-date" />
+        <button className={"disp-fchip" + (dataFiltro === hojeStr() ? " on" : "")} onClick={() => setDataFiltro(hojeStr())}>Hoje</button>
+        <button className={"disp-fchip" + (dataFiltro === "" ? " on" : "")} onClick={() => setDataFiltro("")}>Tudo</button>
+      </div>
+
+      {/* resumo por pessoa (gerente) — agrupado e colapsável */}
+      {isGer && campanhas.length > 0 && (
+        <div className="disp-box">
+          <button className="disp-box-head" onClick={() => setShowResumo((v) => !v)}>
+            <span className="disp-box-tit">Disparos por pessoa {dataFiltro ? "no dia" : ""} <em>· {campanhas.length} campanha{campanhas.length > 1 ? "s" : ""}</em></span>
+            <span className="disp-box-tog">{showResumo ? "esconder ▲" : "mostrar ▼"}</span>
+          </button>
+          {showResumo && (
+            <div className="disp-pessoas">
+              {resumoPessoas.map((p) => (
+                <div key={p.nome} className="disp-pessoa">
+                  <span className="disp-pessoa-nome">{p.nome}</span>
+                  <span className="disp-pessoa-num"><b>{p.disparos}</b> disparo{p.disparos > 1 ? "s" : ""} · {p.enviados} enviados</span>
+                </div>
+              ))}
             </div>
           )}
         </div>
-      </div>
+      )}
+
+      {/* limite por vendedor (gerente) */}
+      {isGer && <LimitesVendedores showToast={showToast} />}
 
       {/* campanhas */}
       <div className="disp-camps">
         <div className="disp-camps-head">
-          <h3>Campanhas</h3>
-          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <span style={{ fontSize: 12, color: "var(--muted)", display: "flex", alignItems: "center", gap: 5 }}>
-              <span style={{ width: 7, height: 7, borderRadius: "50%", background: "#1a9d54", display: "inline-block", animation: "pulse 2s infinite" }} /> atualizando sozinho
-            </span>
-            <button className="btn btn-sm" onClick={async () => { try { await api.ofRecontar(); } catch (e) {} carregarCampanhas(); }}><I.refresh className="ico" /> Atualizar agora</button>
-          </div>
+          <h3>Campanhas <span className="disp-count">{campanhas.length}</span></h3>
+          {isGer && <button className="btn btn-sm" title="Baixa um arquivo com todos os números que já receberam disparo" onClick={() => { window.open("/api/oficial/export-recebidos?token=" + encodeURIComponent(localStorage.getItem("token") || ""), "_blank"); }}>⬇ Baixar quem já recebeu</button>}
         </div>
-        {/* filtro por dia + resumo de disparos por pessoa */}
-        <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 12 }}>
-          <span style={{ fontSize: 13, color: "var(--muted)" }}>📅 Filtrar por dia:</span>
-          <input type="date" value={dataFiltro} onChange={(e) => setDataFiltro(e.target.value)}
-            style={{ padding: "6px 10px", border: "1px solid var(--linha,#e2e6ee)", borderRadius: 8, fontSize: 13, fontFamily: "inherit" }} />
-          <button className="btn btn-sm" onClick={() => setDataFiltro(hojeStr())} style={dataFiltro === hojeStr() ? { background: "var(--brand,#7c5cff)", color: "#fff", borderColor: "transparent" } : {}}>Hoje</button>
-          <button className="btn btn-sm" onClick={() => setDataFiltro("")} style={dataFiltro === "" ? { background: "var(--brand,#7c5cff)", color: "#fff", borderColor: "transparent" } : {}}>Tudo</button>
-        </div>
-        {campanhas.length > 0 && (
-          <div style={{ marginBottom: 14 }}>
-            <div style={{ fontSize: 12.5, color: "var(--muted)", marginBottom: 6 }}>
-              Disparos por pessoa {dataFiltro ? "no dia" : "(tudo)"} — {campanhas.length} campanha(s) no total
-            </div>
-            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-              {resumoPessoas.map((p) => (
-                <div key={p.nome} style={{ background: "var(--card,#fff)", border: "1px solid var(--linha,#eef0f4)", borderRadius: 10, padding: "8px 12px", minWidth: 130 }}>
-                  <div style={{ fontSize: 13, fontWeight: 600 }}>👤 {p.nome}</div>
-                  <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 2 }}>
-                    <b style={{ color: "var(--brand,#7c5cff)", fontSize: 14 }}>{p.disparos}</b> disparo{p.disparos > 1 ? "s" : ""} · {p.enviados} enviados
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-        {isGer && (
-          <div style={{ marginBottom: 8 }}>
-            <button className="btn btn-sm" title="Baixa um arquivo com todos os números que já receberam disparo (pra cruzar com sua planilha)" onClick={() => { window.open("/api/oficial/export-recebidos?token=" + encodeURIComponent(localStorage.getItem("token") || ""), "_blank"); }}>⬇ Baixar quem já recebeu</button>
-          </div>
-        )}
         {campanhas.length === 0 ? (
           <div className="disp-vazio">
             <I.send className="ico-empty" />
@@ -2021,8 +2019,6 @@ function OficialDisparo({ isGer = true, showToast }) {
         )}
       </div>
 
-      {isGer && <LimitesVendedores showToast={showToast} />}
-
       {abrir && <ModalDisparo isGer={isGer} numeros={numeros} showToast={showToast} onClose={() => setAbrir(false)} onDone={() => { setAbrir(false); setTimeout(carregarCampanhas, 1500); if (!isGer) setTimeout(() => api.ofMeuLimite().then(setMeuLimite).catch(() => {}), 1500); }} />}
       {campSel && <ModalMetricas camp={campSel} onClose={() => setCampSel(null)} />}
     </div>
@@ -2055,8 +2051,8 @@ function LimitesVendedores({ showToast }) {
   }
 
   return (
-    <div style={{ marginTop: 20, background: "var(--card,#fff)", border: "1px solid var(--linha,#eef0f4)", borderRadius: 14, padding: 16 }}>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", cursor: "pointer" }} onClick={() => setAberto((v) => !v)}>
+    <div style={{ marginBottom: 14, background: "var(--card,#fff)", border: "1px solid var(--line,#eef0f4)", borderRadius: 12, overflow: "hidden" }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", cursor: "pointer", padding: "13px 16px" }} onClick={() => setAberto((v) => !v)}>
         <div>
           <b style={{ fontSize: 15 }}>🚦 Limite de disparos por vendedor</b>
           <div style={{ fontSize: 12.5, color: "var(--muted)", marginTop: 2 }}>Padrão: 100 por dia. Vendedor não dispara além do limite — só você libera.</div>
@@ -2064,7 +2060,7 @@ function LimitesVendedores({ showToast }) {
         <span style={{ fontSize: 13, color: "var(--brand,#7c5cff)" }}>{aberto ? "▲ fechar" : "▼ abrir"}</span>
       </div>
       {aberto && (
-        <div style={{ marginTop: 14 }}>
+        <div style={{ padding: "2px 16px 16px" }}>
           {lista.length === 0 ? <div className="panel-sub">Nenhum vendedor ativo.</div> : (
             <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
               {lista.map((v) => {
