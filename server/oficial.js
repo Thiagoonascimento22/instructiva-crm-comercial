@@ -1686,6 +1686,60 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
     res.send(linhas);
   });
 
+  // monta um CSV (pt-BR: separador ; e BOM pros acentos abrirem no Excel)
+  function montarCSV(linhas) {
+    return "\ufeff" + linhas.map((r) => r.map((c) => `"${String(c == null ? "" : c).replace(/"/g, '""')}"`).join(";")).join("\r\n");
+  }
+  function ultimaMsgTxt(ch) {
+    const ult = ch.mensagens && ch.mensagens.length ? ch.mensagens[ch.mensagens.length - 1] : null;
+    if (!ult) return "";
+    const t = ult.content || (ult.tipo && ult.tipo !== "text" ? "[" + ult.tipo + "]" : "");
+    return String(t).replace(/[\r\n;]+/g, " ").slice(0, 150);
+  }
+
+  // EXPORTA os leads de UMA campanha (dono da campanha ou gerente) — CSV
+  app.get("/api/oficial/campanhas/:id/leads", (req, res) => {
+    const t = String(req.query.token || (req.headers.authorization || "").replace("Bearer ", "")).trim();
+    const user = (db.users || []).find((u) => u.token && u.token === t);
+    if (!user || !user.ativo) return res.status(401).send("Não autorizado");
+    const camp = (db.oficial.campanhas || []).find((c) => c.id === req.params.id);
+    if (!camp) return res.status(404).send("Campanha não encontrada");
+    if (!campanhaDoUsuario({ user }, camp)) return res.status(403).send("Sem acesso a essa campanha");
+    const linhas = [["Telefone", "Nome", "Respondeu", "Ultima mensagem", "Data/hora"]];
+    for (const ch of Object.values(db.waChats || {})) {
+      if (ch && ch.canal === "oficial" && ch.campanhaId === camp.id) {
+        const ult = ch.mensagens && ch.mensagens.length ? ch.mensagens[ch.mensagens.length - 1] : null;
+        linhas.push([ch.numero || "", ch.nome || "", ch.respondeu ? "Sim" : "Não", ultimaMsgTxt(ch), ult && ult.ts ? new Date(ult.ts).toLocaleString("pt-BR") : ""]);
+      }
+    }
+    res.setHeader("Content-Type", "text/csv; charset=utf-8");
+    res.setHeader("Content-Disposition", `attachment; filename="leads_${String(camp.nome || "campanha").replace(/[^a-z0-9]/gi, "_").slice(0, 40)}.csv"`);
+    res.send(montarCSV(linhas));
+  });
+
+  // EXPORTA todos os leads dos disparos do usuário (vendedor = os dele; gerente = todos) — CSV
+  app.get("/api/oficial/meus-leads", (req, res) => {
+    const t = String(req.query.token || (req.headers.authorization || "").replace("Bearer ", "")).trim();
+    const user = (db.users || []).find((u) => u.token && u.token === t);
+    if (!user || !user.ativo) return res.status(401).send("Não autorizado");
+    const ehGerente = user.role === "gerente";
+    const campById = {};
+    for (const c of db.oficial.campanhas || []) campById[c.id] = c;
+    const linhas = [["Telefone", "Nome", "Campanha", "Respondeu", "Ultima mensagem", "Data/hora"]];
+    for (const ch of Object.values(db.waChats || {})) {
+      if (!ch || ch.canal !== "oficial" || !ch.origemDisparo || !ch.campanhaId) continue;
+      const camp = campById[ch.campanhaId];
+      if (!camp) continue;
+      const meu = ehGerente || camp.criadoPor === user.id || (acharNumero(camp.numeroId) || {}).vendedorId === user.id;
+      if (!meu) continue;
+      const ult = ch.mensagens && ch.mensagens.length ? ch.mensagens[ch.mensagens.length - 1] : null;
+      linhas.push([ch.numero || "", ch.nome || "", camp.nome || "", ch.respondeu ? "Sim" : "Não", ultimaMsgTxt(ch), ult && ult.ts ? new Date(ult.ts).toLocaleString("pt-BR") : ""]);
+    }
+    res.setHeader("Content-Type", "text/csv; charset=utf-8");
+    res.setHeader("Content-Disposition", 'attachment; filename="meus_leads_disparados.csv"');
+    res.send(montarCSV(linhas));
+  });
+
   /* histórico de campanhas */
   // um vendedor só pode mexer numa campanha que é dele (criou) OU que saiu do número dele
   function campanhaDoUsuario(req, campanha) {
