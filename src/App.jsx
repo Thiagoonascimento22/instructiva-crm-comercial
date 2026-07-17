@@ -1833,7 +1833,7 @@ function OficialDisparo({ isGer = true, showToast }) {
   const dataRef = useRef(dataFiltro);
   useEffect(() => { dataRef.current = dataFiltro; }, [dataFiltro]);
   const [meuLimite, setMeuLimite] = useState(null); // só vendedor
-  const [showResumo, setShowResumo] = useState(true);
+  const [showResumo, setShowResumo] = useState(false);
 
   const rangeDe = (d) => {
     if (!d) return [0, 0];
@@ -3189,6 +3189,23 @@ function OficialNumeros({ showToast }) {
    INBOX OFICIAL — usado tanto pelo gerente quanto pelo vendedor
    ============================================================ */
 // renderiza mídia recebida do lead no oficial (áudio, imagem, vídeo, documento)
+function Ticks({ status }) {
+  if (!status) return null;
+  if (status === "failed") return <span title="Não entregue" style={{ marginLeft: 4, color: "#e0483d", fontWeight: 800, fontSize: 11 }}>!</span>;
+  const lida = status === "read";
+  const dois = status === "delivered" || lida;
+  const cor = lida ? "#53bdeb" : "rgba(0,0,0,.42)";
+  const titulo = lida ? "Lida" : status === "delivered" ? "Entregue" : "Enviada";
+  return (
+    <span title={titulo} style={{ display: "inline-flex", alignItems: "center", marginLeft: 4, verticalAlign: "middle", color: cor }}>
+      <svg width={dois ? 17 : 11} height="11" viewBox={dois ? "0 0 17 11" : "0 0 11 11"} fill="none">
+        <path d="M1 6 L4 9 L9.5 2" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+        {dois && <path d="M6.5 6 L9.5 9 L15 2" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />}
+      </svg>
+    </span>
+  );
+}
+
 function OfMidia({ chatId, m }) {
   const [url, setUrl] = useState(null);
   const [erro, setErro] = useState(false);
@@ -3498,7 +3515,7 @@ function InboxOficial({ isGer, showToast, onIrParaEvolution }) {
             <div className="of-chat-mid">
               <div className="of-chat-nm">
                 {c.nome}
-                {c.comIA && <span className="of-pill" style={{ background: "#ede9fe", color: "#6d28d9", borderColor: "#ddd6fe" }}>🤖 IA atendendo</span>}
+                {c.comIA && <span className="of-pill" style={{ background: "#e6faf3", color: "#088f68", borderColor: "#a7f0d4" }}>🤖 IA atendendo</span>}
                 {c.iaPassou && <span className="of-pill" style={{ background: "#eafaf0", color: "#1a9d54", borderColor: "#aee3c4" }}>✓ IA passou</span>}
                 {c.origemDisparo && <span className="of-pill">{c.campanha || "Disparo"}</span>}
               </div>
@@ -3583,7 +3600,7 @@ function InboxOficial({ isGer, showToast, onIrParaEvolution }) {
                         <OfMidia chatId={conversa.id} m={item.m} />
                       )}
                       {(!item.m.tipo || item.m.tipo === "text" || !item.m.arquivo) && item.m.content}
-                      <span className="of-msg-hora">{horaCurta(item.m.ts)}</span>
+                      <span className="of-msg-hora">{horaCurta(item.m.ts)}{item.m.role === "me" && <Ticks status={item.m.status} />}</span>
                     </div>
                   </div>
                 )
@@ -3591,10 +3608,10 @@ function InboxOficial({ isGer, showToast, onIrParaEvolution }) {
               <div ref={fimRef} />
             </div>
             {conversa.temIA && !conversa.iaPausada ? (
-              <div className="of-conv-input" style={{ justifyContent: "center", gap: 10, background: "#f5f3ff", border: "1px solid #ddd6fe", borderRadius: 12 }}>
-                <span style={{ color: "#6d28d9", fontSize: 13.5, fontWeight: 600 }}>🤖 A IA está atendendo este lead.</span>
+              <div className="of-conv-input" style={{ justifyContent: "center", gap: 10, background: "#f5f3ff", border: "1px solid #a7f0d4", borderRadius: 12 }}>
+                <span style={{ color: "#088f68", fontSize: 13.5, fontWeight: 600 }}>🤖 A IA está atendendo este lead.</span>
                 {isGer && (
-                  <button className="btn btn-sm" style={{ background: "#6d28d9", color: "#fff", border: "none" }} onClick={() => alternarIAConversa()}>
+                  <button className="btn btn-sm" style={{ background: "#088f68", color: "#fff", border: "none" }} onClick={() => alternarIAConversa()}>
                     Pausar IA e assumir
                   </button>
                 )}

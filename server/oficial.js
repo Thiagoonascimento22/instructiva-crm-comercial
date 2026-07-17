@@ -1785,9 +1785,11 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
     const numeroCfg = acharNumero(chat.numeroOficialId);
     if (!numeroCfg) return res.status(400).json({ error: "Número de origem não encontrado" });
     try {
-      await enviarTextoOficial(numeroCfg, chat.numero, texto);
+      const resp = await enviarTextoOficial(numeroCfg, chat.numero, texto);
       const ts = Date.now();
-      chat.mensagens.push({ role: "me", content: texto, ts });
+      const wamid = resp && resp.messages && resp.messages[0] && resp.messages[0].id;
+      chat.mensagens.push({ role: "me", content: texto, ts, wamid: wamid || null, status: "sent" });
+      if (wamid) { if (!db.oficial.wamidChat) db.oficial.wamidChat = {}; db.oficial.wamidChat[wamid] = chat.id; }
       if (chat.iaId && !chat.iaPausada) chat.iaPausada = true; // humano assumiu -> IA pausa sozinha
       if (chat.mensagens.length > 300) chat.mensagens = chat.mensagens.slice(-300);
       chat.atualizadoEm = ts;
@@ -1845,7 +1847,8 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
     try {
       const tipo = tipoPorMime(mime);
       const mediaId = await uploadMidiaMeta(numeroCfg, buffer, mime, filename);
-      await enviarMidiaOficial(numeroCfg, chat.numero, tipo, mediaId, caption, filename);
+      const respMidia = await enviarMidiaOficial(numeroCfg, chat.numero, tipo, mediaId, caption, filename);
+      const wamidMidia = respMidia && respMidia.messages && respMidia.messages[0] && respMidia.messages[0].id;
       const ts = Date.now();
       // salva o arquivo enviado no volume TAMBÉM, pra conseguir EXIBIR de volta na conversa
       let arquivoSalvo = null;
@@ -1857,7 +1860,7 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
         }
       } catch (_) { arquivoSalvo = null; }
       const rotulo = tipo === "image" ? "📷 Foto" : tipo === "audio" ? "🎤 Áudio" : tipo === "video" ? "🎬 Vídeo" : "📄 " + filename;
-      const msgObj = { role: "me", content: caption || "", ts };
+      const msgObj = { role: "me", content: caption || "", ts, wamid: wamidMidia || null, status: "sent" };
       if (arquivoSalvo) {
         // mesmo esquema da mídia recebida -> renderiza igual (imagem/vídeo/áudio/doc)
         msgObj.tipo = tipo;
@@ -1872,6 +1875,7 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
         msgObj.midia = { tipo, mediaId, filename, mime };
       }
       chat.mensagens.push(msgObj);
+      if (wamidMidia) { if (!db.oficial.wamidChat) db.oficial.wamidChat = {}; db.oficial.wamidChat[wamidMidia] = chat.id; }
       if (chat.iaId && !chat.iaPausada) chat.iaPausada = true;
       if (chat.mensagens.length > 300) chat.mensagens = chat.mensagens.slice(-300);
       chat.atualizadoEm = ts;
@@ -2139,6 +2143,16 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
           // ===== STATUS de entrega (delivered/read) das mensagens de disparo =====
           for (const st of val.statuses || []) {
             const mid = st.id;
+            // --- pauzinhos: atualiza o status da mensagem individual (enviado/entregue/lido) ---
+            const chatIdMsg = db.oficial.wamidChat && db.oficial.wamidChat[mid];
+            if (chatIdMsg && db.waChats[chatIdMsg]) {
+              const msg = (db.waChats[chatIdMsg].mensagens || []).find((x) => x.wamid === mid);
+              if (msg) {
+                const ordem = { sent: 1, delivered: 2, read: 3 };
+                if (st.status === "failed") msg.status = "failed";
+                else if ((ordem[st.status] || 0) > (ordem[msg.status] || 0)) msg.status = st.status;
+              }
+            }
             const campId = db.oficial.msgCampanha && db.oficial.msgCampanha[mid];
             if (!campId) continue;
             const camp = (db.oficial.campanhas || []).find((x) => x.id === campId);
