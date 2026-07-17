@@ -137,6 +137,16 @@ const I = {
   mic: (p) => (<svg {...p} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="2" width="6" height="11" rx="3"/><path d="M5 10a7 7 0 0 0 14 0M12 17v4"/></svg>),
   arquivar: (p) => (<svg {...p} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="4" rx="1"/><path d="M5 8v11a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8"/><path d="M10 12h4"/></svg>),
   funnel: (p) => (<svg {...p} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M3 4h18l-7 8v7l-4-2v-5z"/></svg>),
+  clock: (p) => (<svg {...p} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>),
+  lock: (p) => (<svg {...p} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="4.5" y="10.5" width="15" height="10" rx="2"/><path d="M8 10.5V7a4 4 0 0 1 8 0v3.5"/></svg>),
+  calendar: (p) => (<svg {...p} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="3.5" y="4.5" width="17" height="16" rx="2"/><path d="M3.5 9h17M8 3v3M16 3v3"/></svg>),
+  download: (p) => (<svg {...p} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M12 4v11m0 0l-4-4m4 4l4-4M4 19h16"/></svg>),
+  image: (p) => (<svg {...p} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="3.5" y="4.5" width="17" height="15" rx="2"/><circle cx="8.5" cy="9.5" r="1.6"/><path d="M4 17l5-4 4 3 3-2 4 3"/></svg>),
+  play: (p) => (<svg {...p} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M7 5l12 7-12 7z"/></svg>),
+  megaphone: (p) => (<svg {...p} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M4 10v4a1 1 0 0 0 1 1h2l8 4V5L7 9H5a1 1 0 0 0-1 1zM18 9a3 3 0 0 1 0 6"/></svg>),
+  alert: (p) => (<svg {...p} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3l9 16H3z"/><path d="M12 9v5M12 17.5v.5"/></svg>),
+  gauge: (p) => (<svg {...p} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M4 20a8 8 0 1 1 16 0"/><path d="M12 20l4-6"/></svg>),
+  user: (p) => (<svg {...p} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="8" r="3.5"/><path d="M5 20a7 7 0 0 1 14 0"/></svg>),
 };
 
 /* ============================ HELPERS ============================ */
@@ -1962,7 +1972,7 @@ function OficialDisparo({ isGer = true, showToast }) {
         <div className="disp-camps-head">
           <h3>Campanhas <span className="disp-count">{campanhas.length}</span></h3>
           <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-            <button className="btn btn-sm" title="Baixa uma planilha (CSV) com os leads dos seus disparos: telefone, nome, se respondeu e a campanha" onClick={() => { window.open("/api/oficial/meus-leads?token=" + encodeURIComponent(getToken()), "_blank"); }}>⬇ Exportar leads</button>
+            <button className="btn btn-sm" title="Baixa uma planilha (CSV) com os leads dos seus disparos: telefone, nome, se respondeu e a campanha" onClick={() => { window.open("/api/oficial/meus-leads?token=" + encodeURIComponent(getToken()), "_blank"); }}><I.download className="ico-inline" /> Exportar leads</button>
             {isGer && <button className="btn btn-sm" title="Baixa um arquivo só com os números que já receberam disparo" onClick={() => { window.open("/api/oficial/export-recebidos?token=" + encodeURIComponent(getToken()), "_blank"); }}>Números que receberam</button>}
           </div>
         </div>
@@ -2035,7 +2045,7 @@ function LimitesVendedores({ showToast }) {
     <div style={{ marginBottom: 14, background: "var(--card,#fff)", border: "1px solid var(--line,#eef0f4)", borderRadius: 12, overflow: "hidden" }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", cursor: "pointer", padding: "13px 16px" }} onClick={() => setAberto((v) => !v)}>
         <div>
-          <b style={{ fontSize: 15 }}>🚦 Limite de disparos por vendedor</b>
+          <b style={{ fontSize: 15 }}><I.funnel className="ico-inline" /> Limite de disparos por vendedor</b>
           <div style={{ fontSize: 12.5, color: "var(--muted)", marginTop: 2 }}>Padrão: 100 por dia. Vendedor não dispara além do limite — só você libera.</div>
         </div>
         <span style={{ fontSize: 13, color: "var(--brand,#7c5cff)" }}>{aberto ? "▲ fechar" : "▼ abrir"}</span>
@@ -2381,14 +2391,14 @@ function ModalMetricas({ camp, isGer = true, onClose, onRetomar, onRedisparar, o
               <button className="disp-camp-acao" style={{ background: "var(--surface-2)", color: "var(--text)", borderColor: "var(--line)" }}
                 onClick={() => { window.open("/api/oficial/campanhas/" + camp.id + "/leads?token=" + encodeURIComponent(getToken()), "_blank"); }}
                 title="Baixa a planilha (CSV) com os leads dessa campanha: telefone, nome, se respondeu">
-                ⬇ Exportar leads dessa campanha
+                <I.download className="ico-inline" /> Exportar leads dessa campanha
               </button>
             )}
             {!agendada && camp.pendentes > 0 && (
-              <button className="disp-camp-acao retomar" onClick={() => { onRetomar && onRetomar(camp); onClose(); }}>▶ Retomar disparo · {camp.pendentes} faltando</button>
+              <button className="disp-camp-acao retomar" onClick={() => { onRetomar && onRetomar(camp); onClose(); }}><I.play className="ico-inline" /> Retomar disparo · {camp.pendentes} faltando</button>
             )}
             {!agendada && !camp.pendentes && camp.enviados > 0 && (
-              <button className="disp-camp-acao redisp" onClick={() => { onRedisparar && onRedisparar(camp); onClose(); }}>↻ Re-disparar pra quem não respondeu</button>
+              <button className="disp-camp-acao redisp" onClick={() => { onRedisparar && onRedisparar(camp); onClose(); }}><I.refresh className="ico-inline" /> Re-disparar pra quem não respondeu</button>
             )}
             {isGer && (
               <button className="mm-excluir" onClick={() => { onExcluir && onExcluir(camp); onClose(); }}>
@@ -2927,20 +2937,22 @@ function badgeQualidade(q) {
     return <span style={{ fontSize: 11.5, color: "var(--faint)" }}>⚪ Qualidade: sem dado ainda</span>;
   }
   const map = {
-    GREEN: { l: "Alta", c: "#059669", bg: "rgba(16,185,129,.13)", e: "🟢" },
-    YELLOW: { l: "Média", c: "#b45309", bg: "rgba(245,158,11,.15)", e: "🟡" },
-    RED: { l: "Baixa", c: "#dc2626", bg: "rgba(244,63,94,.12)", e: "🔴" },
+    GREEN: { l: "Alta", c: "#059669", bg: "rgba(16,185,129,.13)", d: "#10b981" },
+    YELLOW: { l: "Média", c: "#b45309", bg: "rgba(245,158,11,.15)", d: "#f59e0b" },
+    RED: { l: "Baixa", c: "#dc2626", bg: "rgba(244,63,94,.12)", d: "#f43f5e" },
   };
   const m = map[q.rating] || map.RED;
   const tierMap = { TIER_50: "50/dia", TIER_250: "250/dia", TIER_1K: "1 mil/dia", TIER_10K: "10 mil/dia", TIER_100K: "100 mil/dia", TIER_UNLIMITED: "ilimitado" };
   const tier = tierMap[q.tier] || (q.tier ? String(q.tier).replace("TIER_", "") : "");
   const rank = (r) => ({ GREEN: 3, YELLOW: 2, RED: 1 }[r] || 0);
-  const dir = q.anterior && q.anterior !== q.rating ? (rank(q.rating) > rank(q.anterior) ? { t: "↑ subiu", c: "#059669" } : { t: "↓ caiu", c: "#dc2626" }) : null;
+  const dir = q.anterior && q.anterior !== q.rating ? (rank(q.rating) > rank(q.anterior) ? { t: "subiu", c: "#059669" } : { t: "caiu", c: "#dc2626" }) : null;
   return (
     <span style={{ display: "inline-flex", alignItems: "center", gap: 6, flexWrap: "wrap", fontSize: 12 }}>
-      <span style={{ background: m.bg, color: m.c, fontWeight: 700, padding: "2px 9px", borderRadius: 20 }}>{m.e} Qualidade: {m.l}</span>
+      <span style={{ display: "inline-flex", alignItems: "center", gap: 6, background: m.bg, color: m.c, fontWeight: 700, padding: "3px 10px", borderRadius: 20 }}>
+        <span style={{ width: 7, height: 7, borderRadius: "50%", background: m.d }} /> Qualidade: {m.l}
+      </span>
       {tier && <span style={{ color: "var(--muted)" }}>· limite {tier}</span>}
-      {dir && <span style={{ color: dir.c, fontWeight: 700 }}>· {dir.t}</span>}
+      {dir && <span style={{ color: dir.c, fontWeight: 700 }}>· {dir.t === "subiu" ? "▲" : "▼"} {dir.t}</span>}
     </span>
   );
 }
@@ -2975,7 +2987,8 @@ function OficialNumeros({ showToast }) {
     finally { setPuxandoQ(null); }
   }
 
-  const carregar = () => api.ofNumeros().then(setNumeros).catch((e) => showToast(e.message));
+  const [carregando, setCarregando] = useState(true);
+  const carregar = () => api.ofNumeros().then((ns) => { setNumeros(ns); setCarregando(false); }).catch((e) => { showToast(e.message); setCarregando(false); });
   useEffect(() => {
     carregar();
     api.ofWebhookInfo(window.location.origin).then(setWebhook).catch(() => {});
@@ -3077,11 +3090,11 @@ function OficialNumeros({ showToast }) {
         </div>
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
           <button className={tokenDef ? "onum-btn-ghost" : "onum-add"} onClick={() => setTokenForm({ token: "" })} title="Token permanente da Meta (mesma conta da empresa). Vale pra todos os números.">
-            🔑 Token da Meta {tokenDef ? "✓" : "(configurar)"}
+            <I.key className="ico" /> Token da Meta {tokenDef ? "✓" : "(configurar)"}
           </button>
-          <button className="onum-btn-ghost" onClick={diagnostico} title="Verificar se as respostas estão chegando">🔍 Diagnóstico</button>
+          <button className="onum-btn-ghost" onClick={diagnostico} title="Verificar se as respostas estão chegando"><I.search className="ico" /> Diagnóstico</button>
           <button className="onum-btn-ghost" onClick={puxarQualidadeTodos} disabled={puxandoQ === "todos"} title="Puxar da Meta a qualidade, o limite e a foto de perfil de todos os números">
-            {puxandoQ === "todos" ? "Atualizando…" : "🌡️ Atualizar qualidade e fotos"}
+            {puxandoQ === "todos" ? "Atualizando…" : <><I.gauge className="ico" /> Atualizar qualidade e fotos</>}
           </button>
           <button className="onum-add" onClick={() => setForm({ apelido: "", numero: "", phoneNumberId: "", wabaId: "", token: "", vendedorId: "" })}>
             <I.plus className="ico" /> Adicionar número
@@ -3097,7 +3110,7 @@ function OficialNumeros({ showToast }) {
         if (!caidos.length) return null;
         return (
           <div className="onum-alerta">
-            <div className="onum-alerta-tit">⚠️ Atenção: {caidos.length} número{caidos.length > 1 ? "s caíram" : " caiu"} de qualidade</div>
+            <div className="onum-alerta-tit"><I.alert className="ico-inline" /> Atenção: {caidos.length} número{caidos.length > 1 ? "s caíram" : " caiu"} de qualidade</div>
             <div className="onum-alerta-lista">
               {caidos.map((n) => (
                 <span key={n.id} className="onum-alerta-item"><b>{n.apelido}</b>: {lab(n.quality.anterior)} → <b style={{ color: n.quality.rating === "RED" ? "#dc2626" : "#b45309" }}>{lab(n.quality.rating)}</b></span>
@@ -3109,7 +3122,11 @@ function OficialNumeros({ showToast }) {
       })()}
 
       {/* lista de números */}
-      {numeros.length === 0 ? (
+      {carregando && !numeros.length ? (
+        <div className="onum-cards">
+          {[0, 1, 2].map((i) => <div key={i} className="skel skel-card" />)}
+        </div>
+      ) : numeros.length === 0 ? (
         <div className="onum-vazio">
           <div className="onum-vazio-ico"><I.wa className="ico" /></div>
           <b>Nenhum número conectado ainda</b>
@@ -3137,13 +3154,13 @@ function OficialNumeros({ showToast }) {
                 <span className="onum-card-num">{n.numero || "número não informado"}</span>
                 <span className="onum-card-id">ID {n.phoneNumberId}</span>
                 <span className="onum-card-id" style={{ marginTop: 2 }}>
-                  {n.vendedorId ? <>👤 Vendedor: <b style={{ color: "var(--brand)" }}>{n.vendedorNome || "—"}</b></> : <span style={{ opacity: .7 }}>🔀 Sem dono (distribuição por %)</span>}
+                  {n.vendedorId ? <><I.user className="ico-inline" /> Vendedor: <b style={{ color: "var(--brand)" }}>{n.vendedorNome || "—"}</b></> : <span style={{ opacity: .7 }}><I.funnel className="ico-inline" /> Sem dono (distribuição por %)</span>}
                 </span>
                 <span style={{ marginTop: 6, display: "block" }}>{badgeQualidade(n.quality)}</span>
               </div>
               <div className="onum-card-acoes">
                 <button className="onum-acao" onClick={() => puxarQualidade(n)} title="Puxar da Meta a qualidade e a foto de perfil do número" disabled={puxandoQ === n.id}>
-                  {puxandoQ === n.id ? <span className="spin" /> : "🌡️"}
+                  {puxandoQ === n.id ? <span className="spin" /> : <I.gauge className="ico" />}
                 </button>
                 <button className="onum-acao" onClick={() => assinarWebhook(n)} title="Ativar recebimento de respostas (webhook)"><I.link className="ico" /></button>
                 <button className="onum-acao" onClick={() => registrar(n)} title="Registrar número na Cloud API (use se aparecer erro de envio)"><I.key className="ico" /></button>
@@ -3605,7 +3622,7 @@ function InboxOficial({ isGer, showToast, onIrParaEvolution }) {
         {campanhas.length > 0 && (
           <div style={{ padding: "0 12px 10px" }}>
             <select className="select" style={{ width: "100%" }} value={campanhaFiltro} onChange={(e) => setCampanhaFiltro(e.target.value)} title="Ver só as conversas de um disparo específico">
-              <option value="todas">📣 Todas as campanhas</option>
+              <option value="todas">Todas as campanhas</option>
               {campanhas.map((c) => (
                 <option key={c.id} value={c.id}>{c.nome}{c.criadoPorNome ? " · " + c.criadoPorNome : ""}</option>
               ))}
@@ -3646,8 +3663,8 @@ function InboxOficial({ isGer, showToast, onIrParaEvolution }) {
               {(() => {
                 const jan = janela24h(c.ultimaEntrada);
                 if (!jan) return null;
-                if (!jan.aberta) return <span className="of-jan-mini fechada" title="Janela de 24h fechada — só template">🔒</span>;
-                if (jan.urgente) return <span className="of-jan-mini urg" title={"Janela fecha em " + jan.texto}>⏳ {jan.texto}</span>;
+                if (!jan.aberta) return <span className="of-jan-mini fechada" title="Janela de 24h fechada — só template"><I.lock className="ico-inline" /></span>;
+                if (jan.urgente) return <span className="of-jan-mini urg" title={"Janela fecha em " + jan.texto}><I.clock className="ico-inline" /> {jan.texto}</span>;
                 return null;
               })()}
             </div>
@@ -3678,8 +3695,8 @@ function InboxOficial({ isGer, showToast, onIrParaEvolution }) {
                 const jan = janela24h(ue);
                 if (!jan) return null;
                 return jan.aberta
-                  ? <span className={"of-janela" + (jan.urgente ? " urg" : "")} title="Tempo restante da janela de 24h do WhatsApp. Ela renova toda vez que o lead te responde. Dentro dela você manda mensagem livre; fora, só template.">⏳ {jan.texto} de janela</span>
-                  : <span className="of-janela fechada" title="Passou 24h desde a última mensagem do lead. Agora só template aprovado é entregue — a mensagem livre não chega.">🔒 Janela fechada · só template</span>;
+                  ? <span className={"of-janela" + (jan.urgente ? " urg" : "")} title="Tempo restante da janela de 24h do WhatsApp. Ela renova toda vez que o lead te responde. Dentro dela você manda mensagem livre; fora, só template."><I.clock className="ico-inline" /> {jan.texto} de janela</span>
+                  : <span className="of-janela fechada" title="Passou 24h desde a última mensagem do lead. Agora só template aprovado é entregue — a mensagem livre não chega."><I.lock className="ico-inline" /> Janela fechada · só template</span>;
               })()}
               <div className="of-conv-acoes">
                 {isGer && conversa.temIA && (

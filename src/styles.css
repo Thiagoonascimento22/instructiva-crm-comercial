@@ -185,7 +185,7 @@ h4 {
   letter-spacing: -0.02em;
 }
 .mono {
-  font-family: "JetBrains Mono", monospace;
+  font-family: inherit; font-variant-numeric: tabular-nums;
   font-variant-numeric: tabular-nums;
 }
 button {
@@ -383,7 +383,7 @@ textarea {
   letter-spacing: -0.02em;
 }
 .stat .val.money {
-  font-family: "JetBrains Mono", monospace;
+  font-family: inherit; font-variant-numeric: tabular-nums;
   font-size: 21px;
 }
 
@@ -491,7 +491,7 @@ textarea {
   word-break: break-word;
 }
 .kcard .val {
-  font-family: "JetBrains Mono", monospace;
+  font-family: inherit; font-variant-numeric: tabular-nums;
   font-weight: 700;
   font-size: 14px;
   color: var(--indigo-600);
@@ -1377,7 +1377,7 @@ textarea {
 .rank-mid .nm { font-weight: 700; font-size: 14px; }
 .rank-mid .sub { font-size: 12px; color: var(--muted); margin-top: 1px; }
 .rank-val {
-  font-family: "JetBrains Mono", monospace;
+  font-family: inherit; font-variant-numeric: tabular-nums;
   font-weight: 700;
   font-size: 14.5px;
   color: var(--text);
@@ -1398,7 +1398,7 @@ textarea {
   gap: 8px;
 }
 .meta-head .nm { font-weight: 700; font-size: 13.5px; display: flex; align-items: center; gap: 7px; }
-.meta-head .vals { font-size: 12px; color: var(--muted); font-family: "JetBrains Mono", monospace; }
+.meta-head .vals { font-size: 12px; color: var(--muted); font-family: inherit; font-variant-numeric: tabular-nums; }
 .pbar {
   height: 9px;
   background: var(--line-2);
@@ -1444,7 +1444,7 @@ textarea {
 .deal-row:last-child { border-bottom: none; }
 .deal-row .nm { font-weight: 600; font-size: 13.5px; }
 .deal-row .dt { font-size: 11.5px; color: var(--faint); margin-top: 1px; }
-.deal-row .vl { font-family: "JetBrains Mono", monospace; font-weight: 700; color: var(--fechou); font-size: 14px; }
+.deal-row .vl { font-family: inherit; font-variant-numeric: tabular-nums; font-weight: 700; color: var(--fechou); font-size: 14px; }
 
 .dash-empty {
   text-align: center;
@@ -1604,7 +1604,7 @@ textarea {
 }
 .stat-ico .badge svg { width: 22px; height: 22px; }
 .stat-ico .info .val { font-size: 26px; font-weight: 800; font-family: "Sora", sans-serif; letter-spacing: -0.02em; line-height: 1.1; }
-.stat-ico .info .val.money { font-family: "JetBrains Mono", monospace; font-size: 21px; }
+.stat-ico .info .val.money { font-family: inherit; font-variant-numeric: tabular-nums; font-size: 21px; }
 .stat-ico .info .lab { font-size: 12.5px; color: var(--muted); margin-top: 2px; }
 
 /* barra de conclusão/meta grande */
@@ -1621,7 +1621,7 @@ textarea {
 }
 .comp-info { flex-shrink: 0; }
 .comp-info .lab { font-size: 13px; color: var(--muted); }
-.comp-info .num { font-size: 15px; font-weight: 700; color: var(--text); font-family: "JetBrains Mono", monospace; margin-top: 2px; }
+.comp-info .num { font-size: 15px; font-weight: 700; color: var(--text); font-family: inherit; font-variant-numeric: tabular-nums; margin-top: 2px; }
 .comp-bar-wrap { flex: 1; display: flex; align-items: center; gap: 16px; }
 .comp-bar { flex: 1; height: 14px; background: var(--line-2); border-radius: 14px; overflow: hidden; }
 .comp-bar .fill { height: 100%; border-radius: 14px; background: var(--grad); transition: width 0.5s ease; }
@@ -1635,8 +1635,8 @@ textarea {
 .panel-h .panel-sub { display: block; }
 .chart-body { padding: 18px 20px 20px; }
 .chart-svg { width: 100%; height: auto; display: block; }
-.chart-axis { font-size: 10px; fill: var(--faint); font-family: "JetBrains Mono", monospace; }
-.chart-val { font-size: 11px; fill: var(--text); font-weight: 700; font-family: "JetBrains Mono", monospace; }
+.chart-axis { font-size: 10px; fill: var(--faint); font-family: inherit; font-variant-numeric: tabular-nums; }
+.chart-val { font-size: 11px; fill: var(--text); font-weight: 700; font-family: inherit; font-variant-numeric: tabular-nums; }
 .chart-label { font-size: 11px; fill: var(--muted); font-weight: 600; }
 .chart-empty { text-align: center; color: var(--faint); font-size: 13px; padding: 40px 10px; }
 
@@ -1647,7 +1647,7 @@ textarea {
 .donut-center-l { font-size: 11px; fill: var(--muted); }
 .donut-leg { display: flex; flex-direction: column; gap: 9px; }
 .leg-item { display: flex; align-items: center; gap: 9px; font-size: 13px; color: var(--text); }
-.leg-item b { margin-left: auto; font-family: "JetBrains Mono", monospace; }
+.leg-item b { margin-left: auto; font-family: inherit; font-variant-numeric: tabular-nums; }
 .leg-dot { width: 11px; height: 11px; border-radius: 4px; flex-shrink: 0; }
 
 /* ============================================================
@@ -1790,7 +1790,7 @@ textarea {
   border-bottom: 1px solid var(--line);
   white-space: nowrap;
 }
-.mon-tabela tbody td { padding: 12px 14px; border-bottom: 1px solid var(--line); color: var(--text); white-space: nowrap; font-family: "JetBrains Mono", monospace; }
+.mon-tabela tbody td { padding: 12px 14px; border-bottom: 1px solid var(--line); color: var(--text); white-space: nowrap; font-family: inherit; font-variant-numeric: tabular-nums; }
 .mon-tabela tbody tr:last-child td { border-bottom: none; }
 .mon-tabela tbody tr:hover { background: rgba(99, 102, 241, 0.04); }
 .mon-tabela td.vend { display: flex; align-items: center; gap: 10px; font-family: "Plus Jakarta Sans", sans-serif; font-weight: 700; }
@@ -1813,16 +1813,16 @@ textarea {
 .det-conv-row { display: flex; align-items: center; gap: 11px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 12px; }
 .det-conv-row .cc { flex: 1; min-width: 0; }
 .det-conv-row .cc .nm { font-weight: 700; font-size: 13.5px; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.det-conv-row .cc .nm .num { font-weight: 500; color: var(--faint); font-size: 12px; font-family: "JetBrains Mono", monospace; }
+.det-conv-row .cc .nm .num { font-weight: 500; color: var(--faint); font-size: 12px; font-family: inherit; font-variant-numeric: tabular-nums; }
 .det-conv-row .cc .last { font-size: 12.5px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 1px; }
 .det-conv-row .cc-meta { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; flex-shrink: 0; }
-.det-conv-row .cc-meta .t { font-size: 11px; color: var(--faint); font-family: "JetBrains Mono", monospace; }
+.det-conv-row .cc-meta .t { font-size: 11px; color: var(--faint); font-family: inherit; font-variant-numeric: tabular-nums; }
 .badge { font-size: 10.5px; font-weight: 700; padding: 3px 9px; border-radius: 7px; background: var(--line); color: var(--muted); white-space: nowrap; }
 .badge.red { background: rgba(239, 68, 68, 0.13); color: var(--coral); }
 .badge.green { background: rgba(16, 185, 129, 0.14); color: var(--mint); }
 
 .info-box { margin-top: 14px; background: rgba(99, 102, 241, 0.06); border: 1px solid rgba(99, 102, 241, 0.2); border-radius: 12px; padding: 12px 15px; font-size: 13px; color: var(--text); line-height: 1.5; }
-.info-box code { background: rgba(99, 102, 241, 0.12); padding: 1px 6px; border-radius: 6px; font-size: 12px; font-family: "JetBrains Mono", monospace; }
+.info-box code { background: rgba(99, 102, 241, 0.12); padding: 1px 6px; border-radius: 6px; font-size: 12px; font-family: inherit; font-variant-numeric: tabular-nums; }
 
 @media (max-width: 560px) { .det-kpis { grid-template-columns: repeat(2, 1fr); } }
 
@@ -1855,9 +1855,9 @@ textarea {
 
 /* gráfico de evolução */
 .evo-svg { width: 100%; height: auto; display: block; }
-.evo-ylabel { font-size: 13px; fill: var(--faint); font-family: "JetBrains Mono", monospace; }
+.evo-ylabel { font-size: 13px; fill: var(--faint); font-family: inherit; font-variant-numeric: tabular-nums; }
 .evo-xlabel { font-size: 13.5px; fill: var(--muted); font-weight: 600; }
-.evo-badge { font-size: 12.5px; fill: #fff; font-weight: 700; font-family: "JetBrains Mono", monospace; }
+.evo-badge { font-size: 12.5px; fill: #fff; font-weight: 700; font-family: inherit; font-variant-numeric: tabular-nums; }
 
 /* tabela: deixa o header e a leitura mais leves */
 .mon-tabela tbody tr.clicavel { transition: background .12s ease; }
@@ -1921,7 +1921,7 @@ h1, h2, h3, h4, .topbar .greet, .panel-h h3, .login-card .ttl, .login-card h2, .
   letter-spacing: -0.025em;
 }
 .stat .val, .stat-ico .info .val, .mon-mini .num, .mon-strip .mon-mini .num, .det-k .num, .comp-info .num {
-  font-family: "JetBrains Mono", monospace !important;
+  font-family: inherit !important; font-variant-numeric: tabular-nums;
   font-variant-numeric: tabular-nums;
   text-shadow: var(--num-glow);
 }
@@ -3279,3 +3279,47 @@ h1, h2, h3, h4, .topbar .greet, .panel-h h3, .login-card .ttl, .login-card h2, .
 .onum-alerta-lista { display: flex; flex-wrap: wrap; gap: 8px 16px; margin-top: 8px; }
 .onum-alerta-item { font-size: 13px; color: var(--text); }
 .onum-alerta-dica { font-size: 12px; color: var(--muted); margin-top: 8px; }
+
+/* ================= POLIMENTO VISUAL ================= */
+/* micro-interações: transições suaves em tudo que é clicável */
+button, .btn, .onum-acao, .of-acao-btn, .disp-fchip, .disp-camp-acao, .mm-excluir, .onum-add, .onum-btn-ghost, .disp-cta, .nav-btn {
+  transition: background .15s ease, border-color .15s ease, color .15s ease, box-shadow .15s ease, transform .1s ease;
+}
+button:active:not(:disabled), .btn:active { transform: translateY(1px); }
+/* anel de foco elegante e consistente nos campos */
+input:focus-visible, textarea:focus-visible, select:focus-visible {
+  box-shadow: 0 0 0 3px var(--input-focus-ring, rgba(124,58,237,.16));
+}
+/* cards e linhas com transição de hover coesa */
+.onum-card, .disp-row, .disp-camp-card, .of-chat-item, .mon-card, .stat {
+  transition: border-color .16s ease, box-shadow .16s ease, transform .16s ease, background .12s ease;
+}
+.onum-card:hover { border-color: var(--brand); box-shadow: var(--card-hover-shadow); }
+/* IDs e infos técnicas ficam discretos (info de máquina, não compete com o conteúdo) */
+.onum-card-id { font-size: 11px !important; color: var(--faint) !important; opacity: .7; letter-spacing: .015em; }
+/* skeleton de carregamento */
+.skel { background: linear-gradient(90deg, var(--surface-2) 25%, var(--line) 37%, var(--surface-2) 63%); background-size: 400% 100%; animation: skelshimmer 1.3s ease infinite; border-radius: 8px; }
+@keyframes skelshimmer { 0% { background-position: 100% 0; } 100% { background-position: 0 0; } }
+.skel-card { height: 96px; border-radius: 16px; margin-bottom: 12px; }
+.skel-row { height: 56px; border-radius: 12px; margin-bottom: 8px; }
+
+.ico-inline { width: 13px; height: 13px; vertical-align: -2px; display: inline-block; }
+
+/* ============ ACABAMENTO (talento) ============ */
+/* cards com sombra mais premium e leve elevação no hover */
+.onum-card { border-radius: 16px; box-shadow: 0 1px 2px rgba(20,22,45,.04), 0 1px 3px rgba(20,22,45,.03); }
+.onum-card:hover { transform: translateY(-2px); box-shadow: 0 8px 24px -8px rgba(20,22,45,.14); }
+/* avatar do número com anel sutil e cantos mais suaves */
+.onum-card-ico { border-radius: 14px; box-shadow: 0 0 0 1px rgba(20,22,45,.05) inset; }
+[data-theme="dark"] .onum-card-ico { box-shadow: 0 0 0 1px rgba(255,255,255,.06) inset; }
+/* botões de ação do card com hover coeso */
+.onum-acao:hover { border-color: var(--brand); color: var(--brand); background: rgba(124,58,237,.06); }
+/* linhas de campanha e itens: hover mais suave */
+.disp-row:hover, .of-chat-item:hover { background: var(--row-hover, rgba(124,58,237,.04)); }
+/* selos/pills com um respiro melhor */
+.disp-status, .disp-row-pill, .onum-status { letter-spacing: .01em; }
+/* títulos de seção com leve refinamento */
+.onum-titulo, .disp-camps-head h3 { letter-spacing: -0.01em; }
+/* botão primário com sombra colorida suave (dá destaque sem gritar) */
+.disp-cta, .onum-add { box-shadow: 0 6px 18px -6px rgba(124,58,237,.45); }
+.disp-cta:hover, .onum-add:hover { box-shadow: 0 10px 26px -8px rgba(124,58,237,.55); transform: translateY(-1px); }
