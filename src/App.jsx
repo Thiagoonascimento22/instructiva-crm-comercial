@@ -3070,9 +3070,11 @@ function OficialNumeros({ showToast }) {
   }
 
   const [carregando, setCarregando] = useState(true);
+  const [iasNum, setIasNum] = useState([]);
   const carregar = () => api.ofNumeros().then((ns) => { setNumeros(ns); setCarregando(false); }).catch((e) => { showToast(e.message); setCarregando(false); });
   useEffect(() => {
     carregar();
+    api.ofIAs().then((l) => setIasNum((l || []).filter((x) => x.ativa))).catch(() => {});
     api.ofWebhookInfo(window.location.origin).then(setWebhook).catch(() => {});
     api.ofVendedoresLista().then(setVendedores).catch(() => {});
     api.ofTokenGlobalStatus().then((r) => setTokenDef(!!r.definido)).catch(() => {});
@@ -3238,6 +3240,11 @@ function OficialNumeros({ showToast }) {
                 <span className="onum-card-id" style={{ marginTop: 2 }}>
                   {n.vendedorId ? <><I.user className="ico-inline" /> Vendedor: <b style={{ color: "var(--brand)" }}>{n.vendedorNome || "—"}</b></> : <span style={{ opacity: .7 }}><I.funnel className="ico-inline" /> Sem dono (distribuição por %)</span>}
                 </span>
+                {n.iaId && (() => { const ia = iasNum.find((x) => x.id === n.iaId); return (
+                  <span className="onum-card-id" style={{ marginTop: 3, display: "inline-flex", alignItems: "center", gap: 5, color: "var(--brand)", fontWeight: 700 }}>
+                    <I.spark className="ico-inline" /> IA: {ia ? ia.nome : "atende este número"}
+                  </span>
+                ); })()}
                 <span style={{ marginTop: 6, display: "block" }}>{badgeQualidade(n.quality)}</span>
               </div>
               <div className="onum-card-acoes">
@@ -3351,6 +3358,19 @@ function OficialNumeros({ showToast }) {
                 </select>
                 <div className="onum-dica" style={{ marginTop: 8 }}>
                   Ao vincular um vendedor, <b>só ele</b> vê este número, cria os templates dele e dispara por ele — e todo lead que responder cai <b>direto pra ele</b>.
+                </div>
+              </div>
+
+              <div className="onum-f">
+                <label>Atendente IA deste número <i>(a IA atende os leads que entram por ele)</i></label>
+                <select className="input" value={form.iaId || ""} onChange={(e) => setForm({ ...form, iaId: e.target.value })}>
+                  <option value="">Sem IA — o vendedor atende manualmente</option>
+                  {iasNum.map((ia) => <option key={ia.id} value={ia.id}>{ia.nome} · {ia.modo === "qualifica" ? "qualifica → vendedor" : "fecha sozinha"}</option>)}
+                </select>
+                <div className="onum-dica" style={{ marginTop: 8 }}>
+                  {iasNum.length === 0
+                    ? <>Você ainda não tem nenhuma IA ativa. Crie uma na aba <b>Atendente IA</b> pra poder escolher aqui.</>
+                    : <>Escolhendo uma IA, <b>todo lead novo que responder neste número é atendido pela IA automaticamente</b>. Os outros números ficam sem IA. Você pode assumir qualquer conversa a qualquer momento.</>}
                 </div>
               </div>
 
@@ -3487,6 +3507,16 @@ function InboxOficial({ isGer, showToast, onIrParaEvolution }) {
   useEffect(() => { const el = taOfRef.current; if (el && !texto) el.style.height = "auto"; }, [texto]);
   const [, forcarTick] = useState(0); // faz a contagem de 24h atualizar sozinha
   useEffect(() => { const t = setInterval(() => forcarTick((x) => x + 1), 30000); return () => clearInterval(t); }, []);
+  const [iasDisp, setIasDisp] = useState([]);
+  useEffect(() => { if (isGer) api.ofIAs().then((l) => setIasDisp((l || []).filter((x) => x.ativa))).catch(() => {}); }, [isGer]);
+  async function ativarIANaConversa(iaId) {
+    if (!sel || !iaId) return;
+    try {
+      const r = await api.ofAtribuirIAChat(sel, iaId);
+      api.ofChat(sel).then(setConversa);
+      showToast(r.temIA ? `IA "${r.iaNome}" ativada nesta conversa` : "IA desligada");
+    } catch (e) { showToast(e.message); }
+  }
   const nearBottomRef = useRef(true); // usuário está perto do fim?
   const convIdRef = useRef(null);     // qual conversa está aberta
   const msgCountRef = useRef(0);      // qtd de mensagens da última vez
@@ -3839,6 +3869,16 @@ function InboxOficial({ isGer, showToast, onIrParaEvolution }) {
               ))}
               <div ref={fimRef} />
             </div>
+            {isGer && !conversa.temIA && iasDisp.length > 0 && (
+              <div style={{ margin: "10px 14px 0", padding: "10px 13px", background: "var(--surface-2)", border: "1px solid var(--line)", borderRadius: 11, display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+                <I.spark className="ico" style={{ color: "var(--brand)", flexShrink: 0 }} />
+                <span style={{ fontSize: 12.5, color: "var(--muted)", fontWeight: 600 }}>Deixar a IA atender este lead?</span>
+                <select className="input mono" style={{ maxWidth: 240, height: 34, flex: 1, minWidth: 150 }} defaultValue="" onChange={(e) => { if (e.target.value) { ativarIANaConversa(e.target.value); e.target.value = ""; } }}>
+                  <option value="">Escolher IA…</option>
+                  {iasDisp.map((ia) => <option key={ia.id} value={ia.id}>{ia.nome} · {ia.modo === "qualifica" ? "qualifica → vendedor" : "fecha sozinha"}</option>)}
+                </select>
+              </div>
+            )}
             {conversa.iaUltimoErro && (
               <div style={{ margin: "10px 14px 0", padding: "11px 14px", background: "#fef2f2", border: "1px solid #fecaca", borderRadius: 11, color: "#b91c1c", fontSize: 12.5, display: "flex", alignItems: "flex-start", gap: 8 }}>
                 <I.alert className="ico" style={{ flexShrink: 0, marginTop: 1 }} />

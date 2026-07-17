@@ -60,6 +60,7 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
       quality: n.quality || null, // { rating, tier, atualizadoEm, anterior, mudouEm }
       temFoto: !!n.fotoArquivo,
       fotoAtualizadaEm: n.fotoAtualizadaEm || 0,
+      iaId: n.iaId || null, // IA padrão que atende os leads desse número (null = sem IA)
     };
   }
   // busca a URL da foto de perfil do WhatsApp Business do número
@@ -495,6 +496,7 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
       id: proximoId("num"),
       apelido, numero, phoneNumberId, wabaId, token,
       vendedorId,
+      iaId: String(b.iaId || "").trim() || null,
       ativo: true,
     };
     db.oficial.numeros.push(novo);
@@ -512,14 +514,18 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
     if (b.phoneNumberId !== undefined) n.phoneNumberId = String(b.phoneNumberId).trim();
     if (b.wabaId !== undefined) n.wabaId = String(b.wabaId).trim();
     if (b.token !== undefined && b.token) n.token = String(b.token).trim();
+    if (b.iaId !== undefined) {
+      const iid = String(b.iaId || "").trim() || null;
+      if (iid && !(db.oficial.ias || []).some((x) => x.id === iid)) return res.status(400).json({ error: "IA inválida" });
+      n.iaId = iid; // IA padrão desse número (atende os leads que entram nele)
+    }
     if (b.ativo !== undefined) n.ativo = !!b.ativo;
     if (b.vendedorId !== undefined) {
       const vid = String(b.vendedorId || "").trim() || null;
       if (vid && !db.users.some((u) => u.id === vid && u.role === "vendedor")) {
         return res.status(400).json({ error: "Vendedor inválido" });
       }
-      n.vendedorId = vid;
-      // RELIGA conversas travadas: ao definir o dono, joga as respostas que ficaram
+      n.vendedorId = vid;      // RELIGA conversas travadas: ao definir o dono, joga as respostas que ficaram
       // "sem dono" (aguardando distribuição) desse número direto pra esse vendedor.
       if (vid) {
         const dono = db.users.find((u) => u.id === vid);
@@ -1378,6 +1384,35 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
     if (chat.notas.length > 100) chat.notas = chat.notas.slice(-100);
     salvar();
     res.json({ ok: true, iaPausada: chat.iaPausada });
+  });
+
+  // ATIVA uma IA nesta conversa (atribui a IA ao chat). Se o lead já mandou a última
+  // mensagem, a IA responde na hora — se não, responde quando o lead falar.
+  app.post("/api/oficial/chats/:id/atribuir-ia", auth, gerenteOnly, async (req, res) => {
+    const chat = db.waChats[req.params.id];
+    if (!chat || chat.canal !== "oficial") return res.status(404).json({ error: "Conversa não encontrada" });
+    const iaId = String((req.body || {}).iaId || "").trim();
+    if (!Array.isArray(chat.notas)) chat.notas = [];
+    if (!iaId) { // desligar a IA da conversa
+      chat.iaId = null; chat.iaPausada = true; salvar();
+      return res.json({ ok: true, temIA: false });
+    }
+    const ia = (db.oficial.ias || []).find((x) => x.id === iaId);
+    if (!ia) return res.status(404).json({ error: "IA não encontrada" });
+    if (!ia.ativa) return res.status(400).json({ error: `A IA "${ia.nome}" está desativada — ative ela na aba Atendente IA.` });
+    chat.iaId = iaId;
+    chat.iaPausada = false;
+    chat.iaUltimoErro = null;
+    chat.notas.push({ tipo: "ia_ativada", texto: `${req.user.nome} ativou a IA "${ia.nome}" nesta conversa`, ts: Date.now(), por: req.user.nome });
+    if (chat.notas.length > 100) chat.notas = chat.notas.slice(-100);
+    salvar();
+    res.json({ ok: true, temIA: true, iaNome: ia.nome });
+    // se a última mensagem foi do lead, já responde (não espera a próxima)
+    const ult = (chat.mensagens || [])[chat.mensagens.length - 1];
+    if (ult && ult.role === "them") {
+      const numeroCfg = acharNumero(chat.numeroOficialId);
+      if (numeroCfg) rodarIA(chat, numeroCfg);
+    }
   });
 
   // pausar a IA em TODAS as conversas que já existem agora (de uma vez).
@@ -2503,6 +2538,11 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
             }
 
             // ===== IA por campanha OU distribuição pro vendedor =====
+            // se a conversa ainda não tem IA mas o NÚMERO tem uma IA padrão, atribui ela
+            if (!chat.iaId && numeroCfg.iaId) {
+              const iaPadrao = (db.oficial.ias || []).find((x) => x.id === numeroCfg.iaId && x.ativa);
+              if (iaPadrao) { chat.iaId = numeroCfg.iaId; chat.iaPausada = false; }
+            }
             const temIA = chat.iaId && !chat.iaPausada;
             if (temIA) {
               // responde de forma assíncrona (não trava o webhook; a Meta espera 200 rápido)

@@ -145,6 +145,7 @@ export const api = {
   ofDocsIA: (id) => req("GET", "/api/oficial/ias/" + id + "/docs"),
   ofUploadDocIA: (id, dados) => req("POST", "/api/oficial/ias/" + id + "/docs", dados),
   ofDelDocIA: (id, docId) => req("DELETE", "/api/oficial/ias/" + id + "/docs/" + docId),
+  ofAtribuirIAChat: (chatId, iaId) => req("POST", "/api/oficial/chats/" + chatId + "/atribuir-ia", { iaId }),
   ofExcluirIA: (id) => req("DELETE", "/api/oficial/ias/" + id),
   ofExtrairArquivo: (nome, base64) => req("POST", "/api/oficial/ias/extrair", { nome, base64 }),
   ofPreviewIA: (dados) => req("POST", "/api/oficial/ias/preview", dados),
