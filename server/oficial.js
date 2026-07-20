@@ -34,6 +34,13 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
     // ias: [{ id, nome, ativa, modo, persona, playbook, gatilhoHandoff, criadoEm }]
     //   modo: "fecha" (IA vende sozinha) | "qualifica" (IA conversa e passa pro vendedor)
     if (db.oficial.iaGlobalAtiva === undefined) db.oficial.iaGlobalAtiva = true; // botão de pânico geral
+    // v63: pedido do dono — sobe com a IA GERAL desligada, UMA única vez.
+    // Depois disso respeita o botão "Parar/Religar IAs" normalmente (não desliga de novo).
+    if (!db.oficial._iaOffV63) {
+      db.oficial.iaGlobalAtiva = false;
+      db.oficial._iaOffV63 = true;
+      saveDB();
+    }
     if (!db.oficial.verifyToken) {
       db.oficial.verifyToken = "instructiva_" + Math.random().toString(36).slice(2, 10);
     }
@@ -516,8 +523,10 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
     if (b.token !== undefined && b.token) n.token = String(b.token).trim();
     if (b.iaId !== undefined) {
       const iid = String(b.iaId || "").trim() || null;
-      if (iid && !(db.oficial.ias || []).some((x) => x.id === iid)) return res.status(400).json({ error: "IA inválida" });
-      n.iaId = iid; // IA padrão desse número (atende os leads que entram nele)
+      // Se a IA não existe mais (foi excluída/desativada), LIMPA a referência em vez de
+      // travar o salvamento. Antes isso devolvia "IA inválida" e bloqueava editar o número
+      // (inclusive definir o vendedor dono). Agora um iaId fantasma vira "sem IA".
+      n.iaId = (iid && (db.oficial.ias || []).some((x) => x.id === iid)) ? iid : null;
     }
     if (b.ativo !== undefined) n.ativo = !!b.ativo;
     if (b.vendedorId !== undefined) {

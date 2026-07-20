@@ -3878,7 +3878,7 @@ function OficialNumeros({ showToast }) {
                 <button className="onum-acao" onClick={() => testar(n)} title="Testar conexão" disabled={testando === n.id}>
                   {testando === n.id ? <span className="spin" /> : <I.check className="ico" />}
                 </button>
-                <button className="onum-acao" onClick={() => setForm({ ...n, token: "" })} title="Editar"><I.cog className="ico" /></button>
+                <button className="onum-acao" onClick={() => setForm({ ...n, token: "", iaId: (n.iaId && iasNum.some((x) => x.id === n.iaId)) ? n.iaId : "" })} title="Editar"><I.cog className="ico" /></button>
                 <button className="onum-acao danger" onClick={() => excluir(n)} title="Excluir"><I.trash className="ico" /></button>
               </div>
             </div>
