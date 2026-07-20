@@ -2986,8 +2986,7 @@ function OficialLigacoes({ showToast }) {
     api.ofIAs().then((l) => setIas((l || []).filter((x) => x.ativa))).catch(() => {});
     carregar();
     carregarCamp();
-    carregarCusto();
-    const t = setInterval(() => { carregar(); carregarCamp(); carregarCusto(); }, 5000); // atualiza o status ao vivo
+    const t = setInterval(() => { carregar(); carregarCamp(); }, 5000); // atualiza o status ao vivo
     return () => clearInterval(t);
   }, []);
 
@@ -3022,30 +3021,6 @@ function OficialLigacoes({ showToast }) {
 
   return (
     <div className="onum-wrap">
-      {custo && (
-        <div className="lig-custo">
-          {[["Hoje", custo.hoje], ["Este mês", custo.mes], ["Total", custo.total]].map(([lb, d]) => (
-            <div className="lig-custo-item" key={lb}>
-              <span className="lig-custo-lb">{lb}</span>
-              <span className="lig-custo-v">R$ {Number(d.custo).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</span>
-              <span className="lig-custo-sub">{d.ligacoes} lig · {d.minutos} min</span>
-            </div>
-          ))}
-          <div className="lig-custo-rate">
-            {editRate ? (
-              <span style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
-                <span className="lig-custo-lb">Valor por minuto</span>
-                <input className="input mono" style={{ width: 74, height: 34 }} value={rateTmp} onChange={(e) => setRateTmp(e.target.value)} />
-                <button className="btn btn-sm" onClick={salvarRate}>Salvar</button>
-              </span>
-            ) : (
-              <button className="lig-rate-btn" onClick={() => { setRateTmp(String(custo.custoPorMin)); setEditRate(true); }}>
-                estimando a R$ {Number(custo.custoPorMin).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}/min · ajustar
-              </button>
-            )}
-          </div>
-        </div>
-      )}
       <div className="disp-box" style={{ marginBottom: 18 }}>
         <div style={{ padding: "16px 18px" }}>
           <h3 style={{ margin: "0 0 4px", fontSize: 15 }}>Ligar pra um lead com a IA</h3>
