@@ -210,6 +210,9 @@ function fmtEspera(seg) {
 export default function App() {
   const [booting, setBooting] = useState(true);
   const [user, setUser] = useState(null);
+  const [modulos, setModulos] = useState(null);
+  const [ehDono, setEhDono] = useState(false);
+  const carregarModulos = () => api.getModulos().then((r) => { setModulos(r.modulos); setEhDono(!!r.dono); }).catch(() => {});
   const [view, setView] = useState(() => {
     try { return localStorage.getItem("instructiva_view") || "whatsapp"; } catch (e) { return "whatsapp"; }
   });
@@ -235,6 +238,7 @@ export default function App() {
     if (!getToken()) { setBooting(false); return; }
     api.me().then(setUser).catch(() => setToken("")).finally(() => setBooting(false));
   }, []);
+  useEffect(() => { if (user) carregarModulos(); }, [user]);
 
   const vistaInicial = useRef(false);
   useEffect(() => {
@@ -242,7 +246,7 @@ export default function App() {
     vistaInicial.current = true;
     // valida a aba restaurada: se não for permitida pro perfil, cai numa aba segura
     const porRole = {
-      gerente: ["whatsapp", "disparo", "templates", "numeros", "ia", "ligacoes", "crm", "temperatura", "solicitacoes", "equipe", "config"],
+      gerente: ["whatsapp", "disparo", "templates", "numeros", "ia", "ligacoes", "crm", "temperatura", "solicitacoes", "equipe", "sistema", "config"],
       suporte: ["solicitacoes", "config"],
     };
     const permitidas = porRole[user.role] || ["whatsapp", "disparo", "templates", "minhasSolicitacoes", "config"];
@@ -275,6 +279,7 @@ export default function App() {
   const isGer = user.role === "gerente";
   const isSuporte = user.role === "suporte";
   const isVend = !isGer && !isSuporte;
+  const mod = (k) => !modulos || modulos[k] !== false; // módulo ligado? (default ligado enquanto carrega)
   const badgeSol = minhasSol.filter((s) => s.status === "resolvida" && !s.resolvidoVisto).length;
   const titulos = {
     whatsapp: { t: "Caixa de entrada", s: "Suas conversas — não oficial e oficial, num só lugar" },
@@ -283,7 +288,8 @@ export default function App() {
     numeros: { t: "Números", s: "Números oficiais conectados à sua conta Meta" },
     ia: { t: "Atendente IA", s: "SDR de IA que qualifica os leads e passa pro vendedor" },
     ligacoes: { t: "Ligações IA", s: "A IA liga pro lead, qualifica por voz e passa pro vendedor" },
-    crm: { t: "CRM", s: "Funil de leads — arraste entre as etapas, atribua e acompanhe" },
+    crm: { t: "Pipeline", s: "Funil de leads — arraste entre as etapas, atribua e acompanhe" },
+    sistema: { t: "Sistema", s: "Controle dos módulos entregues — visível só pra você (dono)" },
     temperatura: { t: "Temperatura", s: "Melhores horários e dias — quando os leads mais respondem" },
     minhasSolicitacoes: { t: "Minhas solicitações", s: "Acompanhe seus pedidos ao suporte" },
     solicitacoes: { t: "Solicitações de suporte", s: "Pedidos de ajuda dos vendedores e análise" },
@@ -301,17 +307,18 @@ export default function App() {
           <div className="tag">Sistema Comercial</div>
         </div>
         <nav className="nav">
-          {isGer && <NavBtn ic={I.pipe} label="CRM" active={view === "crm"} onClick={() => setView("crm")} />}
-          {!isSuporte && <NavBtn ic={I.wa} label="Caixa de entrada" active={view === "whatsapp"} onClick={() => setView("whatsapp")} />}
-          {(isGer || isVend) && <NavBtn ic={I.send} label="Disparo" active={view === "disparo"} onClick={() => setView("disparo")} />}
-          {(isGer || isVend) && <NavBtn ic={I.chat} label="Templates" active={view === "templates"} onClick={() => setView("templates")} />}
-          {isGer && <NavBtn ic={I.wa} label="Números" active={view === "numeros"} onClick={() => setView("numeros")} />}
-          {isGer && <NavBtn ic={I.spark} label="Atendente IA" active={view === "ia"} onClick={() => setView("ia")} />}
-          {isGer && <NavBtn ic={I.suporte} label="Ligações IA" active={view === "ligacoes"} onClick={() => setView("ligacoes")} />}
-          {isGer && <NavBtn ic={I.gauge} label="Temperatura" active={view === "temperatura"} onClick={() => setView("temperatura")} />}
+          {isGer && mod("crm") && <NavBtn ic={I.pipe} label="Pipeline" active={view === "crm"} onClick={() => setView("crm")} />}
+          {!isSuporte && mod("caixa") && <NavBtn ic={I.wa} label="Caixa de entrada" active={view === "whatsapp"} onClick={() => setView("whatsapp")} />}
+          {(isGer || isVend) && mod("disparo") && <NavBtn ic={I.send} label="Disparo" active={view === "disparo"} onClick={() => setView("disparo")} />}
+          {(isGer || isVend) && mod("templates") && <NavBtn ic={I.chat} label="Templates" active={view === "templates"} onClick={() => setView("templates")} />}
+          {isGer && mod("numeros") && <NavBtn ic={I.wa} label="Números" active={view === "numeros"} onClick={() => setView("numeros")} />}
+          {isGer && mod("ia") && <NavBtn ic={I.spark} label="Atendente IA" active={view === "ia"} onClick={() => setView("ia")} />}
+          {isGer && mod("ligacoes") && <NavBtn ic={I.suporte} label="Ligações IA" active={view === "ligacoes"} onClick={() => setView("ligacoes")} />}
+          {isGer && mod("temperatura") && <NavBtn ic={I.gauge} label="Temperatura" active={view === "temperatura"} onClick={() => setView("temperatura")} />}
           {!isGer && !isSuporte && <NavBtn ic={I.suporte} label="Minhas solicitações" active={view === "minhasSolicitacoes"} badge={badgeSol} onClick={() => setView("minhasSolicitacoes")} />}
-          {(isGer || isSuporte) && <NavBtn ic={I.suporte} label="Solicitações" active={view === "solicitacoes"} onClick={() => setView("solicitacoes")} />}
-          {isGer && <NavBtn ic={I.team} label="Equipe & Acessos" active={view === "equipe"} onClick={() => setView("equipe")} />}
+          {(isGer || isSuporte) && mod("solicitacoes") && <NavBtn ic={I.suporte} label="Solicitações" active={view === "solicitacoes"} onClick={() => setView("solicitacoes")} />}
+          {isGer && mod("equipe") && <NavBtn ic={I.team} label="Equipe & Acessos" active={view === "equipe"} onClick={() => setView("equipe")} />}
+          {ehDono && <NavBtn ic={I.key} label="Sistema" active={view === "sistema"} onClick={() => setView("sistema")} />}
           <NavBtn ic={I.cog} label="Configurações" active={view === "config"} onClick={() => setView("config")} />
         </nav>
         <div className="side-foot">
@@ -338,14 +345,15 @@ export default function App() {
           </div>
         </div>
         <div className="content">
-          {view === "whatsapp" && !isSuporte && <WhatsApp user={user} showToast={showToast} target={waTarget} onTargetUsed={() => setWaTarget(null)} recarregarSol={carregarMinhasSol} />}
-          {view === "disparo" && (isGer || isVend) && <OficialDisparo isGer={isGer} showToast={showToast} />}
-          {view === "templates" && (isGer || isVend) && <OficialTemplates isGer={isGer} showToast={showToast} />}
-          {view === "numeros" && isGer && <OficialNumeros showToast={showToast} />}
-          {view === "ia" && isGer && <OficialIAs showToast={showToast} />}
-          {view === "ligacoes" && isGer && <OficialLigacoes showToast={showToast} />}
-          {view === "crm" && isGer && <OficialCRM showToast={showToast} />}
-          {view === "temperatura" && isGer && <OficialTemperatura showToast={showToast} />}
+          {view === "whatsapp" && !isSuporte && mod("caixa") && <WhatsApp user={user} showToast={showToast} target={waTarget} onTargetUsed={() => setWaTarget(null)} recarregarSol={carregarMinhasSol} />}
+          {view === "disparo" && (isGer || isVend) && mod("disparo") && <OficialDisparo isGer={isGer} showToast={showToast} />}
+          {view === "templates" && (isGer || isVend) && mod("templates") && <OficialTemplates isGer={isGer} showToast={showToast} />}
+          {view === "numeros" && isGer && mod("numeros") && <OficialNumeros showToast={showToast} />}
+          {view === "ia" && isGer && mod("ia") && <OficialIAs showToast={showToast} />}
+          {view === "ligacoes" && isGer && mod("ligacoes") && <OficialLigacoes showToast={showToast} />}
+          {view === "crm" && isGer && mod("crm") && <OficialCRM showToast={showToast} />}
+          {view === "sistema" && ehDono && <PainelSistema modulos={modulos} onSalvo={carregarModulos} showToast={showToast} />}
+          {view === "temperatura" && isGer && mod("temperatura") && <OficialTemperatura showToast={showToast} />}
           {view === "minhasSolicitacoes" && !isGer && !isSuporte && <PaginaMinhasSolicitacoes itens={minhasSol} recarregar={carregarMinhasSol} showToast={showToast} />}
           {view === "solicitacoes" && (isGer || isSuporte) && <PaginaSolicitacoes showToast={showToast} readonly={isGer} />}
           {view === "equipe" && isGer && <Equipe showToast={showToast} meId={user.id} />}
@@ -2751,6 +2759,128 @@ function OficialTemplates({ isGer = true, showToast }) {
 }
 
 
+function PainelSistema({ modulos, onSalvo, showToast }) {
+  const LISTA = [
+    ["caixa", "Caixa de entrada", "Todas as conversas de WhatsApp num só lugar (oficial e vendedores)."],
+    ["disparo", "Disparo", "Campanhas de mensagem em massa por WhatsApp."],
+    ["templates", "Templates", "Modelos de mensagem aprovados pela Meta."],
+    ["numeros", "Números", "Números oficiais conectados e qualidade de cada um."],
+    ["ia", "Atendente IA", "SDR de IA que atende e qualifica os leads no WhatsApp."],
+    ["ligacoes", "Ligações IA", "A IA liga pro lead, qualifica por voz e passa pro vendedor."],
+    ["crm", "Pipeline", "Funil de vendas visual (Kanban) com etapas e distribuição."],
+    ["temperatura", "Temperatura", "Melhores horários e dias pra falar com os leads."],
+    ["solicitacoes", "Solicitações", "Pedidos de suporte dos vendedores."],
+    ["equipe", "Equipe & Acessos", "Gestão de usuários e permissões da equipe."],
+  ];
+  const [flags, setFlags] = useState(() => { const o = {}; LISTA.forEach(([k]) => { o[k] = !modulos || modulos[k] !== false; }); return o; });
+  const [saving, setSaving] = useState(false);
+  const toggle = (k) => setFlags((f) => ({ ...f, [k]: !f[k] }));
+  async function salvar() {
+    setSaving(true);
+    try { await api.setModulos(flags); onSalvo && onSalvo(); showToast("Módulos atualizados"); }
+    catch (e) { showToast(e.message); }
+    finally { setSaving(false); }
+  }
+  const ligados = LISTA.filter(([k]) => flags[k]).length;
+  return (
+    <div className="sist-wrap">
+      <div className="sist-alerta">
+        <b>Controle do dono.</b> Aqui você escolhe quais partes do sistema ficam ativas nesta cópia. Desligue o que não quer entregar — o menu e o acesso somem pra todo mundo, e nenhum outro admin consegue religar. Ideal pra entregar/vender o sistema com só os módulos combinados.
+      </div>
+      <div className="sist-box">
+        <div className="sist-head">
+          <div>
+            <h3>Módulos do sistema</h3>
+            <p>{ligados} de {LISTA.length} ativos</p>
+          </div>
+          <button className="onum-add" disabled={saving} onClick={salvar}>{saving ? <span className="spin" /> : <I.check className="ico" />} Salvar</button>
+        </div>
+        <div className="sist-list">
+          {LISTA.map(([k, nome, desc]) => (
+            <div className={"sist-item" + (flags[k] ? "" : " off")} key={k}>
+              <div className="sist-info">
+                <div className="sist-nome">{nome}</div>
+                <div className="sist-desc">{desc}</div>
+              </div>
+              <button className={"sw" + (flags[k] ? " on" : "")} onClick={() => toggle(k)} aria-label={nome}><span className="sw-dot" /></button>
+            </div>
+          ))}
+        </div>
+      </div>
+      <div className="sist-dica">Configurações continua sempre disponível (é onde ficam os dados de acesso). A cópia entregue usa as próprias chaves de API do cliente, configuradas no ambiente de hospedagem dele.</div>
+    </div>
+  );
+}
+
+// Modal reutilizável: cadastra um lead direto no Pipeline a partir de uma conversa
+// (usado tanto na caixa Oficial quanto na Não oficial). Só o gerente enxerga o botão,
+// porque o Pipeline é gerente-only no servidor.
+function ModalCadastrarPipeline({ prefill, onClose, showToast }) {
+  const [etapas, setEtapas] = useState([]);
+  const [vendedores, setVendedores] = useState([]);
+  const [carregando, setCarregando] = useState(true);
+  const [salvando, setSalvando] = useState(false);
+  const [form, setForm] = useState({
+    nome: (prefill && prefill.nome) || "",
+    telefone: (prefill && prefill.telefone) || "",
+    email: "",
+    curso: "",
+    valor: "",
+    etapa: "novo",
+    vendedorId: "",
+  });
+
+  useEffect(() => {
+    api.ofCRM()
+      .then((d) => { setEtapas(d.etapas || []); setVendedores(d.vendedores || []); })
+      .catch((e) => showToast("✗ " + e.message))
+      .finally(() => setCarregando(false));
+    // eslint-disable-next-line
+  }, []);
+
+  async function salvar() {
+    if (!form.nome.trim()) { showToast("Dê um nome ao lead"); return; }
+    setSalvando(true);
+    try {
+      await api.ofCrmCriar(form);
+      showToast("✓ Lead cadastrado no Pipeline");
+      onClose();
+    } catch (e) { showToast("✗ " + e.message); }
+    finally { setSalvando(false); }
+  }
+
+  return (
+    <Portal>
+      <div className="crm-modal-bg" onClick={(e) => e.target === e.currentTarget && onClose()}>
+        <div className="crm-modal" style={{ maxWidth: 440 }}>
+          <div className="crm-modal-head"><b>Cadastrar no Pipeline</b><button className="crm-x" onClick={onClose}>✕</button></div>
+          <div className="crm-modal-body">
+            <label className="lbl-mini">Nome *</label>
+            <input className="input" value={form.nome} onChange={(e) => setForm({ ...form, nome: e.target.value })} placeholder="Nome do lead" autoFocus />
+            <div className="crm-f2" style={{ marginTop: 10 }}>
+              <div><label className="lbl-mini">Telefone</label><input className="input mono" value={form.telefone} onChange={(e) => setForm({ ...form, telefone: e.target.value })} placeholder="44 99999-9999" /></div>
+              <div><label className="lbl-mini">Valor (R$)</label><input className="input" value={form.valor} onChange={(e) => setForm({ ...form, valor: e.target.value })} placeholder="0" /></div>
+            </div>
+            <div className="crm-f2" style={{ marginTop: 10 }}>
+              <div><label className="lbl-mini">E-mail</label><input className="input" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} placeholder="email@exemplo.com" /></div>
+              <div><label className="lbl-mini">Curso</label><input className="input" value={form.curso} onChange={(e) => setForm({ ...form, curso: e.target.value })} placeholder="Nome do curso" /></div>
+            </div>
+            <div className="crm-f2" style={{ marginTop: 10 }}>
+              <div><label className="lbl-mini">Etapa</label>
+                <select className="input" value={form.etapa} onChange={(e) => setForm({ ...form, etapa: e.target.value })}>{etapas.map((et) => <option key={et.k} value={et.k}>{et.lb}</option>)}</select>
+              </div>
+              <div><label className="lbl-mini">Vendedor</label>
+                <select className="input" value={form.vendedorId} onChange={(e) => setForm({ ...form, vendedorId: e.target.value })}><option value="">Sem dono</option>{vendedores.map((v) => <option key={v.id} value={v.id}>{v.nome}</option>)}</select>
+              </div>
+            </div>
+            <button className="onum-add" style={{ marginTop: 16, width: "100%", justifyContent: "center" }} onClick={salvar} disabled={salvando || carregando}>{salvando ? "Cadastrando…" : "Cadastrar no Pipeline"}</button>
+          </div>
+        </div>
+      </div>
+    </Portal>
+  );
+}
+
 function OficialCRM({ showToast }) {
   const [etapas, setEtapas] = useState([]);
   const [leads, setLeads] = useState([]);
@@ -2798,7 +2928,7 @@ function OficialCRM({ showToast }) {
   return (
     <div className="crm-wrap">
       <div className="crm-top">
-        <button className="onum-add" onClick={() => setCriar({ nome: "", telefone: "", etapa: "novo", vendedorId: "", valor: "" })}><I.plus className="ico" /> Novo lead</button>
+        <button className="onum-add" onClick={() => setCriar({ nome: "", telefone: "", email: "", curso: "", etapa: "novo", vendedorId: "", valor: "" })}><I.plus className="ico" /> Novo lead</button>
         <button className="onum-btn-ghost" onClick={() => setConfig(true)}><I.cog className="ico" /> Distribuição das ligações</button>
       </div>
 
@@ -2816,6 +2946,7 @@ function OficialCRM({ showToast }) {
                   <div key={l.id} className="crm-card" draggable onDragStart={() => setDragId(l.id)} onDragEnd={() => setDragId(null)} onClick={() => { setSel(l.id); setNovaNota(""); }}>
                     <div className="crm-card-nome">{l.nome}</div>
                     {l.telefone && <div className="crm-card-tel">{l.telefone}</div>}
+                    {l.curso && <div className="crm-card-curso">{l.curso}</div>}
                     <div className="crm-card-foot">
                       {l.origem === "ligacao" && <span className="crm-tag-lig"><I.suporte className="ico-inline" /> Ligação</span>}
                       {l.valor > 0 && <span className="crm-card-valor">R$ {Number(l.valor).toLocaleString("pt-BR")}</span>}
@@ -2844,6 +2975,10 @@ function OficialCRM({ showToast }) {
               <div className="crm-f2">
                 <div><label className="lbl-mini">Telefone</label><input className="input mono" value={leadSel.telefone} onChange={(e) => setLeads((ls) => ls.map((x) => x.id === sel ? { ...x, telefone: e.target.value } : x))} onBlur={(e) => salvarCampo(sel, "telefone", e.target.value)} /></div>
                 <div><label className="lbl-mini">Valor (R$)</label><input className="input" value={leadSel.valor || ""} onChange={(e) => setLeads((ls) => ls.map((x) => x.id === sel ? { ...x, valor: e.target.value } : x))} onBlur={(e) => salvarCampo(sel, "valor", e.target.value)} /></div>
+              </div>
+              <div className="crm-f2">
+                <div><label className="lbl-mini">E-mail</label><input className="input" value={leadSel.email || ""} onChange={(e) => setLeads((ls) => ls.map((x) => x.id === sel ? { ...x, email: e.target.value } : x))} onBlur={(e) => salvarCampo(sel, "email", e.target.value)} placeholder="email@exemplo.com" /></div>
+                <div><label className="lbl-mini">Curso</label><input className="input" value={leadSel.curso || ""} onChange={(e) => setLeads((ls) => ls.map((x) => x.id === sel ? { ...x, curso: e.target.value } : x))} onBlur={(e) => salvarCampo(sel, "curso", e.target.value)} placeholder="Nome do curso" /></div>
               </div>
               <div className="crm-f2">
                 <div><label className="lbl-mini">Etapa</label>
@@ -2894,6 +3029,10 @@ function OficialCRM({ showToast }) {
               <div className="crm-f2" style={{ marginTop: 10 }}>
                 <div><label className="lbl-mini">Telefone</label><input className="input mono" value={criar.telefone} onChange={(e) => setCriar({ ...criar, telefone: e.target.value })} placeholder="44 99999-9999" /></div>
                 <div><label className="lbl-mini">Valor (R$)</label><input className="input" value={criar.valor} onChange={(e) => setCriar({ ...criar, valor: e.target.value })} placeholder="0" /></div>
+              </div>
+              <div className="crm-f2" style={{ marginTop: 10 }}>
+                <div><label className="lbl-mini">E-mail</label><input className="input" value={criar.email} onChange={(e) => setCriar({ ...criar, email: e.target.value })} placeholder="email@exemplo.com" /></div>
+                <div><label className="lbl-mini">Curso</label><input className="input" value={criar.curso} onChange={(e) => setCriar({ ...criar, curso: e.target.value })} placeholder="Nome do curso" /></div>
               </div>
               <div className="crm-f2" style={{ marginTop: 10 }}>
                 <div><label className="lbl-mini">Etapa</label>
@@ -3925,6 +4064,7 @@ function InboxOficial({ isGer, showToast, onIrParaEvolution }) {
   const [campanhaFiltro, setCampanhaFiltro] = useState("todas");
   const [showTransfer, setShowTransfer] = useState(false);
   const [pedindoSuporte, setPedindoSuporte] = useState(false);
+  const [cadPipeline, setCadPipeline] = useState(false);
   const [showEmojiOf, setShowEmojiOf] = useState(false);
   const [gravandoOf, setGravandoOf] = useState(false);
   const [enviandoMidiaOf, setEnviandoMidiaOf] = useState(false);
@@ -4257,6 +4397,11 @@ function InboxOficial({ isGer, showToast, onIrParaEvolution }) {
                 <button className="of-acao-btn sup" title="Pedir ajuda ao suporte" onClick={() => setPedindoSuporte(true)}>
                   <I.suporte className="ico" /> Suporte
                 </button>
+                {isGer && (
+                  <button className="of-acao-btn" title="Cadastrar este lead no Pipeline" onClick={() => setCadPipeline(true)}>
+                    <I.pipe className="ico" /> Pipeline
+                  </button>
+                )}
                 <button className="of-acao-btn fim" title="Encerrar atendimento" onClick={() => encerrar()}>
                   <I.check className="ico" /> Encerrar
                 </button>
@@ -4369,6 +4514,14 @@ function InboxOficial({ isGer, showToast, onIrParaEvolution }) {
           onSaved={() => { setPedindoSuporte(false); showToast("✓ Encaminhado para o suporte"); }}
         />
       )}
+
+      {cadPipeline && conversa && (
+        <ModalCadastrarPipeline
+          prefill={{ nome: conversa.nome, telefone: conversa.numero }}
+          showToast={showToast}
+          onClose={() => setCadPipeline(false)}
+        />
+      )}
     </div>
   );
 }
@@ -4395,6 +4548,7 @@ function WhatsApp({ user, showToast, target, onTargetUsed, recarregarSol }) {
   const [novoLead, setNovoLead] = useState(null);
   const [enviando, setEnviando] = useState(false);
   const [pedindoSuporte, setPedindoSuporte] = useState(false);
+  const [cadPipeline, setCadPipeline] = useState(false);
   const [showEmoji, setShowEmoji] = useState(false);
   const [verArquivadas, setVerArquivadas] = useState(false);
   const [gravando, setGravando] = useState(false);
@@ -4760,6 +4914,7 @@ function WhatsApp({ user, showToast, target, onTargetUsed, recarregarSol }) {
                 <div className="num">{chat.numero}</div>
               </div>
               {chat.nota != null && <span className="nota-badge" title="Nota da pesquisa de satisfação">⭐ {chat.nota}/5</span>}
+              {isGer && <button type="button" className="btn-pipe" onClick={() => setCadPipeline(true)} title="Cadastrar este lead no Pipeline"><I.pipe style={{ width: 14, height: 14 }} /> Pipeline</button>}
               {!isGer && <button type="button" className="btn-suporte" onClick={() => setPedindoSuporte(true)} title="Encaminhar este atendimento para a equipe de suporte"><I.suporte style={{ width: 14, height: 14 }} /> Encaminhar pro suporte</button>}
               {chat.encerrado ? (
                 <div className="enc-acao">
@@ -4843,6 +4998,13 @@ function WhatsApp({ user, showToast, target, onTargetUsed, recarregarSol }) {
           defaults={{ cliente: chat.nome, numero: chat.numero }}
           onClose={() => setPedindoSuporte(false)}
           onSaved={() => { setPedindoSuporte(false); showToast("✓ Encaminhado para o suporte"); recarregarSol && recarregarSol(); }}
+        />
+      )}
+      {cadPipeline && chat && (
+        <ModalCadastrarPipeline
+          prefill={{ nome: chat.nome, telefone: chat.numero }}
+          showToast={showToast}
+          onClose={() => setCadPipeline(false)}
         />
       )}
       </>

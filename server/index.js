@@ -107,6 +107,10 @@ function normalizaHorario(h) {
 
 function dbVazio() {
   return {
+    modulos: {
+      caixa: true, disparo: true, templates: true, numeros: true, ia: true,
+      ligacoes: true, crm: true, temperatura: true, solicitacoes: true, equipe: true,
+    },
     users: [
       {
         id: "u_admin",
@@ -114,6 +118,7 @@ function dbVazio() {
         login: "gerente",
         senha: "admin123",
         role: "gerente",
+        dono: true, // dono do sistema: controla os módulos e a licença
         meta: 0,
         ativo: true,
         token: null,
@@ -172,6 +177,15 @@ function loadDB() {
         if (typeof u.ativo !== "boolean") u.ativo = true;
         if (typeof u.podeResponder !== "boolean") u.podeResponder = false;
       });
+      // migração: config de módulos (garante todas as chaves)
+      const modPadrao = dbVazio().modulos;
+      if (!db.modulos || typeof db.modulos !== "object") db.modulos = { ...modPadrao };
+      else Object.keys(modPadrao).forEach((k) => { if (typeof db.modulos[k] !== "boolean") db.modulos[k] = modPadrao[k]; });
+      // migração: garante que exista um "dono" (o primeiro gerente vira dono)
+      if (!db.users.some((u) => u.dono)) {
+        const g = db.users.find((u) => u.role === "gerente");
+        if (g) g.dono = true;
+      }
       console.log(
         `Banco carregado. Usuários: ${db.users.length} | Cards: ${db.cards.length}`
       );
@@ -288,6 +302,11 @@ function gerenteOnly(req, res, next) {
     return res.status(403).json({ error: "Acesso restrito ao gerente" });
   next();
 }
+function donoOnly(req, res, next) {
+  if (!req.user.dono)
+    return res.status(403).json({ error: "Só o dono do sistema pode fazer isso." });
+  next();
+}
 function suporteOnly(req, res, next) {
   if (req.user.role !== "suporte")
     return res.status(403).json({ error: "Apenas o suporte pode atualizar solicitações" });
@@ -314,6 +333,19 @@ app.post("/api/login", (req, res) => {
 });
 
 app.get("/api/me", auth, (req, res) => res.json(semSenha(req.user)));
+
+// módulos ativos do sistema (todos leem — pra montar o menu; só o DONO altera)
+app.get("/api/modulos", auth, (req, res) => {
+  res.json({ modulos: db.modulos || dbVazio().modulos, dono: !!req.user.dono });
+});
+app.put("/api/modulos", auth, donoOnly, (req, res) => {
+  const m = (req.body && req.body.modulos) || {};
+  const base = dbVazio().modulos;
+  if (!db.modulos) db.modulos = { ...base };
+  Object.keys(base).forEach((k) => { if (typeof m[k] === "boolean") db.modulos[k] = m[k]; });
+  saveDB();
+  res.json({ ok: true, modulos: db.modulos });
+});
 
 app.put("/api/me", auth, (req, res) => {
   const { nome, senha } = req.body || {};

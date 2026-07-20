@@ -33,6 +33,8 @@ async function req(method, url, body) {
 export const api = {
   login: (login, senha) => req("POST", "/api/login", { login, senha }),
   me: () => req("GET", "/api/me"),
+  getModulos: () => req("GET", "/api/modulos"),
+  setModulos: (modulos) => req("PUT", "/api/modulos", { modulos }),
   updateMe: (dados) => req("PUT", "/api/me", dados),
 
   listUsers: () => req("GET", "/api/users"),

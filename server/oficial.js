@@ -1519,7 +1519,7 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
   }
   function crmLeadPublico(l) {
     const v = l.vendedorId ? (db.users || []).find((u) => u.id === l.vendedorId) : null;
-    return { id: l.id, nome: l.nome, telefone: l.telefone, etapa: l.etapa, vendedorId: l.vendedorId || null, vendedorNome: v ? v.nome : "", valor: l.valor || 0, origem: l.origem || "manual", notas: l.notas || [], historico: l.historico || [], criadoEm: l.criadoEm, atualizadoEm: l.atualizadoEm };
+    return { id: l.id, nome: l.nome, telefone: l.telefone, email: l.email || "", curso: l.curso || "", etapa: l.etapa, vendedorId: l.vendedorId || null, vendedorNome: v ? v.nome : "", valor: l.valor || 0, origem: l.origem || "manual", notas: l.notas || [], historico: l.historico || [], criadoEm: l.criadoEm, atualizadoEm: l.atualizadoEm };
   }
   function proximoVendedorCRM() {
     garantirCRM();
@@ -1560,6 +1560,8 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
       id: "lead_" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
       nome: String(b.nome || "Sem nome").slice(0, 80),
       telefone: String(b.telefone || "").replace(/\D/g, ""),
+      email: String(b.email || "").trim().slice(0, 120),
+      curso: String(b.curso || "").trim().slice(0, 120),
       etapa: CRM_ETAPAS.some((e) => e.k === b.etapa) ? b.etapa : "novo",
       vendedorId: (b.vendedorId && db.users.some((u) => u.id === b.vendedorId)) ? b.vendedorId : null,
       valor: parseFloat(b.valor) || 0, origem: "manual", notas: [],
@@ -1581,6 +1583,8 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
     }
     if (b.nome !== undefined) l.nome = String(b.nome).slice(0, 80);
     if (b.telefone !== undefined) l.telefone = String(b.telefone).replace(/\D/g, "");
+    if (b.email !== undefined) l.email = String(b.email).trim().slice(0, 120);
+    if (b.curso !== undefined) l.curso = String(b.curso).trim().slice(0, 120);
     if (b.valor !== undefined) l.valor = parseFloat(b.valor) || 0;
     if (b.vendedorId !== undefined) {
       const vid = b.vendedorId || null;
