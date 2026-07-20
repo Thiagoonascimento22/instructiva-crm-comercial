@@ -1415,6 +1415,163 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
     }
   });
 
+  /* ================= IA DE LIGAÇÃO (voz, por turnos via Twilio) =================
+     A IA liga pro lead, conversa por turnos (fala -> escuta a resposta -> responde),
+     qualifica e passa pro vendedor. Reusa a MESMA agente (persona + base RAG).
+     Variáveis no Railway: TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_NUMERO. */
+  function garantirLigacoes() { if (!Array.isArray(db.oficial.ligacoes)) db.oficial.ligacoes = []; }
+  function baseUrlDe(req) {
+    const proto = String(req.headers["x-forwarded-proto"] || "https").split(",")[0];
+    const host = req.headers["x-forwarded-host"] || req.headers.host;
+    return `${proto}://${host}`;
+  }
+  function escXml(s) { return String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&apos;"); }
+  const VOZ_TW = 'voice="Polly.Camila-Neural" language="pt-BR"';
+
+  // gera a próxima fala da IA na ligação (curta, estilo telefone) + detecta classificação
+  async function falaDaIA(lig, ia) {
+    const base = montarSystemPrompt(ia, lig.nome);
+    const chatFake = { id: lig.id, nome: lig.nome, mensagens: lig.transcricao.map((t) => ({ role: t.role === "lead" ? "them" : "me", content: t.content })) };
+    let kb = ""; try { kb = await buscarConhecimento(ia, chatFake); } catch (_) {}
+    const modoVoz = "\n\n===== MODO LIGAÇÃO TELEFÔNICA =====\nVocê está FALANDO ao telefone (não escrevendo). Regras:\n- Fale CURTO e natural, como numa ligação real: no máximo 2 frases por vez, uma ideia de cada vez.\n- NUNCA use listas, emojis, links ou formatação — é voz.\n- Comece se apresentando rápido e vá qualificando com perguntas curtas.\n- Quando o lead demonstrar interesse/perfil (QUALIFICADO), encerre educado dizendo que um consultor vai continuar o atendimento, e escreva a tag [QUALIFICADO] no final.\n- Se claramente não tiver interesse/perfil, encerre educado e escreva [NAO_QUALIFICADO].\n- Se pedir pra falar depois, diga que retorna e escreva [CALLBACK].\nNunca leia as tags em voz alta.";
+    const system = base + (kb ? "\n\n===== BASE DE CONHECIMENTO =====\n" + kb : "") + modoVoz;
+    const hist = lig.transcricao.map((t) => ({ role: t.role === "lead" ? "them" : "me", content: t.content }));
+    if (!hist.length) hist.push({ role: "them", content: "(a ligação foi atendida — comece a conversa)" });
+    let resp = await chamarClaude(system, hist);
+    let classe = null;
+    if (/\[QUALIFICADO\]/i.test(resp)) classe = "qualificado";
+    else if (/\[NAO_QUALIFICADO\]/i.test(resp)) classe = "nao_qualificado";
+    else if (/\[CALLBACK\]/i.test(resp)) classe = "callback";
+    resp = resp.replace(/\[(QUALIFICADO|NAO_QUALIFICADO|CALLBACK|PASSAR_HUMANO)\]/gi, "").trim();
+    return { fala: resp || "Certo!", classe };
+  }
+
+  function gatherXml(base, ligId, fala) {
+    return `<Response><Say ${VOZ_TW}>${escXml(fala)}</Say><Gather input="speech" language="pt-BR" speechTimeout="auto" action="${base}/api/oficial/ligacao/resposta/${ligId}" method="POST"></Gather><Redirect method="POST">${base}/api/oficial/ligacao/resposta/${ligId}?vazio=1</Redirect></Response>`;
+  }
+
+  // quando qualifica (ou callback): cria/atualiza a conversa e passa pro vendedor
+  function finalizarLigacao(lig, ia) {
+    lig.status = "finalizada";
+    const resumo = lig.transcricao.map((t) => (t.role === "ia" ? "IA: " : "Lead: ") + t.content).join("\n");
+    if (lig.classificacao === "qualificado" || lig.classificacao === "callback") {
+      const numero = (db.oficial.numeros || []).find((n) => n.ativo) || (db.oficial.numeros || [])[0];
+      if (numero) {
+        const chave = "oficial::" + numero.id + "::" + lig.telefone;
+        let chat = db.waChats[chave];
+        if (!chat) chat = db.waChats[chave] = { canal: "oficial", numeroOficialId: numero.id, numero: lig.telefone, nome: lig.nome || lig.telefone, mensagens: [], criadoEm: Date.now() };
+        chat.respondeu = true; chat.origemLigacao = true;
+        if (!Array.isArray(chat.notas)) chat.notas = [];
+        chat.notas.push({ tipo: "ligacao_ia", texto: `Ligação da IA — ${lig.classificacao === "qualificado" ? "QUALIFICOU o lead" : "lead pediu retorno"}.\n\n${resumo}`, ts: Date.now(), por: ia ? ia.nome : "IA" });
+        chat.mensagens.push({ role: "them", content: `📞 [Ligação IA · ${lig.classificacao}] Resumo da conversa:\n${resumo}`, ts: Date.now(), tipo: "ligacao" });
+        chat.atualizadoEm = Date.now();
+        chat.naoLidas = (chat.naoLidas || 0) + 1;
+        if (!chat.vendedorId) atribuirLead(chat);
+      }
+    }
+    salvar();
+  }
+
+  // 1) dispara a ligação
+  app.post("/api/oficial/ligacao/iniciar", auth, gerenteOnly, async (req, res) => {
+    garantirLigacoes();
+    const sid = process.env.TWILIO_ACCOUNT_SID, token = process.env.TWILIO_AUTH_TOKEN, from = process.env.TWILIO_NUMERO;
+    if (!sid || !token || !from) return res.status(400).json({ error: "Configure no Railway: TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN e TWILIO_NUMERO." });
+    const b = req.body || {};
+    const telefone = String(b.telefone || "").replace(/\D/g, "");
+    const ia = (db.oficial.ias || []).find((x) => x.id === String(b.iaId || "").trim());
+    if (telefone.length < 10) return res.status(400).json({ error: "Telefone inválido" });
+    if (!ia) return res.status(400).json({ error: "Escolha uma IA válida" });
+    if (!ia.ativa) return res.status(400).json({ error: `A IA "${ia.nome}" está desativada.` });
+    const lig = { id: "lig_" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), telefone, nome: b.nome || "", iaId: ia.id, chatId: b.chatId || null, status: "discando", transcricao: [], classificacao: null, criadoEm: Date.now() };
+    db.oficial.ligacoes.unshift(lig);
+    if (db.oficial.ligacoes.length > 500) db.oficial.ligacoes = db.oficial.ligacoes.slice(0, 500);
+    salvar();
+    try {
+      const base = baseUrlDe(req);
+      const to = telefone.startsWith("55") ? "+" + telefone : "+55" + telefone;
+      const body = new URLSearchParams({
+        To: to, From: from,
+        Url: `${base}/api/oficial/ligacao/twiml/${lig.id}`, Method: "POST",
+        StatusCallback: `${base}/api/oficial/ligacao/status/${lig.id}`, StatusCallbackMethod: "POST",
+      });
+      const r = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${sid}/Calls.json`, {
+        method: "POST",
+        headers: { Authorization: "Basic " + Buffer.from(sid + ":" + token).toString("base64"), "Content-Type": "application/x-www-form-urlencoded" },
+        body,
+      });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) { lig.status = "erro"; lig.erro = (d && d.message) || ("Twilio erro " + r.status); salvar(); return res.status(400).json({ error: lig.erro }); }
+      lig.callSid = d.sid; salvar();
+      res.json({ ok: true, ligacaoId: lig.id });
+    } catch (e) { lig.status = "erro"; lig.erro = e.message; salvar(); res.status(500).json({ error: e.message }); }
+  });
+
+  // 2) TwiML inicial (o lead atendeu) — a IA dá a primeira fala
+  app.post("/api/oficial/ligacao/twiml/:id", async (req, res) => {
+    garantirLigacoes();
+    res.set("Content-Type", "text/xml");
+    const lig = (db.oficial.ligacoes || []).find((x) => x.id === req.params.id);
+    if (!lig) return res.send(`<Response><Say ${VOZ_TW}>Desculpe, houve um erro.</Say><Hangup/></Response>`);
+    const ia = (db.oficial.ias || []).find((x) => x.id === lig.iaId);
+    lig.status = "em_conversa"; salvar();
+    let fala = "Alô! Tudo bem?";
+    try { if (ia) { const r = await falaDaIA(lig, ia); fala = r.fala || fala; if (r.classe) lig.classificacao = r.classe; } } catch (e) { console.error("[ligacao] twiml:", e.message); }
+    lig.transcricao.push({ role: "ia", content: fala, ts: Date.now() }); salvar();
+    res.send(gatherXml(baseUrlDe(req), lig.id, fala));
+  });
+
+  // 3) recebe a fala do lead e responde (loop)
+  app.post("/api/oficial/ligacao/resposta/:id", async (req, res) => {
+    garantirLigacoes();
+    res.set("Content-Type", "text/xml");
+    const lig = (db.oficial.ligacoes || []).find((x) => x.id === req.params.id);
+    if (!lig) return res.send("<Response><Hangup/></Response>");
+    const ia = (db.oficial.ias || []).find((x) => x.id === lig.iaId);
+    const fala = String((req.body && req.body.SpeechResult) || "").trim();
+    const base = baseUrlDe(req);
+    if (fala) { lig.transcricao.push({ role: "lead", content: fala, ts: Date.now() }); lig._vazios = 0; }
+    else { lig._vazios = (lig._vazios || 0) + 1; }
+    if (lig._vazios >= 2) { lig.status = "sem_resposta"; salvar(); return res.send(`<Response><Say ${VOZ_TW}>Parece que não consigo te ouvir bem. Vou encerrar e a gente se fala pelo WhatsApp. Até logo!</Say><Hangup/></Response>`); }
+    if (!fala) { salvar(); return res.send(`<Response><Say ${VOZ_TW}>Ainda está aí?</Say><Gather input="speech" language="pt-BR" speechTimeout="auto" action="${base}/api/oficial/ligacao/resposta/${lig.id}" method="POST"></Gather><Redirect method="POST">${base}/api/oficial/ligacao/resposta/${lig.id}?vazio=1</Redirect></Response>`); }
+    let r;
+    try { r = await falaDaIA(lig, ia); } catch (e) { r = { fala: "Tive um probleminha na conexão. Um consultor vai te chamar no WhatsApp, tá? Obrigado!", classe: "callback" }; }
+    lig.transcricao.push({ role: "ia", content: r.fala, ts: Date.now() });
+    if (r.classe) lig.classificacao = r.classe;
+    salvar();
+    if (r.classe) { finalizarLigacao(lig, ia); return res.send(`<Response><Say ${VOZ_TW}>${escXml(r.fala)}</Say><Hangup/></Response>`); }
+    res.send(gatherXml(base, lig.id, r.fala));
+  });
+
+  // 4) status final (Twilio avisa quando termina)
+  app.post("/api/oficial/ligacao/status/:id", (req, res) => {
+    garantirLigacoes();
+    const lig = (db.oficial.ligacoes || []).find((x) => x.id === req.params.id);
+    if (lig) {
+      const st = String((req.body && req.body.CallStatus) || "");
+      lig.duracao = parseInt((req.body && req.body.CallDuration) || "0") || 0;
+      if (["completed", "busy", "no-answer", "failed", "canceled"].includes(st)) {
+        if (st === "no-answer") lig.status = "nao_atendeu";
+        else if (st === "busy") lig.status = "ocupado";
+        else if (st === "failed" || st === "canceled") lig.status = st;
+        else if (lig.status !== "finalizada" && lig.status !== "sem_resposta") lig.status = "finalizada";
+      }
+      salvar();
+    }
+    res.sendStatus(200);
+  });
+
+  // 5) lista as ligações (histórico + transcrição)
+  app.get("/api/oficial/ligacoes", auth, gerenteOnly, (req, res) => {
+    garantirLigacoes();
+    res.json((db.oficial.ligacoes || []).slice(0, 100).map((l) => ({
+      id: l.id, telefone: l.telefone, nome: l.nome, status: l.status,
+      classificacao: l.classificacao, duracao: l.duracao || 0, criadoEm: l.criadoEm,
+      transcricao: l.transcricao || [], erro: l.erro || null,
+    })));
+  });
+
+
   // pausar a IA em TODAS as conversas que já existem agora (de uma vez).
   // Útil antes de um disparo novo: as conversas antigas ficam congeladas
   // (a IA não responde mais nelas), mas as NOVAS conversas do disparo

@@ -11,6 +11,7 @@ process.env.TZ = process.env.TZ || "America/Sao_Paulo";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
 app.use(express.json({ limit: "40mb" }));
+app.use(express.urlencoded({ extended: false, limit: "10mb" })); // Twilio manda form-urlencoded (ligação IA)
 
 /* ============================================================
    BANCO EM ARQUIVO JSON (com espera do volume do Railway)

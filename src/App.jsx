@@ -242,7 +242,7 @@ export default function App() {
     vistaInicial.current = true;
     // valida a aba restaurada: se não for permitida pro perfil, cai numa aba segura
     const porRole = {
-      gerente: ["whatsapp", "disparo", "templates", "numeros", "ia", "temperatura", "solicitacoes", "equipe", "config"],
+      gerente: ["whatsapp", "disparo", "templates", "numeros", "ia", "ligacoes", "temperatura", "solicitacoes", "equipe", "config"],
       suporte: ["solicitacoes", "config"],
     };
     const permitidas = porRole[user.role] || ["whatsapp", "disparo", "templates", "minhasSolicitacoes", "config"];
@@ -282,6 +282,7 @@ export default function App() {
     templates: { t: "Templates", s: "Modelos de mensagem aprovados pela Meta" },
     numeros: { t: "Números", s: "Números oficiais conectados à sua conta Meta" },
     ia: { t: "Atendente IA", s: "SDR de IA que qualifica os leads e passa pro vendedor" },
+    ligacoes: { t: "Ligações IA", s: "A IA liga pro lead, qualifica por voz e passa pro vendedor" },
     temperatura: { t: "Temperatura", s: "Melhores horários e dias — quando os leads mais respondem" },
     minhasSolicitacoes: { t: "Minhas solicitações", s: "Acompanhe seus pedidos ao suporte" },
     solicitacoes: { t: "Solicitações de suporte", s: "Pedidos de ajuda dos vendedores e análise" },
@@ -304,6 +305,7 @@ export default function App() {
           {(isGer || isVend) && <NavBtn ic={I.chat} label="Templates" active={view === "templates"} onClick={() => setView("templates")} />}
           {isGer && <NavBtn ic={I.wa} label="Números" active={view === "numeros"} onClick={() => setView("numeros")} />}
           {isGer && <NavBtn ic={I.spark} label="Atendente IA" active={view === "ia"} onClick={() => setView("ia")} />}
+          {isGer && <NavBtn ic={I.suporte} label="Ligações IA" active={view === "ligacoes"} onClick={() => setView("ligacoes")} />}
           {isGer && <NavBtn ic={I.gauge} label="Temperatura" active={view === "temperatura"} onClick={() => setView("temperatura")} />}
           {!isGer && !isSuporte && <NavBtn ic={I.suporte} label="Minhas solicitações" active={view === "minhasSolicitacoes"} badge={badgeSol} onClick={() => setView("minhasSolicitacoes")} />}
           {(isGer || isSuporte) && <NavBtn ic={I.suporte} label="Solicitações" active={view === "solicitacoes"} onClick={() => setView("solicitacoes")} />}
@@ -339,6 +341,7 @@ export default function App() {
           {view === "templates" && (isGer || isVend) && <OficialTemplates isGer={isGer} showToast={showToast} />}
           {view === "numeros" && isGer && <OficialNumeros showToast={showToast} />}
           {view === "ia" && isGer && <OficialIAs showToast={showToast} />}
+          {view === "ligacoes" && isGer && <OficialLigacoes showToast={showToast} />}
           {view === "temperatura" && isGer && <OficialTemperatura showToast={showToast} />}
           {view === "minhasSolicitacoes" && !isGer && !isSuporte && <PaginaMinhasSolicitacoes itens={minhasSol} recarregar={carregarMinhasSol} showToast={showToast} />}
           {view === "solicitacoes" && (isGer || isSuporte) && <PaginaSolicitacoes showToast={showToast} readonly={isGer} />}
@@ -2716,6 +2719,126 @@ function OficialTemplates({ isGer = true, showToast }) {
   );
 }
 
+
+function OficialLigacoes({ showToast }) {
+  const [ias, setIas] = useState([]);
+  const [ligacoes, setLigacoes] = useState([]);
+  const [tel, setTel] = useState("");
+  const [nome, setNome] = useState("");
+  const [iaId, setIaId] = useState("");
+  const [ligando, setLigando] = useState(false);
+  const [aberta, setAberta] = useState(null);
+
+  const carregar = () => api.ofLigacoes().then(setLigacoes).catch(() => {});
+  useEffect(() => {
+    api.ofIAs().then((l) => setIas((l || []).filter((x) => x.ativa))).catch(() => {});
+    carregar();
+    const t = setInterval(carregar, 5000); // atualiza o status ao vivo
+    return () => clearInterval(t);
+  }, []);
+
+  async function ligar() {
+    const t = tel.replace(/\D/g, "");
+    if (t.length < 10) { showToast("Telefone inválido (com DDD)"); return; }
+    if (!iaId) { showToast("Escolha a IA"); return; }
+    setLigando(true);
+    try { await api.ofIniciarLigacao({ telefone: t, nome, iaId }); showToast("Ligação iniciada — acompanhe abaixo"); setTel(""); setNome(""); carregar(); }
+    catch (e) { showToast(e.message); }
+    finally { setLigando(false); }
+  }
+
+  const statusInfo = (l) => {
+    const m = {
+      discando: { t: "Discando…", c: "#b45309", bg: "rgba(245,158,11,.14)" },
+      em_conversa: { t: "Em conversa", c: "#059669", bg: "rgba(16,185,129,.14)" },
+      finalizada: { t: "Finalizada", c: "var(--muted)", bg: "var(--surface-2)" },
+      nao_atendeu: { t: "Não atendeu", c: "#64748b", bg: "var(--surface-2)" },
+      ocupado: { t: "Ocupado", c: "#64748b", bg: "var(--surface-2)" },
+      sem_resposta: { t: "Sem resposta", c: "#64748b", bg: "var(--surface-2)" },
+      erro: { t: "Erro", c: "#dc2626", bg: "rgba(244,63,94,.12)" },
+      failed: { t: "Falhou", c: "#dc2626", bg: "rgba(244,63,94,.12)" },
+    };
+    return m[l.status] || { t: l.status, c: "var(--muted)", bg: "var(--surface-2)" };
+  };
+  const classeInfo = (c) => ({
+    qualificado: { t: "✓ Qualificado", c: "#059669" },
+    callback: { t: "↻ Retornar", c: "#b45309" },
+    nao_qualificado: { t: "✕ Não qualificado", c: "#64748b" },
+  }[c]);
+
+  return (
+    <div className="onum-wrap">
+      <div className="disp-box" style={{ marginBottom: 18 }}>
+        <div style={{ padding: "16px 18px" }}>
+          <h3 style={{ margin: "0 0 4px", fontSize: 15 }}>Ligar pra um lead com a IA</h3>
+          <p className="panel-sub" style={{ margin: "0 0 14px" }}>A IA liga, conversa, qualifica e — se der certo — passa a conversa pro vendedor.</p>
+          <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "flex-end" }}>
+            <div style={{ flex: "1 1 160px" }}>
+              <label className="lbl-mini">Telefone (com DDD)</label>
+              <input className="input mono" placeholder="44 99999-9999" value={tel} onChange={(e) => setTel(e.target.value)} />
+            </div>
+            <div style={{ flex: "1 1 140px" }}>
+              <label className="lbl-mini">Nome (opcional)</label>
+              <input className="input" placeholder="Nome do lead" value={nome} onChange={(e) => setNome(e.target.value)} />
+            </div>
+            <div style={{ flex: "1 1 180px" }}>
+              <label className="lbl-mini">IA</label>
+              <select className="input" value={iaId} onChange={(e) => setIaId(e.target.value)}>
+                <option value="">Escolher IA…</option>
+                {ias.map((ia) => <option key={ia.id} value={ia.id}>{ia.nome}</option>)}
+              </select>
+            </div>
+            <button className="onum-add" disabled={ligando} onClick={ligar} style={{ height: 44 }}>
+              {ligando ? <span className="spin" /> : <I.suporte className="ico" />} Ligar agora
+            </button>
+          </div>
+          {ias.length === 0 && <div className="onum-dica" style={{ marginTop: 10 }}>Você precisa de uma IA ativa (aba Atendente IA) pra ligar. A IA usa a mesma personalidade e base de conhecimento.</div>}
+        </div>
+      </div>
+
+      <h3 style={{ margin: "0 0 12px", fontSize: 15 }}>Ligações recentes</h3>
+      {ligacoes.length === 0 ? (
+        <div className="disp-vazio">Nenhuma ligação ainda. Faça a primeira acima.</div>
+      ) : (
+        <div className="disp-lista">
+          {ligacoes.map((l) => {
+            const si = statusInfo(l), ci = classeInfo(l.classificacao);
+            const ab = aberta === l.id;
+            return (
+              <div key={l.id}>
+                <button className="disp-row" onClick={() => setAberta(ab ? null : l.id)}>
+                  <span className="disp-row-main">
+                    <span className="disp-row-nome">{l.nome || l.telefone}</span>
+                    <span className="disp-row-meta">{l.telefone}{l.duracao ? " · " + l.duracao + "s" : ""} · {new Date(l.criadoEm).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}</span>
+                  </span>
+                  {ci && <span style={{ fontSize: 11.5, fontWeight: 700, color: ci.c }}>{ci.t}</span>}
+                  <span className="disp-row-pill" style={{ background: si.bg, color: si.c }}>{si.t}</span>
+                  <I.chevron className="disp-row-arrow" style={{ transform: ab ? "rotate(0deg)" : "rotate(-90deg)" }} />
+                </button>
+                {ab && (
+                  <div style={{ padding: "12px 16px 16px", background: "var(--surface-2)", borderRadius: "0 0 12px 12px", marginTop: -4 }}>
+                    {l.erro && <div style={{ color: "#dc2626", fontSize: 12.5, marginBottom: 8 }}>Erro: {l.erro}</div>}
+                    {(l.transcricao || []).length === 0 ? (
+                      <div style={{ fontSize: 12.5, color: "var(--muted)" }}>Sem transcrição (a ligação não chegou a conversar).</div>
+                    ) : (
+                      <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                        {l.transcricao.map((t, i) => (
+                          <div key={i} style={{ fontSize: 13, lineHeight: 1.4 }}>
+                            <b style={{ color: t.role === "ia" ? "var(--brand)" : "var(--text)" }}>{t.role === "ia" ? "IA" : "Lead"}:</b> <span style={{ color: "var(--text)" }}>{t.content}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
 
 function OficialTemperatura({ showToast }) {
   const [dados, setDados] = useState(null);
