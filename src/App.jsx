@@ -248,10 +248,10 @@ export default function App() {
     vistaInicial.current = true;
     // valida a aba restaurada: se não for permitida pro perfil, cai numa aba segura
     const porRole = {
-      gerente: ["whatsapp", "disparo", "templates", "numeros", "ia", "ligacoes", "crm", "temperatura", "solicitacoes", "equipe", "sistema", "config"],
+      gerente: ["whatsapp", "disparo", "numeros", "ia", "ligacoes", "crm", "temperatura", "solicitacoes", "config"],
       suporte: ["solicitacoes", "config"],
     };
-    const permitidas = porRole[user.role] || ["whatsapp", "disparo", "templates", "minhasSolicitacoes", "config", "crm", "temperatura"];
+    const permitidas = porRole[user.role] || ["whatsapp", "disparo", "minhasSolicitacoes", "config", "crm", "temperatura"];
     if (!permitidas.includes(view)) setView(user.role === "suporte" ? "solicitacoes" : "whatsapp");
   }, [user]);
 
@@ -313,15 +313,12 @@ export default function App() {
           {(isGer || vendPode("crm")) && mod("crm") && <NavBtn ic={I.pipe} label="Pipeline" active={view === "crm"} onClick={() => setView("crm")} />}
           {!isSuporte && mod("caixa") && <NavBtn ic={I.wa} label="Caixa de entrada" active={view === "whatsapp"} onClick={() => setView("whatsapp")} />}
           {(isGer || isVend) && mod("disparo") && <NavBtn ic={I.send} label="Disparo" active={view === "disparo"} onClick={() => setView("disparo")} />}
-          {(isGer || isVend) && mod("templates") && <NavBtn ic={I.chat} label="Templates" active={view === "templates"} onClick={() => setView("templates")} />}
           {isGer && mod("numeros") && <NavBtn ic={I.wa} label="Números" active={view === "numeros"} onClick={() => setView("numeros")} />}
           {isGer && mod("ia") && <NavBtn ic={I.spark} label="Atendente IA" active={view === "ia"} onClick={() => setView("ia")} />}
           {isGer && mod("ligacoes") && <NavBtn ic={I.suporte} label="Ligações IA" active={view === "ligacoes"} onClick={() => setView("ligacoes")} />}
           {(isGer || vendPode("temperatura")) && mod("temperatura") && <NavBtn ic={I.gauge} label="Temperatura" active={view === "temperatura"} onClick={() => setView("temperatura")} />}
           {!isGer && !isSuporte && <NavBtn ic={I.suporte} label="Minhas solicitações" active={view === "minhasSolicitacoes"} badge={badgeSol} onClick={() => setView("minhasSolicitacoes")} />}
           {(isGer || isSuporte) && mod("solicitacoes") && <NavBtn ic={I.suporte} label="Solicitações" active={view === "solicitacoes"} onClick={() => setView("solicitacoes")} />}
-          {isGer && mod("equipe") && <NavBtn ic={I.team} label="Equipe & Acessos" active={view === "equipe"} onClick={() => setView("equipe")} />}
-          {ehDono && <NavBtn ic={I.key} label="Sistema" active={view === "sistema"} onClick={() => setView("sistema")} />}
           <NavBtn ic={I.cog} label="Configurações" active={view === "config"} onClick={() => setView("config")} />
         </nav>
         <div className="side-foot">
@@ -350,17 +347,14 @@ export default function App() {
         <div className="content">
           {view === "whatsapp" && !isSuporte && mod("caixa") && <WhatsApp user={user} showToast={showToast} target={waTarget} onTargetUsed={() => setWaTarget(null)} recarregarSol={carregarMinhasSol} />}
           {view === "disparo" && (isGer || isVend) && mod("disparo") && <OficialDisparo isGer={isGer} showToast={showToast} />}
-          {view === "templates" && (isGer || isVend) && mod("templates") && <OficialTemplates isGer={isGer} showToast={showToast} />}
           {view === "numeros" && isGer && mod("numeros") && <OficialNumeros showToast={showToast} />}
           {view === "ia" && isGer && mod("ia") && <OficialIAs showToast={showToast} />}
           {view === "ligacoes" && isGer && mod("ligacoes") && <OficialLigacoes showToast={showToast} />}
           {view === "crm" && (isGer || vendPode("crm")) && mod("crm") && <OficialCRM showToast={showToast} isGer={isGer} />}
-          {view === "sistema" && ehDono && <PainelSistema modulos={modulos} onSalvo={carregarModulos} showToast={showToast} />}
           {view === "temperatura" && (isGer || vendPode("temperatura")) && mod("temperatura") && <OficialTemperatura showToast={showToast} />}
           {view === "minhasSolicitacoes" && !isGer && !isSuporte && <PaginaMinhasSolicitacoes itens={minhasSol} recarregar={carregarMinhasSol} showToast={showToast} />}
           {view === "solicitacoes" && (isGer || isSuporte) && <PaginaSolicitacoes showToast={showToast} readonly={isGer} />}
-          {view === "equipe" && isGer && <Equipe showToast={showToast} meId={user.id} />}
-          {view === "config" && <Config user={user} setUser={setUser} showToast={showToast} />}
+          {view === "config" && <Config user={user} setUser={setUser} showToast={showToast} isGer={isGer} ehDono={ehDono} modulos={modulos} onModulosSalvo={carregarModulos} />}
         </div>
       </main>
 
@@ -1056,7 +1050,7 @@ function UserForm({ user, onClose, onSaved }) {
 }
 
 /* ============================ CONFIG ============================ */
-function Config({ user, setUser, showToast }) {
+function ConfigDados({ user, setUser, showToast }) {
   const [nome, setNome] = useState(user.nome);
   const [senha, setSenha] = useState("");
   const [saving, setSaving] = useState(false);
@@ -1168,6 +1162,29 @@ function Config({ user, setUser, showToast }) {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+// Configurações vira uma página com abas: Meus dados + Equipe & Acessos + Sistema
+// (Equipe e Sistema saíram do menu lateral pra deixar ele menos poluído).
+function Config({ user, setUser, showToast, isGer, ehDono, modulos, onModulosSalvo }) {
+  const abas = [["dados", "Meus dados"]];
+  if (isGer) abas.push(["equipe", "Equipe & Acessos"]);
+  if (ehDono) abas.push(["sistema", "Sistema"]);
+  const [aba, setAba] = useState("dados");
+  return (
+    <div>
+      {abas.length > 1 && (
+        <div className="of-tabs" style={{ marginBottom: 18 }}>
+          {abas.map(([k, lb]) => (
+            <button key={k} className={aba === k ? "of-tab on" : "of-tab"} onClick={() => setAba(k)}>{lb}</button>
+          ))}
+        </div>
+      )}
+      {aba === "dados" && <ConfigDados user={user} setUser={setUser} showToast={showToast} />}
+      {aba === "equipe" && isGer && <Equipe showToast={showToast} meId={user.id} />}
+      {aba === "sistema" && ehDono && <PainelSistema modulos={modulos} onSalvo={onModulosSalvo} showToast={showToast} />}
     </div>
   );
 }
@@ -1974,6 +1991,8 @@ function OficialDisparo({ isGer = true, showToast }) {
   useEffect(() => { dataRef.current = dataFiltro; }, [dataFiltro]);
   const [meuLimite, setMeuLimite] = useState(null); // só vendedor
   const [showResumo, setShowResumo] = useState(false);
+  const [showTemplates, setShowTemplates] = useState(false);
+  const [showDistrib, setShowDistrib] = useState(false);
 
   const rangeDe = (d) => {
     if (!d) return [0, 0];
@@ -2052,6 +2071,8 @@ function OficialDisparo({ isGer = true, showToast }) {
           <button className="disp-cta" onClick={() => { if (!numeros.length) return showToast(isGer ? "Cadastre um número na aba Números primeiro" : "Você ainda não tem um número vinculado. Peça pro gerente vincular o seu número oficial."); setAbrir(true); }}>
             <I.send className="ico" /> Novo disparo
           </button>
+          <button className="onum-btn-ghost" onClick={() => setShowTemplates(true)}><I.chat className="ico" /> Templates</button>
+          {isGer && <button className="onum-btn-ghost" onClick={() => setShowDistrib(true)}><I.users className="ico" /> Quem recebe os leads</button>}
           {!isGer && meuLimite && !meuLimite.ilimitado && (
             <span className="disp-limite-chip" style={{ color: meuLimite.restante > 0 ? "var(--muted)" : "#dc2626", background: meuLimite.restante > 0 ? "var(--surface-2, #f1f3f8)" : "#fef2f2" }}>
               {meuLimite.restante > 0
@@ -2142,6 +2163,23 @@ function OficialDisparo({ isGer = true, showToast }) {
 
       {abrir && <ModalDisparo isGer={isGer} numeros={numeros} showToast={showToast} onClose={() => setAbrir(false)} onDone={() => { setAbrir(false); setTimeout(carregarCampanhas, 1500); if (!isGer) setTimeout(() => api.ofMeuLimite().then(setMeuLimite).catch(() => {}), 1500); }} />}
       {campSel && <ModalMetricas camp={campSel} isGer={isGer} onClose={() => setCampSel(null)} onRetomar={retomarCampanha} onRedisparar={redispararCampanha} onExcluir={excluirCampanha} />}
+
+      {showTemplates && (
+        <div className="pop-bg" onClick={(e) => e.target === e.currentTarget && setShowTemplates(false)}>
+          <div className="pop-sheet">
+            <div className="pop-head"><b>Templates</b><button className="crm-x" onClick={() => setShowTemplates(false)}>✕</button></div>
+            <div className="pop-body"><OficialTemplates isGer={isGer} showToast={showToast} /></div>
+          </div>
+        </div>
+      )}
+      {showDistrib && isGer && (
+        <div className="pop-bg" onClick={(e) => e.target === e.currentTarget && setShowDistrib(false)}>
+          <div className="pop-sheet">
+            <div className="pop-head"><b>Quem recebe os leads</b><button className="crm-x" onClick={() => setShowDistrib(false)}>✕</button></div>
+            <div className="pop-body"><OficialVendedores showToast={showToast} /></div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
