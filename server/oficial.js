@@ -1544,18 +1544,54 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
     salvar();
   }
 
-  app.get("/api/oficial/crm", auth, gerenteOnly, (req, res) => {
+  /* ---- ACESSO DOS VENDEDORES (o dono decide o que cada vendedor pode ver) ---- */
+  // Mapa por tela: liga/desliga o acesso do vendedor. Default: tudo desligado
+  // (mantém o comportamento antigo, em que essas telas eram só do gerente).
+  const ACESSO_VEND_CHAVES = ["crm", "temperatura"];
+  function acessoVend() {
+    const a = (db.oficial && db.oficial.acessoVend) || {};
+    const out = {};
+    ACESSO_VEND_CHAVES.forEach((k) => { out[k] = a[k] === true; });
+    return out;
+  }
+  // Middleware: libera se for gerente OU se for vendedor e o dono ligou essa tela.
+  function permiteVend(chave) {
+    return (req, res, next) => {
+      if (req.user.role === "gerente") return next();
+      if (req.user.role === "vendedor" && acessoVend()[chave]) return next();
+      return res.status(403).json({ error: "Acesso restrito" });
+    };
+  }
+  // Qualquer usuário lê (o front usa pra montar o menu). Só o DONO altera.
+  app.get("/api/oficial/acesso-vendedor", auth, (req, res) => {
+    res.json({ acessoVend: acessoVend() });
+  });
+  app.put("/api/oficial/acesso-vendedor", auth, gerenteOnly, (req, res) => {
+    if (!req.user.dono) return res.status(403).json({ error: "Só o dono do sistema pode mudar os acessos." });
+    const b = (req.body && req.body.acessoVend) || {};
+    if (!db.oficial.acessoVend || typeof db.oficial.acessoVend !== "object") db.oficial.acessoVend = {};
+    ACESSO_VEND_CHAVES.forEach((k) => { if (typeof b[k] === "boolean") db.oficial.acessoVend[k] = b[k]; });
+    salvar();
+    res.json({ ok: true, acessoVend: acessoVend() });
+  });
+
+  app.get("/api/oficial/crm", auth, permiteVend("crm"), (req, res) => {
     garantirCRM();
+    const ehVend = req.user.role === "vendedor";
+    let leads = (db.oficial.crmLeads || []);
+    if (ehVend) leads = leads.filter((l) => l.vendedorId === req.user.id); // vendedor só vê os leads dele
     res.json({
       etapas: CRM_ETAPAS,
-      leads: (db.oficial.crmLeads || []).map(crmLeadPublico),
-      vendedores: (db.users || []).filter((u) => u.role === "vendedor" && u.ativo).map((u) => ({ id: u.id, nome: u.nome })),
-      crmVendedores: db.oficial.crmVendedores || [],
+      leads: leads.map(crmLeadPublico),
+      vendedores: ehVend ? [] : (db.users || []).filter((u) => u.role === "vendedor" && u.ativo).map((u) => ({ id: u.id, nome: u.nome })),
+      crmVendedores: ehVend ? [] : (db.oficial.crmVendedores || []),
+      soMeus: ehVend, // o front usa pra esconder as partes que são só do gerente
     });
   });
-  app.post("/api/oficial/crm/lead", auth, gerenteOnly, (req, res) => {
+  app.post("/api/oficial/crm/lead", auth, permiteVend("crm"), (req, res) => {
     garantirCRM();
     const b = req.body || {};
+    if (req.user.role === "vendedor") b.vendedorId = req.user.id; // vendedor só cria lead pra si
     const lead = {
       id: "lead_" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
       nome: String(b.nome || "Sem nome").slice(0, 80),
@@ -1572,11 +1608,15 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
     salvar();
     res.json({ ok: true, lead: crmLeadPublico(lead) });
   });
-  app.put("/api/oficial/crm/lead/:id", auth, gerenteOnly, (req, res) => {
+  app.put("/api/oficial/crm/lead/:id", auth, permiteVend("crm"), (req, res) => {
     garantirCRM();
     const l = (db.oficial.crmLeads || []).find((x) => x.id === req.params.id);
     if (!l) return res.status(404).json({ error: "Lead não encontrado" });
     const b = req.body || {};
+    if (req.user.role === "vendedor") {
+      if (l.vendedorId !== req.user.id) return res.status(403).json({ error: "Esse lead não é seu" });
+      delete b.vendedorId; // vendedor não reatribui o lead pra outra pessoa
+    }
     if (b.etapa !== undefined && CRM_ETAPAS.some((e) => e.k === b.etapa)) {
       if (l.etapa !== b.etapa) l.historico.push({ tipo: "etapa", texto: "Movido para " + CRM_ETAPAS.find((e) => e.k === b.etapa).lb, ts: Date.now() });
       l.etapa = b.etapa;
@@ -1596,10 +1636,11 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
     salvar();
     res.json({ ok: true, lead: crmLeadPublico(l) });
   });
-  app.post("/api/oficial/crm/lead/:id/nota", auth, (req, res) => {
+  app.post("/api/oficial/crm/lead/:id/nota", auth, permiteVend("crm"), (req, res) => {
     garantirCRM();
     const l = (db.oficial.crmLeads || []).find((x) => x.id === req.params.id);
     if (!l) return res.status(404).json({ error: "Lead não encontrado" });
+    if (req.user.role === "vendedor" && l.vendedorId !== req.user.id) return res.status(403).json({ error: "Esse lead não é seu" });
     const texto = String((req.body || {}).texto || "").trim();
     if (!texto) return res.status(400).json({ error: "Nota vazia" });
     if (!Array.isArray(l.notas)) l.notas = [];
@@ -1608,8 +1649,12 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
     salvar();
     res.json({ ok: true, lead: crmLeadPublico(l) });
   });
-  app.delete("/api/oficial/crm/lead/:id", auth, gerenteOnly, (req, res) => {
+  app.delete("/api/oficial/crm/lead/:id", auth, permiteVend("crm"), (req, res) => {
     garantirCRM();
+    if (req.user.role === "vendedor") {
+      const alvo = (db.oficial.crmLeads || []).find((x) => x.id === req.params.id);
+      if (!alvo || alvo.vendedorId !== req.user.id) return res.status(403).json({ error: "Esse lead não é seu" });
+    }
     db.oficial.crmLeads = (db.oficial.crmLeads || []).filter((x) => x.id !== req.params.id);
     salvar();
     res.json({ ok: true });

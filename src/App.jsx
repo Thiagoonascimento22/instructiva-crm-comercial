@@ -212,7 +212,9 @@ export default function App() {
   const [user, setUser] = useState(null);
   const [modulos, setModulos] = useState(null);
   const [ehDono, setEhDono] = useState(false);
+  const [acessoVend, setAcessoVend] = useState({});
   const carregarModulos = () => api.getModulos().then((r) => { setModulos(r.modulos); setEhDono(!!r.dono); }).catch(() => {});
+  const carregarAcessoVend = () => api.ofAcessoVend().then((r) => setAcessoVend(r.acessoVend || {})).catch(() => {});
   const [view, setView] = useState(() => {
     try { return localStorage.getItem("instructiva_view") || "whatsapp"; } catch (e) { return "whatsapp"; }
   });
@@ -238,7 +240,7 @@ export default function App() {
     if (!getToken()) { setBooting(false); return; }
     api.me().then(setUser).catch(() => setToken("")).finally(() => setBooting(false));
   }, []);
-  useEffect(() => { if (user) carregarModulos(); }, [user]);
+  useEffect(() => { if (user) { carregarModulos(); carregarAcessoVend(); } }, [user]);
 
   const vistaInicial = useRef(false);
   useEffect(() => {
@@ -249,7 +251,7 @@ export default function App() {
       gerente: ["whatsapp", "disparo", "templates", "numeros", "ia", "ligacoes", "crm", "temperatura", "solicitacoes", "equipe", "sistema", "config"],
       suporte: ["solicitacoes", "config"],
     };
-    const permitidas = porRole[user.role] || ["whatsapp", "disparo", "templates", "minhasSolicitacoes", "config"];
+    const permitidas = porRole[user.role] || ["whatsapp", "disparo", "templates", "minhasSolicitacoes", "config", "crm", "temperatura"];
     if (!permitidas.includes(view)) setView(user.role === "suporte" ? "solicitacoes" : "whatsapp");
   }, [user]);
 
@@ -280,6 +282,7 @@ export default function App() {
   const isSuporte = user.role === "suporte";
   const isVend = !isGer && !isSuporte;
   const mod = (k) => !modulos || modulos[k] !== false; // módulo ligado? (default ligado enquanto carrega)
+  const vendPode = (k) => !!(acessoVend && acessoVend[k] === true); // dono liberou essa tela pro vendedor?
   const badgeSol = minhasSol.filter((s) => s.status === "resolvida" && !s.resolvidoVisto).length;
   const titulos = {
     whatsapp: { t: "Caixa de entrada", s: "Suas conversas — não oficial e oficial, num só lugar" },
@@ -307,14 +310,14 @@ export default function App() {
           <div className="tag">Sistema Comercial</div>
         </div>
         <nav className="nav">
-          {isGer && mod("crm") && <NavBtn ic={I.pipe} label="Pipeline" active={view === "crm"} onClick={() => setView("crm")} />}
+          {(isGer || vendPode("crm")) && mod("crm") && <NavBtn ic={I.pipe} label="Pipeline" active={view === "crm"} onClick={() => setView("crm")} />}
           {!isSuporte && mod("caixa") && <NavBtn ic={I.wa} label="Caixa de entrada" active={view === "whatsapp"} onClick={() => setView("whatsapp")} />}
           {(isGer || isVend) && mod("disparo") && <NavBtn ic={I.send} label="Disparo" active={view === "disparo"} onClick={() => setView("disparo")} />}
           {(isGer || isVend) && mod("templates") && <NavBtn ic={I.chat} label="Templates" active={view === "templates"} onClick={() => setView("templates")} />}
           {isGer && mod("numeros") && <NavBtn ic={I.wa} label="Números" active={view === "numeros"} onClick={() => setView("numeros")} />}
           {isGer && mod("ia") && <NavBtn ic={I.spark} label="Atendente IA" active={view === "ia"} onClick={() => setView("ia")} />}
           {isGer && mod("ligacoes") && <NavBtn ic={I.suporte} label="Ligações IA" active={view === "ligacoes"} onClick={() => setView("ligacoes")} />}
-          {isGer && mod("temperatura") && <NavBtn ic={I.gauge} label="Temperatura" active={view === "temperatura"} onClick={() => setView("temperatura")} />}
+          {(isGer || vendPode("temperatura")) && mod("temperatura") && <NavBtn ic={I.gauge} label="Temperatura" active={view === "temperatura"} onClick={() => setView("temperatura")} />}
           {!isGer && !isSuporte && <NavBtn ic={I.suporte} label="Minhas solicitações" active={view === "minhasSolicitacoes"} badge={badgeSol} onClick={() => setView("minhasSolicitacoes")} />}
           {(isGer || isSuporte) && mod("solicitacoes") && <NavBtn ic={I.suporte} label="Solicitações" active={view === "solicitacoes"} onClick={() => setView("solicitacoes")} />}
           {isGer && mod("equipe") && <NavBtn ic={I.team} label="Equipe & Acessos" active={view === "equipe"} onClick={() => setView("equipe")} />}
@@ -351,9 +354,9 @@ export default function App() {
           {view === "numeros" && isGer && mod("numeros") && <OficialNumeros showToast={showToast} />}
           {view === "ia" && isGer && mod("ia") && <OficialIAs showToast={showToast} />}
           {view === "ligacoes" && isGer && mod("ligacoes") && <OficialLigacoes showToast={showToast} />}
-          {view === "crm" && isGer && mod("crm") && <OficialCRM showToast={showToast} />}
+          {view === "crm" && (isGer || vendPode("crm")) && mod("crm") && <OficialCRM showToast={showToast} isGer={isGer} />}
           {view === "sistema" && ehDono && <PainelSistema modulos={modulos} onSalvo={carregarModulos} showToast={showToast} />}
-          {view === "temperatura" && isGer && mod("temperatura") && <OficialTemperatura showToast={showToast} />}
+          {view === "temperatura" && (isGer || vendPode("temperatura")) && mod("temperatura") && <OficialTemperatura showToast={showToast} />}
           {view === "minhasSolicitacoes" && !isGer && !isSuporte && <PaginaMinhasSolicitacoes itens={minhasSol} recarregar={carregarMinhasSol} showToast={showToast} />}
           {view === "solicitacoes" && (isGer || isSuporte) && <PaginaSolicitacoes showToast={showToast} readonly={isGer} />}
           {view === "equipe" && isGer && <Equipe showToast={showToast} meId={user.id} />}
@@ -2782,6 +2785,27 @@ function PainelSistema({ modulos, onSalvo, showToast }) {
     finally { setSaving(false); }
   }
   const ligados = LISTA.filter(([k]) => flags[k]).length;
+
+  // Acesso dos vendedores: o dono liga/desliga o que o vendedor pode ver.
+  // [chave, nome, descrição, sensível?, emBreve?]
+  const AC_VEND_LISTA = [
+    ["crm", "Pipeline", "Vê e move leads no funil — mas só os que são dele.", false, false],
+    ["temperatura", "Temperatura", "Melhores horários e dias pra falar com os leads.", false, false],
+    ["ligacoes", "Ligações IA", "Disparo e histórico de ligações por voz.", false, true],
+    ["ia", "Atendente IA", "Deixa editar o cérebro e a base da IA.", true, true],
+    ["numeros", "Números", "Mostra os tokens da Meta e permite excluir números.", true, true],
+  ];
+  const [acVend, setAcVend] = useState({});
+  const [savingAV, setSavingAV] = useState(false);
+  useEffect(() => { api.ofAcessoVend().then((r) => setAcVend(r.acessoVend || {})).catch(() => {}); }, []);
+  const toggleAV = (k) => setAcVend((a) => ({ ...a, [k]: !a[k] }));
+  async function salvarAV() {
+    setSavingAV(true);
+    try { await api.ofSetAcessoVend({ crm: !!acVend.crm, temperatura: !!acVend.temperatura }); onSalvo && onSalvo(); showToast("Acessos dos vendedores atualizados"); }
+    catch (e) { showToast(e.message); }
+    finally { setSavingAV(false); }
+  }
+
   return (
     <div className="sist-wrap">
       <div className="sist-alerta">
@@ -2807,6 +2831,35 @@ function PainelSistema({ modulos, onSalvo, showToast }) {
           ))}
         </div>
       </div>
+
+      <div className="sist-box">
+        <div className="sist-head">
+          <div>
+            <h3>Acesso dos vendedores</h3>
+            <p>O que cada vendedor pode ver, além do padrão</p>
+          </div>
+          <button className="onum-add" disabled={savingAV} onClick={salvarAV}>{savingAV ? <span className="spin" /> : <I.check className="ico" />} Salvar</button>
+        </div>
+        <div className="sist-dica" style={{ margin: "2px 0 10px" }}>
+          No Pipeline, o vendedor enxerga <b>só os leads dele</b>. As opções marcadas como <b>sensível</b> expõem dados delicados — pense bem antes de ligar. As em cinza chegam em breve.
+        </div>
+        <div className="sist-list">
+          {AC_VEND_LISTA.map(([k, nome, desc, sensivel, emBreve]) => (
+            <div className={"sist-item" + ((acVend[k] && !emBreve) ? "" : " off")} key={k}>
+              <div className="sist-info">
+                <div className="sist-nome">
+                  {nome}
+                  {sensivel && <span style={{ color: "#e0483d", fontWeight: 700, fontSize: 11, marginLeft: 6 }}>· sensível</span>}
+                  {emBreve && <span style={{ opacity: .6, fontSize: 11, marginLeft: 6 }}>· em breve</span>}
+                </div>
+                <div className="sist-desc">{desc}</div>
+              </div>
+              <button className={"sw" + (acVend[k] && !emBreve ? " on" : "")} onClick={() => { if (!emBreve) toggleAV(k); }} aria-label={nome} disabled={emBreve} style={emBreve ? { opacity: .4, cursor: "not-allowed" } : undefined}><span className="sw-dot" /></button>
+            </div>
+          ))}
+        </div>
+      </div>
+
       <div className="sist-dica">Configurações continua sempre disponível (é onde ficam os dados de acesso). A cópia entregue usa as próprias chaves de API do cliente, configuradas no ambiente de hospedagem dele.</div>
     </div>
   );
@@ -2881,7 +2934,7 @@ function ModalCadastrarPipeline({ prefill, onClose, showToast }) {
   );
 }
 
-function OficialCRM({ showToast }) {
+function OficialCRM({ showToast, isGer = true }) {
   const [etapas, setEtapas] = useState([]);
   const [leads, setLeads] = useState([]);
   const [vendedores, setVendedores] = useState([]);
@@ -2929,7 +2982,7 @@ function OficialCRM({ showToast }) {
     <div className="crm-wrap">
       <div className="crm-top">
         <button className="onum-add" onClick={() => setCriar({ nome: "", telefone: "", email: "", curso: "", etapa: "novo", vendedorId: "", valor: "" })}><I.plus className="ico" /> Novo lead</button>
-        <button className="onum-btn-ghost" onClick={() => setConfig(true)}><I.cog className="ico" /> Distribuição das ligações</button>
+        {isGer && <button className="onum-btn-ghost" onClick={() => setConfig(true)}><I.cog className="ico" /> Distribuição das ligações</button>}
       </div>
 
       <div className="crm-board">
@@ -2986,12 +3039,12 @@ function OficialCRM({ showToast }) {
                     {etapas.map((e) => <option key={e.k} value={e.k}>{e.lb}</option>)}
                   </select>
                 </div>
-                <div><label className="lbl-mini">Vendedor responsável</label>
+                {isGer && <div><label className="lbl-mini">Vendedor responsável</label>
                   <select className="input" value={leadSel.vendedorId || ""} onChange={(e) => salvarCampo(sel, "vendedorId", e.target.value)}>
                     <option value="">Sem dono</option>
                     {vendedores.map((v) => <option key={v.id} value={v.id}>{v.nome}</option>)}
                   </select>
-                </div>
+                </div>}
               </div>
 
               <div className="crm-sec-t">Notas</div>
@@ -3038,9 +3091,9 @@ function OficialCRM({ showToast }) {
                 <div><label className="lbl-mini">Etapa</label>
                   <select className="input" value={criar.etapa} onChange={(e) => setCriar({ ...criar, etapa: e.target.value })}>{etapas.map((e) => <option key={e.k} value={e.k}>{e.lb}</option>)}</select>
                 </div>
-                <div><label className="lbl-mini">Vendedor</label>
+                {isGer && <div><label className="lbl-mini">Vendedor</label>
                   <select className="input" value={criar.vendedorId} onChange={(e) => setCriar({ ...criar, vendedorId: e.target.value })}><option value="">Sem dono</option>{vendedores.map((v) => <option key={v.id} value={v.id}>{v.nome}</option>)}</select>
-                </div>
+                </div>}
               </div>
               <button className="onum-add" style={{ marginTop: 16, width: "100%", justifyContent: "center" }} onClick={criarLead}>Criar lead</button>
             </div>
