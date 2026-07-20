@@ -1247,6 +1247,7 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
       config: ia.config || configVazia(),
       conhecimento: (ia.conhecimento || []).map((k) => ({ id: k.id, secao: k.secao, nome: k.nome, chars: (k.texto || "").length, criadoEm: k.criadoEm })),
       docs: (ia.docs || []).map((d) => ({ id: d.id, nome: d.nome, tamanho: d.tamanho, nChunks: d.nChunks, criadoEm: d.criadoEm })),
+      voiceId: ia.voiceId || null, voiceNome: ia.voiceNome || "",
       criadoEm: ia.criadoEm,
     };
   }
@@ -1303,6 +1304,7 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
     if (b.ativa !== undefined) ia.ativa = !!b.ativa;
     if (b.config !== undefined) ia.config = sanitizaConfig(b.config);
     if (b.conhecimento !== undefined) ia.conhecimento = sanitizaConhecimento(b.conhecimento);
+    if (b.voiceId !== undefined) { ia.voiceId = String(b.voiceId || "").trim() || null; ia.voiceNome = String(b.voiceNome || "").slice(0, 60); }
     salvar();
     res.json(iaPublica(ia));
   });
@@ -1428,6 +1430,32 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
   function escXml(s) { return String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&apos;"); }
   const VOZ_TW = 'voice="Polly.Camila-Neural" language="pt-BR"';
 
+  // gera o áudio da fala na ElevenLabs (voz humana), salva e devolve o nome do arquivo.
+  // Se não tiver chave ou falhar, devolve null (aí cai na voz da Twilio).
+  async function gerarVozEleven(texto, voiceId) {
+    const key = process.env.ELEVENLABS_API_KEY;
+    const voice = voiceId || process.env.ELEVENLABS_VOICE_ID || "EXAVITQu4vr4xnSDxMaL"; // voz padrão (multilíngue)
+    if (!key || !texto || !MEDIA_DIR) return null;
+    try {
+      const r = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voice}?output_format=mp3_44100_128`, {
+        method: "POST",
+        headers: { "xi-api-key": key, "Content-Type": "application/json", Accept: "audio/mpeg" },
+        body: JSON.stringify({ text: texto, model_id: "eleven_turbo_v2_5", voice_settings: { stability: 0.45, similarity_boost: 0.8, style: 0.15, use_speaker_boost: true } }),
+      });
+      if (!r.ok) { console.error("[ligacao] ElevenLabs " + r.status + ":", (await r.text().catch(() => "")).slice(0, 160)); return null; }
+      const buf = Buffer.from(await r.arrayBuffer());
+      const nome = "voz_" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6) + ".mp3";
+      fs.writeFileSync(path.join(MEDIA_DIR, nome), buf);
+      return nome;
+    } catch (e) { console.error("[ligacao] ElevenLabs erro:", e.message); return null; }
+  }
+  // devolve a tag de fala (ElevenLabs <Play> se der certo, senão <Say> da Twilio)
+  async function vozTag(base, texto, voiceId) {
+    const arq = await gerarVozEleven(texto, voiceId);
+    if (arq) return `<Play>${base}/api/oficial/ligacao/audio/${arq}</Play>`;
+    return `<Say ${VOZ_TW}>${escXml(texto)}</Say>`;
+  }
+
   // gera a próxima fala da IA na ligação (curta, estilo telefone) + detecta classificação
   async function falaDaIA(lig, ia) {
     const base = montarSystemPrompt(ia, lig.nome);
@@ -1446,9 +1474,36 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
     return { fala: resp || "Certo!", classe };
   }
 
-  function gatherXml(base, ligId, fala) {
-    return `<Response><Say ${VOZ_TW}>${escXml(fala)}</Say><Gather input="speech" language="pt-BR" speechTimeout="auto" action="${base}/api/oficial/ligacao/resposta/${ligId}" method="POST"></Gather><Redirect method="POST">${base}/api/oficial/ligacao/resposta/${ligId}?vazio=1</Redirect></Response>`;
+  async function gatherXml(base, ligId, fala, voiceId) {
+    const v = await vozTag(base, fala, voiceId);
+    return `<Response>${v}<Gather input="speech" language="pt-BR" speechTimeout="auto" action="${base}/api/oficial/ligacao/resposta/${ligId}" method="POST"></Gather><Redirect method="POST">${base}/api/oficial/ligacao/resposta/${ligId}?vazio=1</Redirect></Response>`;
   }
+  // serve o mp3 da ElevenLabs pro Twilio tocar (público — o Twilio precisa acessar)
+  app.get("/api/oficial/ligacao/audio/:file", (req, res) => {
+    const f = String(req.params.file || "").replace(/[^a-z0-9_.]/gi, "");
+    const p = f && MEDIA_DIR ? path.join(MEDIA_DIR, f) : null;
+    if (!p || !fs.existsSync(p)) return res.sendStatus(404);
+    res.set("Content-Type", "audio/mpeg");
+    res.set("Cache-Control", "public, max-age=3600");
+    res.sendFile(p);
+  });
+  // lista as vozes da conta ElevenLabs (pra escolher no sistema)
+  app.get("/api/oficial/vozes", auth, gerenteOnly, async (req, res) => {
+    const key = process.env.ELEVENLABS_API_KEY;
+    if (!key) return res.status(400).json({ error: "Configure a ELEVENLABS_API_KEY no Railway pra listar as vozes." });
+    try {
+      const r = await fetch("https://api.elevenlabs.io/v1/voices", { headers: { "xi-api-key": key } });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) return res.status(400).json({ error: (d && d.detail && d.detail.message) || ("Erro ElevenLabs " + r.status) });
+      const vozes = (d.voices || []).map((v) => ({
+        voiceId: v.voice_id, nome: v.name,
+        preview: v.preview_url || "",
+        idioma: (v.labels && (v.labels.language || v.labels.accent)) || "",
+        genero: (v.labels && v.labels.gender) || "",
+      }));
+      res.json({ vozes });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+  });
 
   // quando qualifica (ou callback): cria/atualiza a conversa e passa pro vendedor
   function finalizarLigacao(lig, ia) {
@@ -1518,7 +1573,7 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
     let fala = "Alô! Tudo bem?";
     try { if (ia) { const r = await falaDaIA(lig, ia); fala = r.fala || fala; if (r.classe) lig.classificacao = r.classe; } } catch (e) { console.error("[ligacao] twiml:", e.message); }
     lig.transcricao.push({ role: "ia", content: fala, ts: Date.now() }); salvar();
-    res.send(gatherXml(baseUrlDe(req), lig.id, fala));
+    res.send(await gatherXml(baseUrlDe(req), lig.id, fala, ia && ia.voiceId));
   });
 
   // 3) recebe a fala do lead e responde (loop)
@@ -1532,15 +1587,15 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
     const base = baseUrlDe(req);
     if (fala) { lig.transcricao.push({ role: "lead", content: fala, ts: Date.now() }); lig._vazios = 0; }
     else { lig._vazios = (lig._vazios || 0) + 1; }
-    if (lig._vazios >= 2) { lig.status = "sem_resposta"; salvar(); return res.send(`<Response><Say ${VOZ_TW}>Parece que não consigo te ouvir bem. Vou encerrar e a gente se fala pelo WhatsApp. Até logo!</Say><Hangup/></Response>`); }
-    if (!fala) { salvar(); return res.send(`<Response><Say ${VOZ_TW}>Ainda está aí?</Say><Gather input="speech" language="pt-BR" speechTimeout="auto" action="${base}/api/oficial/ligacao/resposta/${lig.id}" method="POST"></Gather><Redirect method="POST">${base}/api/oficial/ligacao/resposta/${lig.id}?vazio=1</Redirect></Response>`); }
+    if (lig._vazios >= 2) { lig.status = "sem_resposta"; salvar(); return res.send(`<Response>${await vozTag(base, "Parece que não consigo te ouvir bem. Vou encerrar e a gente se fala pelo WhatsApp. Até logo!", ia && ia.voiceId)}<Hangup/></Response>`); }
+    if (!fala) { salvar(); return res.send(`<Response>${await vozTag(base, "Ainda está aí?", ia && ia.voiceId)}<Gather input="speech" language="pt-BR" speechTimeout="auto" action="${base}/api/oficial/ligacao/resposta/${lig.id}" method="POST"></Gather><Redirect method="POST">${base}/api/oficial/ligacao/resposta/${lig.id}?vazio=1</Redirect></Response>`); }
     let r;
     try { r = await falaDaIA(lig, ia); } catch (e) { r = { fala: "Tive um probleminha na conexão. Um consultor vai te chamar no WhatsApp, tá? Obrigado!", classe: "callback" }; }
     lig.transcricao.push({ role: "ia", content: r.fala, ts: Date.now() });
     if (r.classe) lig.classificacao = r.classe;
     salvar();
-    if (r.classe) { finalizarLigacao(lig, ia); return res.send(`<Response><Say ${VOZ_TW}>${escXml(r.fala)}</Say><Hangup/></Response>`); }
-    res.send(gatherXml(base, lig.id, r.fala));
+    if (r.classe) { finalizarLigacao(lig, ia); return res.send(`<Response>${await vozTag(base, r.fala, ia && ia.voiceId)}<Hangup/></Response>`); }
+    res.send(await gatherXml(base, lig.id, r.fala, ia && ia.voiceId));
   });
 
   // 4) status final (Twilio avisa quando termina)

@@ -148,6 +148,7 @@ export const api = {
   ofAtribuirIAChat: (chatId, iaId) => req("POST", "/api/oficial/chats/" + chatId + "/atribuir-ia", { iaId }),
   ofLigacoes: () => req("GET", "/api/oficial/ligacoes"),
   ofIniciarLigacao: (dados) => req("POST", "/api/oficial/ligacao/iniciar", dados),
+  ofVozes: () => req("GET", "/api/oficial/vozes"),
   ofExcluirIA: (id) => req("DELETE", "/api/oficial/ias/" + id),
   ofExtrairArquivo: (nome, base64) => req("POST", "/api/oficial/ias/extrair", { nome, base64 }),
   ofPreviewIA: (dados) => req("POST", "/api/oficial/ias/preview", dados),

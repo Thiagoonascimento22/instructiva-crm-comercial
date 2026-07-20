@@ -1409,6 +1409,16 @@ function ModalIA({ ia, showToast, onClose, onSaved }) {
   const [secao, setSecao] = useState("identidade");
   const [saving, setSaving] = useState(false);
   const [docs, setDocs] = useState(ia.docs || []);
+  const [voiceId, setVoiceId] = useState(ia.voiceId || "");
+  const [voiceNome, setVoiceNome] = useState(ia.voiceNome || "");
+  const [vozes, setVozes] = useState([]);
+  const [vozErro, setVozErro] = useState("");
+  const audioPrev = useRef(null);
+  useEffect(() => { api.ofVozes().then((r) => setVozes(r.vozes || [])).catch((e) => setVozErro(e.message)); }, []);
+  function ouvirPreview(url) {
+    if (!url) return;
+    try { if (audioPrev.current) { audioPrev.current.pause(); } audioPrev.current = new Audio(url); audioPrev.current.play().catch(() => {}); } catch (_) {}
+  }
   const [subindoDoc, setSubindoDoc] = useState(false);
   const [filaDoc, setFilaDoc] = useState({ feitos: 0, total: 0, atual: "" });
 
@@ -1546,7 +1556,7 @@ function ModalIA({ ia, showToast, onClose, onSaved }) {
     setSaving(true);
     const conhecimentoNovo = kb.filter((x) => x.texto).map((x) => ({ id: x.id, secao: x.secao, nome: x.nome, texto: x.texto, criadoEm: x.criadoEm }));
     const conhecimentoExistente = (ia.conhecimento || []).filter((old) => kb.some((x) => x.id === old.id && !x.texto));
-    const dados = { nome: nome.trim(), modo, config: c, conhecimento: [...conhecimentoExistente, ...conhecimentoNovo] };
+    const dados = { nome: nome.trim(), modo, config: c, conhecimento: [...conhecimentoExistente, ...conhecimentoNovo], voiceId: voiceId || null, voiceNome };
     try {
       if (editando) await api.ofEditarIA(ia.id, dados);
       else await api.ofCriarIA(dados);
@@ -1649,6 +1659,24 @@ function ModalIA({ ia, showToast, onClose, onSaved }) {
                 <div className="agx-field">
                   <label>Objetivo principal *</label>
                   <input className="agx-input" value={c.objetivo} onChange={(e) => set("objetivo", e.target.value)} placeholder="Ex: Conduzir o lead até a matrícula no curso de Reparo de Inversor" />
+                </div>
+                <div className="agx-field">
+                  <label>Voz da ligação (ElevenLabs)</label>
+                  {vozErro ? (
+                    <div className="onum-dica" style={{ color: "#dc2626" }}>{vozErro}</div>
+                  ) : (
+                    <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                      <select className="agx-input" style={{ flex: 1, minWidth: 180 }} value={voiceId}
+                        onChange={(e) => { const v = vozes.find((x) => x.voiceId === e.target.value); setVoiceId(e.target.value); setVoiceNome(v ? v.nome : ""); }}>
+                        <option value="">Voz padrão do sistema</option>
+                        {vozes.map((v) => <option key={v.voiceId} value={v.voiceId}>{v.nome}{v.genero ? " · " + v.genero : ""}{v.idioma ? " · " + v.idioma : ""}</option>)}
+                      </select>
+                      {(() => { const vv = vozes.find((v) => v.voiceId === voiceId); return vv && vv.preview ? (
+                        <button type="button" className="btn btn-sm" onClick={() => ouvirPreview(vv.preview)}>▶ Ouvir</button>
+                      ) : null; })()}
+                    </div>
+                  )}
+                  <span className="agx-psub">A voz que essa IA usa nas ligações. A lista vem da sua conta ElevenLabs — clica em Ouvir pra testar.</span>
                 </div>
                 <div className="agx-sep" />
                 <h4 className="agx-h">O que ela faz</h4>
