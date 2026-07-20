@@ -3355,8 +3355,8 @@ input:focus-visible, textarea:focus-visible, select:focus-visible {
 /* ================= CRM Kanban ================= */
 .crm-wrap { padding: 4px 2px 20px; }
 .crm-top { display: flex; gap: 10px; align-items: center; margin-bottom: 16px; flex-wrap: wrap; }
-.crm-board { display: flex; gap: 14px; overflow-x: auto; padding-bottom: 12px; align-items: flex-start; }
-.crm-col { flex: 0 0 270px; background: var(--surface-2); border: 1px solid var(--line); border-radius: 14px; display: flex; flex-direction: column; max-height: calc(100vh - 220px); }
+.crm-board { display: flex; gap: 14px; overflow-x: auto; padding-bottom: 12px; align-items: stretch; }
+.crm-col { flex: 0 0 270px; background: var(--surface-2); border: 1px solid var(--line); border-radius: 14px; display: flex; flex-direction: column; height: calc(100vh - 200px); min-height: 440px; }
 .crm-col-head { display: flex; align-items: center; gap: 8px; padding: 12px 14px; font-weight: 700; font-size: 13.5px; border-bottom: 1px solid var(--line); }
 .crm-col-dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
 .crm-col-n { margin-left: auto; background: var(--card); border: 1px solid var(--line); border-radius: 20px; padding: 1px 9px; font-size: 12px; color: var(--muted); }
@@ -3375,7 +3375,7 @@ input:focus-visible, textarea:focus-visible, select:focus-visible {
 .crm-card-semvend { font-size: 11.5px; color: var(--faint); }
 .crm-card-notas { font-size: 11px; color: var(--faint); }
 .crm-modal-bg { position: fixed; inset: 0; background: var(--scrim); display: flex; align-items: flex-start; justify-content: center; padding: 5vh 16px; z-index: 100; overflow-y: auto; }
-.crm-modal { background: var(--card); border-radius: 16px; width: 100%; max-width: 560px; box-shadow: 0 20px 60px -12px rgba(20,22,45,.35); }
+.crm-modal { background: var(--card); border-radius: 16px; width: 100%; max-width: 560px; box-shadow: 0 20px 60px -12px rgba(20,22,45,.35); max-height: 90vh; overflow-y: auto; }
 .crm-modal-head { display: flex; align-items: center; gap: 10px; padding: 16px 18px; border-bottom: 1px solid var(--line); }
 .crm-modal-nome { flex: 1; font-size: 17px; font-weight: 800; border: none; background: none; color: var(--text); outline: none; padding: 4px 0; }
 .crm-modal-nome:focus { border-bottom: 2px solid var(--brand); }
