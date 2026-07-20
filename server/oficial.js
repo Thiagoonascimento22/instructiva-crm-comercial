@@ -1642,39 +1642,91 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
   }
 
   // 1) dispara a ligação
-  app.post("/api/oficial/ligacao/iniciar", auth, gerenteOnly, async (req, res) => {
+  // helper reutilizável: dispara UMA ligação (usado no disparo único e no disparo em massa)
+  async function dispararLigacaoTwilio({ telefone, nome, iaId, baseUrl, campId }) {
     garantirLigacoes();
     const sid = process.env.TWILIO_ACCOUNT_SID, token = process.env.TWILIO_AUTH_TOKEN, from = process.env.TWILIO_NUMERO;
-    if (!sid || !token || !from) return res.status(400).json({ error: "Configure no Railway: TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN e TWILIO_NUMERO." });
-    const b = req.body || {};
-    const telefone = String(b.telefone || "").replace(/\D/g, "");
-    const ia = (db.oficial.ias || []).find((x) => x.id === String(b.iaId || "").trim());
-    if (telefone.length < 10) return res.status(400).json({ error: "Telefone inválido" });
-    if (!ia) return res.status(400).json({ error: "Escolha uma IA válida" });
-    if (!ia.ativa) return res.status(400).json({ error: `A IA "${ia.nome}" está desativada.` });
-    const lig = { id: "lig_" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), telefone, nome: b.nome || "", iaId: ia.id, chatId: b.chatId || null, status: "discando", transcricao: [], classificacao: null, criadoEm: Date.now() };
+    if (!sid || !token || !from) return { erro: "Configure TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN e TWILIO_NUMERO no Railway." };
+    const tel = String(telefone || "").replace(/\D/g, "");
+    const ia = (db.oficial.ias || []).find((x) => x.id === String(iaId || "").trim());
+    if (tel.length < 10) return { erro: "Telefone inválido" };
+    if (!ia) return { erro: "IA inválida" };
+    if (!ia.ativa) return { erro: `A IA "${ia.nome}" está desativada.` };
+    const lig = { id: "lig_" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), telefone: tel, nome: nome || "", iaId: ia.id, campId: campId || null, status: "discando", transcricao: [], classificacao: null, criadoEm: Date.now() };
     db.oficial.ligacoes.unshift(lig);
-    if (db.oficial.ligacoes.length > 500) db.oficial.ligacoes = db.oficial.ligacoes.slice(0, 500);
+    if (db.oficial.ligacoes.length > 800) db.oficial.ligacoes = db.oficial.ligacoes.slice(0, 800);
     salvar();
     try {
-      const base = baseUrlDe(req);
-      const to = telefone.startsWith("55") ? "+" + telefone : "+55" + telefone;
-      const body = new URLSearchParams({
-        To: to, From: from,
-        Url: `${base}/api/oficial/ligacao/twiml/${lig.id}`, Method: "POST",
-        StatusCallback: `${base}/api/oficial/ligacao/status/${lig.id}`, StatusCallbackMethod: "POST",
-      });
-      const r = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${sid}/Calls.json`, {
-        method: "POST",
-        headers: { Authorization: "Basic " + Buffer.from(sid + ":" + token).toString("base64"), "Content-Type": "application/x-www-form-urlencoded" },
-        body,
-      });
+      const to = tel.startsWith("55") ? "+" + tel : "+55" + tel;
+      const body = new URLSearchParams({ To: to, From: from, Url: `${baseUrl}/api/oficial/ligacao/twiml/${lig.id}`, Method: "POST", StatusCallback: `${baseUrl}/api/oficial/ligacao/status/${lig.id}`, StatusCallbackMethod: "POST" });
+      const r = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${sid}/Calls.json`, { method: "POST", headers: { Authorization: "Basic " + Buffer.from(sid + ":" + token).toString("base64"), "Content-Type": "application/x-www-form-urlencoded" }, body });
       const d = await r.json().catch(() => ({}));
-      if (!r.ok) { lig.status = "erro"; lig.erro = (d && d.message) || ("Twilio erro " + r.status); salvar(); return res.status(400).json({ error: lig.erro }); }
+      if (!r.ok) { lig.status = "erro"; lig.erro = (d && d.message) || ("Twilio erro " + r.status); salvar(); return { erro: lig.erro, lig }; }
       lig.callSid = d.sid; salvar();
-      res.json({ ok: true, ligacaoId: lig.id });
-    } catch (e) { lig.status = "erro"; lig.erro = e.message; salvar(); res.status(500).json({ error: e.message }); }
+      return { lig };
+    } catch (e) { lig.status = "erro"; lig.erro = e.message; salvar(); return { erro: e.message, lig }; }
+  }
+
+  app.post("/api/oficial/ligacao/iniciar", auth, gerenteOnly, async (req, res) => {
+    const b = req.body || {};
+    const r = await dispararLigacaoTwilio({ telefone: b.telefone, nome: b.nome, iaId: b.iaId, baseUrl: baseUrlDe(req) });
+    if (r.erro) return res.status(400).json({ error: r.erro });
+    res.json({ ok: true, ligacaoId: r.lig.id });
   });
+
+  /* ---- DISPARO EM MASSA DE LIGAÇÕES ---- */
+  function garantirCampLig() { if (!Array.isArray(db.oficial.campLig)) db.oficial.campLig = []; }
+  app.post("/api/oficial/ligacao/campanha", auth, gerenteOnly, (req, res) => {
+    garantirCampLig();
+    const b = req.body || {};
+    const ia = (db.oficial.ias || []).find((x) => x.id === String(b.iaId || "").trim());
+    if (!ia) return res.status(400).json({ error: "Escolha uma IA válida" });
+    if (!ia.ativa) return res.status(400).json({ error: `A IA "${ia.nome}" está desativada.` });
+    const vistos = new Set();
+    const contatos = (Array.isArray(b.contatos) ? b.contatos : [])
+      .map((c) => ({ telefone: String(c.telefone || "").replace(/\D/g, ""), nome: c.nome || "", status: "pendente" }))
+      .filter((c) => { if (c.telefone.length < 10 || vistos.has(c.telefone)) return false; vistos.add(c.telefone); return true; });
+    if (!contatos.length) return res.status(400).json({ error: "Nenhum telefone válido na lista." });
+    const intervalo = Math.max(15, parseInt(b.intervalo) || 45);
+    const camp = { id: "campl_" + Date.now().toString(36), nome: b.nome || "Campanha de ligação", iaId: ia.id, intervalo, baseUrl: baseUrlDe(req), fila: contatos, status: "rodando", criadoEm: Date.now(), ultimaEm: 0 };
+    db.oficial.campLig.unshift(camp);
+    salvar();
+    res.json({ ok: true, campanhaId: camp.id, total: contatos.length });
+  });
+  app.get("/api/oficial/ligacao/campanhas", auth, gerenteOnly, (req, res) => {
+    garantirCampLig();
+    res.json((db.oficial.campLig || []).slice(0, 50).map((c) => ({
+      id: c.id, nome: c.nome, status: c.status, intervalo: c.intervalo,
+      total: c.fila.length, feitas: c.fila.filter((x) => x.status !== "pendente").length,
+      criadoEm: c.criadoEm,
+    })));
+  });
+  app.post("/api/oficial/ligacao/campanha/:id/pausar", auth, gerenteOnly, (req, res) => {
+    garantirCampLig();
+    const c = (db.oficial.campLig || []).find((x) => x.id === req.params.id);
+    if (!c) return res.status(404).json({ error: "Campanha não encontrada" });
+    c.status = c.status === "rodando" ? "pausada" : "rodando";
+    salvar();
+    res.json({ ok: true, status: c.status });
+  });
+  // agendador: dispara a próxima ligação de cada campanha rodando, respeitando o intervalo
+  setInterval(async () => {
+    try {
+      garantirCampLig();
+      const agora = Date.now();
+      for (const c of (db.oficial.campLig || [])) {
+        if (c.status !== "rodando") continue;
+        const pend = c.fila.find((x) => x.status === "pendente");
+        if (!pend) { c.status = "concluida"; salvar(); continue; }
+        if (agora - (c.ultimaEm || 0) < c.intervalo * 1000) continue;
+        c.ultimaEm = agora; pend.status = "ligando"; salvar();
+        const r = await dispararLigacaoTwilio({ telefone: pend.telefone, nome: pend.nome, iaId: c.iaId, baseUrl: c.baseUrl, campId: c.id });
+        pend.status = r.erro ? "erro" : "ligou";
+        if (r.erro) pend.erro = r.erro;
+        salvar();
+      }
+    } catch (e) { console.error("[campLig] agendador:", e.message); }
+  }, 5000);
 
   // 2) TwiML inicial (o lead atendeu) — a IA dá a primeira fala
   app.post("/api/oficial/ligacao/twiml/:id", async (req, res) => {
@@ -1738,6 +1790,27 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
       classificacao: l.classificacao, duracao: l.duracao || 0, criadoEm: l.criadoEm,
       transcricao: l.transcricao || [], erro: l.erro || null,
     })));
+  });
+
+  // medidor de custo estimado das ligações (duração × R$/min, ajustável)
+  app.get("/api/oficial/ligacao/custo", auth, gerenteOnly, (req, res) => {
+    garantirLigacoes();
+    const rate = db.oficial.custoPorMin != null ? db.oficial.custoPorMin : 3;
+    const agora = new Date();
+    const inicioHoje = new Date(agora.getFullYear(), agora.getMonth(), agora.getDate()).getTime();
+    const inicioMes = new Date(agora.getFullYear(), agora.getMonth(), 1).getTime();
+    const calc = (desde) => {
+      const ligs = (db.oficial.ligacoes || []).filter((l) => l.criadoEm >= desde && (l.duracao || 0) > 0);
+      const seg = ligs.reduce((s, l) => s + (l.duracao || 0), 0);
+      const min = seg / 60;
+      return { ligacoes: ligs.length, minutos: Math.round(min * 10) / 10, custo: Math.round(min * rate * 100) / 100 };
+    };
+    res.json({ custoPorMin: rate, hoje: calc(inicioHoje), mes: calc(inicioMes), total: calc(0) });
+  });
+  app.post("/api/oficial/ligacao/custo", auth, gerenteOnly, (req, res) => {
+    const r = parseFloat((req.body || {}).custoPorMin);
+    if (!isNaN(r) && r >= 0) { db.oficial.custoPorMin = r; salvar(); }
+    res.json({ ok: true, custoPorMin: db.oficial.custoPorMin != null ? db.oficial.custoPorMin : 3 });
   });
 
 

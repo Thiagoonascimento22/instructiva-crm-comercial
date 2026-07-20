@@ -301,13 +301,13 @@ export default function App() {
           <div className="tag">Sistema Comercial</div>
         </div>
         <nav className="nav">
+          {isGer && <NavBtn ic={I.pipe} label="CRM" active={view === "crm"} onClick={() => setView("crm")} />}
           {!isSuporte && <NavBtn ic={I.wa} label="Caixa de entrada" active={view === "whatsapp"} onClick={() => setView("whatsapp")} />}
           {(isGer || isVend) && <NavBtn ic={I.send} label="Disparo" active={view === "disparo"} onClick={() => setView("disparo")} />}
           {(isGer || isVend) && <NavBtn ic={I.chat} label="Templates" active={view === "templates"} onClick={() => setView("templates")} />}
           {isGer && <NavBtn ic={I.wa} label="Números" active={view === "numeros"} onClick={() => setView("numeros")} />}
           {isGer && <NavBtn ic={I.spark} label="Atendente IA" active={view === "ia"} onClick={() => setView("ia")} />}
           {isGer && <NavBtn ic={I.suporte} label="Ligações IA" active={view === "ligacoes"} onClick={() => setView("ligacoes")} />}
-          {isGer && <NavBtn ic={I.pipe} label="CRM" active={view === "crm"} onClick={() => setView("crm")} />}
           {isGer && <NavBtn ic={I.gauge} label="Temperatura" active={view === "temperatura"} onClick={() => setView("temperatura")} />}
           {!isGer && !isSuporte && <NavBtn ic={I.suporte} label="Minhas solicitações" active={view === "minhasSolicitacoes"} badge={badgeSol} onClick={() => setView("minhasSolicitacoes")} />}
           {(isGer || isSuporte) && <NavBtn ic={I.suporte} label="Solicitações" active={view === "solicitacoes"} onClick={() => setView("solicitacoes")} />}
@@ -2937,12 +2937,57 @@ function OficialLigacoes({ showToast }) {
   const [iaId, setIaId] = useState("");
   const [ligando, setLigando] = useState(false);
   const [aberta, setAberta] = useState(null);
+  const [massa, setMassa] = useState("");
+  const [massaIa, setMassaIa] = useState("");
+  const [intervalo, setIntervalo] = useState(45);
+  const [campanhas, setCampanhas] = useState([]);
+  const [enviandoMassa, setEnviandoMassa] = useState(false);
+  const [custo, setCusto] = useState(null);
+  const [editRate, setEditRate] = useState(false);
+  const [rateTmp, setRateTmp] = useState("");
+  const carregarCusto = () => api.ofCustoLigacoes().then(setCusto).catch(() => {});
+  async function salvarRate() {
+    try { const r = await api.ofSetCustoLigacoes(parseFloat(rateTmp) || 0); setEditRate(false); carregarCusto(); showToast("Valor por minuto atualizado"); }
+    catch (e) { showToast(e.message); }
+  }
+
+  function parseLista(txt) {
+    return (txt || "").split("\n").map((linha) => {
+      const l = linha.trim();
+      if (!l) return null;
+      const partes = l.split(/[,;\t]/).map((x) => x.trim()).filter(Boolean);
+      if (partes.length === 1) { const tel = partes[0].replace(/\D/g, ""); return tel.length >= 10 ? { telefone: tel, nome: "" } : null; }
+      // acha a parte com mais dígitos = telefone, o resto = nome
+      let tel = "", nome = "";
+      for (const p of partes) { const d = p.replace(/\D/g, ""); if (d.length >= 8 && d.length >= tel.replace(/\D/g, "").length) tel = d; else nome = nome ? nome + " " + p : p; }
+      return tel.length >= 10 ? { telefone: tel, nome } : null;
+    }).filter(Boolean);
+  }
+  const contatosMassa = parseLista(massa);
+
+  async function dispararMassa() {
+    if (!contatosMassa.length) { showToast("Cole ao menos um telefone válido (com DDD)"); return; }
+    if (!massaIa) { showToast("Escolha a IA da campanha"); return; }
+    if (!confirm(`Disparar ligações pra ${contatosMassa.length} contato(s)? Vai ligar 1 a cada ${intervalo}s. Isso gera custo por ligação.`)) return;
+    setEnviandoMassa(true);
+    try {
+      const r = await api.ofCampLigacaoCriar({ nome: "Campanha " + new Date().toLocaleDateString("pt-BR"), iaId: massaIa, intervalo, contatos: contatosMassa });
+      showToast(`Campanha criada: ${r.total} ligações na fila`);
+      setMassa("");
+      carregarCamp();
+    } catch (e) { showToast(e.message); }
+    finally { setEnviandoMassa(false); }
+  }
+  const carregarCamp = () => api.ofCampLigacoes().then(setCampanhas).catch(() => {});
+  async function pausarCamp(id) { try { await api.ofCampLigacaoPausar(id); carregarCamp(); } catch (e) { showToast(e.message); } }
 
   const carregar = () => api.ofLigacoes().then(setLigacoes).catch(() => {});
   useEffect(() => {
     api.ofIAs().then((l) => setIas((l || []).filter((x) => x.ativa))).catch(() => {});
     carregar();
-    const t = setInterval(carregar, 5000); // atualiza o status ao vivo
+    carregarCamp();
+    carregarCusto();
+    const t = setInterval(() => { carregar(); carregarCamp(); carregarCusto(); }, 5000); // atualiza o status ao vivo
     return () => clearInterval(t);
   }, []);
 
@@ -2977,6 +3022,30 @@ function OficialLigacoes({ showToast }) {
 
   return (
     <div className="onum-wrap">
+      {custo && (
+        <div className="lig-custo">
+          {[["Hoje", custo.hoje], ["Este mês", custo.mes], ["Total", custo.total]].map(([lb, d]) => (
+            <div className="lig-custo-item" key={lb}>
+              <span className="lig-custo-lb">{lb}</span>
+              <span className="lig-custo-v">R$ {Number(d.custo).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</span>
+              <span className="lig-custo-sub">{d.ligacoes} lig · {d.minutos} min</span>
+            </div>
+          ))}
+          <div className="lig-custo-rate">
+            {editRate ? (
+              <span style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
+                <span className="lig-custo-lb">Valor por minuto</span>
+                <input className="input mono" style={{ width: 74, height: 34 }} value={rateTmp} onChange={(e) => setRateTmp(e.target.value)} />
+                <button className="btn btn-sm" onClick={salvarRate}>Salvar</button>
+              </span>
+            ) : (
+              <button className="lig-rate-btn" onClick={() => { setRateTmp(String(custo.custoPorMin)); setEditRate(true); }}>
+                estimando a R$ {Number(custo.custoPorMin).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}/min · ajustar
+              </button>
+            )}
+          </div>
+        </div>
+      )}
       <div className="disp-box" style={{ marginBottom: 18 }}>
         <div style={{ padding: "16px 18px" }}>
           <h3 style={{ margin: "0 0 4px", fontSize: 15 }}>Ligar pra um lead com a IA</h3>
@@ -3004,6 +3073,57 @@ function OficialLigacoes({ showToast }) {
           {ias.length === 0 && <div className="onum-dica" style={{ marginTop: 10 }}>Você precisa de uma IA ativa (aba Atendente IA) pra ligar. A IA usa a mesma personalidade e base de conhecimento.</div>}
         </div>
       </div>
+
+      <div className="disp-box" style={{ marginBottom: 18 }}>
+        <div style={{ padding: "16px 18px" }}>
+          <h3 style={{ margin: "0 0 4px", fontSize: 15 }}>Disparo em massa de ligações</h3>
+          <p className="panel-sub" style={{ margin: "0 0 14px" }}>Cole a lista (um por linha: <b>nome, telefone</b> — ou só o telefone). O sistema liga pra todos, um a cada intervalo.</p>
+          <textarea className="input" rows={5} style={{ width: "100%", resize: "vertical", fontFamily: "inherit" }}
+            placeholder={"João, 44 99999-8888\nMaria, 44 98888-7777\n44 97777-6666"}
+            value={massa} onChange={(e) => setMassa(e.target.value)} />
+          <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "flex-end", marginTop: 10 }}>
+            <div style={{ flex: "1 1 180px" }}>
+              <label className="lbl-mini">IA da campanha</label>
+              <select className="input" value={massaIa} onChange={(e) => setMassaIa(e.target.value)}>
+                <option value="">Escolher IA…</option>
+                {ias.map((ia) => <option key={ia.id} value={ia.id}>{ia.nome}</option>)}
+              </select>
+            </div>
+            <div style={{ flex: "0 0 150px" }}>
+              <label className="lbl-mini">Intervalo (segundos)</label>
+              <input className="input" type="number" min={15} value={intervalo} onChange={(e) => setIntervalo(e.target.value)} />
+            </div>
+            <button className="onum-add" disabled={enviandoMassa} onClick={dispararMassa} style={{ height: 44 }}>
+              {enviandoMassa ? <span className="spin" /> : <I.megaphone className="ico" />} Disparar {contatosMassa.length > 0 ? `(${contatosMassa.length})` : ""}
+            </button>
+          </div>
+          {massa.trim() && <div className="onum-dica" style={{ marginTop: 8 }}>{contatosMassa.length} telefone(s) válido(s) detectado(s) na lista.</div>}
+        </div>
+      </div>
+
+      {campanhas.length > 0 && (
+        <div style={{ marginBottom: 18 }}>
+          <h3 style={{ margin: "0 0 10px", fontSize: 14 }}>Campanhas de ligação</h3>
+          <div className="disp-lista">
+            {campanhas.map((c) => {
+              const pct = c.total ? Math.round((c.feitas / c.total) * 100) : 0;
+              return (
+                <div key={c.id} className="disp-row" style={{ cursor: "default" }}>
+                  <span className="disp-row-main">
+                    <span className="disp-row-nome">{c.nome}</span>
+                    <span className="disp-row-meta">{c.feitas}/{c.total} ligadas · 1 a cada {c.intervalo}s</span>
+                    <span style={{ display: "block", height: 5, background: "var(--surface-2)", borderRadius: 4, marginTop: 6, overflow: "hidden" }}>
+                      <span style={{ display: "block", height: "100%", width: pct + "%", background: "var(--brand)", borderRadius: 4 }} />
+                    </span>
+                  </span>
+                  <span className="disp-row-pill" style={{ background: c.status === "rodando" ? "rgba(16,185,129,.14)" : "var(--surface-2)", color: c.status === "rodando" ? "#059669" : "var(--muted)" }}>{c.status === "rodando" ? "Rodando" : c.status === "concluida" ? "Concluída" : "Pausada"}</span>
+                  {c.status !== "concluida" && <button className="btn btn-sm" onClick={() => pausarCamp(c.id)}>{c.status === "rodando" ? "Pausar" : "Retomar"}</button>}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       <h3 style={{ margin: "0 0 12px", fontSize: 15 }}>Ligações recentes</h3>
       {ligacoes.length === 0 ? (

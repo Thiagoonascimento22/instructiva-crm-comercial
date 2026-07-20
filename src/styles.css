@@ -3398,3 +3398,15 @@ input:focus-visible, textarea:focus-visible, select:focus-visible {
 .crm-excluir:hover { background: rgba(244,63,94,.14); }
 .crm-vend-check { display: flex; align-items: center; gap: 9px; padding: 9px 4px; font-size: 14px; cursor: pointer; border-bottom: 1px solid var(--line-2); }
 .lbl-mini { display: block; font-size: 11.5px; font-weight: 600; color: var(--muted); margin-bottom: 5px; }
+
+/* ===== medidor de custo das ligações ===== */
+.lig-custo { display: flex; gap: 12px; flex-wrap: wrap; align-items: stretch; background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 14px 16px; margin-bottom: 16px; }
+.lig-custo-item { flex: 1 1 120px; display: flex; flex-direction: column; gap: 2px; padding-right: 14px; border-right: 1px solid var(--line-2); }
+.lig-custo-item:nth-child(3) { border-right: none; }
+.lig-custo-lb { font-size: 11.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .03em; color: var(--faint); }
+.lig-custo-v { font-size: 21px; font-weight: 800; color: var(--text); }
+.lig-custo-sub { font-size: 11.5px; color: var(--muted); }
+.lig-custo-rate { flex: 1 1 100%; border-top: 1px solid var(--line-2); padding-top: 10px; margin-top: 2px; }
+.lig-rate-btn { background: none; border: none; color: var(--muted); font-size: 12px; cursor: pointer; text-decoration: underline; text-underline-offset: 2px; padding: 0; }
+.lig-rate-btn:hover { color: var(--brand); }
+@media (min-width: 640px) { .lig-custo-rate { flex-basis: auto; border-top: none; padding-top: 0; margin-top: 0; display: flex; align-items: center; } }
