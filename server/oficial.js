@@ -1505,9 +1505,123 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
     } catch (e) { res.status(500).json({ error: e.message }); }
   });
 
+  /* ================= CRM (Kanban de leads) ================= */
+  const CRM_ETAPAS = [
+    { k: "novo", lb: "Novo lead", cor: "#64748b" },
+    { k: "contato", lb: "Em contato", cor: "#3b82f6" },
+    { k: "qualificado", lb: "Qualificado", cor: "#059669" },
+    { k: "matriculado", lb: "Matriculado", cor: "#d97706" },
+    { k: "perdido", lb: "Perdido", cor: "#ef4444" },
+  ];
+  function garantirCRM() {
+    if (!Array.isArray(db.oficial.crmLeads)) db.oficial.crmLeads = [];
+    if (!Array.isArray(db.oficial.crmVendedores)) db.oficial.crmVendedores = [];
+  }
+  function crmLeadPublico(l) {
+    const v = l.vendedorId ? (db.users || []).find((u) => u.id === l.vendedorId) : null;
+    return { id: l.id, nome: l.nome, telefone: l.telefone, etapa: l.etapa, vendedorId: l.vendedorId || null, vendedorNome: v ? v.nome : "", valor: l.valor || 0, origem: l.origem || "manual", notas: l.notas || [], historico: l.historico || [], criadoEm: l.criadoEm, atualizadoEm: l.atualizadoEm };
+  }
+  function proximoVendedorCRM() {
+    garantirCRM();
+    let pool = (db.oficial.crmVendedores || []).filter((id) => db.users.some((u) => u.id === id && u.role === "vendedor" && u.ativo));
+    if (!pool.length) pool = (db.users || []).filter((u) => u.role === "vendedor" && u.ativo).map((u) => u.id);
+    if (!pool.length) return null;
+    db.oficial._crmRR = ((db.oficial._crmRR || 0) + 1) % pool.length;
+    return pool[db.oficial._crmRR];
+  }
+  // cria/atualiza um lead no CRM a partir de uma ligação qualificada
+  function criarLeadDaLigacao(lig) {
+    garantirCRM();
+    const resumo = (lig.transcricao || []).map((t) => (t.role === "ia" ? "IA: " : "Lead: ") + t.content).join("\n");
+    let l = (db.oficial.crmLeads || []).find((x) => x.telefone === lig.telefone);
+    if (!l) {
+      l = { id: "lead_" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), nome: lig.nome || lig.telefone, telefone: lig.telefone, etapa: "qualificado", vendedorId: proximoVendedorCRM(), valor: 0, origem: "ligacao", notas: [], historico: [], criadoEm: Date.now(), atualizadoEm: Date.now() };
+      db.oficial.crmLeads.unshift(l);
+    } else { l.etapa = "qualificado"; if (!l.vendedorId) l.vendedorId = proximoVendedorCRM(); }
+    l.notas.push({ texto: "📞 Qualificado pela IA na ligação. Resumo:\n" + resumo, por: "IA", ts: Date.now() });
+    l.historico.push({ tipo: "ligacao", texto: "Qualificado por ligação da IA", ts: Date.now() });
+    l.atualizadoEm = Date.now();
+    salvar();
+  }
+
+  app.get("/api/oficial/crm", auth, gerenteOnly, (req, res) => {
+    garantirCRM();
+    res.json({
+      etapas: CRM_ETAPAS,
+      leads: (db.oficial.crmLeads || []).map(crmLeadPublico),
+      vendedores: (db.users || []).filter((u) => u.role === "vendedor" && u.ativo).map((u) => ({ id: u.id, nome: u.nome })),
+      crmVendedores: db.oficial.crmVendedores || [],
+    });
+  });
+  app.post("/api/oficial/crm/lead", auth, gerenteOnly, (req, res) => {
+    garantirCRM();
+    const b = req.body || {};
+    const lead = {
+      id: "lead_" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+      nome: String(b.nome || "Sem nome").slice(0, 80),
+      telefone: String(b.telefone || "").replace(/\D/g, ""),
+      etapa: CRM_ETAPAS.some((e) => e.k === b.etapa) ? b.etapa : "novo",
+      vendedorId: (b.vendedorId && db.users.some((u) => u.id === b.vendedorId)) ? b.vendedorId : null,
+      valor: parseFloat(b.valor) || 0, origem: "manual", notas: [],
+      historico: [{ tipo: "criado", texto: "Lead criado manualmente", ts: Date.now() }],
+      criadoEm: Date.now(), atualizadoEm: Date.now(),
+    };
+    db.oficial.crmLeads.unshift(lead);
+    salvar();
+    res.json({ ok: true, lead: crmLeadPublico(lead) });
+  });
+  app.put("/api/oficial/crm/lead/:id", auth, gerenteOnly, (req, res) => {
+    garantirCRM();
+    const l = (db.oficial.crmLeads || []).find((x) => x.id === req.params.id);
+    if (!l) return res.status(404).json({ error: "Lead não encontrado" });
+    const b = req.body || {};
+    if (b.etapa !== undefined && CRM_ETAPAS.some((e) => e.k === b.etapa)) {
+      if (l.etapa !== b.etapa) l.historico.push({ tipo: "etapa", texto: "Movido para " + CRM_ETAPAS.find((e) => e.k === b.etapa).lb, ts: Date.now() });
+      l.etapa = b.etapa;
+    }
+    if (b.nome !== undefined) l.nome = String(b.nome).slice(0, 80);
+    if (b.telefone !== undefined) l.telefone = String(b.telefone).replace(/\D/g, "");
+    if (b.valor !== undefined) l.valor = parseFloat(b.valor) || 0;
+    if (b.vendedorId !== undefined) {
+      const vid = b.vendedorId || null;
+      if (vid && !db.users.some((u) => u.id === vid)) return res.status(400).json({ error: "Vendedor inválido" });
+      if (l.vendedorId !== vid) { const v = vid ? db.users.find((u) => u.id === vid) : null; l.historico.push({ tipo: "atribuido", texto: v ? "Atribuído a " + v.nome : "Atribuição removida", ts: Date.now() }); }
+      l.vendedorId = vid;
+    }
+    l.atualizadoEm = Date.now();
+    salvar();
+    res.json({ ok: true, lead: crmLeadPublico(l) });
+  });
+  app.post("/api/oficial/crm/lead/:id/nota", auth, (req, res) => {
+    garantirCRM();
+    const l = (db.oficial.crmLeads || []).find((x) => x.id === req.params.id);
+    if (!l) return res.status(404).json({ error: "Lead não encontrado" });
+    const texto = String((req.body || {}).texto || "").trim();
+    if (!texto) return res.status(400).json({ error: "Nota vazia" });
+    if (!Array.isArray(l.notas)) l.notas = [];
+    l.notas.push({ texto: texto.slice(0, 2000), por: req.user.nome, ts: Date.now() });
+    l.atualizadoEm = Date.now();
+    salvar();
+    res.json({ ok: true, lead: crmLeadPublico(l) });
+  });
+  app.delete("/api/oficial/crm/lead/:id", auth, gerenteOnly, (req, res) => {
+    garantirCRM();
+    db.oficial.crmLeads = (db.oficial.crmLeads || []).filter((x) => x.id !== req.params.id);
+    salvar();
+    res.json({ ok: true });
+  });
+  app.post("/api/oficial/crm/vendedores", auth, gerenteOnly, (req, res) => {
+    garantirCRM();
+    const ids = Array.isArray((req.body || {}).ids) ? req.body.ids.filter((id) => db.users.some((u) => u.id === id && u.role === "vendedor")) : [];
+    db.oficial.crmVendedores = ids;
+    salvar();
+    res.json({ ok: true, crmVendedores: ids });
+  });
+
   // quando qualifica (ou callback): cria/atualiza a conversa e passa pro vendedor
   function finalizarLigacao(lig, ia) {
     lig.status = "finalizada";
+    if (lig.classificacao === "qualificado") { try { criarLeadDaLigacao(lig); } catch (e) { console.error("[crm] criarLeadDaLigacao:", e.message); } }
     const resumo = lig.transcricao.map((t) => (t.role === "ia" ? "IA: " : "Lead: ") + t.content).join("\n");
     if (lig.classificacao === "qualificado" || lig.classificacao === "callback") {
       const numero = (db.oficial.numeros || []).find((n) => n.ativo) || (db.oficial.numeros || [])[0];

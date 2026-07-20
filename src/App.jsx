@@ -242,7 +242,7 @@ export default function App() {
     vistaInicial.current = true;
     // valida a aba restaurada: se não for permitida pro perfil, cai numa aba segura
     const porRole = {
-      gerente: ["whatsapp", "disparo", "templates", "numeros", "ia", "ligacoes", "temperatura", "solicitacoes", "equipe", "config"],
+      gerente: ["whatsapp", "disparo", "templates", "numeros", "ia", "ligacoes", "crm", "temperatura", "solicitacoes", "equipe", "config"],
       suporte: ["solicitacoes", "config"],
     };
     const permitidas = porRole[user.role] || ["whatsapp", "disparo", "templates", "minhasSolicitacoes", "config"];
@@ -283,6 +283,7 @@ export default function App() {
     numeros: { t: "Números", s: "Números oficiais conectados à sua conta Meta" },
     ia: { t: "Atendente IA", s: "SDR de IA que qualifica os leads e passa pro vendedor" },
     ligacoes: { t: "Ligações IA", s: "A IA liga pro lead, qualifica por voz e passa pro vendedor" },
+    crm: { t: "CRM", s: "Funil de leads — arraste entre as etapas, atribua e acompanhe" },
     temperatura: { t: "Temperatura", s: "Melhores horários e dias — quando os leads mais respondem" },
     minhasSolicitacoes: { t: "Minhas solicitações", s: "Acompanhe seus pedidos ao suporte" },
     solicitacoes: { t: "Solicitações de suporte", s: "Pedidos de ajuda dos vendedores e análise" },
@@ -306,6 +307,7 @@ export default function App() {
           {isGer && <NavBtn ic={I.wa} label="Números" active={view === "numeros"} onClick={() => setView("numeros")} />}
           {isGer && <NavBtn ic={I.spark} label="Atendente IA" active={view === "ia"} onClick={() => setView("ia")} />}
           {isGer && <NavBtn ic={I.suporte} label="Ligações IA" active={view === "ligacoes"} onClick={() => setView("ligacoes")} />}
+          {isGer && <NavBtn ic={I.pipe} label="CRM" active={view === "crm"} onClick={() => setView("crm")} />}
           {isGer && <NavBtn ic={I.gauge} label="Temperatura" active={view === "temperatura"} onClick={() => setView("temperatura")} />}
           {!isGer && !isSuporte && <NavBtn ic={I.suporte} label="Minhas solicitações" active={view === "minhasSolicitacoes"} badge={badgeSol} onClick={() => setView("minhasSolicitacoes")} />}
           {(isGer || isSuporte) && <NavBtn ic={I.suporte} label="Solicitações" active={view === "solicitacoes"} onClick={() => setView("solicitacoes")} />}
@@ -342,6 +344,7 @@ export default function App() {
           {view === "numeros" && isGer && <OficialNumeros showToast={showToast} />}
           {view === "ia" && isGer && <OficialIAs showToast={showToast} />}
           {view === "ligacoes" && isGer && <OficialLigacoes showToast={showToast} />}
+          {view === "crm" && isGer && <OficialCRM showToast={showToast} />}
           {view === "temperatura" && isGer && <OficialTemperatura showToast={showToast} />}
           {view === "minhasSolicitacoes" && !isGer && !isSuporte && <PaginaMinhasSolicitacoes itens={minhasSol} recarregar={carregarMinhasSol} showToast={showToast} />}
           {view === "solicitacoes" && (isGer || isSuporte) && <PaginaSolicitacoes showToast={showToast} readonly={isGer} />}
@@ -2747,6 +2750,184 @@ function OficialTemplates({ isGer = true, showToast }) {
   );
 }
 
+
+function OficialCRM({ showToast }) {
+  const [etapas, setEtapas] = useState([]);
+  const [leads, setLeads] = useState([]);
+  const [vendedores, setVendedores] = useState([]);
+  const [crmVend, setCrmVend] = useState([]);
+  const [sel, setSel] = useState(null);
+  const [criar, setCriar] = useState(null);
+  const [config, setConfig] = useState(false);
+  const [dragId, setDragId] = useState(null);
+  const [novaNota, setNovaNota] = useState("");
+
+  const carregar = () => api.ofCRM().then((d) => { setEtapas(d.etapas || []); setLeads(d.leads || []); setVendedores(d.vendedores || []); setCrmVend(d.crmVendedores || []); }).catch((e) => showToast(e.message));
+  useEffect(() => { carregar(); const t = setInterval(carregar, 12000); return () => clearInterval(t); }, []);
+
+  const leadSel = sel ? leads.find((l) => l.id === sel) : null;
+
+  async function mover(id, etapa) {
+    const l = leads.find((x) => x.id === id); if (!l || l.etapa === etapa) return;
+    setLeads((ls) => ls.map((x) => x.id === id ? { ...x, etapa } : x));
+    try { await api.ofCrmEditar(id, { etapa }); } catch (e) { showToast(e.message); carregar(); }
+  }
+  async function salvarCampo(id, campo, valor) {
+    try { const r = await api.ofCrmEditar(id, { [campo]: valor }); setLeads((ls) => ls.map((x) => x.id === id ? r.lead : x)); } catch (e) { showToast(e.message); }
+  }
+  async function addNota() {
+    if (!novaNota.trim() || !sel) return;
+    try { const r = await api.ofCrmNota(sel, novaNota.trim()); setLeads((ls) => ls.map((x) => x.id === sel ? r.lead : x)); setNovaNota(""); } catch (e) { showToast(e.message); }
+  }
+  async function excluir(id) {
+    if (!confirm("Excluir este lead do CRM? Não dá pra desfazer.")) return;
+    try { await api.ofCrmExcluir(id); setLeads((ls) => ls.filter((x) => x.id !== id)); setSel(null); showToast("Lead excluído"); } catch (e) { showToast(e.message); }
+  }
+  async function criarLead() {
+    if (!criar.nome.trim()) { showToast("Dê um nome ao lead"); return; }
+    try { const r = await api.ofCrmCriar(criar); setLeads((ls) => [r.lead, ...ls]); setCriar(null); showToast("Lead criado"); } catch (e) { showToast(e.message); }
+  }
+  async function toggleVend(id) {
+    const novo = crmVend.includes(id) ? crmVend.filter((x) => x !== id) : [...crmVend, id];
+    setCrmVend(novo);
+    try { await api.ofCrmVendedores(novo); } catch (e) { showToast(e.message); }
+  }
+  const etapaDe = (k) => etapas.find((e) => e.k === k) || { lb: k, cor: "#64748b" };
+  const fmtData = (ts) => new Date(ts).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
+
+  return (
+    <div className="crm-wrap">
+      <div className="crm-top">
+        <button className="onum-add" onClick={() => setCriar({ nome: "", telefone: "", etapa: "novo", vendedorId: "", valor: "" })}><I.plus className="ico" /> Novo lead</button>
+        <button className="onum-btn-ghost" onClick={() => setConfig(true)}><I.cog className="ico" /> Distribuição das ligações</button>
+      </div>
+
+      <div className="crm-board">
+        {etapas.map((et) => {
+          const doEt = leads.filter((l) => l.etapa === et.k);
+          return (
+            <div key={et.k} className="crm-col" onDragOver={(e) => e.preventDefault()} onDrop={(e) => { e.preventDefault(); if (dragId) mover(dragId, et.k); setDragId(null); }}>
+              <div className="crm-col-head">
+                <span className="crm-col-dot" style={{ background: et.cor }} /> {et.lb}
+                <span className="crm-col-n">{doEt.length}</span>
+              </div>
+              <div className="crm-col-body">
+                {doEt.map((l) => (
+                  <div key={l.id} className="crm-card" draggable onDragStart={() => setDragId(l.id)} onDragEnd={() => setDragId(null)} onClick={() => { setSel(l.id); setNovaNota(""); }}>
+                    <div className="crm-card-nome">{l.nome}</div>
+                    {l.telefone && <div className="crm-card-tel">{l.telefone}</div>}
+                    <div className="crm-card-foot">
+                      {l.origem === "ligacao" && <span className="crm-tag-lig"><I.suporte className="ico-inline" /> Ligação</span>}
+                      {l.valor > 0 && <span className="crm-card-valor">R$ {Number(l.valor).toLocaleString("pt-BR")}</span>}
+                    </div>
+                    <div className="crm-card-vendrow">
+                      {l.vendedorNome ? <span className="crm-card-vend">{l.vendedorNome}</span> : <span className="crm-card-semvend">sem dono</span>}
+                      {(l.notas || []).length > 0 && <span className="crm-card-notas">{l.notas.length} nota(s)</span>}
+                    </div>
+                  </div>
+                ))}
+                {doEt.length === 0 && <div className="crm-col-vazio">Arraste leads pra cá</div>}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {leadSel && (
+        <div className="crm-modal-bg" onClick={(e) => e.target === e.currentTarget && setSel(null)}>
+          <div className="crm-modal">
+            <div className="crm-modal-head">
+              <input className="crm-modal-nome" value={leadSel.nome} onChange={(e) => setLeads((ls) => ls.map((x) => x.id === sel ? { ...x, nome: e.target.value } : x))} onBlur={(e) => salvarCampo(sel, "nome", e.target.value)} />
+              <button className="crm-x" onClick={() => setSel(null)}><I.trash className="ico" style={{ display: "none" }} />✕</button>
+            </div>
+            <div className="crm-modal-body">
+              <div className="crm-f2">
+                <div><label className="lbl-mini">Telefone</label><input className="input mono" value={leadSel.telefone} onChange={(e) => setLeads((ls) => ls.map((x) => x.id === sel ? { ...x, telefone: e.target.value } : x))} onBlur={(e) => salvarCampo(sel, "telefone", e.target.value)} /></div>
+                <div><label className="lbl-mini">Valor (R$)</label><input className="input" value={leadSel.valor || ""} onChange={(e) => setLeads((ls) => ls.map((x) => x.id === sel ? { ...x, valor: e.target.value } : x))} onBlur={(e) => salvarCampo(sel, "valor", e.target.value)} /></div>
+              </div>
+              <div className="crm-f2">
+                <div><label className="lbl-mini">Etapa</label>
+                  <select className="input" value={leadSel.etapa} onChange={(e) => salvarCampo(sel, "etapa", e.target.value)}>
+                    {etapas.map((e) => <option key={e.k} value={e.k}>{e.lb}</option>)}
+                  </select>
+                </div>
+                <div><label className="lbl-mini">Vendedor responsável</label>
+                  <select className="input" value={leadSel.vendedorId || ""} onChange={(e) => salvarCampo(sel, "vendedorId", e.target.value)}>
+                    <option value="">Sem dono</option>
+                    {vendedores.map((v) => <option key={v.id} value={v.id}>{v.nome}</option>)}
+                  </select>
+                </div>
+              </div>
+
+              <div className="crm-sec-t">Notas</div>
+              <div className="crm-nota-add">
+                <input className="input" placeholder="Escrever uma nota…" value={novaNota} onChange={(e) => setNovaNota(e.target.value)} onKeyDown={(e) => e.key === "Enter" && addNota()} />
+                <button className="btn btn-sm" onClick={addNota}>Add</button>
+              </div>
+              <div className="crm-notas">
+                {(leadSel.notas || []).slice().reverse().map((n, i) => (
+                  <div key={i} className="crm-nota"><div className="crm-nota-txt">{n.texto}</div><div className="crm-nota-meta">{n.por} · {fmtData(n.ts)}</div></div>
+                ))}
+                {(leadSel.notas || []).length === 0 && <div className="crm-vazio-mini">Nenhuma nota ainda.</div>}
+              </div>
+
+              <div className="crm-sec-t">Histórico</div>
+              <div className="crm-hist">
+                {(leadSel.historico || []).slice().reverse().map((h, i) => (
+                  <div key={i} className="crm-hist-row"><span>{h.texto}</span><span className="crm-hist-ts">{fmtData(h.ts)}</span></div>
+                ))}
+              </div>
+
+              <button className="crm-excluir" onClick={() => excluir(sel)}><I.trash className="ico-inline" /> Excluir lead</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {criar && (
+        <div className="crm-modal-bg" onClick={(e) => e.target === e.currentTarget && setCriar(null)}>
+          <div className="crm-modal" style={{ maxWidth: 440 }}>
+            <div className="crm-modal-head"><b>Novo lead</b><button className="crm-x" onClick={() => setCriar(null)}>✕</button></div>
+            <div className="crm-modal-body">
+              <label className="lbl-mini">Nome *</label>
+              <input className="input" value={criar.nome} onChange={(e) => setCriar({ ...criar, nome: e.target.value })} placeholder="Nome do lead" />
+              <div className="crm-f2" style={{ marginTop: 10 }}>
+                <div><label className="lbl-mini">Telefone</label><input className="input mono" value={criar.telefone} onChange={(e) => setCriar({ ...criar, telefone: e.target.value })} placeholder="44 99999-9999" /></div>
+                <div><label className="lbl-mini">Valor (R$)</label><input className="input" value={criar.valor} onChange={(e) => setCriar({ ...criar, valor: e.target.value })} placeholder="0" /></div>
+              </div>
+              <div className="crm-f2" style={{ marginTop: 10 }}>
+                <div><label className="lbl-mini">Etapa</label>
+                  <select className="input" value={criar.etapa} onChange={(e) => setCriar({ ...criar, etapa: e.target.value })}>{etapas.map((e) => <option key={e.k} value={e.k}>{e.lb}</option>)}</select>
+                </div>
+                <div><label className="lbl-mini">Vendedor</label>
+                  <select className="input" value={criar.vendedorId} onChange={(e) => setCriar({ ...criar, vendedorId: e.target.value })}><option value="">Sem dono</option>{vendedores.map((v) => <option key={v.id} value={v.id}>{v.nome}</option>)}</select>
+                </div>
+              </div>
+              <button className="onum-add" style={{ marginTop: 16, width: "100%", justifyContent: "center" }} onClick={criarLead}>Criar lead</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {config && (
+        <div className="crm-modal-bg" onClick={(e) => e.target === e.currentTarget && setConfig(false)}>
+          <div className="crm-modal" style={{ maxWidth: 440 }}>
+            <div className="crm-modal-head"><b>Quem recebe os leads das ligações</b><button className="crm-x" onClick={() => setConfig(false)}>✕</button></div>
+            <div className="crm-modal-body">
+              <p className="onum-dica" style={{ marginBottom: 12 }}>Marque os vendedores que vão receber (em rodízio) os leads qualificados pela IA de ligação. Se não marcar nenhum, distribui entre todos os ativos.</p>
+              {vendedores.map((v) => (
+                <label key={v.id} className="crm-vend-check">
+                  <input type="checkbox" checked={crmVend.includes(v.id)} onChange={() => toggleVend(v.id)} /> {v.nome}
+                </label>
+              ))}
+              {vendedores.length === 0 && <div className="crm-vazio-mini">Nenhum vendedor ativo.</div>}
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 
 function OficialLigacoes({ showToast }) {
   const [ias, setIas] = useState([]);
