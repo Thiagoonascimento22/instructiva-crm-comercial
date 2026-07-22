@@ -5235,6 +5235,8 @@ function WhatsApp({ user, showToast, target, onTargetUsed, recarregarSol }) {
   const [qrInst, setQrInst] = useState(null);
   const [nova, setNova] = useState(false);
   const [novaNum, setNovaNum] = useState("");
+  const [novaTexto, setNovaTexto] = useState("");
+  const [novaEnviando, setNovaEnviando] = useState(false);
   const [novoLead, setNovoLead] = useState(null);
   const [enviando, setEnviando] = useState(false);
   const [pedindoSuporte, setPedindoSuporte] = useState(false);
@@ -5324,11 +5326,21 @@ function WhatsApp({ user, showToast, target, onTargetUsed, recarregarSol }) {
   }, [busca]);
 
   async function abrir(id) {
-    setSel(id); selRef.current = id;
+    setSel(id); selRef.current = id; setNova(false);
     try {
       setChat(await api.waChat(id));
       setChats((cs) => cs.map((x) => (x.id === id ? { ...x, naoLidas: 0 } : x)));
     } catch (e) { showToast("✗ " + e.message); }
+  }
+  async function enviarNovaEvo() {
+    if (!novaNum || !novaTexto.trim()) return;
+    setNovaEnviando(true);
+    try {
+      const r = await api.waIniciar({ numero: novaNum, texto: novaTexto.trim() });
+      setNovaTexto(""); setNova(false);
+      await carregarChats(true);
+      if (r.id) abrir(r.id);
+    } catch (e) { showToast("✗ " + e.message); } finally { setNovaEnviando(false); }
   }
   async function enviar() {
     const t = texto.trim();
@@ -5596,7 +5608,17 @@ function WhatsApp({ user, showToast, target, onTargetUsed, recarregarSol }) {
           </div>
         </div>
 
-        {!chat ? (
+        {nova ? (
+          <div className="wa-chat wa-nova">
+            <div className="of-nova-head"><b>Nova conversa</b><button className="crm-x" onClick={() => { setNova(false); setNovaNum(""); setNovaTexto(""); }}>✕</button></div>
+            <div className="of-nova-body">
+              <div className="of-nova-num">Para: <b>{novaNum}</b></div>
+              <p className="of-nova-info">No WhatsApp não oficial você fala livre. Escreva a primeira mensagem e envie — a conversa abre em seguida.</p>
+              <textarea className="input" rows={3} placeholder="Escreva a primeira mensagem…" value={novaTexto} onChange={(e) => setNovaTexto(e.target.value)} style={{ resize: "vertical" }} />
+              <button className="btn btn-primary" style={{ marginTop: 12 }} disabled={novaEnviando || !novaTexto.trim()} onClick={enviarNovaEvo}>{novaEnviando ? "Enviando…" : "Enviar e abrir conversa"}</button>
+            </div>
+          </div>
+        ) : !chat ? (
           <div className="wa-chat"><div className="wa-none"><I.chat className="ico" /><div>Selecione uma conversa pra começar</div></div></div>
         ) : (
           <div className="wa-chat">
