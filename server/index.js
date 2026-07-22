@@ -348,9 +348,13 @@ app.put("/api/modulos", auth, donoOnly, (req, res) => {
 });
 
 app.put("/api/me", auth, (req, res) => {
-  const { nome, senha } = req.body || {};
+  const { nome, senha, foto } = req.body || {};
   if (nome && nome.trim()) req.user.nome = nome.trim();
   if (senha && senha.length >= 3) req.user.senha = senha;
+  if (foto !== undefined) {
+    if (!foto) req.user.foto = "";
+    else if (typeof foto === "string" && foto.startsWith("data:image/") && foto.length < 400000) req.user.foto = foto;
+  }
   req.user.precisaOnboarding = false;
   saveSoon();
   res.json(semSenha(req.user));

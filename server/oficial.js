@@ -1537,7 +1537,7 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
   }
   function crmLeadPublico(l) {
     const v = l.vendedorId ? (db.users || []).find((u) => u.id === l.vendedorId) : null;
-    return { id: l.id, nome: l.nome, telefone: l.telefone, email: l.email || "", curso: l.curso || "", etapa: l.etapa, vendedorId: l.vendedorId || null, vendedorNome: v ? v.nome : "", valor: l.valor || 0, formaPagamento: l.formaPagamento || "", tags: l.tags || [], reservaNome: l.reservaNome || "", origem: l.origem || "manual", notas: l.notas || [], historico: l.historico || [], criadoEm: l.criadoEm, atualizadoEm: l.atualizadoEm };
+    return { id: l.id, nome: l.nome, telefone: l.telefone, email: l.email || "", curso: l.curso || "", etapa: l.etapa, vendedorId: l.vendedorId || null, vendedorNome: v ? v.nome : "", vendedorFoto: v ? (v.foto || "") : "", valor: l.valor || 0, formaPagamento: l.formaPagamento || "", tags: l.tags || [], reservaNome: l.reservaNome || "", origem: l.origem || "manual", notas: l.notas || [], historico: l.historico || [], criadoEm: l.criadoEm, atualizadoEm: l.atualizadoEm };
   }
   function proximoVendedorCRM() {
     garantirCRM();
@@ -1601,7 +1601,7 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
     res.json({
       etapas: etapasCRM(),
       leads: leads.map(crmLeadPublico),
-      vendedores: ehVend ? [] : (db.users || []).filter((u) => u.role === "vendedor" && u.ativo).map((u) => ({ id: u.id, nome: u.nome })),
+      vendedores: ehVend ? [] : (db.users || []).filter((u) => u.role === "vendedor" && u.ativo).map((u) => ({ id: u.id, nome: u.nome, foto: u.foto || "" })),
       crmVendedores: ehVend ? [] : (db.oficial.crmVendedores || []),
       soMeus: ehVend, // o front usa pra esconder as partes que são só do gerente
     });

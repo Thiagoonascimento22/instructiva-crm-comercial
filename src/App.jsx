@@ -173,6 +173,30 @@ function iniciais(nome) {
   const p = (nome || "?").trim().split(/\s+/);
   return ((p[0]?.[0] || "") + (p[1]?.[0] || "")).toUpperCase() || "?";
 }
+// Avatar reutilizável: mostra a foto do usuário se tiver, senão as iniciais
+function Avatar({ nome, foto, size = 28 }) {
+  const s = { width: size, height: size, minWidth: size, fontSize: Math.round(size * 0.4) };
+  if (foto) return <img className="uav" style={s} src={foto} alt={nome || ""} />;
+  return <span className="uav uav-ini" style={s}>{iniciais(nome || "?")}</span>;
+}
+// Redimensiona a imagem no navegador antes de enviar (mantém o banco leve)
+function redimensionarImg(file, max) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      const escala = Math.min(1, max / Math.max(img.width, img.height));
+      const w = Math.round(img.width * escala), h = Math.round(img.height * escala);
+      const c = document.createElement("canvas");
+      c.width = w; c.height = h;
+      c.getContext("2d").drawImage(img, 0, 0, w, h);
+      resolve(c.toDataURL("image/jpeg", 0.82));
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error("erro")); };
+    img.src = url;
+  });
+}
 const soDigitos = (s) => (s || "").replace(/\D/g, "");
 const limpaInst = (s) => (s || "").trim();
 
@@ -329,7 +353,7 @@ export default function App() {
         </nav>
         <div className="side-foot">
           <div className="side-user">
-            <div className="avatar">{iniciais(user.nome)}</div>
+            <Avatar nome={user.nome} foto={user.foto} size={40} />
             <div>
               <div className="nm">{user.nome}</div>
               <div className="rl">{isGer ? "Gerente comercial" : isSuporte ? "Suporte" : "Vendedor"}</div>
@@ -356,7 +380,7 @@ export default function App() {
           {view === "numeros" && isGer && mod("numeros") && <OficialNumeros showToast={showToast} />}
           {view === "ia" && isGer && mod("ia") && <OficialIAs showToast={showToast} />}
           {view === "ligacoes" && isGer && mod("ligacoes") && <OficialLigacoes showToast={showToast} />}
-          {view === "crm" && (isGer || vendPode("crm")) && mod("crm") && <OficialCRM showToast={showToast} isGer={isGer} />}
+          {view === "crm" && (isGer || vendPode("crm")) && mod("crm") && <OficialCRM showToast={showToast} isGer={isGer} onAbrirWhats={(tel, canal) => { setWaTarget({ numero: tel, canal }); setView("whatsapp"); }} />}
           {view === "temperatura" && (isGer || vendPode("temperatura")) && mod("temperatura") && <OficialTemperatura showToast={showToast} />}
           {view === "minhasSolicitacoes" && !isGer && !isSuporte && <PaginaMinhasSolicitacoes itens={minhasSol} recarregar={carregarMinhasSol} showToast={showToast} />}
           {view === "solicitacoes" && (isGer || isSuporte) && <PaginaSolicitacoes showToast={showToast} readonly={isGer} />}
@@ -1060,10 +1084,30 @@ function ConfigDados({ user, setUser, showToast }) {
   const [nome, setNome] = useState(user.nome);
   const [senha, setSenha] = useState("");
   const [saving, setSaving] = useState(false);
+  const [foto, setFoto] = useState(user.foto || "");
+  const fotoRef = useRef(null);
   const isGer = user.role === "gerente";
   const [h, setH] = useState(null);
   const [savingH, setSavingH] = useState(false);
   useEffect(() => { if (isGer) api.horario().then((x) => setH(normHor(x))).catch(() => {}); /* eslint-disable-next-line */ }, []);
+
+  async function escolherFoto(e) {
+    const file = e.target.files && e.target.files[0];
+    e.target.value = "";
+    if (!file) return;
+    if (!file.type.startsWith("image/")) { showToast("Escolha uma imagem"); return; }
+    try {
+      const dataUrl = await redimensionarImg(file, 160);
+      setFoto(dataUrl);
+      const u = await api.updateMe({ foto: dataUrl });
+      setUser((prev) => ({ ...prev, ...u }));
+      showToast("✓ Foto atualizada");
+    } catch (err) { showToast("✗ Não deu pra carregar a foto"); }
+  }
+  async function removerFoto() {
+    setFoto("");
+    try { const u = await api.updateMe({ foto: "" }); setUser((prev) => ({ ...prev, ...u })); showToast("✓ Foto removida"); } catch (e) { showToast("✗ " + e.message); }
+  }
 
   async function salvar() {
     setSaving(true);
@@ -1112,6 +1156,15 @@ function ConfigDados({ user, setUser, showToast }) {
       <div className="panel" style={{ marginBottom: 18 }}>
         <div className="panel-h"><h3>Meus dados</h3></div>
         <div style={{ padding: 22 }}>
+          <div className="foto-row">
+            <Avatar nome={nome} foto={foto} size={72} />
+            <div className="foto-acoes">
+              <input ref={fotoRef} type="file" accept="image/*" style={{ display: "none" }} onChange={escolherFoto} />
+              <button className="btn" onClick={() => fotoRef.current && fotoRef.current.click()}>{foto ? "Trocar foto" : "Adicionar foto"}</button>
+              {foto && <button className="foto-del" onClick={removerFoto}>remover</button>}
+              <div className="foto-dica">Aparece nos leads que são seus.</div>
+            </div>
+          </div>
           <div className="field">
             <label>Nome</label>
             <input className="input" value={nome} onChange={(e) => setNome(e.target.value)} />
@@ -3115,13 +3168,14 @@ function ModalCadastrarPipeline({ prefill, onClose, showToast }) {
   );
 }
 
-function OficialCRM({ showToast, isGer = true }) {
+function OficialCRM({ showToast, isGer = true, onAbrirWhats }) {
   const [etapas, setEtapas] = useState([]);
   const [leads, setLeads] = useState([]);
   const [vendedores, setVendedores] = useState([]);
   const [crmVend, setCrmVend] = useState([]);
   const [sel, setSel] = useState(null);
   const [criar, setCriar] = useState(null);
+  const [waMenu, setWaMenu] = useState(null);
   const [config, setConfig] = useState(false);
   const [showReserva, setShowReserva] = useState(false);
   const [showColunas, setShowColunas] = useState(false);
@@ -3181,33 +3235,58 @@ function OficialCRM({ showToast, isGer = true }) {
       </div>
 
       <div className="crm-board">
+        {waMenu && <div className="crm-wa-backdrop" onClick={() => setWaMenu(null)} />}
         {etapas.map((et) => {
           const doEt = leads.filter((l) => l.etapa === et.k && (!filtroVend || (filtroVend === "__sem" ? !l.vendedorId : l.vendedorId === filtroVend)));
+          const totalCol = doEt.reduce((s, l) => s + (Number(l.valor) || 0), 0);
           return (
             <div key={et.k} className="crm-col" onDragOver={(e) => e.preventDefault()} onDrop={(e) => { e.preventDefault(); if (dragId) mover(dragId, et.k); setDragId(null); }}>
+              <div className="crm-col-bar" style={{ background: et.cor }} />
               <div className="crm-col-head">
-                <span className="crm-col-dot" style={{ background: et.cor }} /> {et.lb}
-                <span className="crm-col-n">{doEt.length}</span>
+                <div className="crm-col-head-l">
+                  <span className="crm-col-nome">{et.lb}</span>
+                  <span className="crm-col-n">{doEt.length}</span>
+                </div>
+                {totalCol > 0 && <span className="crm-col-total">R$ {totalCol.toLocaleString("pt-BR")}</span>}
               </div>
               <div className="crm-col-body">
                 {doEt.map((l) => (
                   <div key={l.id} className="crm-card" draggable onDragStart={() => setDragId(l.id)} onDragEnd={() => setDragId(null)} onClick={() => { setSel(l.id); setNovaNota(""); }}>
-                    <div className="crm-card-nome">{l.nome}</div>
-                    {l.telefone && <div className="crm-card-tel">{l.telefone}<a className="crm-wa" href={linkWhats(l.telefone)} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()} title="Chamar no WhatsApp"><I.wa className="ico" /></a></div>}
+                    <div className="crm-card-top">
+                      <div className="crm-card-nome">{l.nome}</div>
+                      {l.telefone && (
+                        <div className="crm-wa-wrap">
+                          <button className="crm-wa" onClick={(e) => { e.stopPropagation(); setWaMenu(waMenu === l.id ? null : l.id); }} title="Chamar no WhatsApp"><I.wa className="ico" /></button>
+                          {waMenu === l.id && (
+                            <div className="crm-wa-menu" onClick={(e) => e.stopPropagation()}>
+                              <button onClick={() => { setWaMenu(null); onAbrirWhats && onAbrirWhats(l.telefone, "evolution"); }}><span className="crm-wa-dot nao" /><span><b>Não oficial</b><small>abre a conversa direto</small></span></button>
+                              <button onClick={() => { setWaMenu(null); onAbrirWhats && onAbrirWhats(l.telefone, "oficial"); }}><span className="crm-wa-dot ofi" /><span><b>Oficial</b><small>abre a conversa + template</small></span></button>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                    {l.telefone && <div className="crm-card-tel">{l.telefone}</div>}
                     {l.curso && <div className="crm-card-curso">{l.curso}</div>}
-                    {l.formaPagamento && <div className="crm-card-forma">💳 {l.formaPagamento}</div>}
+                    {(l.valor > 0 || l.formaPagamento) && (
+                      <div className="crm-card-pay">
+                        {l.valor > 0 && <span className="crm-card-valor">R$ {Number(l.valor).toLocaleString("pt-BR")}</span>}
+                        {l.formaPagamento && <span className="crm-card-forma">{l.formaPagamento}</span>}
+                      </div>
+                    )}
                     {(l.tags || []).length > 0 && <div className="crm-card-tags">{l.tags.map((t, i) => <span key={i} className="crm-tag">{t}</span>)}</div>}
                     <div className="crm-card-foot">
                       {l.origem === "ligacao" && <span className="crm-tag-lig"><I.suporte className="ico-inline" /> Ligação</span>}
-                      {l.valor > 0 && <span className="crm-card-valor">R$ {Number(l.valor).toLocaleString("pt-BR")}</span>}
-                    </div>
-                    <div className="crm-card-vendrow">
-                      {l.vendedorNome ? <span className="crm-card-vend">{l.vendedorNome}</span> : <span className="crm-card-semvend">sem dono</span>}
-                      {(l.notas || []).length > 0 && <span className="crm-card-notas">{l.notas.length} nota(s)</span>}
+                      <div className="crm-card-vend">
+                        {l.vendedorNome
+                          ? <><Avatar nome={l.vendedorNome} foto={l.vendedorFoto} size={22} /><span className="crm-card-vend-nm">{l.vendedorNome.split(" ")[0]}</span></>
+                          : <span className="crm-card-semvend">sem dono</span>}
+                      </div>
+                      {(l.notas || []).length > 0 && <span className="crm-card-notas">📝 {l.notas.length}</span>}
                     </div>
                   </div>
                 ))}
-                {doEt.length === 0 && <div className="crm-col-vazio">Arraste leads pra cá</div>}
+                {doEt.length === 0 && <div className="crm-col-vazio">Nenhum lead aqui</div>}
               </div>
             </div>
           );
@@ -5050,8 +5129,10 @@ function WhatsApp({ user, showToast, target, onTargetUsed, recarregarSol }) {
   // alvo vindo do botão de WhatsApp no card do pipeline
   useEffect(() => {
     if (!target || !target.numero) return;
-    if (alvoRef.current === target.numero) return;
     if (loading) return;
+    // veio do Pipeline pedindo um canal específico (oficial/não oficial)? troca de aba primeiro
+    if (target.canal && target.canal !== canalAba) { setCanalAba(target.canal); return; }
+    if (alvoRef.current === target.numero) return;
     alvoRef.current = target.numero;
     const num = soDigitos(target.numero);
     const achado = chats.find((c) => soDigitos(c.numero) === num);
@@ -5059,7 +5140,7 @@ function WhatsApp({ user, showToast, target, onTargetUsed, recarregarSol }) {
     else { setNovaNum(num); setNova(true); }
     onTargetUsed && onTargetUsed();
     // eslint-disable-next-line
-  }, [target, loading, chats]);
+  }, [target, loading, chats, canalAba]);
 
   // vendedores vêm de quem está CADASTRADO no Monitoria (Equipe & Acessos),
   // não das instâncias do Evolution (que é compartilhado com outros sistemas)

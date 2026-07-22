@@ -3498,3 +3498,58 @@ input:focus-visible, textarea:focus-visible, select:focus-visible {
 .col-cor { width: 40px; height: 38px; padding: 2px; border: 1px solid var(--border, #e6e8ef); border-radius: 8px; background: transparent; cursor: pointer; flex: none; }
 .col-nome { flex: 1; }
 .col-nova { display: flex; align-items: center; gap: 10px; border-top: 1px solid var(--border, #e6e8ef); padding-top: 14px; }
+
+/* ============ Pipeline redesign (estilo RD Station) ============ */
+.crm-board { display: flex; gap: 14px; overflow-x: auto; padding: 6px 2px 16px; align-items: flex-start; }
+.crm-col { flex: 0 0 300px; width: 300px; background: var(--surface-2, #f4f6fa); border: 1px solid var(--border, #e6e8ef); border-radius: 14px; display: flex; flex-direction: column; max-height: calc(100vh - 210px); overflow: hidden; }
+.crm-col-bar { height: 4px; border-radius: 4px 4px 0 0; flex: none; }
+.crm-col-head { display: flex; align-items: center; justify-content: space-between; padding: 12px 14px 10px; gap: 8px; flex: none; }
+.crm-col-head-l { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.crm-col-nome { font-weight: 700; font-size: 14px; color: var(--text, #1a2b22); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.crm-col-n { font-size: 12px; font-weight: 700; color: var(--muted, #6b7280); background: var(--surface, #fff); border: 1px solid var(--border, #e6e8ef); border-radius: 99px; padding: 1px 9px; flex: none; }
+.crm-col-total { font-size: 12px; font-weight: 800; color: #059669; white-space: nowrap; flex: none; }
+.crm-col-body { padding: 4px 10px 12px; overflow-y: auto; display: flex; flex-direction: column; gap: 9px; }
+.crm-col-vazio { text-align: center; color: var(--muted, #9aa2b1); font-size: 12.5px; padding: 22px 8px; border: 1.5px dashed var(--border, #e0e3ec); border-radius: 10px; }
+
+.crm-card { background: var(--surface, #fff); border: 1px solid var(--border, #e6e8ef); border-radius: 11px; padding: 12px 13px; cursor: pointer; box-shadow: 0 1px 2px rgba(20,40,30,.04); transition: box-shadow .15s, transform .05s, border-color .15s; }
+.crm-card:hover { box-shadow: 0 4px 14px rgba(20,40,30,.10); border-color: #cdd3e0; }
+.crm-card:active { transform: scale(.995); }
+.crm-card-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
+.crm-card-nome { font-weight: 700; font-size: 14.5px; color: var(--text, #1a2b22); line-height: 1.25; word-break: break-word; }
+.crm-card-tel { font-size: 12.5px; color: var(--muted, #6b7280); margin-top: 2px; display: block; }
+.crm-card-curso { font-size: 12.5px; color: var(--muted, #6b7280); margin-top: 4px; }
+.crm-card-pay { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.crm-card-valor { font-size: 13px; font-weight: 800; color: #047857; background: #e8f6ef; border-radius: 7px; padding: 2px 9px; }
+.crm-card-forma { font-size: 11.5px; font-weight: 600; color: #7c3aed; background: #f3f0ff; border-radius: 7px; padding: 2px 9px; margin: 0; }
+.crm-card-tags { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 8px; }
+.crm-card-foot { display: flex; align-items: center; gap: 8px; margin-top: 11px; padding-top: 10px; border-top: 1px solid var(--border, #eef0f5); }
+.crm-card-vend { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.crm-card-vend-nm { font-size: 12px; color: var(--muted, #556); font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.crm-card-semvend { font-size: 11.5px; color: #b45309; background: #fff7ed; border-radius: 6px; padding: 2px 8px; font-weight: 600; }
+.crm-card-notas { font-size: 11.5px; color: var(--muted, #6b7280); margin-left: auto; white-space: nowrap; }
+
+/* Avatar (foto ou iniciais) */
+.uav { border-radius: 50%; object-fit: cover; display: inline-flex; align-items: center; justify-content: center; flex: none; overflow: hidden; }
+.uav-ini { background: linear-gradient(135deg, #F26522, #25A06B); color: #fff; font-weight: 700; }
+
+/* Botão + menu WhatsApp no card */
+.crm-wa-wrap { position: relative; flex: none; }
+.crm-wa { display: inline-flex; align-items: center; justify-content: center; width: 26px; height: 26px; border-radius: 7px; background: #25D366; color: #fff; border: 0; cursor: pointer; flex: none; margin: 0; }
+.crm-wa .ico { width: 15px; height: 15px; }
+.crm-wa:hover { background: #1eb455; }
+.crm-wa-backdrop { position: fixed; inset: 0; z-index: 40; }
+.crm-wa-menu { position: absolute; right: 0; top: 32px; z-index: 41; background: var(--surface, #fff); border: 1px solid var(--border, #e6e8ef); border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,.18); overflow: hidden; width: 212px; }
+.crm-wa-menu button { display: flex; align-items: center; gap: 10px; width: 100%; text-align: left; background: transparent; border: 0; padding: 11px 13px; cursor: pointer; color: var(--text, #1a2b22); }
+.crm-wa-menu button:hover { background: var(--surface-2, #f4f6fa); }
+.crm-wa-menu button + button { border-top: 1px solid var(--border, #eef0f5); }
+.crm-wa-menu b { font-weight: 700; font-size: 13px; }
+.crm-wa-menu small { display: block; font-size: 11px; color: var(--muted, #6b7280); margin-top: 1px; }
+.crm-wa-dot { width: 9px; height: 9px; border-radius: 50%; flex: none; }
+.crm-wa-dot.nao { background: #25D366; }
+.crm-wa-dot.ofi { background: #2563eb; }
+
+/* Foto no Configurações */
+.foto-row { display: flex; align-items: center; gap: 16px; margin-bottom: 20px; }
+.foto-acoes { display: flex; flex-direction: column; gap: 6px; align-items: flex-start; }
+.foto-del { background: transparent; border: 0; color: #dc2626; font-size: 12px; cursor: pointer; padding: 0; }
+.foto-dica { font-size: 11.5px; color: var(--muted, #6b7280); }
