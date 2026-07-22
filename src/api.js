@@ -105,6 +105,7 @@ export const api = {
   ofAssinarWebhook: (id) => req("POST", "/api/oficial/numeros/" + id + "/assinar-webhook"),
   ofDiagnostico: () => req("GET", "/api/oficial/diagnostico"),
   ofTemplates: (id) => req("GET", "/api/oficial/numeros/" + id + "/templates"),
+  ofEnviarTemplate: (dados) => req("POST", "/api/oficial/enviar-template", dados),
   ofCriarTemplate: (id, dados) => req("POST", "/api/oficial/numeros/" + id + "/templates", dados),
   ofVendedoresLista: () => req("GET", "/api/oficial/vendedores-lista"),
   ofLimparChats: (modo) => req("POST", "/api/oficial/chats/limpar", { modo }),

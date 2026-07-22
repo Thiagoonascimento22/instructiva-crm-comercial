@@ -3633,3 +3633,11 @@ input:focus-visible, textarea:focus-visible, select:focus-visible {
 
 /* Menu do WhatsApp agora é renderizado via Portal (fixo, por cima de tudo, sem corte) */
 .crm-wa-menu { position: fixed; right: auto; top: auto; z-index: 200; }
+
+/* ===== Nova conversa oficial (a partir do lead) ===== */
+.of-nova { display: flex; flex-direction: column; height: 100%; }
+.of-nova-head { display: flex; align-items: center; justify-content: space-between; padding: 16px 20px; border-bottom: 1px solid var(--line); font-size: 15px; color: var(--text); }
+.of-nova-body { padding: 22px; max-width: 460px; }
+.of-nova-num { font-size: 15px; color: var(--text); margin-bottom: 10px; }
+.of-nova-info { font-size: 13px; color: var(--muted); line-height: 1.5; background: var(--surface-2); border-radius: 10px; padding: 11px 13px; margin-bottom: 16px; }
+.of-nova-semtpl { font-size: 13px; color: var(--muted); background: var(--surface-2); border-radius: 9px; padding: 10px 12px; margin-top: 4px; }

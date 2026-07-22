@@ -4665,8 +4665,15 @@ function OfMidia({ chatId, m }) {
     : <button className="of-midia-btn" onClick={carregar}>{carregando ? "Carregando…" : "📄 " + (m.filename || "Baixar documento")}</button>;
 }
 
-function InboxOficial({ isGer, showToast, onIrParaEvolution }) {
+function InboxOficial({ isGer, showToast, onIrParaEvolution, target, onTargetUsed }) {
   const [chats, setChats] = useState([]);
+  const [carregou, setCarregou] = useState(false);
+  const [novaConv, setNovaConv] = useState(null); // { telefone } quando iniciando conversa nova
+  const [numerosOf, setNumerosOf] = useState([]);
+  const [numSel, setNumSel] = useState("");
+  const [tpls, setTpls] = useState([]);
+  const [tplSel, setTplSel] = useState("");
+  const [enviandoTpl, setEnviandoTpl] = useState(false);
   const [sel, setSel] = useState(null);
   const [conversa, setConversa] = useState(null);
   const [texto, setTexto] = useState("");
@@ -4703,7 +4710,7 @@ function InboxOficial({ isGer, showToast, onIrParaEvolution }) {
   const nearBottomRef = useRef(true); // usuário está perto do fim?
   const convIdRef = useRef(null);     // qual conversa está aberta
   const msgCountRef = useRef(0);      // qtd de mensagens da última vez
-  const carregarLista = () => api.ofChats(busca, null, campanhaFiltro === "todas" ? null : campanhaFiltro).then(setChats).catch(() => {});
+  const carregarLista = () => api.ofChats(busca, null, campanhaFiltro === "todas" ? null : campanhaFiltro).then((cs) => { setChats(cs); setCarregou(true); }).catch(() => {});
   useEffect(() => {
     carregarLista();
     const t = setInterval(carregarLista, 5000);
@@ -4713,6 +4720,49 @@ function InboxOficial({ isGer, showToast, onIrParaEvolution }) {
     api.ofCampanhas().then((cs) => setCampanhas(cs || [])).catch(() => {});
     return () => clearInterval(t);
   }, [busca, campanhaFiltro]);
+
+  // Alvo vindo do Pipeline (canal oficial): abre a conversa existente ou inicia uma nova
+  const alvoOfRef = useRef(null);
+  useEffect(() => {
+    if (!target || !target.numero || !carregou) return;
+    if (alvoOfRef.current === target.numero) return;
+    alvoOfRef.current = target.numero;
+    const num = soDigitos(target.numero);
+    const achado = chats.find((c) => soDigitos(c.numero) === num);
+    if (achado) { setSel(achado.id); setNovaConv(null); }
+    else { setSel(null); setNovaConv({ telefone: num }); }
+    onTargetUsed && onTargetUsed();
+    // eslint-disable-next-line
+  }, [target, carregou, chats]);
+
+  // Ao iniciar uma conversa nova: carrega os números oficiais disponíveis
+  useEffect(() => {
+    if (!novaConv) { setTpls([]); setTplSel(""); return; }
+    api.ofNumeros().then((r) => {
+      const ns = (r.numeros || r || []).filter((n) => n && n.phoneNumberId);
+      setNumerosOf(ns);
+      setNumSel(ns.length ? ns[0].id : "");
+    }).catch(() => {});
+  }, [novaConv]);
+  // Ao escolher o número: carrega os templates dele
+  useEffect(() => {
+    if (!novaConv || !numSel) { setTpls([]); return; }
+    api.ofTemplates(numSel).then((r) => {
+      const ts = (r.templates || r || []).filter((t) => t && (t.status === "APPROVED" || !t.status));
+      setTpls(ts); setTplSel(ts.length ? (ts[0].name || ts[0].nome || "") : "");
+    }).catch(() => setTpls([]));
+  }, [numSel, novaConv]);
+  async function enviarNovaConv() {
+    if (!novaConv || !numSel || !tplSel) { showToast("Escolha o número e o template"); return; }
+    setEnviandoTpl(true);
+    try {
+      const r = await api.ofEnviarTemplate({ numeroId: numSel, telefone: novaConv.telefone, template: tplSel });
+      showToast("✓ Conversa iniciada");
+      setNovaConv(null);
+      await carregarLista();
+      if (r.chatId) setSel(r.chatId);
+    } catch (e) { showToast("✗ " + e.message); } finally { setEnviandoTpl(false); }
+  }
 
   useEffect(() => {
     if (!sel) { setConversa(null); return; }
@@ -4970,7 +5020,34 @@ function InboxOficial({ isGer, showToast, onIrParaEvolution }) {
       </div>
 
       <div className="of-inbox-conv">
-        {!conversa ? (
+        {novaConv ? (
+          <div className="of-nova">
+            <div className="of-nova-head">
+              <b>Nova conversa · oficial</b>
+              <button className="crm-x" onClick={() => setNovaConv(null)}>✕</button>
+            </div>
+            <div className="of-nova-body">
+              <div className="of-nova-num">Para: <b>{novaConv.telefone}</b></div>
+              <p className="of-nova-info">No WhatsApp oficial, a <b>primeira</b> mensagem precisa ser um <b>template aprovado</b>. Escolha um e envie — a conversa abre em seguida e aí você fala livre.</p>
+              {numerosOf.length > 1 && (
+                <div style={{ marginBottom: 10 }}><label className="lbl-mini">Enviar pelo número</label>
+                  <select className="input" value={numSel} onChange={(e) => setNumSel(e.target.value)}>
+                    {numerosOf.map((n) => <option key={n.id} value={n.id}>{n.apelido || n.numero || n.id}</option>)}
+                  </select>
+                </div>
+              )}
+              <label className="lbl-mini">Template</label>
+              {tpls.length === 0 ? (
+                <div className="of-nova-semtpl">Nenhum template aprovado nesse número. Crie um em <b>Disparo › Templates</b>.</div>
+              ) : (
+                <select className="input" value={tplSel} onChange={(e) => setTplSel(e.target.value)}>
+                  {tpls.map((t) => { const nm = t.name || t.nome || ""; return <option key={nm} value={nm}>{nm}</option>; })}
+                </select>
+              )}
+              <button className="btn btn-primary" style={{ marginTop: 16 }} disabled={enviandoTpl || !tplSel} onClick={enviarNovaConv}>{enviandoTpl ? "Enviando…" : "Enviar template e abrir conversa"}</button>
+            </div>
+          </div>
+        ) : !conversa ? (
           <div className="of-inbox-empty big">
             <I.chat className="ico-empty" />
             <p>Selecione uma conversa</p>
@@ -5405,6 +5482,7 @@ function WhatsApp({ user, showToast, target, onTargetUsed, recarregarSol }) {
     if (loading) return;
     // veio do Pipeline pedindo um canal específico (oficial/não oficial)? troca de aba primeiro
     if (target.canal && target.canal !== canalAba) { setCanalAba(target.canal); return; }
+    if (canalAba === "oficial") return; // o alvo oficial é tratado pelo InboxOficial
     if (alvoRef.current === target.numero) return;
     alvoRef.current = target.numero;
     const num = soDigitos(target.numero);
@@ -5454,7 +5532,7 @@ function WhatsApp({ user, showToast, target, onTargetUsed, recarregarSol }) {
       </div>
 
       {canalAba === "oficial" ? (
-        <InboxOficial isGer={isGer} showToast={showToast} onIrParaEvolution={() => setCanalAba("evolution")} />
+        <InboxOficial isGer={isGer} showToast={showToast} onIrParaEvolution={() => setCanalAba("evolution")} target={target && target.canal === "oficial" ? target : null} onTargetUsed={onTargetUsed} />
       ) : semEvolution ? (
         <div className="wa-grid"><div className="wa-none">
           <I.wa className="ico" />

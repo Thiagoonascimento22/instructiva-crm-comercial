@@ -2576,6 +2576,37 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
     salvar();
   }
 
+  /* Enviar UM template pra um número — inicia a conversa oficial a partir do lead */
+  app.post("/api/oficial/enviar-template", auth, async (req, res) => {
+    garantirEstrutura();
+    const b = req.body || {};
+    const numeroCfg = acharNumero(b.numeroId);
+    if (!numeroCfg) return res.status(404).json({ error: "Número não encontrado" });
+    if (req.user.role === "vendedor" && numeroCfg.vendedorId && numeroCfg.vendedorId !== req.user.id) {
+      return res.status(403).json({ error: "Esse número não é seu" });
+    }
+    const telefone = normalizaTelefone(b.telefone);
+    if (!telefone) return res.status(400).json({ error: "Telefone inválido" });
+    const template = String(b.template || "").trim();
+    if (!template) return res.status(400).json({ error: "Escolha um template" });
+    const idioma = String(b.idioma || "pt_BR");
+    const nome = String(b.nome || "").trim() || telefone;
+    try {
+      const resp = await enviarTemplate(numeroCfg, telefone, template, idioma, b.variaveis || []);
+      const mid = resp && resp.messages && resp.messages[0] && resp.messages[0].id;
+      const chat = acharOuCriarChat(numeroCfg.id, telefone, nome);
+      if (!chat.vendedorId) { chat.vendedorId = req.user.id; chat.vendedorNome = req.user.nome; chat.atribuidoEm = Date.now(); }
+      chat.iaPausada = true; // conversa iniciada por humano
+      const ts = Date.now();
+      chat.mensagens.push({ role: "me", content: `[template] ${template}`, ts, template: true });
+      chat.atualizadoEm = ts;
+      salvar();
+      res.json({ ok: true, chatId: chat.id });
+    } catch (e) {
+      res.status(400).json({ error: (e && e.message) || "Falha ao enviar template" });
+    }
+  });
+
   /* retomar uma campanha que parou no meio (ex: servidor reiniciou) */
   app.post("/api/oficial/campanhas/:id/retomar", auth, (req, res) => {
     const campanha = (db.oficial.campanhas || []).find((x) => x.id === req.params.id);
