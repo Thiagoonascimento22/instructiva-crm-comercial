@@ -1676,10 +1676,7 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
   });
   app.delete("/api/oficial/crm/lead/:id", auth, permiteVend("crm"), (req, res) => {
     garantirCRM();
-    if (req.user.role === "vendedor") {
-      const alvo = (db.oficial.crmLeads || []).find((x) => x.id === req.params.id);
-      if (!alvo || alvo.vendedorId !== req.user.id) return res.status(403).json({ error: "Esse lead não é seu" });
-    }
+    if (req.user.role === "vendedor") return res.status(403).json({ error: "Vendedor não pode excluir leads" });
     db.oficial.crmLeads = (db.oficial.crmLeads || []).filter((x) => x.id !== req.params.id);
     salvar();
     res.json({ ok: true });
@@ -1782,10 +1779,10 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
   });
   app.post("/api/oficial/crm/lote/excluir", auth, permiteVend("crm"), (req, res) => {
     garantirCRM();
+    if (req.user.role === "vendedor") return res.status(403).json({ error: "Vendedor não pode excluir leads" });
     const ids = Array.isArray((req.body || {}).ids) ? req.body.ids : [];
     const antes = (db.oficial.crmLeads || []).length;
-    const some = (l) => ids.includes(l.id) && (req.user.role !== "vendedor" || l.vendedorId === req.user.id);
-    db.oficial.crmLeads = (db.oficial.crmLeads || []).filter((l) => !some(l));
+    db.oficial.crmLeads = (db.oficial.crmLeads || []).filter((l) => !ids.includes(l.id));
     salvar();
     res.json({ ok: true, excluidos: antes - db.oficial.crmLeads.length });
   });

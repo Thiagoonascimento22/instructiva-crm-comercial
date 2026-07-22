@@ -3595,7 +3595,7 @@ function OficialCRM({ showToast, isGer = true, onAbrirWhats }) {
                 ))}
               </div>
 
-              <button className="crm-excluir" onClick={() => excluir(sel)}><I.trash className="ico-inline" /> Excluir lead</button>
+              {isGer && <button className="crm-excluir" onClick={() => excluir(sel)}><I.trash className="ico-inline" /> Excluir lead</button>}
             </div>
           </div>
         </div>
@@ -3666,7 +3666,7 @@ function OficialCRM({ showToast, isGer = true, onAbrirWhats }) {
               <option value="__sem">Sem dono</option>
               {vendedores.map((v) => <option key={v.id} value={v.id}>{v.nome}</option>)}
             </select>
-            <button className="crm-lote-del" onClick={excluirLote}><I.trash className="ico" /> Excluir</button>
+            {isGer && <button className="crm-lote-del" onClick={excluirLote}><I.trash className="ico" /> Excluir</button>}
             <button className="crm-lote-limpar" onClick={() => setMarcados({})}>Limpar</button>
           </div>
         </Portal>
