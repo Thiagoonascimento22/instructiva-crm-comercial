@@ -2909,16 +2909,21 @@ function ModalReservaListas({ onClose, showToast }) {
   const [listas, setListas] = useState(null);
   const [nome, setNome] = useState("");
   const [curso, setCurso] = useState("");
-  const [valor, setValor] = useState("");
+  const [tag, setTag] = useState("");
+  const [opcoes, setOpcoes] = useState([{ forma: "", preco: "" }]);
   const [criando, setCriando] = useState(false);
+  const setOpc = (i, k, v) => setOpcoes((a) => a.map((o, j) => (j === i ? { ...o, [k]: v } : o)));
+  const addOpc = () => setOpcoes((a) => (a.length < 3 ? [...a, { forma: "", preco: "" }] : a));
+  const delOpc = (i) => setOpcoes((a) => (a.length > 1 ? a.filter((_, j) => j !== i) : a));
   const carregar = () => api.ofReservaListas().then((r) => setListas(r.listas || [])).catch((e) => showToast("✗ " + e.message));
   useEffect(() => { carregar(); /* eslint-disable-next-line */ }, []);
   const origin = typeof window !== "undefined" ? window.location.origin : "";
 
   async function criar() {
     if (!nome.trim()) { showToast("Dê um nome à lista"); return; }
+    const ops = opcoes.map((o) => ({ forma: o.forma.trim(), preco: parseFloat(o.preco) || 0 })).filter((o) => o.forma || o.preco > 0);
     setCriando(true);
-    try { await api.ofReservaCriar({ nome, curso, valor }); setNome(""); setCurso(""); setValor(""); showToast("✓ Lista criada"); carregar(); }
+    try { await api.ofReservaCriar({ nome, curso, tag, opcoes: ops }); setNome(""); setCurso(""); setTag(""); setOpcoes([{ forma: "", preco: "" }]); showToast("✓ Lista criada"); carregar(); }
     catch (e) { showToast("✗ " + e.message); } finally { setCriando(false); }
   }
   async function toggle(l) { try { await api.ofReservaEditar(l.id, { ativa: !l.ativa }); carregar(); } catch (e) { showToast("✗ " + e.message); } }
@@ -2935,9 +2940,18 @@ function ModalReservaListas({ onClose, showToast }) {
             <div className="rsv-f3">
               <div><label className="lbl-mini">Nome da lista</label><input className="input" value={nome} onChange={(e) => setNome(e.target.value)} placeholder="Ex: Turma de Março" /></div>
               <div><label className="lbl-mini">Curso</label><input className="input" value={curso} onChange={(e) => setCurso(e.target.value)} placeholder="Nome do curso" /></div>
-              <div><label className="lbl-mini">Valor (R$)</label><input className="input" value={valor} onChange={(e) => setValor(e.target.value)} placeholder="0" /></div>
+              <div><label className="lbl-mini">Tag do lead</label><input className="input" value={tag} onChange={(e) => setTag(e.target.value)} placeholder="Ex: Reserva Março" /></div>
             </div>
-            <button className="onum-add" style={{ marginTop: 12 }} disabled={criando} onClick={criar}><I.plus className="ico" /> Criar lista e gerar link</button>
+            <label className="lbl-mini" style={{ marginTop: 14, display: "block" }}>Opções de pagamento — o lead escolhe uma (até 3)</label>
+            {opcoes.map((o, i) => (
+              <div className="rsv-opc-row" key={i}>
+                <input className="input" value={o.forma} onChange={(e) => setOpc(i, "forma", e.target.value)} placeholder="Forma (ex: 12x no cartão)" />
+                <input className="input" value={o.preco} onChange={(e) => setOpc(i, "preco", e.target.value)} placeholder="Preço" style={{ maxWidth: 130 }} />
+                {opcoes.length > 1 && <button className="rsv-opc-del" onClick={() => delOpc(i)} title="Remover opção">✕</button>}
+              </div>
+            ))}
+            {opcoes.length < 3 && <button className="rsv-opc-add" onClick={addOpc}>+ adicionar opção</button>}
+            <button className="onum-add" style={{ marginTop: 14, display: "block" }} disabled={criando} onClick={criar}><I.plus className="ico" /> Criar lista e gerar link</button>
           </div>
 
           {listas === null ? <div className="rsv-vazio">Carregando…</div> : listas.length === 0 ? (
@@ -2948,7 +2962,8 @@ function ModalReservaListas({ onClose, showToast }) {
                 <div className={"rsv-item" + (l.ativa ? "" : " off")} key={l.id}>
                   <div className="rsv-info">
                     <div className="rsv-nome">{l.nome} {!l.ativa && <span className="rsv-off-tag">pausada</span>}</div>
-                    <div className="rsv-meta">{l.curso || "sem curso"} · R$ {Number(l.valor || 0).toLocaleString("pt-BR")} · <b>{l.leads}</b> {l.leads === 1 ? "lead" : "leads"}</div>
+                    <div className="rsv-meta">{l.curso || "sem curso"}{l.tag ? " · 🏷 " + l.tag : ""} · <b>{l.leads}</b> {l.leads === 1 ? "lead" : "leads"}</div>
+                    {(l.opcoes || []).length > 0 && <div className="rsv-opcs-mini">{l.opcoes.map((o, i) => <span key={i} className="rsv-opc-chip">{o.forma} · R$ {Number(o.preco || 0).toLocaleString("pt-BR")}</span>)}</div>}
                     <div className="rsv-link" onClick={() => copiar(l.slug)} title="Clique pra copiar o link">{origin}/r/{l.slug}<span className="rsv-copy">copiar</span></div>
                   </div>
                   <div className="rsv-acoes">
@@ -3102,6 +3117,8 @@ function OficialCRM({ showToast, isGer = true }) {
                     <div className="crm-card-nome">{l.nome}</div>
                     {l.telefone && <div className="crm-card-tel">{l.telefone}</div>}
                     {l.curso && <div className="crm-card-curso">{l.curso}</div>}
+                    {l.formaPagamento && <div className="crm-card-forma">💳 {l.formaPagamento}</div>}
+                    {(l.tags || []).length > 0 && <div className="crm-card-tags">{l.tags.map((t, i) => <span key={i} className="crm-tag">{t}</span>)}</div>}
                     <div className="crm-card-foot">
                       {l.origem === "ligacao" && <span className="crm-tag-lig"><I.suporte className="ico-inline" /> Ligação</span>}
                       {l.valor > 0 && <span className="crm-card-valor">R$ {Number(l.valor).toLocaleString("pt-BR")}</span>}

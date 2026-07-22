@@ -1517,6 +1517,7 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
 
   /* ================= CRM (Kanban de leads) ================= */
   const CRM_ETAPAS = [
+    { k: "reserva", lb: "Lista de reserva", cor: "#8b5cf6" },
     { k: "novo", lb: "Novo lead", cor: "#64748b" },
     { k: "contato", lb: "Em contato", cor: "#3b82f6" },
     { k: "qualificado", lb: "Qualificado", cor: "#059669" },
@@ -1529,7 +1530,7 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
   }
   function crmLeadPublico(l) {
     const v = l.vendedorId ? (db.users || []).find((u) => u.id === l.vendedorId) : null;
-    return { id: l.id, nome: l.nome, telefone: l.telefone, email: l.email || "", curso: l.curso || "", etapa: l.etapa, vendedorId: l.vendedorId || null, vendedorNome: v ? v.nome : "", valor: l.valor || 0, origem: l.origem || "manual", notas: l.notas || [], historico: l.historico || [], criadoEm: l.criadoEm, atualizadoEm: l.atualizadoEm };
+    return { id: l.id, nome: l.nome, telefone: l.telefone, email: l.email || "", curso: l.curso || "", etapa: l.etapa, vendedorId: l.vendedorId || null, vendedorNome: v ? v.nome : "", valor: l.valor || 0, formaPagamento: l.formaPagamento || "", tags: l.tags || [], reservaNome: l.reservaNome || "", origem: l.origem || "manual", notas: l.notas || [], historico: l.historico || [], criadoEm: l.criadoEm, atualizadoEm: l.atualizadoEm };
   }
   function proximoVendedorCRM() {
     garantirCRM();
@@ -1682,7 +1683,15 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
   }
   function reservaPublica(l) {
     const qtd = (db.oficial.crmLeads || []).filter((x) => x.reservaId === l.id).length;
-    return { id: l.id, nome: l.nome, curso: l.curso, valor: l.valor, slug: l.slug, ativa: l.ativa !== false, leads: qtd, criadoEm: l.criadoEm };
+    return { id: l.id, nome: l.nome, curso: l.curso, tag: l.tag || "", opcoes: Array.isArray(l.opcoes) ? l.opcoes : [], slug: l.slug, ativa: l.ativa !== false, leads: qtd, criadoEm: l.criadoEm };
+  }
+  // Sanitiza as opções de pagamento (forma + preço), no máx 3
+  function limparOpcoes(arr) {
+    if (!Array.isArray(arr)) return [];
+    return arr
+      .map((o) => ({ forma: String((o && o.forma) || "").trim().slice(0, 60), preco: parseFloat(o && o.preco) || 0 }))
+      .filter((o) => o.forma || o.preco > 0)
+      .slice(0, 3);
   }
   function distribuirReserva() {
     const v = escolherVendedor();
@@ -1705,7 +1714,7 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
     const nome = String(b.nome || "").trim().slice(0, 80);
     if (!nome) return res.status(400).json({ error: "Dê um nome à lista" });
     let slug; do { slug = slugReserva(); } while ((db.oficial.reservaListas || []).some((x) => x.slug === slug));
-    const lista = { id: proximoId("rsv"), nome, curso: String(b.curso || "").trim().slice(0, 120), valor: parseFloat(b.valor) || 0, slug, ativa: true, criadoEm: Date.now() };
+    const lista = { id: proximoId("rsv"), nome, curso: String(b.curso || "").trim().slice(0, 120), tag: String(b.tag || "").trim().slice(0, 40), opcoes: limparOpcoes(b.opcoes), slug, ativa: true, criadoEm: Date.now() };
     db.oficial.reservaListas.push(lista);
     salvar();
     res.json({ ok: true, lista: reservaPublica(lista) });
@@ -1717,7 +1726,8 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
     const b = req.body || {};
     if (b.nome !== undefined) l.nome = String(b.nome).trim().slice(0, 80);
     if (b.curso !== undefined) l.curso = String(b.curso).trim().slice(0, 120);
-    if (b.valor !== undefined) l.valor = parseFloat(b.valor) || 0;
+    if (b.tag !== undefined) l.tag = String(b.tag).trim().slice(0, 40);
+    if (b.opcoes !== undefined) l.opcoes = limparOpcoes(b.opcoes);
     if (b.ativa !== undefined) l.ativa = !!b.ativa;
     salvar();
     res.json({ ok: true, lista: reservaPublica(l) });
@@ -1753,15 +1763,28 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
     if (telefone.length < 10 || telefone.length > 13) return res.status(400).json({ error: "WhatsApp inválido" });
     const ja = (db.oficial.crmLeads || []).find((x) => x.reservaId === lista.id && x.telefone === telefone);
     if (ja) return res.json({ ok: true, jaEstava: true }); // já está na lista, não duplica
+    // opção de pagamento escolhida (forma + preço)
+    const opcoes = Array.isArray(lista.opcoes) ? lista.opcoes : [];
+    let idx = parseInt(b.opcao, 10);
+    if (!(idx >= 0 && idx < opcoes.length)) {
+      if (opcoes.length === 1) idx = 0;         // só tem 1 opção -> usa ela
+      else if (opcoes.length === 0) idx = -1;   // lista sem opções -> sem valor
+      else return res.status(400).json({ error: "Escolha uma opção de pagamento" });
+    }
+    const opc = idx >= 0 ? opcoes[idx] : null;
     const dist = distribuirReserva();
     const lead = {
       id: "lead_" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
       nome, telefone, email,
-      curso: lista.curso, valor: lista.valor, etapa: "novo",
+      curso: lista.curso,
+      valor: opc ? opc.preco : 0,
+      formaPagamento: opc ? opc.forma : "",
+      etapa: "reserva",
       vendedorId: dist.vendedorId, vendedorNome: dist.vendedorNome,
       origem: "reserva", reservaId: lista.id, reservaNome: lista.nome,
+      tags: [lista.tag || lista.nome].filter(Boolean),
       notas: [],
-      historico: [{ tipo: "criado", texto: "Entrou pela lista de reserva: " + lista.nome, ts: Date.now() }],
+      historico: [{ tipo: "criado", texto: "Entrou pela lista de reserva: " + lista.nome + (opc ? (" — " + opc.forma) : ""), ts: Date.now() }],
       criadoEm: Date.now(), atualizadoEm: Date.now(),
     };
     db.oficial.crmLeads.unshift(lead);
@@ -1778,6 +1801,14 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
   });
   function paginaReserva(l) {
     const titulo = escHtml(l.curso || l.nome);
+    const ops = Array.isArray(l.opcoes) ? l.opcoes : [];
+    const fmtBRL = (n) => "R$ " + Number(n || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    let opcoesHtml = "";
+    if (ops.length) {
+      opcoesHtml = '<div class="opc-tit">Escolha a forma de pagamento</div><div class="opcs">'
+        + ops.map((o, i) => '<label class="opc"><input type="radio" name="opcao" value="' + i + '"' + (ops.length === 1 ? " checked" : "") + '><span class="opc-txt"><span class="opc-forma">' + escHtml(o.forma) + '</span><span class="opc-preco">' + fmtBRL(o.preco) + '</span></span></label>').join("")
+        + '</div>';
+    }
     return '<!doctype html><html lang="pt-BR"><head><meta charset="utf-8">'
       + '<meta name="viewport" content="width=device-width,initial-scale=1">'
       + '<title>Lista de reserva - ' + titulo + '</title>'
@@ -1790,10 +1821,12 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
       + 'input{width:100%;padding:13px 14px;border:1.5px solid #e2e8e2;border-radius:12px;font-size:16px;transition:.15s;outline:none}input:focus{border-color:#25A06B}'
       + 'button{width:100%;margin-top:22px;padding:15px;border:0;border-radius:12px;font-size:16px;font-weight:700;color:#fff;background:linear-gradient(90deg,#F26522,#25A06B);cursor:pointer}button:disabled{opacity:.6;cursor:wait}'
       + '.msg{color:#dc2626;font-size:14px;margin-top:12px;min-height:18px;text-align:center}'
-      + '.ok{display:none;text-align:center}.ok-ic{width:64px;height:64px;border-radius:50%;background:#25A06B;color:#fff;font-size:34px;display:flex;align-items:center;justify-content:center;margin:0 auto 18px}.ok p{color:#5a6b62;font-size:15px;line-height:1.5}</style></head><body>'
+      + '.ok{display:none;text-align:center}.ok-ic{width:64px;height:64px;border-radius:50%;background:#25A06B;color:#fff;font-size:34px;display:flex;align-items:center;justify-content:center;margin:0 auto 18px}.ok p{color:#5a6b62;font-size:15px;line-height:1.5}'
+      + '.opc-tit{font-size:13px;font-weight:600;color:#3a4b42;margin:16px 0 8px}.opcs{display:flex;flex-direction:column;gap:8px}.opc{display:flex;align-items:center;gap:11px;border:1.5px solid #e2e8e2;border-radius:12px;padding:12px 14px;cursor:pointer;transition:.15s}.opc:has(input:checked){border-color:#25A06B;background:#f0faf5}.opc input{width:18px;height:18px;accent-color:#25A06B;flex:none}.opc-txt{display:flex;justify-content:space-between;align-items:center;width:100%;gap:10px}.opc-forma{font-size:14.5px;font-weight:600;color:#1a2b22}.opc-preco{font-size:15px;font-weight:700;color:#25A06B;white-space:nowrap}</style></head><body>'
       + '<div class="card"><div class="bar"></div><span class="badge">Lista de reserva</span>'
       + '<h1>' + titulo + '</h1><p class="sub">Garanta sua vaga. Preencha abaixo e a gente te avisa em primeira mão quando abrir.</p>'
       + '<form id="f" novalidate>'
+      + opcoesHtml
       + '<label>Nome completo<input name="nome" required maxlength="80" autocomplete="name"></label>'
       + '<label>WhatsApp<input name="telefone" required inputmode="tel" placeholder="(44) 99999-9999" autocomplete="tel"></label>'
       + '<label>E-mail<input name="email" type="email" maxlength="120" autocomplete="email"></label>'
@@ -1801,7 +1834,9 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
       + '<div class="ok" id="ok"><div class="ok-ic">&#10003;</div><h2>Voce esta na lista! &#127881;</h2><p>Prontinho. A gente te chama em primeira mao assim que abrir as vagas.</p></div>'
       + '<script>var f=document.getElementById("f"),btn=document.getElementById("btn"),msg=document.getElementById("msg");'
       + 'f.addEventListener("submit",function(e){e.preventDefault();btn.disabled=true;msg.textContent="";'
-      + 'var d={nome:f.nome.value,telefone:f.telefone.value,email:f.email.value};'
+      + 'var op=f.querySelector("input[name=opcao]:checked");'
+      + 'if(document.querySelector(".opcs")&&!op){msg.textContent="Escolha uma forma de pagamento.";btn.disabled=false;return;}'
+      + 'var d={nome:f.nome.value,telefone:f.telefone.value,email:f.email.value,opcao:op?op.value:null};'
       + 'fetch("/api/reserva/' + l.slug + '",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(d)})'
       + '.then(function(r){return r.json().then(function(j){return{ok:r.ok,j:j}})})'
       + '.then(function(o){if(o.ok&&o.j.ok){document.querySelector(".card").style.display="none";document.getElementById("ok").style.display="block";}else{msg.textContent=(o.j&&o.j.error)||"Nao deu pra enviar. Confira os dados.";btn.disabled=false;}})'
