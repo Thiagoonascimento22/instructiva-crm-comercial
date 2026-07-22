@@ -171,6 +171,7 @@ export const api = {
   ofCrmEtapaCriar: (dados) => req("POST", "/api/oficial/crm/etapa", dados),
   ofCrmEtapaEditar: (k, dados) => req("PUT", "/api/oficial/crm/etapa/" + k, dados),
   ofCrmEtapaExcluir: (k) => req("DELETE", "/api/oficial/crm/etapa/" + k),
+  ofCrmImportar: (dados) => req("POST", "/api/oficial/crm/importar", dados),
   ofExcluirIA: (id) => req("DELETE", "/api/oficial/ias/" + id),
   ofExtrairArquivo: (nome, base64) => req("POST", "/api/oficial/ias/extrair", { nome, base64 }),
   ofPreviewIA: (dados) => req("POST", "/api/oficial/ias/preview", dados),

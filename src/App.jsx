@@ -215,6 +215,26 @@ function redimensionarImg(file, max) {
 }
 const soDigitos = (s) => (s || "").replace(/\D/g, "");
 
+// Parser de CSV simples: lida com aspas, separador ; ou , e BOM
+function parseCSV(texto) {
+  texto = String(texto || "").replace(/^\uFEFF/, "");
+  const linhas = texto.split(/\r\n|\n|\r/).filter((l) => l.trim() !== "");
+  if (!linhas.length) return { headers: [], rows: [] };
+  const sep = (linhas[0].match(/;/g) || []).length >= (linhas[0].match(/,/g) || []).length ? ";" : ",";
+  const parseLinha = (linha) => {
+    const out = []; let cur = "", dentro = false;
+    for (let i = 0; i < linha.length; i++) {
+      const c = linha[i];
+      if (c === '"') { if (dentro && linha[i + 1] === '"') { cur += '"'; i++; } else dentro = !dentro; }
+      else if (c === sep && !dentro) { out.push(cur); cur = ""; }
+      else cur += c;
+    }
+    out.push(cur);
+    return out.map((s) => s.trim());
+  };
+  return { headers: parseLinha(linhas[0]).map((h) => h.toLowerCase()), rows: linhas.slice(1).map(parseLinha) };
+}
+
 // Lembrete no topo: avisa o vendedor que ele pode adicionar a foto de perfil (e já deixa adicionar)
 function LembreteFoto({ user, setUser, showToast }) {
   const [dispensado, setDispensado] = useState(false);
@@ -3018,6 +3038,86 @@ function PainelSistema({ modulos, onSalvo, showToast }) {
   );
 }
 
+// Importar leads de uma planilha CSV
+function ModalImportar({ etapas, onClose, onDone, showToast }) {
+  const [dados, setDados] = useState(null);
+  const [destino, setDestino] = useState((etapas[0] || {}).k || "novo");
+  const [distribuir, setDistribuir] = useState("auto");
+  const [tag, setTag] = useState("");
+  const [importando, setImportando] = useState(false);
+  const ref = useRef(null);
+  const cols = etapas.length ? etapas : [{ k: "novo", lb: "Novo lead" }];
+  const digOk = (t) => { const d = String(t).replace(/\D/g, ""); return d.length >= 10 && d.length <= 13; };
+
+  function lerArquivo(e) {
+    const file = e.target.files && e.target.files[0];
+    e.target.value = "";
+    if (!file) return;
+    const fr = new FileReader();
+    fr.onload = () => {
+      try {
+        const { headers, rows } = parseCSV(String(fr.result || ""));
+        const acha = (ops) => { for (let i = 0; i < headers.length; i++) if (ops.some((o) => headers[i].includes(o))) return i; return -1; };
+        const iNome = acha(["nome", "name"]);
+        const iTel = acha(["whatsapp", "telefone", "celular", "fone", "tel", "numero", "número", "phone"]);
+        const iEmail = acha(["email", "e-mail", "mail"]);
+        const iCurso = acha(["curso", "produto"]);
+        const iValor = acha(["valor", "preço", "preco", "price"]);
+        if (iNome < 0 && iTel < 0) { showToast("Não achei colunas de nome/telefone no arquivo"); return; }
+        const leads = rows.map((r) => ({
+          nome: iNome >= 0 ? (r[iNome] || "") : "",
+          telefone: iTel >= 0 ? (r[iTel] || "") : "",
+          email: iEmail >= 0 ? (r[iEmail] || "") : "",
+          curso: iCurso >= 0 ? (r[iCurso] || "") : "",
+          valor: iValor >= 0 ? (r[iValor] || "") : "",
+        }));
+        const validos = leads.filter((l) => l.nome.trim() && digOk(l.telefone)).length;
+        setDados({ leads, total: leads.length, validos });
+      } catch (err) { showToast("Não consegui ler o arquivo. Confira se é um CSV."); }
+    };
+    fr.readAsText(file, "utf-8");
+  }
+
+  async function importar() {
+    if (!dados || !dados.validos) { showToast("Nenhum lead válido pra importar"); return; }
+    setImportando(true);
+    try {
+      const r = await api.ofCrmImportar({ leads: dados.leads, destino, distribuir, tag });
+      showToast(`✓ ${r.criados} importados${r.pulados ? " · " + r.pulados + " pulados" : ""}`);
+      onDone(); onClose();
+    } catch (e) { showToast("✗ " + e.message); } finally { setImportando(false); }
+  }
+
+  return (
+    <div className="pop-bg" onClick={(e) => e.target === e.currentTarget && onClose()}>
+      <div className="pop-sheet" style={{ maxWidth: 620 }}>
+        <div className="pop-head"><b>Importar leads de planilha</b><button className="crm-x" onClick={onClose}>✕</button></div>
+        <div className="pop-body">
+          <div className="rsv-hint" style={{ marginTop: 0 }}>Suba um <b>CSV</b> com colunas de <b>nome</b> e <b>telefone</b> (e, se quiser, e-mail, curso, valor). O sistema reconhece as colunas pelo nome. Telefones repetidos são pulados.</div>
+          <input ref={ref} type="file" accept=".csv,text/csv" style={{ display: "none" }} onChange={lerArquivo} />
+          <button className="btn btn-on" style={{ marginTop: 12 }} onClick={() => ref.current && ref.current.click()}><I.download className="ico" /> Escolher arquivo CSV</button>
+
+          {dados && (
+            <>
+              <div className="imp-resumo"><b>{dados.total}</b> linhas · <b style={{ color: "var(--brand)" }}>{dados.validos}</b> válidas{dados.total - dados.validos > 0 ? ` · ${dados.total - dados.validos} sem nome/telefone` : ""}</div>
+              <div className="imp-preview">
+                {dados.leads.slice(0, 3).map((l, i) => <div key={i} className="imp-row"><b>{l.nome || "—"}</b> · {l.telefone || "—"}{l.curso ? " · " + l.curso : ""}</div>)}
+                {dados.total > 3 && <div className="imp-mais">…e mais {dados.total - 3} linha(s)</div>}
+              </div>
+              <div className="rsv-f2" style={{ marginTop: 14 }}>
+                <div><label className="lbl-mini">Cai na coluna</label><select className="input" value={destino} onChange={(e) => setDestino(e.target.value)}>{cols.map((e) => <option key={e.k} value={e.k}>{e.lb}</option>)}</select></div>
+                <div><label className="lbl-mini">Distribuição</label><select className="input" value={distribuir} onChange={(e) => setDistribuir(e.target.value)}><option value="auto">Automática (entre os vendedores)</option><option value="manual">Sem dono</option></select></div>
+              </div>
+              <div style={{ marginTop: 10 }}><label className="lbl-mini">Tag (opcional)</label><input className="input" value={tag} onChange={(e) => setTag(e.target.value)} placeholder="Ex.: Lista antiga" /></div>
+              <button className="onum-add" style={{ marginTop: 16, display: "block" }} disabled={importando || !dados.validos} onClick={importar}>{importando ? "Importando…" : `Importar ${dados.validos} leads`}</button>
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // Gerenciador de colunas do Pipeline (criar, renomear, mudar cor, apagar)
 function ModalColunas({ etapas, onClose, onChanged, showToast }) {
   const [novoNome, setNovoNome] = useState("");
@@ -3256,6 +3356,7 @@ function OficialCRM({ showToast, isGer = true, onAbrirWhats }) {
   const [config, setConfig] = useState(false);
   const [showReserva, setShowReserva] = useState(false);
   const [showColunas, setShowColunas] = useState(false);
+  const [showImportar, setShowImportar] = useState(false);
   const [showDistrib, setShowDistrib] = useState(false);
   const [filtroVend, setFiltroVend] = useState("");
   const [dragId, setDragId] = useState(null);
@@ -3329,6 +3430,7 @@ function OficialCRM({ showToast, isGer = true, onAbrirWhats }) {
         {isGer && <button className="onum-btn-ghost" onClick={() => setShowReserva(true)}><I.chat className="ico" /> Listas de reserva</button>}
         {isGer && <button className="onum-btn-ghost" onClick={() => setShowColunas(true)}><I.cog className="ico" /> Colunas</button>}
         {isGer && <button className="onum-btn-ghost" onClick={() => setConfig(true)}><I.suporte className="ico" /> Distribuição das ligações</button>}
+        {isGer && <button className="onum-btn-ghost" onClick={() => setShowImportar(true)} title="Importar leads de uma planilha CSV"><I.clip className="ico" /> Importar</button>}
         {isGer && <button className="onum-btn-ghost" onClick={exportarCSV} title="Baixar todos os leads em CSV"><I.download className="ico" /> Exportar</button>}
         <div className="crm-top-right">
           <div className="crm-busca"><I.search className="ico" /><input value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Buscar por nome, telefone, curso, tag..." /></div>
@@ -3533,6 +3635,7 @@ function OficialCRM({ showToast, isGer = true, onAbrirWhats }) {
 
       {showReserva && <ModalReservaListas etapas={etapas} onClose={() => setShowReserva(false)} showToast={showToast} />}
       {showColunas && <ModalColunas etapas={etapas} onClose={() => setShowColunas(false)} onChanged={carregar} showToast={showToast} />}
+      {showImportar && <ModalImportar etapas={etapas} onClose={() => setShowImportar(false)} onDone={carregar} showToast={showToast} />}
       {showDistrib && (
         <div className="pop-bg" onClick={(e) => e.target === e.currentTarget && setShowDistrib(false)}>
           <div className="pop-sheet" style={{ maxWidth: 640 }}>

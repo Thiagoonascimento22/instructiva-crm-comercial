@@ -1723,6 +1723,44 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
     res.json({ ok: true, etapas: etapasCRM(), movidosPara: destino });
   });
 
+  // ---- Importar leads de planilha (CSV) — gerente ----
+  app.post("/api/oficial/crm/importar", auth, gerenteOnly, (req, res) => {
+    garantirEstrutura(); garantirCRM();
+    const b = req.body || {};
+    const destino = etapasCRM().some((e) => e.k === b.destino) ? b.destino : (etapasCRM()[0] || {}).k;
+    const modo = b.distribuir === "manual" ? "manual" : "auto";
+    const tag = String(b.tag || "").trim().slice(0, 40);
+    const linhas = Array.isArray(b.leads) ? b.leads.slice(0, 5000) : [];
+    let criados = 0, pulados = 0, i = 0;
+    for (const row of linhas) {
+      i++;
+      const nome = String((row && row.nome) || "").trim().slice(0, 80);
+      const telefone = String((row && row.telefone) || "").replace(/\D/g, "");
+      if (!nome || telefone.length < 10 || telefone.length > 13) { pulados++; continue; }
+      if ((db.oficial.crmLeads || []).some((x) => x.telefone === telefone)) { pulados++; continue; } // dedupe por telefone
+      const dist = modo === "manual" ? { vendedorId: null, vendedorNome: "" } : distribuirReserva();
+      const lead = {
+        id: "lead_" + Date.now().toString(36) + "_" + i + Math.random().toString(36).slice(2, 5),
+        nome, telefone,
+        email: String((row && row.email) || "").trim().slice(0, 120),
+        curso: String((row && row.curso) || "").trim().slice(0, 120),
+        valor: parseFloat(row && row.valor) || 0,
+        formaPagamento: "",
+        etapa: destino,
+        vendedorId: dist.vendedorId, vendedorNome: dist.vendedorNome,
+        origem: "importado",
+        tags: tag ? [tag] : [],
+        notas: [],
+        historico: [{ tipo: "criado", texto: "Importado de planilha", ts: Date.now() }],
+        criadoEm: Date.now(), atualizadoEm: Date.now(),
+      };
+      db.oficial.crmLeads.unshift(lead);
+      criados++;
+    }
+    salvar();
+    res.json({ ok: true, criados, pulados });
+  });
+
   /* ============ LISTAS DE RESERVA (captação de leads por lançamento) ============
      Cada lista = um lançamento (curso + valor) com um link público /r/<slug>.
      A pessoa preenche → o lead cai no Pipeline (etapa "novo"), já com curso+valor,
@@ -2478,6 +2516,14 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
         chat.origemDisparo = true;
         chat.campanha = campanha.nome;
         chat.campanhaId = campanha.id;
+        // O disparo fica com QUEM disparou: carimba o dono da conversa como o remetente
+        // da campanha. Como atribuirLead() respeita dono já existente, a resposta (e um
+        // eventual repasse da IA) continua com ele, sem cair na distribuição pro time.
+        if (!chat.vendedorId && campanha.criadoPor) {
+          chat.vendedorId = campanha.criadoPor;
+          chat.vendedorNome = campanha.criadoPorNome || "";
+          chat.atribuidoEm = Date.now();
+        }
         chat.iaId = campanha.iaId || null;
         chat.iaPausada = false;
         if (chat.respondeu === undefined) chat.respondeu = false;

@@ -3609,3 +3609,10 @@ input:focus-visible, textarea:focus-visible, select:focus-visible {
 .crm-tarefa-form { display: grid; grid-template-columns: 1fr 1fr auto; gap: 8px; align-items: center; }
 @media (max-width: 560px){ .crm-tarefa-form { grid-template-columns: 1fr; } }
 .btn.btn-ghost { background: transparent; }
+
+/* ===== Importar CSV ===== */
+.imp-resumo { margin-top: 14px; font-size: 13px; color: var(--text); }
+.imp-preview { margin-top: 8px; border: 1px solid var(--line); border-radius: 9px; overflow: hidden; }
+.imp-row { font-size: 12.5px; color: var(--text); padding: 8px 12px; border-bottom: 1px solid var(--line); }
+.imp-row:last-child { border-bottom: 0; }
+.imp-mais { font-size: 11.5px; color: var(--muted); padding: 7px 12px; background: var(--surface-2); }
