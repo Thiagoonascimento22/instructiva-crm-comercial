@@ -3630,3 +3630,6 @@ input:focus-visible, textarea:focus-visible, select:focus-visible {
 .crm-lote-del:hover { background: rgba(220,38,38,.08); }
 .crm-lote-del .ico { width: 15px; height: 15px; }
 .crm-lote-limpar { background: transparent; border: 0; color: var(--muted); font-size: 13px; cursor: pointer; white-space: nowrap; }
+
+/* Menu do WhatsApp agora é renderizado via Portal (fixo, por cima de tudo, sem corte) */
+.crm-wa-menu { position: fixed; right: auto; top: auto; z-index: 200; }

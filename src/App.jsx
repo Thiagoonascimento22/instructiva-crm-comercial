@@ -3481,15 +3481,7 @@ function OficialCRM({ showToast, isGer = true, onAbrirWhats }) {
                       <label className="crm-check" onClick={(e) => e.stopPropagation()}><input type="checkbox" checked={!!marcados[l.id]} onChange={() => toggleMarcado(l.id)} /></label>
                       <div className="crm-card-nome">{l.nome}</div>
                       {l.telefone && (
-                        <div className="crm-wa-wrap">
-                          <button className="crm-wa" onClick={(e) => { e.stopPropagation(); setWaMenu(waMenu === l.id ? null : l.id); }} title="Chamar no WhatsApp"><I.wa className="ico" /></button>
-                          {waMenu === l.id && (
-                            <div className="crm-wa-menu" onClick={(e) => e.stopPropagation()}>
-                              <button onClick={() => { setWaMenu(null); onAbrirWhats && onAbrirWhats(l.telefone, "evolution"); }}><span className="crm-wa-dot nao" /><span><b>Não oficial</b><small>abre a conversa direto</small></span></button>
-                              <button onClick={() => { setWaMenu(null); onAbrirWhats && onAbrirWhats(l.telefone, "oficial"); }}><span className="crm-wa-dot ofi" /><span><b>Oficial</b><small>abre a conversa + template</small></span></button>
-                            </div>
-                          )}
-                        </div>
+                        <button className="crm-wa" onClick={(e) => { e.stopPropagation(); const r = e.currentTarget.getBoundingClientRect(); setWaMenu(waMenu && waMenu.id === l.id ? null : { id: l.id, tel: l.telefone, x: r.right, y: r.bottom, yt: r.top }); }} title="Chamar no WhatsApp"><I.wa className="ico" /></button>
                       )}
                     </div>
                     {l.telefone && <div className="crm-card-tel">{l.telefone}</div>}
@@ -3651,17 +3643,28 @@ function OficialCRM({ showToast, isGer = true, onAbrirWhats }) {
       )}
 
       {showReserva && <ModalReservaListas etapas={etapas} onClose={() => setShowReserva(false)} showToast={showToast} />}
+      {waMenu && (
+        <Portal>
+          <div className="crm-wa-menu" style={{ top: (waMenu.y + 104 > window.innerHeight ? waMenu.yt - 100 : waMenu.y + 4), left: Math.max(8, Math.min(waMenu.x - 214, window.innerWidth - 224)) }} onClick={(e) => e.stopPropagation()}>
+            <button onClick={() => { const t = waMenu.tel; setWaMenu(null); onAbrirWhats && onAbrirWhats(t, "evolution"); }}><span className="crm-wa-dot nao" /><span><b>Não oficial</b><small>abre a conversa direto</small></span></button>
+            <button onClick={() => { const t = waMenu.tel; setWaMenu(null); onAbrirWhats && onAbrirWhats(t, "oficial"); }}><span className="crm-wa-dot ofi" /><span><b>Oficial</b><small>abre a conversa + template</small></span></button>
+          </div>
+        </Portal>
+      )}
+
       {qtdMarcados > 0 && (
-        <div className="crm-lote-bar">
-          <span className="crm-lote-n">{qtdMarcados} selecionado{qtdMarcados > 1 ? "s" : ""}</span>
-          <select className="crm-lote-sel" value="" onChange={(e) => { if (e.target.value) atribuirLote(e.target.value === "__sem" ? "" : e.target.value); }}>
-            <option value="">Atribuir dono…</option>
-            <option value="__sem">Sem dono</option>
-            {vendedores.map((v) => <option key={v.id} value={v.id}>{v.nome}</option>)}
-          </select>
-          <button className="crm-lote-del" onClick={excluirLote}><I.trash className="ico" /> Excluir</button>
-          <button className="crm-lote-limpar" onClick={() => setMarcados({})}>Limpar</button>
-        </div>
+        <Portal>
+          <div className="crm-lote-bar">
+            <span className="crm-lote-n">{qtdMarcados} selecionado{qtdMarcados > 1 ? "s" : ""}</span>
+            <select className="crm-lote-sel" value="" onChange={(e) => { if (e.target.value) atribuirLote(e.target.value === "__sem" ? "" : e.target.value); }}>
+              <option value="">Atribuir dono…</option>
+              <option value="__sem">Sem dono</option>
+              {vendedores.map((v) => <option key={v.id} value={v.id}>{v.nome}</option>)}
+            </select>
+            <button className="crm-lote-del" onClick={excluirLote}><I.trash className="ico" /> Excluir</button>
+            <button className="crm-lote-limpar" onClick={() => setMarcados({})}>Limpar</button>
+          </div>
+        </Portal>
       )}
 
       {showColunas && <ModalColunas etapas={etapas} onClose={() => setShowColunas(false)} onChanged={carregar} showToast={showToast} />}
