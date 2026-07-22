@@ -1761,6 +1761,35 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
     res.json({ ok: true, criados, pulados });
   });
 
+  // ---- Ações em lote (selecionar vários leads) ----
+  app.post("/api/oficial/crm/lote/atribuir", auth, permiteVend("crm"), (req, res) => {
+    garantirCRM();
+    const b = req.body || {};
+    const ids = Array.isArray(b.ids) ? b.ids : [];
+    const vid = b.vendedorId || null;
+    if (vid && !db.users.some((u) => u.id === vid)) return res.status(400).json({ error: "Vendedor inválido" });
+    let n = 0;
+    for (const l of (db.oficial.crmLeads || [])) {
+      if (!ids.includes(l.id)) continue;
+      if (req.user.role === "vendedor" && l.vendedorId !== req.user.id) continue; // vendedor só mexe nos seus
+      l.vendedorId = vid;
+      l.vendedorNome = vid ? ((db.users.find((u) => u.id === vid) || {}).nome || "") : "";
+      l.atualizadoEm = Date.now();
+      n++;
+    }
+    salvar();
+    res.json({ ok: true, alterados: n });
+  });
+  app.post("/api/oficial/crm/lote/excluir", auth, permiteVend("crm"), (req, res) => {
+    garantirCRM();
+    const ids = Array.isArray((req.body || {}).ids) ? req.body.ids : [];
+    const antes = (db.oficial.crmLeads || []).length;
+    const some = (l) => ids.includes(l.id) && (req.user.role !== "vendedor" || l.vendedorId === req.user.id);
+    db.oficial.crmLeads = (db.oficial.crmLeads || []).filter((l) => !some(l));
+    salvar();
+    res.json({ ok: true, excluidos: antes - db.oficial.crmLeads.length });
+  });
+
   /* ============ LISTAS DE RESERVA (captação de leads por lançamento) ============
      Cada lista = um lançamento (curso + valor) com um link público /r/<slug>.
      A pessoa preenche → o lead cai no Pipeline (etapa "novo"), já com curso+valor,

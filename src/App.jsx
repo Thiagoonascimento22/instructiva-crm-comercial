@@ -3337,6 +3337,7 @@ function OficialCRM({ showToast, isGer = true, onAbrirWhats }) {
   const [criar, setCriar] = useState(null);
   const [waMenu, setWaMenu] = useState(null);
   const [busca, setBusca] = useState("");
+  const [marcados, setMarcados] = useState({});
   const [tarefaTexto, setTarefaTexto] = useState("");
   const [tarefaQuando, setTarefaQuando] = useState("");
   useEffect(() => {
@@ -3402,6 +3403,20 @@ function OficialCRM({ showToast, isGer = true, onAbrirWhats }) {
     const a = document.createElement("a"); a.href = url; a.download = "leads-pipeline.csv"; a.click();
     URL.revokeObjectURL(url);
   }
+  const qtdMarcados = Object.keys(marcados).length;
+  const toggleMarcado = (id) => setMarcados((m) => { const n = { ...m }; if (n[id]) delete n[id]; else n[id] = true; return n; });
+  const marcarColuna = (ids, on) => setMarcados((m) => { const n = { ...m }; ids.forEach((id) => { if (on) n[id] = true; else delete n[id]; }); return n; });
+  async function atribuirLote(vid) {
+    const ids = Object.keys(marcados); if (!ids.length) return;
+    try { const r = await api.ofCrmLoteAtribuir({ ids, vendedorId: vid }); showToast(`✓ ${r.alterados} lead(s) atribuído(s)`); setMarcados({}); carregar(); }
+    catch (e) { showToast("✗ " + e.message); }
+  }
+  async function excluirLote() {
+    const ids = Object.keys(marcados); if (!ids.length) return;
+    if (!window.confirm(`Excluir ${ids.length} lead(s) selecionado(s)? Não dá pra desfazer.`)) return;
+    try { const r = await api.ofCrmLoteExcluir({ ids }); showToast(`✓ ${r.excluidos} lead(s) excluído(s)`); setMarcados({}); carregar(); }
+    catch (e) { showToast("✗ " + e.message); }
+  }
   async function addNota() {
     if (!novaNota.trim() || !sel) return;
     try { const r = await api.ofCrmNota(sel, novaNota.trim()); setLeads((ls) => ls.map((x) => x.id === sel ? r.lead : x)); setNovaNota(""); } catch (e) { showToast(e.message); }
@@ -3453,6 +3468,7 @@ function OficialCRM({ showToast, isGer = true, onAbrirWhats }) {
               <div className="crm-col-bar" style={{ background: et.cor }} />
               <div className="crm-col-head">
                 <div className="crm-col-head-l">
+                  {doEt.length > 0 && <input type="checkbox" className="crm-check-col" checked={doEt.every((l) => marcados[l.id])} onChange={(e) => marcarColuna(doEt.map((l) => l.id), e.target.checked)} title="Selecionar todos desta coluna" />}
                   <span className="crm-col-nome">{et.lb}</span>
                   <span className="crm-col-n">{doEt.length}</span>
                 </div>
@@ -3460,8 +3476,9 @@ function OficialCRM({ showToast, isGer = true, onAbrirWhats }) {
               </div>
               <div className="crm-col-body">
                 {doEt.map((l) => (
-                  <div key={l.id} className="crm-card" draggable onDragStart={() => setDragId(l.id)} onDragEnd={() => setDragId(null)} onClick={() => { setSel(l.id); setNovaNota(""); }}>
+                  <div key={l.id} className={"crm-card" + (marcados[l.id] ? " marcado" : "")} draggable onDragStart={() => setDragId(l.id)} onDragEnd={() => setDragId(null)} onClick={() => { setSel(l.id); setNovaNota(""); }}>
                     <div className="crm-card-top">
+                      <label className="crm-check" onClick={(e) => e.stopPropagation()}><input type="checkbox" checked={!!marcados[l.id]} onChange={() => toggleMarcado(l.id)} /></label>
                       <div className="crm-card-nome">{l.nome}</div>
                       {l.telefone && (
                         <div className="crm-wa-wrap">
@@ -3634,6 +3651,19 @@ function OficialCRM({ showToast, isGer = true, onAbrirWhats }) {
       )}
 
       {showReserva && <ModalReservaListas etapas={etapas} onClose={() => setShowReserva(false)} showToast={showToast} />}
+      {qtdMarcados > 0 && (
+        <div className="crm-lote-bar">
+          <span className="crm-lote-n">{qtdMarcados} selecionado{qtdMarcados > 1 ? "s" : ""}</span>
+          <select className="crm-lote-sel" value="" onChange={(e) => { if (e.target.value) atribuirLote(e.target.value === "__sem" ? "" : e.target.value); }}>
+            <option value="">Atribuir dono…</option>
+            <option value="__sem">Sem dono</option>
+            {vendedores.map((v) => <option key={v.id} value={v.id}>{v.nome}</option>)}
+          </select>
+          <button className="crm-lote-del" onClick={excluirLote}><I.trash className="ico" /> Excluir</button>
+          <button className="crm-lote-limpar" onClick={() => setMarcados({})}>Limpar</button>
+        </div>
+      )}
+
       {showColunas && <ModalColunas etapas={etapas} onClose={() => setShowColunas(false)} onChanged={carregar} showToast={showToast} />}
       {showImportar && <ModalImportar etapas={etapas} onClose={() => setShowImportar(false)} onDone={carregar} showToast={showToast} />}
       {showDistrib && (
