@@ -165,6 +165,22 @@ function linkWhats(tel) {
   if (!d) return "#";
   return "https://wa.me/" + (d.startsWith("55") ? d : "55" + d);
 }
+// Formata a tarefa (follow-up) do lead e diz se venceu / é hoje / é futura
+function infoTarefa(t) {
+  if (!t || t.feito || !t.quando) return null;
+  const d = new Date(t.quando);
+  const ehHoje = d.toDateString() === new Date().toDateString();
+  const venceu = t.quando < Date.now();
+  const hhmm = d.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+  const data = ehHoje ? "hoje " + hhmm : d.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" }) + " " + hhmm;
+  return { texto: t.texto || "", data, classe: venceu ? "venceu" : ehHoje ? "hoje" : "futuro" };
+}
+// timestamp -> valor pro input datetime-local (hora local)
+function tsParaInput(ts) {
+  if (!ts) return "";
+  const d = new Date(ts), p = (n) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
+}
 
 function fmtMoney(n) {
   return "R$ " + (Number(n) || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -198,6 +214,36 @@ function redimensionarImg(file, max) {
   });
 }
 const soDigitos = (s) => (s || "").replace(/\D/g, "");
+
+// Lembrete no topo: avisa o vendedor que ele pode adicionar a foto de perfil (e já deixa adicionar)
+function LembreteFoto({ user, setUser, showToast }) {
+  const [dispensado, setDispensado] = useState(false);
+  const ref = useRef(null);
+  if (user.foto || dispensado) return null;
+  async function escolher(e) {
+    const file = e.target.files && e.target.files[0];
+    e.target.value = "";
+    if (!file || !file.type.startsWith("image/")) return;
+    try {
+      const dataUrl = await redimensionarImg(file, 160);
+      const u = await api.updateMe({ foto: dataUrl });
+      setUser((prev) => ({ ...prev, ...u }));
+      showToast("✓ Foto adicionada!");
+    } catch (err) { showToast("✗ Não deu pra carregar a foto"); }
+  }
+  return (
+    <div className="lembrete-foto">
+      <div className="lembrete-foto-ic">📸</div>
+      <div className="lembrete-foto-txt">
+        <b>Novidade: você já pode colocar sua foto de perfil</b>
+        <span>Ela aparece nos seus leads no Pipeline. Leva 5 segundos.</span>
+      </div>
+      <input ref={ref} type="file" accept="image/*" style={{ display: "none" }} onChange={escolher} />
+      <button className="btn btn-on btn-sm" onClick={() => ref.current && ref.current.click()}>Adicionar foto</button>
+      <button className="lembrete-foto-x" onClick={() => setDispensado(true)} title="Agora não">✕</button>
+    </div>
+  );
+}
 const limpaInst = (s) => (s || "").trim();
 
 // hora estilo WhatsApp: hoje -> HH:MM, ontem -> "ontem", senão -> DD/MM
@@ -375,6 +421,7 @@ export default function App() {
           </div>
         </div>
         <div className="content">
+          <LembreteFoto user={user} setUser={setUser} showToast={showToast} />
           {view === "whatsapp" && !isSuporte && mod("caixa") && <WhatsApp user={user} showToast={showToast} target={waTarget} onTargetUsed={() => setWaTarget(null)} recarregarSol={carregarMinhasSol} />}
           {view === "disparo" && (isGer || isVend) && mod("disparo") && <OficialDisparo isGer={isGer} showToast={showToast} />}
           {view === "numeros" && isGer && mod("numeros") && <OficialNumeros showToast={showToast} />}
@@ -3189,6 +3236,23 @@ function OficialCRM({ showToast, isGer = true, onAbrirWhats }) {
   const [sel, setSel] = useState(null);
   const [criar, setCriar] = useState(null);
   const [waMenu, setWaMenu] = useState(null);
+  const [busca, setBusca] = useState("");
+  const [tarefaTexto, setTarefaTexto] = useState("");
+  const [tarefaQuando, setTarefaQuando] = useState("");
+  useEffect(() => {
+    const l = leads.find((x) => x.id === sel);
+    const t = l && l.tarefa && !l.tarefa.feito ? l.tarefa : null;
+    setTarefaTexto(t ? t.texto : "");
+    setTarefaQuando(t && t.quando ? tsParaInput(t.quando) : "");
+    // eslint-disable-next-line
+  }, [sel]);
+  async function salvarTarefa() {
+    if (!sel) return;
+    if (!tarefaTexto.trim() && !tarefaQuando) { showToast("Escreva a tarefa e/ou escolha a data"); return; }
+    const quando = tarefaQuando ? new Date(tarefaQuando).getTime() : 0;
+    await salvarCampo(sel, "tarefa", { texto: tarefaTexto.trim(), quando, feito: false });
+    showToast("✓ Tarefa agendada");
+  }
   const [config, setConfig] = useState(false);
   const [showReserva, setShowReserva] = useState(false);
   const [showColunas, setShowColunas] = useState(false);
@@ -3221,6 +3285,22 @@ function OficialCRM({ showToast, isGer = true, onAbrirWhats }) {
     try { await api.ofCrmEditar(sel, { vendedorId: vid }); setSel(null); showToast("✓ Lead transferido"); carregar(); }
     catch (e) { showToast("✗ " + e.message); }
   }
+  const matchBusca = (l) => {
+    const q = busca.trim().toLowerCase();
+    if (!q) return true;
+    return [l.nome, l.telefone, l.curso, l.formaPagamento, (l.tags || []).join(" ")].some((x) => String(x || "").toLowerCase().includes(q));
+  };
+  function exportarCSV() {
+    const nomeEt = (k) => (etapas.find((e) => e.k === k) || {}).lb || k;
+    const cab = ["Nome", "Telefone", "Email", "Curso", "Valor", "Forma pagamento", "Etapa", "Vendedor", "Tags", "Origem", "Criado em"];
+    const linhas = leads.map((l) => [l.nome, l.telefone, l.email, l.curso, l.valor, l.formaPagamento, nomeEt(l.etapa), l.vendedorNome, (l.tags || []).join(" | "), l.origem, new Date(l.criadoEm).toLocaleString("pt-BR")]);
+    const esc = (v) => { const s = String(v == null ? "" : v); return /[",;\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
+    const csv = "\uFEFF" + [cab, ...linhas].map((r) => r.map(esc).join(";")).join("\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a"); a.href = url; a.download = "leads-pipeline.csv"; a.click();
+    URL.revokeObjectURL(url);
+  }
   async function addNota() {
     if (!novaNota.trim() || !sel) return;
     try { const r = await api.ofCrmNota(sel, novaNota.trim()); setLeads((ls) => ls.map((x) => x.id === sel ? r.lead : x)); setNovaNota(""); } catch (e) { showToast(e.message); }
@@ -3249,18 +3329,22 @@ function OficialCRM({ showToast, isGer = true, onAbrirWhats }) {
         {isGer && <button className="onum-btn-ghost" onClick={() => setShowReserva(true)}><I.chat className="ico" /> Listas de reserva</button>}
         {isGer && <button className="onum-btn-ghost" onClick={() => setShowColunas(true)}><I.cog className="ico" /> Colunas</button>}
         {isGer && <button className="onum-btn-ghost" onClick={() => setConfig(true)}><I.suporte className="ico" /> Distribuição das ligações</button>}
-        {isGer && vendedores.length > 0 && (
-          <select className="crm-filtro-vend" value={filtroVend} onChange={(e) => setFiltroVend(e.target.value)}>
-            <option value="">Todos os vendedores</option>
-            {vendedores.map((v) => <option key={v.id} value={v.id}>{v.nome}</option>)}
-            <option value="__sem">Sem dono</option>
-          </select>
-        )}
+        {isGer && <button className="onum-btn-ghost" onClick={exportarCSV} title="Baixar todos os leads em CSV"><I.download className="ico" /> Exportar</button>}
+        <div className="crm-top-right">
+          <div className="crm-busca"><I.search className="ico" /><input value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Buscar por nome, telefone, curso, tag..." /></div>
+          {isGer && vendedores.length > 0 && (
+            <select className="crm-filtro-vend" value={filtroVend} onChange={(e) => setFiltroVend(e.target.value)}>
+              <option value="">Todos os vendedores</option>
+              {vendedores.map((v) => <option key={v.id} value={v.id}>{v.nome}</option>)}
+              <option value="__sem">Sem dono</option>
+            </select>
+          )}
+        </div>
       </div>
 
       <div className="crm-board">
         {etapas.map((et) => {
-          const doEt = leads.filter((l) => l.etapa === et.k && (!filtroVend || (filtroVend === "__sem" ? !l.vendedorId : l.vendedorId === filtroVend)));
+          const doEt = leads.filter((l) => l.etapa === et.k && (!filtroVend || (filtroVend === "__sem" ? !l.vendedorId : l.vendedorId === filtroVend)) && matchBusca(l));
           const totalCol = doEt.reduce((s, l) => s + (Number(l.valor) || 0), 0);
           return (
             <div key={et.k} className="crm-col" onDragOver={(e) => e.preventDefault()} onDrop={(e) => { e.preventDefault(); if (dragId) mover(dragId, et.k); setDragId(null); }}>
@@ -3298,6 +3382,11 @@ function OficialCRM({ showToast, isGer = true, onAbrirWhats }) {
                       </div>
                     )}
                     {(l.tags || []).length > 0 && <div className="crm-card-tags">{l.tags.map((t, i) => <span key={i} className="crm-tag">{t}</span>)}</div>}
+                    {infoTarefa(l.tarefa) && (
+                      <div className={"crm-card-tarefa " + infoTarefa(l.tarefa).classe}>
+                        <I.clock className="ico-inline" /> {infoTarefa(l.tarefa).texto ? infoTarefa(l.tarefa).texto + " · " : ""}{infoTarefa(l.tarefa).data}
+                      </div>
+                    )}
                     <div className="crm-card-foot">
                       {l.origem === "ligacao" && <span className="crm-tag-lig"><I.suporte className="ico-inline" /> Ligação</span>}
                       <div className="crm-card-vend">
@@ -3353,6 +3442,22 @@ function OficialCRM({ showToast, isGer = true, onAbrirWhats }) {
                     </select>
                   </div>
                 )}
+              </div>
+
+              <div className="crm-sec-t"><I.clock className="ico-inline" /> Próxima tarefa (follow-up)</div>
+              <div className="crm-tarefa-box">
+                {leadSel.tarefa && !leadSel.tarefa.feito && (
+                  <div className={"crm-tarefa-atual " + (infoTarefa(leadSel.tarefa) ? infoTarefa(leadSel.tarefa).classe : "")}>
+                    <span><b>{leadSel.tarefa.texto || "Tarefa"}</b>{infoTarefa(leadSel.tarefa) ? " · " + infoTarefa(leadSel.tarefa).data : ""}</span>
+                    <button className="crm-tarefa-ok" onClick={() => salvarCampo(sel, "tarefa", { ...leadSel.tarefa, feito: true })} title="Concluir"><I.check className="ico" /></button>
+                    <button className="crm-tarefa-del" onClick={() => salvarCampo(sel, "tarefa", null)} title="Remover">✕</button>
+                  </div>
+                )}
+                <div className="crm-tarefa-form">
+                  <input className="input" placeholder="O que fazer (ex.: Ligar, Mandar proposta)" value={tarefaTexto} onChange={(e) => setTarefaTexto(e.target.value)} />
+                  <input className="input" type="datetime-local" value={tarefaQuando} onChange={(e) => setTarefaQuando(e.target.value)} />
+                  <button className="btn btn-on btn-sm" onClick={salvarTarefa}>{leadSel.tarefa && !leadSel.tarefa.feito ? "Atualizar" : "Agendar"}</button>
+                </div>
               </div>
 
               <div className="crm-sec-t">Notas</div>
