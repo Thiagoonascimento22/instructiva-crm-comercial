@@ -3507,7 +3507,7 @@ function OficialCRM({ showToast, isGer = true, onAbrirWhats }) {
                       {l.origem === "ligacao" && <span className="crm-tag-lig"><I.suporte className="ico-inline" /> Ligação</span>}
                       <div className="crm-card-vend">
                         {l.vendedorNome
-                          ? <><Avatar nome={l.vendedorNome} foto={l.vendedorFoto} size={22} /><span className="crm-card-vend-nm">{l.vendedorNome.split(" ")[0]}</span></>
+                          ? <><Avatar nome={l.vendedorNome} foto={l.vendedorFoto} size={22} /><span className="crm-card-vend-nm">{l.vendedorNome.split(" ").slice(0, 2).join(" ")}</span></>
                           : <span className="crm-card-semvend">sem dono</span>}
                       </div>
                       {(l.notas || []).length > 0 && <span className="crm-card-notas">📝 {l.notas.length}</span>}
