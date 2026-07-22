@@ -1516,7 +1516,7 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
   });
 
   /* ================= CRM (Kanban de leads) ================= */
-  const CRM_ETAPAS = [
+  const CRM_ETAPAS_PADRAO = [
     { k: "reserva", lb: "Lista de reserva", cor: "#8b5cf6" },
     { k: "novo", lb: "Novo lead", cor: "#64748b" },
     { k: "contato", lb: "Em contato", cor: "#3b82f6" },
@@ -1524,6 +1524,13 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
     { k: "matriculado", lb: "Matriculado", cor: "#d97706" },
     { k: "perdido", lb: "Perdido", cor: "#ef4444" },
   ];
+  // Colunas do Pipeline agora são editáveis pelo gerente (guardadas no banco).
+  function etapasCRM() {
+    if (!Array.isArray(db.oficial.crmEtapas) || !db.oficial.crmEtapas.length) {
+      db.oficial.crmEtapas = CRM_ETAPAS_PADRAO.map((e) => ({ ...e }));
+    }
+    return db.oficial.crmEtapas;
+  }
   function garantirCRM() {
     if (!Array.isArray(db.oficial.crmLeads)) db.oficial.crmLeads = [];
     if (!Array.isArray(db.oficial.crmVendedores)) db.oficial.crmVendedores = [];
@@ -1592,7 +1599,7 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
     let leads = (db.oficial.crmLeads || []);
     if (ehVend) leads = leads.filter((l) => l.vendedorId === req.user.id); // vendedor só vê os leads dele
     res.json({
-      etapas: CRM_ETAPAS,
+      etapas: etapasCRM(),
       leads: leads.map(crmLeadPublico),
       vendedores: ehVend ? [] : (db.users || []).filter((u) => u.role === "vendedor" && u.ativo).map((u) => ({ id: u.id, nome: u.nome })),
       crmVendedores: ehVend ? [] : (db.oficial.crmVendedores || []),
@@ -1609,7 +1616,7 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
       telefone: String(b.telefone || "").replace(/\D/g, ""),
       email: String(b.email || "").trim().slice(0, 120),
       curso: String(b.curso || "").trim().slice(0, 120),
-      etapa: CRM_ETAPAS.some((e) => e.k === b.etapa) ? b.etapa : "novo",
+      etapa: etapasCRM().some((e) => e.k === b.etapa) ? b.etapa : (etapasCRM()[0] || {}).k,
       vendedorId: (b.vendedorId && db.users.some((u) => u.id === b.vendedorId)) ? b.vendedorId : null,
       valor: parseFloat(b.valor) || 0, origem: "manual", notas: [],
       historico: [{ tipo: "criado", texto: "Lead criado manualmente", ts: Date.now() }],
@@ -1628,8 +1635,8 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
       if (l.vendedorId !== req.user.id) return res.status(403).json({ error: "Esse lead não é seu" });
       delete b.vendedorId; // vendedor não reatribui o lead pra outra pessoa
     }
-    if (b.etapa !== undefined && CRM_ETAPAS.some((e) => e.k === b.etapa)) {
-      if (l.etapa !== b.etapa) l.historico.push({ tipo: "etapa", texto: "Movido para " + CRM_ETAPAS.find((e) => e.k === b.etapa).lb, ts: Date.now() });
+    if (b.etapa !== undefined && etapasCRM().some((e) => e.k === b.etapa)) {
+      if (l.etapa !== b.etapa) l.historico.push({ tipo: "etapa", texto: "Movido para " + etapasCRM().find((e) => e.k === b.etapa).lb, ts: Date.now() });
       l.etapa = b.etapa;
     }
     if (b.nome !== undefined) l.nome = String(b.nome).slice(0, 80);
@@ -1669,6 +1676,44 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
     db.oficial.crmLeads = (db.oficial.crmLeads || []).filter((x) => x.id !== req.params.id);
     salvar();
     res.json({ ok: true });
+  });
+
+  // ---- Colunas do Pipeline: criar / editar / apagar (gerente) ----
+  function slugEtapa() { return "col_" + Date.now().toString(36) + Math.random().toString(36).slice(2, 5); }
+  app.post("/api/oficial/crm/etapa", auth, gerenteOnly, (req, res) => {
+    garantirCRM();
+    const b = req.body || {};
+    const lb = String(b.lb || "").trim().slice(0, 40);
+    if (!lb) return res.status(400).json({ error: "Dê um nome à coluna" });
+    const et = etapasCRM();
+    let k; do { k = slugEtapa(); } while (et.some((e) => e.k === k));
+    const cor = /^#[0-9a-fA-F]{6}$/.test(b.cor) ? b.cor : "#64748b";
+    et.push({ k, lb, cor });
+    salvar();
+    res.json({ ok: true, etapas: etapasCRM() });
+  });
+  app.put("/api/oficial/crm/etapa/:k", auth, gerenteOnly, (req, res) => {
+    garantirCRM();
+    const e = etapasCRM().find((x) => x.k === req.params.k);
+    if (!e) return res.status(404).json({ error: "Coluna não encontrada" });
+    const b = req.body || {};
+    if (b.lb !== undefined) { const lb = String(b.lb).trim().slice(0, 40); if (lb) e.lb = lb; }
+    if (b.cor !== undefined && /^#[0-9a-fA-F]{6}$/.test(b.cor)) e.cor = b.cor;
+    salvar();
+    res.json({ ok: true, etapas: etapasCRM() });
+  });
+  app.delete("/api/oficial/crm/etapa/:k", auth, gerenteOnly, (req, res) => {
+    garantirCRM();
+    const et = etapasCRM();
+    if (et.length <= 1) return res.status(400).json({ error: "Precisa ter pelo menos uma coluna" });
+    const idx = et.findIndex((x) => x.k === req.params.k);
+    if (idx < 0) return res.status(404).json({ error: "Coluna não encontrada" });
+    // move os leads dessa coluna pra primeira coluna que sobrar (não perde ninguém)
+    const destino = et.find((x) => x.k !== req.params.k).k;
+    (db.oficial.crmLeads || []).forEach((l) => { if (l.etapa === req.params.k) l.etapa = destino; });
+    db.oficial.crmEtapas = et.filter((x) => x.k !== req.params.k);
+    salvar();
+    res.json({ ok: true, etapas: etapasCRM(), movidosPara: destino });
   });
 
   /* ============ LISTAS DE RESERVA (captação de leads por lançamento) ============
@@ -1714,7 +1759,7 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
     const nome = String(b.nome || "").trim().slice(0, 80);
     if (!nome) return res.status(400).json({ error: "Dê um nome à lista" });
     let slug; do { slug = slugReserva(); } while ((db.oficial.reservaListas || []).some((x) => x.slug === slug));
-    const destino = CRM_ETAPAS.some((e) => e.k === b.destino) ? b.destino : "reserva";
+    const destino = etapasCRM().some((e) => e.k === b.destino) ? b.destino : (etapasCRM().some((e) => e.k === "reserva") ? "reserva" : (etapasCRM()[0] || {}).k);
     const lista = { id: proximoId("rsv"), nome, curso: String(b.curso || "").trim().slice(0, 120), tag: String(b.tag || "").trim().slice(0, 40), opcoes: limparOpcoes(b.opcoes), destino, distribuir: b.distribuir === "manual" ? "manual" : "auto", slug, ativa: true, criadoEm: Date.now() };
     db.oficial.reservaListas.push(lista);
     salvar();
@@ -1729,7 +1774,7 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
     if (b.curso !== undefined) l.curso = String(b.curso).trim().slice(0, 120);
     if (b.tag !== undefined) l.tag = String(b.tag).trim().slice(0, 40);
     if (b.opcoes !== undefined) l.opcoes = limparOpcoes(b.opcoes);
-    if (b.destino !== undefined && CRM_ETAPAS.some((e) => e.k === b.destino)) l.destino = b.destino;
+    if (b.destino !== undefined && etapasCRM().some((e) => e.k === b.destino)) l.destino = b.destino;
     if (b.distribuir !== undefined) l.distribuir = b.distribuir === "manual" ? "manual" : "auto";
     if (b.ativa !== undefined) l.ativa = !!b.ativa;
     salvar();
@@ -1775,7 +1820,7 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
       else return res.status(400).json({ error: "Escolha uma opção de pagamento" });
     }
     const opc = idx >= 0 ? opcoes[idx] : null;
-    const etapaDestino = CRM_ETAPAS.some((e) => e.k === lista.destino) ? lista.destino : "reserva";
+    const etapaDestino = etapasCRM().some((e) => e.k === lista.destino) ? lista.destino : (etapasCRM()[0] || {}).k;
     const dist = (lista.distribuir === "manual") ? { vendedorId: null, vendedorNome: "" } : distribuirReserva();
     const lead = {
       id: "lead_" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),

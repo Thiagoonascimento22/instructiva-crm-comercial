@@ -3484,3 +3484,17 @@ input:focus-visible, textarea:focus-visible, select:focus-visible {
 @media (max-width: 640px){ .rsv-f2 { grid-template-columns: 1fr; } }
 .rsv-hint { margin-top: 8px; font-size: 12px; color: var(--muted, #6b7280); background: var(--surface-2, #f7f8fb); border-radius: 8px; padding: 8px 11px; line-height: 1.45; }
 .rsv-dest { margin-top: 6px; font-size: 12px; color: #7c3aed; }
+
+/* ===== WhatsApp no card + filtro por vendedor ===== */
+.crm-card-tel { display: flex; align-items: center; gap: 6px; }
+.crm-wa { display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; border-radius: 6px; background: #25D366; color: #fff; margin-left: auto; text-decoration: none; flex: none; }
+.crm-wa .ico { width: 14px; height: 14px; }
+.crm-wa:hover { background: #1eb455; }
+.crm-filtro-vend { margin-left: auto; padding: 8px 12px; border: 1px solid var(--border, #e6e8ef); border-radius: 9px; background: var(--surface, #fff); color: var(--text, #1a2b22); font-size: 13px; cursor: pointer; }
+
+/* ===== Gerenciador de colunas ===== */
+.col-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 14px; }
+.col-item { display: flex; align-items: center; gap: 10px; }
+.col-cor { width: 40px; height: 38px; padding: 2px; border: 1px solid var(--border, #e6e8ef); border-radius: 8px; background: transparent; cursor: pointer; flex: none; }
+.col-nome { flex: 1; }
+.col-nova { display: flex; align-items: center; gap: 10px; border-top: 1px solid var(--border, #e6e8ef); padding-top: 14px; }

@@ -159,6 +159,12 @@ const ETAPAS = [
   { id: "perdeu", nome: "Perdeu", cor: "var(--perdeu)" },
 ];
 const corEtapa = (id) => (ETAPAS.find((e) => e.id === id) || ETAPAS[0]).cor;
+// Link pra abrir a conversa no WhatsApp (garante DDI 55 do Brasil se faltar)
+function linkWhats(tel) {
+  const d = String(tel || "").replace(/\D/g, "");
+  if (!d) return "#";
+  return "https://wa.me/" + (d.startsWith("55") ? d : "55" + d);
+}
 
 function fmtMoney(n) {
   return "R$ " + (Number(n) || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -2903,6 +2909,45 @@ function PainelSistema({ modulos, onSalvo, showToast }) {
   );
 }
 
+// Gerenciador de colunas do Pipeline (criar, renomear, mudar cor, apagar)
+function ModalColunas({ etapas, onClose, onChanged, showToast }) {
+  const [novoNome, setNovoNome] = useState("");
+  const [novaCor, setNovaCor] = useState("#3b82f6");
+  const [busy, setBusy] = useState(false);
+  async function add() {
+    if (!novoNome.trim()) { showToast("Dê um nome à coluna"); return; }
+    setBusy(true);
+    try { await api.ofCrmEtapaCriar({ lb: novoNome, cor: novaCor }); setNovoNome(""); showToast("✓ Coluna criada"); onChanged(); }
+    catch (e) { showToast("✗ " + e.message); } finally { setBusy(false); }
+  }
+  async function salvar(k, campo, valor) { try { await api.ofCrmEtapaEditar(k, { [campo]: valor }); onChanged(); } catch (e) { showToast("✗ " + e.message); } }
+  async function excluir(k, lb) { if (!window.confirm('Apagar a coluna "' + lb + '"? Os leads dela vão pra primeira coluna.')) return; try { await api.ofCrmEtapaExcluir(k); showToast("✓ Coluna apagada"); onChanged(); } catch (e) { showToast("✗ " + e.message); } }
+  return (
+    <div className="pop-bg" onClick={(e) => e.target === e.currentTarget && onClose()}>
+      <div className="pop-sheet" style={{ maxWidth: 560 }}>
+        <div className="pop-head"><b>Colunas do Pipeline</b><button className="crm-x" onClick={onClose}>✕</button></div>
+        <div className="pop-body">
+          <div className="col-list">
+            {etapas.map((e) => (
+              <div className="col-item" key={e.k}>
+                <input type="color" className="col-cor" defaultValue={e.cor} onBlur={(ev) => { if (ev.target.value !== e.cor) salvar(e.k, "cor", ev.target.value); }} title="Cor da coluna" />
+                <input className="input col-nome" defaultValue={e.lb} onBlur={(ev) => { const v = ev.target.value.trim(); if (v && v !== e.lb) salvar(e.k, "lb", v); }} />
+                <button className="onum-acao del" onClick={() => excluir(e.k, e.lb)} title="Apagar coluna" disabled={etapas.length <= 1}><I.trash className="ico" /></button>
+              </div>
+            ))}
+          </div>
+          <div className="col-nova">
+            <input type="color" className="col-cor" value={novaCor} onChange={(e) => setNovaCor(e.target.value)} />
+            <input className="input col-nome" value={novoNome} onChange={(e) => setNovoNome(e.target.value)} placeholder="Nome da nova coluna" onKeyDown={(e) => e.key === "Enter" && add()} />
+            <button className="onum-add" disabled={busy} onClick={add}><I.plus className="ico" /> Criar</button>
+          </div>
+          <div className="rsv-hint" style={{ marginTop: 12 }}>Renomeie clicando no nome (sai do campo pra salvar). Mude a cor no quadradinho. Ao apagar uma coluna, os leads dela vão pra primeira coluna — ninguém se perde.</div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // Gerenciador de Listas de Reserva (captação). Cada lista = um lançamento (curso+valor)
 // com um link público /r/<slug> pra mandar pra galera. Os leads caem no Pipeline distribuídos.
 function ModalReservaListas({ onClose, showToast, etapas = [] }) {
@@ -3079,6 +3124,9 @@ function OficialCRM({ showToast, isGer = true }) {
   const [criar, setCriar] = useState(null);
   const [config, setConfig] = useState(false);
   const [showReserva, setShowReserva] = useState(false);
+  const [showColunas, setShowColunas] = useState(false);
+  const [showDistrib, setShowDistrib] = useState(false);
+  const [filtroVend, setFiltroVend] = useState("");
   const [dragId, setDragId] = useState(null);
   const [novaNota, setNovaNota] = useState("");
 
@@ -3118,14 +3166,23 @@ function OficialCRM({ showToast, isGer = true }) {
   return (
     <div className="crm-wrap">
       <div className="crm-top">
-        <button className="onum-add" onClick={() => setCriar({ nome: "", telefone: "", email: "", curso: "", etapa: "novo", vendedorId: "", valor: "" })}><I.plus className="ico" /> Novo lead</button>
-        {isGer && <button className="onum-btn-ghost" onClick={() => setConfig(true)}><I.cog className="ico" /> Distribuição das ligações</button>}
-        {isGer && <button className="onum-btn-ghost" onClick={() => setShowReserva(true)}><I.users className="ico" /> Listas de reserva</button>}
+        <button className="onum-add" onClick={() => setCriar({ nome: "", telefone: "", email: "", curso: "", etapa: (etapas[0] || {}).k || "novo", vendedorId: "", valor: "" })}><I.plus className="ico" /> Novo lead</button>
+        {isGer && <button className="onum-btn-ghost" onClick={() => setShowDistrib(true)}><I.users className="ico" /> Quem recebe os leads</button>}
+        {isGer && <button className="onum-btn-ghost" onClick={() => setShowReserva(true)}><I.chat className="ico" /> Listas de reserva</button>}
+        {isGer && <button className="onum-btn-ghost" onClick={() => setShowColunas(true)}><I.cog className="ico" /> Colunas</button>}
+        {isGer && <button className="onum-btn-ghost" onClick={() => setConfig(true)}><I.suporte className="ico" /> Distribuição das ligações</button>}
+        {isGer && vendedores.length > 0 && (
+          <select className="crm-filtro-vend" value={filtroVend} onChange={(e) => setFiltroVend(e.target.value)}>
+            <option value="">Todos os vendedores</option>
+            {vendedores.map((v) => <option key={v.id} value={v.id}>{v.nome}</option>)}
+            <option value="__sem">Sem dono</option>
+          </select>
+        )}
       </div>
 
       <div className="crm-board">
         {etapas.map((et) => {
-          const doEt = leads.filter((l) => l.etapa === et.k);
+          const doEt = leads.filter((l) => l.etapa === et.k && (!filtroVend || (filtroVend === "__sem" ? !l.vendedorId : l.vendedorId === filtroVend)));
           return (
             <div key={et.k} className="crm-col" onDragOver={(e) => e.preventDefault()} onDrop={(e) => { e.preventDefault(); if (dragId) mover(dragId, et.k); setDragId(null); }}>
               <div className="crm-col-head">
@@ -3136,7 +3193,7 @@ function OficialCRM({ showToast, isGer = true }) {
                 {doEt.map((l) => (
                   <div key={l.id} className="crm-card" draggable onDragStart={() => setDragId(l.id)} onDragEnd={() => setDragId(null)} onClick={() => { setSel(l.id); setNovaNota(""); }}>
                     <div className="crm-card-nome">{l.nome}</div>
-                    {l.telefone && <div className="crm-card-tel">{l.telefone}</div>}
+                    {l.telefone && <div className="crm-card-tel">{l.telefone}<a className="crm-wa" href={linkWhats(l.telefone)} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()} title="Chamar no WhatsApp"><I.wa className="ico" /></a></div>}
                     {l.curso && <div className="crm-card-curso">{l.curso}</div>}
                     {l.formaPagamento && <div className="crm-card-forma">💳 {l.formaPagamento}</div>}
                     {(l.tags || []).length > 0 && <div className="crm-card-tags">{l.tags.map((t, i) => <span key={i} className="crm-tag">{t}</span>)}</div>}
@@ -3259,6 +3316,15 @@ function OficialCRM({ showToast, isGer = true }) {
       )}
 
       {showReserva && <ModalReservaListas etapas={etapas} onClose={() => setShowReserva(false)} showToast={showToast} />}
+      {showColunas && <ModalColunas etapas={etapas} onClose={() => setShowColunas(false)} onChanged={carregar} showToast={showToast} />}
+      {showDistrib && (
+        <div className="pop-bg" onClick={(e) => e.target === e.currentTarget && setShowDistrib(false)}>
+          <div className="pop-sheet" style={{ maxWidth: 640 }}>
+            <div className="pop-head"><b>Quem recebe os leads</b><button className="crm-x" onClick={() => setShowDistrib(false)}>✕</button></div>
+            <div className="pop-body"><OficialVendedores showToast={showToast} /></div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
