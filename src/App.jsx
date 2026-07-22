@@ -3186,6 +3186,12 @@ function OficialCRM({ showToast, isGer = true, onAbrirWhats }) {
 
   const carregar = () => api.ofCRM().then((d) => { setEtapas(d.etapas || []); setLeads(d.leads || []); setVendedores(d.vendedores || []); setCrmVend(d.crmVendedores || []); }).catch((e) => showToast(e.message));
   useEffect(() => { carregar(); const t = setInterval(carregar, 12000); return () => clearInterval(t); }, []);
+  useEffect(() => {
+    if (!waMenu) return;
+    const fechar = () => setWaMenu(null);
+    document.addEventListener("click", fechar);
+    return () => document.removeEventListener("click", fechar);
+  }, [waMenu]);
 
   const leadSel = sel ? leads.find((l) => l.id === sel) : null;
 
@@ -3196,6 +3202,11 @@ function OficialCRM({ showToast, isGer = true, onAbrirWhats }) {
   }
   async function salvarCampo(id, campo, valor) {
     try { const r = await api.ofCrmEditar(id, { [campo]: valor }); setLeads((ls) => ls.map((x) => x.id === id ? r.lead : x)); } catch (e) { showToast(e.message); }
+  }
+  async function transferir(vid) {
+    if (!sel) return;
+    try { await api.ofCrmEditar(sel, { vendedorId: vid }); setSel(null); showToast("✓ Lead transferido"); carregar(); }
+    catch (e) { showToast("✗ " + e.message); }
   }
   async function addNota() {
     if (!novaNota.trim() || !sel) return;
@@ -3235,7 +3246,6 @@ function OficialCRM({ showToast, isGer = true, onAbrirWhats }) {
       </div>
 
       <div className="crm-board">
-        {waMenu && <div className="crm-wa-backdrop" onClick={() => setWaMenu(null)} />}
         {etapas.map((et) => {
           const doEt = leads.filter((l) => l.etapa === et.k && (!filtroVend || (filtroVend === "__sem" ? !l.vendedorId : l.vendedorId === filtroVend)));
           const totalCol = doEt.reduce((s, l) => s + (Number(l.valor) || 0), 0);
@@ -3315,12 +3325,21 @@ function OficialCRM({ showToast, isGer = true, onAbrirWhats }) {
                     {etapas.map((e) => <option key={e.k} value={e.k}>{e.lb}</option>)}
                   </select>
                 </div>
-                {isGer && <div><label className="lbl-mini">Vendedor responsável</label>
-                  <select className="input" value={leadSel.vendedorId || ""} onChange={(e) => salvarCampo(sel, "vendedorId", e.target.value)}>
-                    <option value="">Sem dono</option>
-                    {vendedores.map((v) => <option key={v.id} value={v.id}>{v.nome}</option>)}
-                  </select>
-                </div>}
+                {isGer ? (
+                  <div><label className="lbl-mini">Vendedor responsável</label>
+                    <select className="input" value={leadSel.vendedorId || ""} onChange={(e) => salvarCampo(sel, "vendedorId", e.target.value)}>
+                      <option value="">Sem dono</option>
+                      {vendedores.map((v) => <option key={v.id} value={v.id}>{v.nome}</option>)}
+                    </select>
+                  </div>
+                ) : (
+                  <div><label className="lbl-mini">Transferir para</label>
+                    <select className="input" value="" onChange={(e) => { if (e.target.value) transferir(e.target.value); }}>
+                      <option value="">Escolher vendedor…</option>
+                      {vendedores.filter((v) => v.id !== leadSel.vendedorId).map((v) => <option key={v.id} value={v.id}>{v.nome}</option>)}
+                    </select>
+                  </div>
+                )}
               </div>
 
               <div className="crm-sec-t">Notas</div>

@@ -1601,7 +1601,7 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
     res.json({
       etapas: etapasCRM(),
       leads: leads.map(crmLeadPublico),
-      vendedores: ehVend ? [] : (db.users || []).filter((u) => u.role === "vendedor" && u.ativo).map((u) => ({ id: u.id, nome: u.nome, foto: u.foto || "" })),
+      vendedores: (db.users || []).filter((u) => u.role === "vendedor" && u.ativo).map((u) => ({ id: u.id, nome: u.nome, foto: u.foto || "" })),
       crmVendedores: ehVend ? [] : (db.oficial.crmVendedores || []),
       soMeus: ehVend, // o front usa pra esconder as partes que são só do gerente
     });
@@ -1631,9 +1631,8 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
     const l = (db.oficial.crmLeads || []).find((x) => x.id === req.params.id);
     if (!l) return res.status(404).json({ error: "Lead não encontrado" });
     const b = req.body || {};
-    if (req.user.role === "vendedor") {
-      if (l.vendedorId !== req.user.id) return res.status(403).json({ error: "Esse lead não é seu" });
-      delete b.vendedorId; // vendedor não reatribui o lead pra outra pessoa
+    if (req.user.role === "vendedor" && l.vendedorId !== req.user.id) {
+      return res.status(403).json({ error: "Esse lead não é seu" });
     }
     if (b.etapa !== undefined && etapasCRM().some((e) => e.k === b.etapa)) {
       if (l.etapa !== b.etapa) l.historico.push({ tipo: "etapa", texto: "Movido para " + etapasCRM().find((e) => e.k === b.etapa).lb, ts: Date.now() });
