@@ -3558,3 +3558,20 @@ input:focus-visible, textarea:focus-visible, select:focus-visible {
 .of-stepper button:hover:not(:disabled) { background: var(--surface-2); }
 .of-stepper button:disabled { color: var(--muted); opacity: .4; cursor: default; }
 .of-peso-n { min-width: 32px; text-align: center; font-weight: 700; font-size: 15px; color: var(--text); border-left: 1px solid var(--line); border-right: 1px solid var(--line); height: 32px; display: inline-flex; align-items: center; justify-content: center; }
+
+/* ===== Links da lista: formulário + endpoint ===== */
+.rsv-links { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
+.rsv-link { display: flex; align-items: center; gap: 8px; font-size: 12px; border: 1px dashed var(--line); border-radius: 8px; padding: 6px 10px; cursor: pointer; background: var(--surface-2); }
+.rsv-link:hover { border-color: var(--brand); }
+.rsv-link.api { border-style: solid; border-color: var(--brand); }
+.rsv-link-tag { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .3px; color: var(--muted); white-space: nowrap; flex: none; }
+.rsv-link.api .rsv-link-tag { color: var(--brand); }
+.rsv-link-url { font-family: ui-monospace, monospace; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; min-width: 0; }
+.rsv-copy { font-weight: 700; font-size: 10.5px; text-transform: uppercase; letter-spacing: .4px; color: var(--brand); flex: none; }
+
+/* ===== Endpoint no card da lista ===== */
+.rsv-link { display: flex; align-items: center; gap: 8px; font-size: 12px; border: 1px dashed var(--brand); border-radius: 8px; padding: 7px 11px; cursor: pointer; background: var(--surface-2); margin-top: 8px; }
+.rsv-link:hover { background: var(--card); }
+.rsv-link-tag { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .3px; color: var(--brand); white-space: nowrap; flex: none; }
+.rsv-link-url { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; min-width: 0; }
+.rsv-copy { font-weight: 700; font-size: 10.5px; text-transform: uppercase; letter-spacing: .4px; color: var(--brand); flex: none; }

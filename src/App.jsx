@@ -3039,7 +3039,7 @@ function ModalReservaListas({ onClose, showToast, etapas = [] }) {
   }
   async function toggle(l) { try { await api.ofReservaEditar(l.id, { ativa: !l.ativa }); carregar(); } catch (e) { showToast("✗ " + e.message); } }
   async function excluir(l) { if (!window.confirm('Excluir a lista "' + l.nome + '"? Os leads que já entraram continuam no Pipeline.')) return; try { await api.ofReservaExcluir(l.id); carregar(); } catch (e) { showToast("✗ " + e.message); } }
-  function copiar(slug) { const url = origin + "/r/" + slug; if (navigator.clipboard) navigator.clipboard.writeText(url).then(() => showToast("✓ Link copiado")).catch(() => showToast(url)); else showToast(url); }
+  function copiarUrl(url, oque) { if (navigator.clipboard) navigator.clipboard.writeText(url).then(() => showToast("✓ " + (oque || "Link") + " copiado")).catch(() => showToast(url)); else showToast(url); }
 
   return (
     <div className="pop-bg" onClick={(e) => e.target === e.currentTarget && onClose()}>
@@ -3092,7 +3092,11 @@ function ModalReservaListas({ onClose, showToast, etapas = [] }) {
                     <div className="rsv-meta">{l.curso || "sem curso"}{l.tag ? " · 🏷 " + l.tag : ""} · <b>{l.leads}</b> {l.leads === 1 ? "lead" : "leads"}</div>
                     {(l.opcoes || []).length > 0 && <div className="rsv-opcs-mini">{l.opcoes.map((o, i) => <span key={i} className="rsv-opc-chip">{o.forma} · R$ {Number(o.preco || 0).toLocaleString("pt-BR")}</span>)}</div>}
                     <div className="rsv-dest">→ cai em <b>{nomeCol(l.destino)}</b> · {l.distribuir === "manual" ? "sem dono (você distribui)" : "distribuição automática"}</div>
-                    <div className="rsv-link" onClick={() => copiar(l.slug)} title="Clique pra copiar o link">{origin}/r/{l.slug}<span className="rsv-copy">copiar</span></div>
+                    <div className="rsv-link api" onClick={() => copiarUrl(origin + "/api/reserva/" + l.slug, "Endpoint")} title="Clique pra copiar — é o endpoint que o time usa pra cair lead no CRM">
+                      <span className="rsv-link-tag">Endpoint · POST</span>
+                      <span className="rsv-link-url">{origin}/api/reserva/{l.slug}</span>
+                      <span className="rsv-copy">copiar</span>
+                    </div>
                   </div>
                   <div className="rsv-acoes">
                     <button className={"sw" + (l.ativa ? " on" : "")} onClick={() => toggle(l)} title={l.ativa ? "Pausar (fecha o link)" : "Reabrir a lista"}><span className="sw-dot" /></button>
