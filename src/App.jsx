@@ -2903,6 +2903,68 @@ function PainelSistema({ modulos, onSalvo, showToast }) {
   );
 }
 
+// Gerenciador de Listas de Reserva (captação). Cada lista = um lançamento (curso+valor)
+// com um link público /r/<slug> pra mandar pra galera. Os leads caem no Pipeline distribuídos.
+function ModalReservaListas({ onClose, showToast }) {
+  const [listas, setListas] = useState(null);
+  const [nome, setNome] = useState("");
+  const [curso, setCurso] = useState("");
+  const [valor, setValor] = useState("");
+  const [criando, setCriando] = useState(false);
+  const carregar = () => api.ofReservaListas().then((r) => setListas(r.listas || [])).catch((e) => showToast("✗ " + e.message));
+  useEffect(() => { carregar(); /* eslint-disable-next-line */ }, []);
+  const origin = typeof window !== "undefined" ? window.location.origin : "";
+
+  async function criar() {
+    if (!nome.trim()) { showToast("Dê um nome à lista"); return; }
+    setCriando(true);
+    try { await api.ofReservaCriar({ nome, curso, valor }); setNome(""); setCurso(""); setValor(""); showToast("✓ Lista criada"); carregar(); }
+    catch (e) { showToast("✗ " + e.message); } finally { setCriando(false); }
+  }
+  async function toggle(l) { try { await api.ofReservaEditar(l.id, { ativa: !l.ativa }); carregar(); } catch (e) { showToast("✗ " + e.message); } }
+  async function excluir(l) { if (!window.confirm('Excluir a lista "' + l.nome + '"? Os leads que já entraram continuam no Pipeline.')) return; try { await api.ofReservaExcluir(l.id); carregar(); } catch (e) { showToast("✗ " + e.message); } }
+  function copiar(slug) { const url = origin + "/r/" + slug; if (navigator.clipboard) navigator.clipboard.writeText(url).then(() => showToast("✓ Link copiado")).catch(() => showToast(url)); else showToast(url); }
+
+  return (
+    <div className="pop-bg" onClick={(e) => e.target === e.currentTarget && onClose()}>
+      <div className="pop-sheet" style={{ maxWidth: 720 }}>
+        <div className="pop-head"><b>Listas de reserva</b><button className="crm-x" onClick={onClose}>✕</button></div>
+        <div className="pop-body">
+          <div className="rsv-nova">
+            <div className="rsv-nova-tit">Nova lista — um lançamento</div>
+            <div className="rsv-f3">
+              <div><label className="lbl-mini">Nome da lista</label><input className="input" value={nome} onChange={(e) => setNome(e.target.value)} placeholder="Ex: Turma de Março" /></div>
+              <div><label className="lbl-mini">Curso</label><input className="input" value={curso} onChange={(e) => setCurso(e.target.value)} placeholder="Nome do curso" /></div>
+              <div><label className="lbl-mini">Valor (R$)</label><input className="input" value={valor} onChange={(e) => setValor(e.target.value)} placeholder="0" /></div>
+            </div>
+            <button className="onum-add" style={{ marginTop: 12 }} disabled={criando} onClick={criar}><I.plus className="ico" /> Criar lista e gerar link</button>
+          </div>
+
+          {listas === null ? <div className="rsv-vazio">Carregando…</div> : listas.length === 0 ? (
+            <div className="rsv-vazio">Nenhuma lista ainda. Crie a primeira acima — ela gera um link pra você mandar pra galera.</div>
+          ) : (
+            <div className="rsv-list">
+              {listas.map((l) => (
+                <div className={"rsv-item" + (l.ativa ? "" : " off")} key={l.id}>
+                  <div className="rsv-info">
+                    <div className="rsv-nome">{l.nome} {!l.ativa && <span className="rsv-off-tag">pausada</span>}</div>
+                    <div className="rsv-meta">{l.curso || "sem curso"} · R$ {Number(l.valor || 0).toLocaleString("pt-BR")} · <b>{l.leads}</b> {l.leads === 1 ? "lead" : "leads"}</div>
+                    <div className="rsv-link" onClick={() => copiar(l.slug)} title="Clique pra copiar o link">{origin}/r/{l.slug}<span className="rsv-copy">copiar</span></div>
+                  </div>
+                  <div className="rsv-acoes">
+                    <button className={"sw" + (l.ativa ? " on" : "")} onClick={() => toggle(l)} title={l.ativa ? "Pausar (fecha o link)" : "Reabrir a lista"}><span className="sw-dot" /></button>
+                    <button className="onum-acao del" onClick={() => excluir(l)} title="Excluir lista"><I.trash className="ico" /></button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // Modal reutilizável: cadastra um lead direto no Pipeline a partir de uma conversa
 // (usado tanto na caixa Oficial quanto na Não oficial). Só o gerente enxerga o botão,
 // porque o Pipeline é gerente-only no servidor.
@@ -2980,6 +3042,7 @@ function OficialCRM({ showToast, isGer = true }) {
   const [sel, setSel] = useState(null);
   const [criar, setCriar] = useState(null);
   const [config, setConfig] = useState(false);
+  const [showReserva, setShowReserva] = useState(false);
   const [dragId, setDragId] = useState(null);
   const [novaNota, setNovaNota] = useState("");
 
@@ -3021,6 +3084,7 @@ function OficialCRM({ showToast, isGer = true }) {
       <div className="crm-top">
         <button className="onum-add" onClick={() => setCriar({ nome: "", telefone: "", email: "", curso: "", etapa: "novo", vendedorId: "", valor: "" })}><I.plus className="ico" /> Novo lead</button>
         {isGer && <button className="onum-btn-ghost" onClick={() => setConfig(true)}><I.cog className="ico" /> Distribuição das ligações</button>}
+        {isGer && <button className="onum-btn-ghost" onClick={() => setShowReserva(true)}><I.users className="ico" /> Listas de reserva</button>}
       </div>
 
       <div className="crm-board">
@@ -3155,6 +3219,8 @@ function OficialCRM({ showToast, isGer = true }) {
           </div>
         </div>
       )}
+
+      {showReserva && <ModalReservaListas onClose={() => setShowReserva(false)} showToast={showToast} />}
     </div>
   );
 }

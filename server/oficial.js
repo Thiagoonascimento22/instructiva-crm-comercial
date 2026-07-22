@@ -30,6 +30,7 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
     if (!Array.isArray(db.oficial.campanhas)) db.oficial.campanhas = [];
     // campanhas: [{ id, nome, numeroId, template, enviados, falhas, total, criadoEm }]
     if (typeof db.oficial.rrCursor !== "number") db.oficial.rrCursor = 0;
+    if (!Array.isArray(db.oficial.reservaListas)) db.oficial.reservaListas = []; // listas de reserva (captação)
     if (!Array.isArray(db.oficial.ias)) db.oficial.ias = [];
     // ias: [{ id, nome, ativa, modo, persona, playbook, gatilhoHandoff, criadoEm }]
     //   modo: "fecha" (IA vende sozinha) | "qualifica" (IA conversa e passa pro vendedor)
@@ -1668,6 +1669,149 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
     salvar();
     res.json({ ok: true });
   });
+
+  /* ============ LISTAS DE RESERVA (captação de leads por lançamento) ============
+     Cada lista = um lançamento (curso + valor) com um link público /r/<slug>.
+     A pessoa preenche → o lead cai no Pipeline (etapa "novo"), já com curso+valor,
+     distribuído pro vendedor pela regra de % que já existe. Aguenta rajada porque
+     a gravação do banco é síncrona/atômica (nunca corrompe) + anti-duplicado + anti-flood. */
+  function slugReserva() {
+    const abc = "abcdefghjkmnpqrstuvwxyz23456789";
+    let s = ""; for (let i = 0; i < 7; i++) s += abc[Math.floor(Math.random() * abc.length)];
+    return s;
+  }
+  function reservaPublica(l) {
+    const qtd = (db.oficial.crmLeads || []).filter((x) => x.reservaId === l.id).length;
+    return { id: l.id, nome: l.nome, curso: l.curso, valor: l.valor, slug: l.slug, ativa: l.ativa !== false, leads: qtd, criadoEm: l.criadoEm };
+  }
+  function distribuirReserva() {
+    const v = escolherVendedor();
+    if (!v) return { vendedorId: null, vendedorNome: "" };
+    v.oficialLeadsRecebidos = (v.oficialLeadsRecebidos || 0) + 1;
+    return { vendedorId: v.id, vendedorNome: v.nome };
+  }
+  function escHtml(s) {
+    return String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  }
+
+  // ---- Admin (gerente) ----
+  app.get("/api/oficial/reserva", auth, gerenteOnly, (req, res) => {
+    garantirEstrutura();
+    res.json({ listas: (db.oficial.reservaListas || []).map(reservaPublica) });
+  });
+  app.post("/api/oficial/reserva", auth, gerenteOnly, (req, res) => {
+    garantirEstrutura();
+    const b = req.body || {};
+    const nome = String(b.nome || "").trim().slice(0, 80);
+    if (!nome) return res.status(400).json({ error: "Dê um nome à lista" });
+    let slug; do { slug = slugReserva(); } while ((db.oficial.reservaListas || []).some((x) => x.slug === slug));
+    const lista = { id: proximoId("rsv"), nome, curso: String(b.curso || "").trim().slice(0, 120), valor: parseFloat(b.valor) || 0, slug, ativa: true, criadoEm: Date.now() };
+    db.oficial.reservaListas.push(lista);
+    salvar();
+    res.json({ ok: true, lista: reservaPublica(lista) });
+  });
+  app.put("/api/oficial/reserva/:id", auth, gerenteOnly, (req, res) => {
+    garantirEstrutura();
+    const l = (db.oficial.reservaListas || []).find((x) => x.id === req.params.id);
+    if (!l) return res.status(404).json({ error: "Lista não encontrada" });
+    const b = req.body || {};
+    if (b.nome !== undefined) l.nome = String(b.nome).trim().slice(0, 80);
+    if (b.curso !== undefined) l.curso = String(b.curso).trim().slice(0, 120);
+    if (b.valor !== undefined) l.valor = parseFloat(b.valor) || 0;
+    if (b.ativa !== undefined) l.ativa = !!b.ativa;
+    salvar();
+    res.json({ ok: true, lista: reservaPublica(l) });
+  });
+  app.delete("/api/oficial/reserva/:id", auth, gerenteOnly, (req, res) => {
+    garantirEstrutura();
+    db.oficial.reservaListas = (db.oficial.reservaListas || []).filter((x) => x.id !== req.params.id);
+    salvar();
+    res.json({ ok: true });
+  });
+
+  // ---- Público: recebe o lead (SEM login) ----
+  const _rsvRate = new Map();
+  function rsvRateOk(ip) {
+    const agora = Date.now();
+    const arr = (_rsvRate.get(ip) || []).filter((t) => agora - t < 60000);
+    if (arr.length >= 25) { _rsvRate.set(ip, arr); return false; } // máx 25/min por IP
+    arr.push(agora); _rsvRate.set(ip, arr);
+    if (_rsvRate.size > 5000) _rsvRate.clear();
+    return true;
+  }
+  app.post("/api/reserva/:slug", (req, res) => {
+    garantirEstrutura(); garantirCRM();
+    const lista = (db.oficial.reservaListas || []).find((x) => x.slug === req.params.slug);
+    if (!lista || lista.ativa === false) return res.status(404).json({ error: "Lista indisponível" });
+    const ip = String(req.headers["x-forwarded-for"] || req.ip || "").split(",")[0].trim();
+    if (!rsvRateOk(ip)) return res.status(429).json({ error: "Muitas tentativas seguidas. Aguarde um instante." });
+    const b = req.body || {};
+    const nome = String(b.nome || "").trim().slice(0, 80);
+    const telefone = String(b.telefone || "").replace(/\D/g, "");
+    const email = String(b.email || "").trim().slice(0, 120);
+    if (!nome) return res.status(400).json({ error: "Informe seu nome" });
+    if (telefone.length < 10 || telefone.length > 13) return res.status(400).json({ error: "WhatsApp inválido" });
+    const ja = (db.oficial.crmLeads || []).find((x) => x.reservaId === lista.id && x.telefone === telefone);
+    if (ja) return res.json({ ok: true, jaEstava: true }); // já está na lista, não duplica
+    const dist = distribuirReserva();
+    const lead = {
+      id: "lead_" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+      nome, telefone, email,
+      curso: lista.curso, valor: lista.valor, etapa: "novo",
+      vendedorId: dist.vendedorId, vendedorNome: dist.vendedorNome,
+      origem: "reserva", reservaId: lista.id, reservaNome: lista.nome,
+      notas: [],
+      historico: [{ tipo: "criado", texto: "Entrou pela lista de reserva: " + lista.nome, ts: Date.now() }],
+      criadoEm: Date.now(), atualizadoEm: Date.now(),
+    };
+    db.oficial.crmLeads.unshift(lead);
+    salvar();
+    res.json({ ok: true });
+  });
+
+  // ---- Público: página do formulário (SEM login) ----
+  app.get("/r/:slug", (req, res) => {
+    garantirEstrutura();
+    const lista = (db.oficial.reservaListas || []).find((x) => x.slug === req.params.slug);
+    res.set("Content-Type", "text/html; charset=utf-8");
+    res.send((lista && lista.ativa !== false) ? paginaReserva(lista) : paginaReservaOff());
+  });
+  function paginaReserva(l) {
+    const titulo = escHtml(l.curso || l.nome);
+    return '<!doctype html><html lang="pt-BR"><head><meta charset="utf-8">'
+      + '<meta name="viewport" content="width=device-width,initial-scale=1">'
+      + '<title>Lista de reserva - ' + titulo + '</title>'
+      + '<style>*{box-sizing:border-box;margin:0;padding:0}body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;background:#fdf6ef;color:#1a2b22;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px}'
+      + '.card,.ok{background:#fff;max-width:440px;width:100%;border-radius:20px;padding:32px 26px;box-shadow:0 12px 40px rgba(20,40,30,.12)}'
+      + '.bar{height:6px;border-radius:99px;background:linear-gradient(90deg,#F26522,#25A06B);margin-bottom:20px}'
+      + '.badge{display:inline-block;font-size:12px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;color:#25A06B;background:#e8f6ef;padding:5px 11px;border-radius:99px;margin-bottom:14px}'
+      + 'h1{font-size:25px;line-height:1.2;margin-bottom:8px}h2{font-size:23px;margin-bottom:8px}.sub{color:#5a6b62;font-size:15px;margin-bottom:22px;line-height:1.45}'
+      + 'label{display:block;font-size:13px;font-weight:600;color:#3a4b42;margin:14px 0 6px}'
+      + 'input{width:100%;padding:13px 14px;border:1.5px solid #e2e8e2;border-radius:12px;font-size:16px;transition:.15s;outline:none}input:focus{border-color:#25A06B}'
+      + 'button{width:100%;margin-top:22px;padding:15px;border:0;border-radius:12px;font-size:16px;font-weight:700;color:#fff;background:linear-gradient(90deg,#F26522,#25A06B);cursor:pointer}button:disabled{opacity:.6;cursor:wait}'
+      + '.msg{color:#dc2626;font-size:14px;margin-top:12px;min-height:18px;text-align:center}'
+      + '.ok{display:none;text-align:center}.ok-ic{width:64px;height:64px;border-radius:50%;background:#25A06B;color:#fff;font-size:34px;display:flex;align-items:center;justify-content:center;margin:0 auto 18px}.ok p{color:#5a6b62;font-size:15px;line-height:1.5}</style></head><body>'
+      + '<div class="card"><div class="bar"></div><span class="badge">Lista de reserva</span>'
+      + '<h1>' + titulo + '</h1><p class="sub">Garanta sua vaga. Preencha abaixo e a gente te avisa em primeira mão quando abrir.</p>'
+      + '<form id="f" novalidate>'
+      + '<label>Nome completo<input name="nome" required maxlength="80" autocomplete="name"></label>'
+      + '<label>WhatsApp<input name="telefone" required inputmode="tel" placeholder="(44) 99999-9999" autocomplete="tel"></label>'
+      + '<label>E-mail<input name="email" type="email" maxlength="120" autocomplete="email"></label>'
+      + '<button id="btn" type="submit">Quero entrar na lista</button><div id="msg" class="msg"></div></form></div>'
+      + '<div class="ok" id="ok"><div class="ok-ic">&#10003;</div><h2>Voce esta na lista! &#127881;</h2><p>Prontinho. A gente te chama em primeira mao assim que abrir as vagas.</p></div>'
+      + '<script>var f=document.getElementById("f"),btn=document.getElementById("btn"),msg=document.getElementById("msg");'
+      + 'f.addEventListener("submit",function(e){e.preventDefault();btn.disabled=true;msg.textContent="";'
+      + 'var d={nome:f.nome.value,telefone:f.telefone.value,email:f.email.value};'
+      + 'fetch("/api/reserva/' + l.slug + '",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(d)})'
+      + '.then(function(r){return r.json().then(function(j){return{ok:r.ok,j:j}})})'
+      + '.then(function(o){if(o.ok&&o.j.ok){document.querySelector(".card").style.display="none";document.getElementById("ok").style.display="block";}else{msg.textContent=(o.j&&o.j.error)||"Nao deu pra enviar. Confira os dados.";btn.disabled=false;}})'
+      + '.catch(function(){msg.textContent="Sem conexao. Tente de novo.";btn.disabled=false;});});</script></body></html>';
+  }
+  function paginaReservaOff() {
+    return '<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">'
+      + '<title>Lista indisponivel</title><style>body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:#fdf6ef;color:#1a2b22;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px;text-align:center}div{background:#fff;max-width:400px;padding:36px 28px;border-radius:20px;box-shadow:0 12px 40px rgba(20,40,30,.12)}h1{font-size:22px;margin-bottom:10px}p{color:#5a6b62;line-height:1.5}</style></head>'
+      + '<body><div><h1>Lista indisponivel</h1><p>Essa lista de reserva nao esta mais aberta. Fale com a gente pelo canal de sempre.</p></div></body></html>';
+  }
   app.post("/api/oficial/crm/vendedores", auth, gerenteOnly, (req, res) => {
     garantirCRM();
     const ids = Array.isArray((req.body || {}).ids) ? req.body.ids.filter((id) => db.users.some((u) => u.id === id && u.role === "vendedor")) : [];

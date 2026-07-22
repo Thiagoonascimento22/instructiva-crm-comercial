@@ -3448,3 +3448,21 @@ input:focus-visible, textarea:focus-visible, select:focus-visible {
 .pop-head { display: flex; align-items: center; justify-content: space-between; padding: 16px 20px; border-bottom: 1px solid var(--border, #e6e8ef); font-size: 16px; flex: none; }
 .pop-body { padding: 18px 20px 22px; overflow-y: auto; }
 .pop-body .cfg-wrap, .pop-body .of-wrap, .pop-body .disp-wrap { padding: 0; }
+
+/* ===== Listas de reserva (captação) ===== */
+.rsv-nova { background: var(--surface-2, #f7f8fb); border: 1px solid var(--border, #e6e8ef); border-radius: 14px; padding: 16px; margin-bottom: 18px; }
+.rsv-nova-tit { font-weight: 700; font-size: 14px; margin-bottom: 10px; }
+.rsv-f3 { display: grid; grid-template-columns: 1.3fr 1.3fr .8fr; gap: 10px; }
+@media (max-width: 640px){ .rsv-f3 { grid-template-columns: 1fr; } }
+.rsv-vazio { text-align: center; color: var(--muted, #6b7280); font-size: 14px; padding: 26px 10px; line-height: 1.5; }
+.rsv-list { display: flex; flex-direction: column; gap: 10px; }
+.rsv-item { display: flex; align-items: center; justify-content: space-between; gap: 12px; border: 1px solid var(--border, #e6e8ef); border-radius: 12px; padding: 12px 14px; }
+.rsv-item.off { opacity: .6; }
+.rsv-info { min-width: 0; flex: 1; }
+.rsv-nome { font-weight: 700; font-size: 15px; display: flex; align-items: center; gap: 8px; }
+.rsv-off-tag { font-size: 11px; font-weight: 700; color: #b45309; background: #fef3c7; padding: 2px 8px; border-radius: 99px; }
+.rsv-meta { font-size: 12.5px; color: var(--muted, #6b7280); margin-top: 3px; }
+.rsv-link { margin-top: 7px; font-size: 12.5px; color: var(--brand, #059669); background: var(--surface-2, #f1f5f9); border: 1px dashed var(--brand, #059669); border-radius: 8px; padding: 6px 10px; cursor: pointer; display: inline-flex; align-items: center; gap: 8px; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: ui-monospace, monospace; }
+.rsv-copy { font-weight: 700; font-family: -apple-system, sans-serif; text-transform: uppercase; font-size: 10.5px; letter-spacing: .4px; flex: none; }
+.rsv-acoes { display: flex; align-items: center; gap: 8px; flex: none; }
+.onum-acao.del:hover { color: #dc2626; }
