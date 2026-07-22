@@ -214,6 +214,11 @@ function redimensionarImg(file, max) {
   });
 }
 const soDigitos = (s) => (s || "").replace(/\D/g, "");
+// compara dois telefones ignorando o DDI 55 (o Evolution guarda com 55, o lead às vezes sem)
+function numIgual(a, b) {
+  const norm = (x) => { x = soDigitos(x); return x.length > 11 && x.startsWith("55") ? x.slice(2) : x; };
+  return norm(a) === norm(b);
+}
 
 // Parser de CSV simples: lida com aspas, separador ; ou , e BOM
 function parseCSV(texto) {
@@ -4728,7 +4733,7 @@ function InboxOficial({ isGer, showToast, onIrParaEvolution, target, onTargetUse
     if (alvoOfRef.current === target.numero) return;
     alvoOfRef.current = target.numero;
     const num = soDigitos(target.numero);
-    const achado = chats.find((c) => soDigitos(c.numero) === num);
+    const achado = chats.find((c) => numIgual(c.numero, target.numero));
     if (achado) { setSel(achado.id); setNovaConv(null); }
     else { setSel(null); setNovaConv({ telefone: num }); }
     onTargetUsed && onTargetUsed();
@@ -5498,7 +5503,7 @@ function WhatsApp({ user, showToast, target, onTargetUsed, recarregarSol }) {
     if (alvoRef.current === target.numero) return;
     alvoRef.current = target.numero;
     const num = soDigitos(target.numero);
-    const achado = chats.find((c) => soDigitos(c.numero) === num);
+    const achado = chats.find((c) => numIgual(c.numero, target.numero));
     if (achado) { abrir(achado.id); }
     else { setNovaNum(num); setNova(true); }
     onTargetUsed && onTargetUsed();

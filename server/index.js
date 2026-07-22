@@ -1002,7 +1002,7 @@ async function evo(method, caminho, body) {
     } else {
       msg = (data && (data.message || data.error)) || "Erro Evolution " + res.status;
     }
-    throw new Error(Array.isArray(msg) ? msg.join("; ") : String(msg));
+    throw new Error(Array.isArray(msg) ? msg.join("; ") : (msg && typeof msg === "object" ? JSON.stringify(msg) : String(msg)));
   }
   return data;
 }
@@ -1218,13 +1218,15 @@ app.put("/api/horario", auth, gerenteOnly, (req, res) => {
 /* ---- minha instância (vendedor conecta o próprio) ---- */
 app.get("/api/wa/minha", auth, async (req, res) => {
   const insts = instanciasDoUser(req.user);
-  const instance = insts[0] || null;
+  // vendedor sem instância ainda: usa um nome fixo pra ele conectar sozinho (self-service)
+  const jaTem = insts[0] || null;
+  const instance = jaTem || (req.user.role === "vendedor" ? "vend_" + req.user.id : null);
   let estado = "sem_instancia";
   if (instance) {
     try {
       const r = await evo("GET", `/instance/connectionState/${instance}`);
       estado = (r && r.instance && r.instance.state) || "close";
-    } catch (_) { estado = "desconhecido"; }
+    } catch (_) { estado = jaTem ? "desconhecido" : "close"; }
   }
   res.json({ instance, estado });
 });
@@ -1436,8 +1438,9 @@ app.post("/api/wa/iniciar", auth, async (req, res) => {
   const inst = instance || instanciasDoUser(req.user)[0];
   if (!inst || !permitidas.has(inst))
     return res.status(403).json({ error: "Sem WhatsApp vinculado" });
-  const num = String(numero || "").replace(/\D/g, "");
+  let num = String(numero || "").replace(/\D/g, "");
   if (num.length < 8) return res.status(400).json({ error: "Número inválido" });
+  if (num.length <= 11) num = "55" + num; // número BR sem DDI -> adiciona 55
   try {
     await evo("POST", `/message/sendText/${inst}`, { number: num, text: texto || "Olá!" });
     const id = `${inst}::${num}`;
@@ -1460,11 +1463,13 @@ app.post("/api/wa/connect", auth, async (req, res) => {
   let { instance, publicUrl } = req.body || {};
   instance = String(instance || "").trim();
   if (!instance) return res.status(400).json({ error: "Informe o nome da instância" });
-  // permissão: gerente conecta qualquer uma; vendedor só a dele
+  // permissão: gerente conecta qualquer uma; vendedor SEMPRE conecta a dele (self-service)
   if (req.user.role !== "gerente") {
-    const minhas = instanciasDoUser(req.user);
-    if (!minhas.includes(instance))
-      return res.status(403).json({ error: "Você só pode conectar o seu WhatsApp" });
+    instance = "vend_" + req.user.id; // ignora o que veio: é sempre a instância do próprio vendedor
+    if (!Array.isArray(db.waConfig.instancias)) db.waConfig.instancias = [];
+    const m = db.waConfig.instancias.find((i) => i.instance === instance);
+    if (!m) { db.waConfig.instancias.push({ instance, vendedorId: req.user.id }); saveSoon(); }
+    else if (!m.vendedorId) { m.vendedorId = req.user.id; saveSoon(); }
   }
   if (publicUrl && !db.waConfig.publicUrl) {
     db.waConfig.publicUrl = String(publicUrl).trim();
