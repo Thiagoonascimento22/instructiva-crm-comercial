@@ -187,17 +187,17 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
       (s, v) => s + (v.oficialLeadsRecebidos || 0), 0
     );
 
-    // soma dos pesos dos ativos (renormaliza só entre quem está ativo agora)
-    let somaPesos = ativos.reduce((s, v) => s + (Number(v.oficialPercentual) || 0), 0);
-    // se ninguém tem peso configurado, trata como igual pra todos
-    const usarIgual = somaPesos <= 0;
-    if (usarIgual) somaPesos = ativos.length;
+    // PESO de cada ativo = o número que o gerente definiu, ou 1 (padrão) se não mexeu.
+    // Assim "todos em 1" = 1 lead pra cada em rodízio; subir alguém pra 2 dá o dobro
+    // SEM zerar os outros. Nunca alguém ativo fica com peso 0 por engano.
+    const pesoDe = (v) => { const n = Number(v.oficialPercentual); return n > 0 ? n : 1; };
+    const somaPesos = ativos.reduce((s, v) => s + pesoDe(v), 0);
 
     // próximo lead -> escolhe quem tem MAIOR déficit (cota esperada - recebido)
     let escolhido = null;
     let melhorDeficit = -Infinity;
     for (const v of ativos) {
-      const peso = usarIgual ? 1 : (Number(v.oficialPercentual) || 0);
+      const peso = pesoDe(v);
       const cotaEsperada = ((totalDistribuido + 1) * peso) / somaPesos;
       const recebido = v.oficialLeadsRecebidos || 0;
       const deficit = cotaEsperada - recebido;

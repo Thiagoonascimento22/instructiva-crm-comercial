@@ -2667,9 +2667,20 @@ function OficialVendedores({ showToast }) {
     try { await api.ofZerarContadores(); carregar(); showToast("Contadores zerados"); }
     catch (e) { showToast(e.message); }
   }
+  const pesoDe = (v) => (Number(v.oficialPercentual) > 0 ? Number(v.oficialPercentual) : 1);
+  async function stepPeso(v, delta) {
+    const novo = Math.max(1, pesoDe(v) + delta);
+    try { const r = await api.ofEditarVendedor(v.id, { oficialPercentual: novo }); setVends((xs) => xs.map((x) => x.id === v.id ? { ...x, ...r } : x)); }
+    catch (e) { showToast(e.message); }
+  }
+  async function igualar() {
+    try { await Promise.all(vends.filter((v) => v.oficialAtivo).map((v) => api.ofEditarVendedor(v.id, { oficialPercentual: 1 }))); carregar(); showToast("✓ Todos recebem igual — 1 lead pra cada"); }
+    catch (e) { showToast(e.message); }
+  }
 
   const ativos = vends.filter((v) => v.oficialAtivo);
-  const somaPct = ativos.reduce((s, v) => s + (Number(v.oficialPercentual) || 0), 0);
+  const somaPeso = ativos.reduce((s, v) => s + pesoDe(v), 0);
+  const todosIgual = ativos.length > 0 && ativos.every((v) => pesoDe(v) === 1);
 
   if (carregando) return <div className="dash-empty"><span className="spin" /> Carregando…</div>;
   if (vends.length === 0) {
@@ -2684,44 +2695,42 @@ function OficialVendedores({ showToast }) {
 
   return (
     <div className="panel">
-      <div className="panel-h"><I.users className="ico" /> Distribuição de leads</div>
+      <div className="panel-h"><I.users className="ico" /> Quem recebe os leads</div>
       <div className="panel-sub">
-        Ligue quem está atendendo agora e defina o percentual de cada um. Os leads que responderem ao disparo
-        são distribuídos automaticamente só entre os <b>ativos</b>, respeitando o percentual.
+        <b>Desligue quem não vai trabalhar</b> — os leads caem só entre os ligados, e vale <b>na hora</b> (já pros próximos). Cada ligado recebe <b>1 lead por vez</b>, em rodízio. Se quiser que alguém receba mais, aumente os <b>leads por rodada</b> dele (2 = o dobro, e assim por diante).
       </div>
 
-      {ativos.length > 0 && somaPct !== 100 && somaPct !== 0 && (
-        <div className="of-aviso">
-          ⚠️ A soma dos percentuais dos ativos é {somaPct}% (não 100%). Funciona mesmo assim — o sistema
-          ajusta proporcionalmente — mas o ideal é somar 100%.
-        </div>
-      )}
+      <div className="of-vend-top">
+        <button className={"btn btn-sm" + (todosIgual ? " btn-on" : "")} onClick={igualar}><I.refresh className="ico" /> 1 lead pra cada (igual)</button>
+        <span className="of-vend-resumo">{ativos.length} ligado(s){!todosIgual && somaPeso ? ` · rodada de ${somaPeso} leads` : ""}</span>
+      </div>
 
       <div className="of-vend-list">
         {vends.map((v) => (
           <div key={v.id} className={v.oficialAtivo ? "of-vend on" : "of-vend"}>
-            <button className={v.oficialAtivo ? "of-switch on" : "of-switch"} onClick={() => toggle(v)} title={v.oficialAtivo ? "Ativo — clique para pausar" : "Pausado — clique para ativar"}>
+            <button className={v.oficialAtivo ? "of-switch on" : "of-switch"} onClick={() => toggle(v)} title={v.oficialAtivo ? "Trabalhando — clique pra desligar" : "Desligado — clique pra ligar"}>
               <span className="of-switch-dot" />
             </button>
             <div className="of-vend-nome">
               <b>{v.nome}</b>
-              <span className="of-vend-sub">{v.oficialLeadsRecebidos || 0} leads recebidos</span>
+              <span className="of-vend-sub">{v.oficialLeadsRecebidos || 0} leads recebidos{v.oficialAtivo ? "" : " · desligado"}</span>
             </div>
-            <div className="of-vend-pct">
-              <input
-                type="number" min="0" max="100" className="input of-pct-input"
-                value={v.oficialPercentual || 0}
-                onChange={(e) => setPct(v, Number(e.target.value))}
-                disabled={!v.oficialAtivo}
-              />
-              <span>%</span>
-            </div>
+            {v.oficialAtivo && (
+              <div className="of-peso">
+                <span className="of-peso-lbl">leads/rodada</span>
+                <div className="of-stepper">
+                  <button onClick={() => stepPeso(v, -1)} disabled={pesoDe(v) <= 1} aria-label="menos">−</button>
+                  <span className="of-peso-n">{pesoDe(v)}</span>
+                  <button onClick={() => stepPeso(v, +1)} aria-label="mais">+</button>
+                </div>
+              </div>
+            )}
           </div>
         ))}
       </div>
 
       <div className="of-vend-foot">
-        <div className="panel-sub"><b>{ativos.length}</b> ativo(s) · soma {somaPct}%</div>
+        <div className="panel-sub">Muda quando quiser — vale na hora pros próximos leads.</div>
         <button className="btn btn-sm" onClick={zerar}><I.refresh className="ico" /> Zerar contadores</button>
       </div>
     </div>
@@ -3063,12 +3072,12 @@ function ModalReservaListas({ onClose, showToast, etapas = [] }) {
               <div>
                 <label className="lbl-mini">Distribuição</label>
                 <select className="input" value={distribuir} onChange={(e) => setDistribuir(e.target.value)}>
-                  <option value="auto">Automática (pelo % configurado)</option>
+                  <option value="auto">Automática (divide entre os vendedores)</option>
                   <option value="manual">Sem dono (eu distribuo na mão)</option>
                 </select>
               </div>
             </div>
-            <div className="rsv-hint">{distribuir === "auto" ? 'Automática: os leads são divididos entre os vendedores conforme o % de "Quem recebe os leads". Se ninguém estiver ativo lá, o lead cai sem dono pra você atribuir.' : "Sem dono: todo lead cai sem vendedor e você escolhe pra quem vai, um por um, dentro do Pipeline."}</div>
+            <div className="rsv-hint">{distribuir === "auto" ? 'Automática: divide entre os vendedores. QUEM recebe e QUANTO cada um você define em "Quem recebe os leads" (botão no topo do Pipeline) — vale pra todas as listas automáticas e muda na hora. Aqui você só gera o link.' : "Sem dono: todo lead cai sem vendedor e você escolhe pra quem vai, um por um, dentro do Pipeline."}</div>
             <button className="onum-add" style={{ marginTop: 14, display: "block" }} disabled={criando} onClick={criar}><I.plus className="ico" /> Criar lista e gerar link</button>
           </div>
 

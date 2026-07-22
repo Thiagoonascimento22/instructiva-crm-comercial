@@ -3546,3 +3546,15 @@ input:focus-visible, textarea:focus-visible, select:focus-visible {
 .foto-acoes { display: flex; flex-direction: column; gap: 6px; align-items: flex-start; }
 .foto-del { background: transparent; border: 0; color: #dc2626; font-size: 12px; cursor: pointer; padding: 0; }
 .foto-dica { font-size: 11.5px; color: var(--muted); }
+
+/* ===== Quem recebe os leads (distribuição por rodada) ===== */
+.of-vend-top { display: flex; align-items: center; gap: 12px; margin: 12px 0 14px; flex-wrap: wrap; }
+.of-vend-resumo { font-size: 12.5px; color: var(--muted); }
+.btn.btn-on { background: var(--brand); color: #fff; border-color: var(--brand); }
+.of-peso { display: flex; flex-direction: column; align-items: flex-end; gap: 3px; }
+.of-peso-lbl { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: .3px; }
+.of-stepper { display: inline-flex; align-items: center; border: 1px solid var(--line); border-radius: 9px; overflow: hidden; background: var(--card); }
+.of-stepper button { width: 30px; height: 32px; border: 0; background: transparent; color: var(--text); font-size: 18px; cursor: pointer; line-height: 1; }
+.of-stepper button:hover:not(:disabled) { background: var(--surface-2); }
+.of-stepper button:disabled { color: var(--muted); opacity: .4; cursor: default; }
+.of-peso-n { min-width: 32px; text-align: center; font-weight: 700; font-size: 15px; color: var(--text); border-left: 1px solid var(--line); border-right: 1px solid var(--line); height: 32px; display: inline-flex; align-items: center; justify-content: center; }
