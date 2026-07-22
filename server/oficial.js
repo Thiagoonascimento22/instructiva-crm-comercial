@@ -1683,7 +1683,7 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
   }
   function reservaPublica(l) {
     const qtd = (db.oficial.crmLeads || []).filter((x) => x.reservaId === l.id).length;
-    return { id: l.id, nome: l.nome, curso: l.curso, tag: l.tag || "", opcoes: Array.isArray(l.opcoes) ? l.opcoes : [], slug: l.slug, ativa: l.ativa !== false, leads: qtd, criadoEm: l.criadoEm };
+    return { id: l.id, nome: l.nome, curso: l.curso, tag: l.tag || "", opcoes: Array.isArray(l.opcoes) ? l.opcoes : [], destino: l.destino || "reserva", distribuir: l.distribuir === "manual" ? "manual" : "auto", slug: l.slug, ativa: l.ativa !== false, leads: qtd, criadoEm: l.criadoEm };
   }
   // Sanitiza as opções de pagamento (forma + preço), no máx 3
   function limparOpcoes(arr) {
@@ -1714,7 +1714,8 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
     const nome = String(b.nome || "").trim().slice(0, 80);
     if (!nome) return res.status(400).json({ error: "Dê um nome à lista" });
     let slug; do { slug = slugReserva(); } while ((db.oficial.reservaListas || []).some((x) => x.slug === slug));
-    const lista = { id: proximoId("rsv"), nome, curso: String(b.curso || "").trim().slice(0, 120), tag: String(b.tag || "").trim().slice(0, 40), opcoes: limparOpcoes(b.opcoes), slug, ativa: true, criadoEm: Date.now() };
+    const destino = CRM_ETAPAS.some((e) => e.k === b.destino) ? b.destino : "reserva";
+    const lista = { id: proximoId("rsv"), nome, curso: String(b.curso || "").trim().slice(0, 120), tag: String(b.tag || "").trim().slice(0, 40), opcoes: limparOpcoes(b.opcoes), destino, distribuir: b.distribuir === "manual" ? "manual" : "auto", slug, ativa: true, criadoEm: Date.now() };
     db.oficial.reservaListas.push(lista);
     salvar();
     res.json({ ok: true, lista: reservaPublica(lista) });
@@ -1728,6 +1729,8 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
     if (b.curso !== undefined) l.curso = String(b.curso).trim().slice(0, 120);
     if (b.tag !== undefined) l.tag = String(b.tag).trim().slice(0, 40);
     if (b.opcoes !== undefined) l.opcoes = limparOpcoes(b.opcoes);
+    if (b.destino !== undefined && CRM_ETAPAS.some((e) => e.k === b.destino)) l.destino = b.destino;
+    if (b.distribuir !== undefined) l.distribuir = b.distribuir === "manual" ? "manual" : "auto";
     if (b.ativa !== undefined) l.ativa = !!b.ativa;
     salvar();
     res.json({ ok: true, lista: reservaPublica(l) });
@@ -1772,14 +1775,15 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
       else return res.status(400).json({ error: "Escolha uma opção de pagamento" });
     }
     const opc = idx >= 0 ? opcoes[idx] : null;
-    const dist = distribuirReserva();
+    const etapaDestino = CRM_ETAPAS.some((e) => e.k === lista.destino) ? lista.destino : "reserva";
+    const dist = (lista.distribuir === "manual") ? { vendedorId: null, vendedorNome: "" } : distribuirReserva();
     const lead = {
       id: "lead_" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
       nome, telefone, email,
       curso: lista.curso,
       valor: opc ? opc.preco : 0,
       formaPagamento: opc ? opc.forma : "",
-      etapa: "reserva",
+      etapa: etapaDestino,
       vendedorId: dist.vendedorId, vendedorNome: dist.vendedorNome,
       origem: "reserva", reservaId: lista.id, reservaNome: lista.nome,
       tags: [lista.tag || lista.nome].filter(Boolean),

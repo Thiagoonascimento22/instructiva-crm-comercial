@@ -3478,3 +3478,9 @@ input:focus-visible, textarea:focus-visible, select:focus-visible {
 .rsv-opc-add { margin-top: 10px; background: transparent; border: 1px dashed var(--brand, #059669); color: var(--brand, #059669); border-radius: 9px; padding: 8px 14px; cursor: pointer; font-size: 13px; font-weight: 600; }
 .rsv-opcs-mini { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 7px; }
 .rsv-opc-chip { font-size: 11.5px; color: #6d28d9; background: #f3f0ff; border-radius: 8px; padding: 3px 9px; font-weight: 600; }
+
+/* ===== Destino + distribuição na lista de reserva ===== */
+.rsv-f2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+@media (max-width: 640px){ .rsv-f2 { grid-template-columns: 1fr; } }
+.rsv-hint { margin-top: 8px; font-size: 12px; color: var(--muted, #6b7280); background: var(--surface-2, #f7f8fb); border-radius: 8px; padding: 8px 11px; line-height: 1.45; }
+.rsv-dest { margin-top: 6px; font-size: 12px; color: #7c3aed; }

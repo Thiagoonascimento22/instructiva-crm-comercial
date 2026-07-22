@@ -2905,16 +2905,20 @@ function PainelSistema({ modulos, onSalvo, showToast }) {
 
 // Gerenciador de Listas de Reserva (captação). Cada lista = um lançamento (curso+valor)
 // com um link público /r/<slug> pra mandar pra galera. Os leads caem no Pipeline distribuídos.
-function ModalReservaListas({ onClose, showToast }) {
+function ModalReservaListas({ onClose, showToast, etapas = [] }) {
   const [listas, setListas] = useState(null);
   const [nome, setNome] = useState("");
   const [curso, setCurso] = useState("");
   const [tag, setTag] = useState("");
+  const [destino, setDestino] = useState("reserva");
+  const [distribuir, setDistribuir] = useState("auto");
   const [opcoes, setOpcoes] = useState([{ forma: "", preco: "" }]);
   const [criando, setCriando] = useState(false);
   const setOpc = (i, k, v) => setOpcoes((a) => a.map((o, j) => (j === i ? { ...o, [k]: v } : o)));
   const addOpc = () => setOpcoes((a) => (a.length < 3 ? [...a, { forma: "", preco: "" }] : a));
   const delOpc = (i) => setOpcoes((a) => (a.length > 1 ? a.filter((_, j) => j !== i) : a));
+  const cols = etapas.length ? etapas : [{ k: "reserva", lb: "Lista de reserva" }, { k: "novo", lb: "Novo lead" }];
+  const nomeCol = (k) => (cols.find((e) => e.k === k) || {}).lb || k;
   const carregar = () => api.ofReservaListas().then((r) => setListas(r.listas || [])).catch((e) => showToast("✗ " + e.message));
   useEffect(() => { carregar(); /* eslint-disable-next-line */ }, []);
   const origin = typeof window !== "undefined" ? window.location.origin : "";
@@ -2923,7 +2927,7 @@ function ModalReservaListas({ onClose, showToast }) {
     if (!nome.trim()) { showToast("Dê um nome à lista"); return; }
     const ops = opcoes.map((o) => ({ forma: o.forma.trim(), preco: parseFloat(o.preco) || 0 })).filter((o) => o.forma || o.preco > 0);
     setCriando(true);
-    try { await api.ofReservaCriar({ nome, curso, tag, opcoes: ops }); setNome(""); setCurso(""); setTag(""); setOpcoes([{ forma: "", preco: "" }]); showToast("✓ Lista criada"); carregar(); }
+    try { await api.ofReservaCriar({ nome, curso, tag, opcoes: ops, destino, distribuir }); setNome(""); setCurso(""); setTag(""); setOpcoes([{ forma: "", preco: "" }]); setDestino("reserva"); setDistribuir("auto"); showToast("✓ Lista criada"); carregar(); }
     catch (e) { showToast("✗ " + e.message); } finally { setCriando(false); }
   }
   async function toggle(l) { try { await api.ofReservaEditar(l.id, { ativa: !l.ativa }); carregar(); } catch (e) { showToast("✗ " + e.message); } }
@@ -2951,6 +2955,22 @@ function ModalReservaListas({ onClose, showToast }) {
               </div>
             ))}
             {opcoes.length < 3 && <button className="rsv-opc-add" onClick={addOpc}>+ adicionar opção</button>}
+            <div className="rsv-f2" style={{ marginTop: 14 }}>
+              <div>
+                <label className="lbl-mini">Cai na coluna do Pipeline</label>
+                <select className="input" value={destino} onChange={(e) => setDestino(e.target.value)}>
+                  {cols.map((e) => <option key={e.k} value={e.k}>{e.lb}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="lbl-mini">Distribuição</label>
+                <select className="input" value={distribuir} onChange={(e) => setDistribuir(e.target.value)}>
+                  <option value="auto">Automática (pelo % configurado)</option>
+                  <option value="manual">Sem dono (eu distribuo na mão)</option>
+                </select>
+              </div>
+            </div>
+            <div className="rsv-hint">{distribuir === "auto" ? 'Automática: os leads são divididos entre os vendedores conforme o % de "Quem recebe os leads". Se ninguém estiver ativo lá, o lead cai sem dono pra você atribuir.' : "Sem dono: todo lead cai sem vendedor e você escolhe pra quem vai, um por um, dentro do Pipeline."}</div>
             <button className="onum-add" style={{ marginTop: 14, display: "block" }} disabled={criando} onClick={criar}><I.plus className="ico" /> Criar lista e gerar link</button>
           </div>
 
@@ -2964,6 +2984,7 @@ function ModalReservaListas({ onClose, showToast }) {
                     <div className="rsv-nome">{l.nome} {!l.ativa && <span className="rsv-off-tag">pausada</span>}</div>
                     <div className="rsv-meta">{l.curso || "sem curso"}{l.tag ? " · 🏷 " + l.tag : ""} · <b>{l.leads}</b> {l.leads === 1 ? "lead" : "leads"}</div>
                     {(l.opcoes || []).length > 0 && <div className="rsv-opcs-mini">{l.opcoes.map((o, i) => <span key={i} className="rsv-opc-chip">{o.forma} · R$ {Number(o.preco || 0).toLocaleString("pt-BR")}</span>)}</div>}
+                    <div className="rsv-dest">→ cai em <b>{nomeCol(l.destino)}</b> · {l.distribuir === "manual" ? "sem dono (você distribui)" : "distribuição automática"}</div>
                     <div className="rsv-link" onClick={() => copiar(l.slug)} title="Clique pra copiar o link">{origin}/r/{l.slug}<span className="rsv-copy">copiar</span></div>
                   </div>
                   <div className="rsv-acoes">
@@ -3237,7 +3258,7 @@ function OficialCRM({ showToast, isGer = true }) {
         </div>
       )}
 
-      {showReserva && <ModalReservaListas onClose={() => setShowReserva(false)} showToast={showToast} />}
+      {showReserva && <ModalReservaListas etapas={etapas} onClose={() => setShowReserva(false)} showToast={showToast} />}
     </div>
   );
 }
