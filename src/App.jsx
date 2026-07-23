@@ -4102,6 +4102,20 @@ function ModalIntegracao({ onClose, showToast }) {
             Obrigatórios: <b>vendedor</b> e <b>valor</b>. O resto é opcional. Se o vendedor ainda não existir aqui,
             ele é criado. Venda com o mesmo <b>código</b> não entra duas vezes.
           </div>
+          <div className="vd-sec" style={{ marginTop: 22 }}>Painel de TV</div>
+          <div className="vd-dica" style={{ marginTop: 0 }}>
+            Abra este link na TV ou num monitor e deixe rodando: ele passa sozinho pelas telas
+            (visão geral, formas de pagamento, top 3, cursos e ranking) e se atualiza em tempo real.
+            Dica: aperte <b>F</b> pra tela cheia.
+          </div>
+          <div className="rsv-link api" onClick={() => copiar(origin + "/tv.html?k=" + (dados ? dados.chave : ""), "Link da TV")}>
+            <span className="rsv-link-tag">TV</span>
+            <span className="rsv-link-url">{origin}/tv.html?k={dados ? dados.chave : "…"}</span>
+            <span className="rsv-copy">copiar</span>
+          </div>
+          <a className="btn btn-on" style={{ marginTop: 10, display: "inline-flex" }} target="_blank" rel="noreferrer"
+            href={origin + "/tv.html?k=" + (dados ? dados.chave : "")}>Abrir o painel de TV</a>
+
           <div className="vd-sec" style={{ marginTop: 22 }}>Nomes diferentes entre os sistemas</div>
           <div className="vd-dica" style={{ marginTop: 0 }}>
             Se lá o vendedor é <b>Cris</b> e aqui é <b>Cristiane Alves</b>, faça a ligação uma vez —

@@ -672,6 +672,101 @@ export function instalarVendas({ app, getDb, saveDB, proximoId, auth, gerenteOnl
     res.json({ ok: true, excluidas: n });
   });
 
+  /* ============================================================
+     PAINEL DE TV — tudo somado, sem login (usa a chave na URL)
+     ============================================================ */
+  function grupoForma(f) {
+    const t = String(f || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+    if (!t.trim()) return "Não informado";
+    const temCart = /cart/.test(t), temPix = /pix/.test(t);
+    if (temCart && temPix) return "Cartão + Pix";
+    if (/recorr/.test(t)) return "Recorrência";
+    if (temCart) return "Cartão";
+    if (/boleto/.test(t)) return "Boleto";
+    if (temPix) return "Pix";
+    if (/dinheiro|especie/.test(t)) return "Dinheiro";
+    return String(f).trim();
+  }
+
+  app.get("/api/vendas/tv", (req, res) => {
+    garantir();
+    const k = String(req.query.k || "").trim();
+    if (!k || k !== chaveIntegracao()) return res.status(401).json({ error: "Chave inválida" });
+    const mes = mesValido(req.query.mes) ? req.query.mes : mesDe(Date.now());
+    const doMes = (db.vendas.lista || []).filter((v) => mesDe(v.data) === mes);
+
+    // ---- geral ----
+    const venda = doMes.reduce((s, v) => s + num(v.valor), 0);
+    const recebido = doMes.reduce((s, v) => s + num(v.recebido), 0);
+    const pessoasAtivas = db.vendas.pessoas.filter((p) => p.ativo !== false);
+    const metaTotal = pessoasAtivas.reduce((s, p) => s + metaDaPessoa(p, mes), 0);
+
+    // ---- por forma de pagamento ----
+    const formas = {};
+    doMes.forEach((v) => {
+      const g = grupoForma(v.forma);
+      if (!formas[g]) formas[g] = { forma: g, qtd: 0, valor: 0, recebido: 0 };
+      formas[g].qtd++; formas[g].valor += num(v.valor); formas[g].recebido += num(v.recebido);
+    });
+
+    // ---- por curso ----
+    const cursos = {};
+    doMes.forEach((v) => {
+      const c = String(v.curso || "").trim() || "Sem curso";
+      if (!cursos[c]) cursos[c] = { curso: c, qtd: 0, valor: 0 };
+      cursos[c].qtd++; cursos[c].valor += num(v.valor);
+    });
+
+    // ---- por plataforma ----
+    const plataformas = {};
+    doMes.forEach((v) => {
+      const p = String(v.plataforma || "").trim() || "Não informada";
+      if (!plataformas[p]) plataformas[p] = { plataforma: p, qtd: 0, valor: 0 };
+      plataformas[p].qtd++; plataformas[p].valor += num(v.valor);
+    });
+
+    // ---- ranking (sem quem é venda direta, ex.: Escola) ----
+    const porPessoa = {};
+    doMes.forEach((v) => {
+      if (!porPessoa[v.pessoaId]) porPessoa[v.pessoaId] = { pessoaId: v.pessoaId, qtd: 0, valor: 0, recebido: 0 };
+      porPessoa[v.pessoaId].qtd++; porPessoa[v.pessoaId].valor += num(v.valor); porPessoa[v.pessoaId].recebido += num(v.recebido);
+    });
+    const ranking = Object.values(porPessoa).map((x) => {
+      const p = db.vendas.pessoas.find((y) => y.id === x.pessoaId) || {};
+      const u = p.userId ? (db.users || []).find((y) => y.id === p.userId) : null;
+      const meta = p.id ? metaDaPessoa(p, mes) : 0;
+      return { ...x, nome: p.nome || "—", foto: u ? (u.foto || "") : "", foraDoPodio: !!p.foraDoPodio,
+               meta, pct: meta > 0 ? Math.round((x.valor / meta) * 100) : 0 };
+    }).sort((a, b) => b.valor - a.valor);
+
+    // ---- dia a dia ----
+    const [ano, mm] = mes.split("-").map(Number);
+    const diasNoMes = new Date(ano, mm, 0).getDate();
+    const hoje = new Date();
+    const ehMesAtual = hoje.getFullYear() === ano && hoje.getMonth() + 1 === mm;
+    const diaHoje = ehMesAtual ? hoje.getDate() : diasNoMes;
+    const porDia = Array.from({ length: diasNoMes }, (_, i) => ({ dia: i + 1, valor: 0, qtd: 0 }));
+    doMes.forEach((v) => { const d = new Date(v.data).getDate(); if (porDia[d - 1]) { porDia[d - 1].valor += num(v.valor); porDia[d - 1].qtd++; } });
+    const vendidoHoje = (porDia[diaHoje - 1] || {}).valor || 0;
+    const qtdHoje = (porDia[diaHoje - 1] || {}).qtd || 0;
+
+    res.json({
+      mes, atualizadoEm: Date.now(), diasNoMes, diaHoje,
+      geral: {
+        venda, recebido, qtd: doMes.length, meta: metaTotal,
+        pct: metaTotal > 0 ? Math.round((venda / metaTotal) * 100) : 0,
+        falta: Math.max(0, metaTotal - venda),
+        ticket: doMes.length ? venda / doMes.length : 0,
+        cursosVendidos: Object.keys(cursos).length,
+        vendidoHoje, qtdHoje,
+      },
+      formas: Object.values(formas).sort((a, b) => b.valor - a.valor),
+      cursos: Object.values(cursos).sort((a, b) => b.valor - a.valor),
+      plataformas: Object.values(plataformas).sort((a, b) => b.valor - a.valor),
+      ranking, porDia,
+    });
+  });
+
   /* ---------------- PAINEL (a planilha) ---------------- */
   app.get("/api/vendas/painel", auth, permiteVend("vendas"), (req, res) => {
     garantir();

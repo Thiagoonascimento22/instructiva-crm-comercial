@@ -1,0 +1,350 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Instructiva · Painel de Vendas</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#0b1015; --card:#141b23; --card2:#1b242e; --linha:#243040;
+    --txt:#f2f6fa; --mut:#8b9bb0;
+    --laranja:#F26522; --verde:#25A06B; --verde2:#34d399;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%;overflow:hidden}
+  body{
+    background:
+      radial-gradient(1200px 700px at 12% -10%, rgba(242,101,34,.16), transparent 60%),
+      radial-gradient(1100px 700px at 95% 0%, rgba(37,160,107,.16), transparent 55%),
+      var(--bg);
+    color:var(--txt); font-family:Inter,system-ui,sans-serif; -webkit-font-smoothing:antialiased;
+  }
+  /* ---------- topo ---------- */
+  .topo{position:fixed;top:0;left:0;right:0;height:clamp(64px,7vh,92px);display:flex;align-items:center;
+        gap:22px;padding:0 clamp(24px,3vw,54px);z-index:5}
+  .marca{display:flex;align-items:baseline;gap:10px;font-weight:900;font-size:clamp(20px,1.9vw,30px);letter-spacing:-.5px}
+  .marca i{font-style:normal;background:linear-gradient(90deg,var(--laranja),var(--verde));-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
+  .marca small{font-weight:600;font-size:clamp(10px,.8vw,13px);color:var(--mut);letter-spacing:2.5px;text-transform:uppercase}
+  .topo .mes{margin-left:auto;font-size:clamp(13px,1.1vw,19px);color:var(--mut);font-weight:700;text-transform:capitalize}
+  .relogio{font-size:clamp(13px,1.1vw,19px);font-weight:800;color:var(--txt);font-variant-numeric:tabular-nums}
+  .aovivo{display:flex;align-items:center;gap:8px;font-size:clamp(10px,.85vw,14px);font-weight:800;color:var(--verde2);
+          text-transform:uppercase;letter-spacing:1.5px}
+  .bolha{width:10px;height:10px;border-radius:50%;background:var(--verde2);animation:pisca 1.6s infinite}
+  @keyframes pisca{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.35;transform:scale(.8)}}
+
+  /* ---------- telas ---------- */
+  .palco{position:absolute;inset:clamp(64px,7vh,92px) clamp(24px,3vw,54px) clamp(46px,5vh,64px)}
+  .tela{position:absolute;inset:0;opacity:0;transform:translateX(40px);pointer-events:none;
+        transition:opacity .5s ease,transform .5s ease;display:flex;flex-direction:column}
+  .tela.on{opacity:1;transform:none}
+  .titulo{font-size:clamp(14px,1.3vw,22px);font-weight:800;color:var(--mut);text-transform:uppercase;
+          letter-spacing:3px;margin-bottom:clamp(12px,1.6vh,24px);flex:none}
+
+  /* ---------- tela 1 ---------- */
+  .grid4{display:grid;grid-template-columns:repeat(4,1fr);gap:clamp(12px,1.4vw,22px);flex:none}
+  .cx{background:var(--card);border:1px solid var(--linha);border-radius:22px;padding:clamp(16px,2vh,30px) clamp(18px,1.8vw,32px);
+      display:flex;flex-direction:column;justify-content:center;min-width:0}
+  .cx .rot{font-size:clamp(11px,.9vw,15px);font-weight:800;color:var(--mut);text-transform:uppercase;letter-spacing:1.6px}
+  .cx .val{font-size:clamp(26px,3.1vw,54px);font-weight:900;letter-spacing:-1.5px;line-height:1.08;margin-top:6px;white-space:nowrap}
+  .cx .pe{font-size:clamp(11px,.9vw,15px);color:var(--mut);margin-top:6px}
+  .cx.dest{background:linear-gradient(135deg,rgba(242,101,34,.20),rgba(37,160,107,.20));border-color:transparent}
+  .verde{color:var(--verde2)}
+  .grad{background:linear-gradient(90deg,var(--laranja),var(--verde2));-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
+
+  .meta-linha{margin-top:clamp(14px,2vh,26px);background:var(--card);border:1px solid var(--linha);
+              border-radius:22px;padding:clamp(16px,2.2vh,30px) clamp(20px,2vw,34px);flex:none}
+  .meta-cab{display:flex;justify-content:space-between;align-items:baseline;font-size:clamp(12px,1vw,17px);color:var(--mut);font-weight:700}
+  .meta-cab b{color:var(--txt);font-size:clamp(16px,1.5vw,26px)}
+  .barra{height:clamp(14px,1.7vh,24px);background:var(--card2);border-radius:99px;overflow:hidden;margin-top:12px}
+  .barra i{display:block;height:100%;border-radius:99px;background:linear-gradient(90deg,var(--laranja),var(--verde2));
+           transition:width 1s cubic-bezier(.2,.8,.2,1)}
+
+  .graf{flex:1;min-height:0;margin-top:clamp(14px,2vh,26px);background:var(--card);border:1px solid var(--linha);
+        border-radius:22px;padding:clamp(16px,2vh,28px) clamp(18px,2vw,30px);display:flex;flex-direction:column}
+  .graf .rot{font-size:clamp(11px,.9vw,15px);font-weight:800;color:var(--mut);text-transform:uppercase;letter-spacing:1.6px;flex:none}
+  .barras{flex:1;min-height:0;display:flex;align-items:flex-end;gap:clamp(2px,.35vw,7px);margin-top:14px}
+  .barras div{flex:1;background:linear-gradient(180deg,var(--verde),rgba(37,160,107,.28));border-radius:6px 6px 3px 3px;min-height:3px;
+              transition:height .8s cubic-bezier(.2,.8,.2,1)}
+  .barras div.hoje{background:linear-gradient(180deg,var(--laranja),rgba(242,101,34,.35))}
+
+  /* ---------- listas (formas, cursos, plataformas) ---------- */
+  .lista{flex:1;min-height:0;display:flex;flex-direction:column;gap:clamp(8px,1.1vh,16px);overflow:hidden}
+  .item{background:var(--card);border:1px solid var(--linha);border-radius:18px;padding:clamp(12px,1.7vh,24px) clamp(18px,1.9vw,32px);
+        display:flex;align-items:center;gap:clamp(14px,1.6vw,26px)}
+  .item .pos{font-size:clamp(16px,1.6vw,28px);font-weight:900;color:var(--mut);min-width:clamp(32px,3vw,54px)}
+  .item .nm{flex:1;min-width:0}
+  .item .nm b{display:block;font-size:clamp(16px,1.6vw,29px);font-weight:800;letter-spacing:-.4px;
+              white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .item .nm .sub{font-size:clamp(11px,.9vw,15px);color:var(--mut);margin-top:3px}
+  .item .mini{height:7px;background:var(--card2);border-radius:99px;overflow:hidden;margin-top:8px}
+  .item .mini i{display:block;height:100%;border-radius:99px;background:linear-gradient(90deg,var(--laranja),var(--verde2))}
+  .item .vl{text-align:right;flex:none}
+  .item .vl b{display:block;font-size:clamp(18px,1.8vw,32px);font-weight:900;letter-spacing:-.6px;white-space:nowrap}
+  .item .vl span{font-size:clamp(11px,.9vw,15px);color:var(--mut)}
+
+  /* ---------- pódio ---------- */
+  .podio{flex:1;min-height:0;display:grid;grid-template-columns:1fr 1.25fr 1fr;gap:clamp(14px,1.6vw,28px);align-items:end}
+  .lug{background:var(--card);border:1px solid var(--linha);border-radius:26px;padding:clamp(18px,2.4vh,36px) clamp(14px,1.4vw,26px);
+       text-align:center;display:flex;flex-direction:column;align-items:center;gap:clamp(6px,.9vh,14px);position:relative;overflow:hidden}
+  .lug.p1{border-color:#f5c518;box-shadow:0 0 60px rgba(245,197,24,.18)}
+  .lug .med{font-size:clamp(30px,3.4vw,64px);line-height:1}
+  .lug .av{width:clamp(56px,6vw,110px);height:clamp(56px,6vw,110px);border-radius:50%;object-fit:cover;
+           display:grid;place-items:center;font-weight:900;font-size:clamp(20px,2vw,38px);
+           background:linear-gradient(135deg,var(--laranja),var(--verde));color:#fff;overflow:hidden}
+  .lug .nome{font-size:clamp(15px,1.5vw,28px);font-weight:800;letter-spacing:-.4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
+  .lug .vl{font-size:clamp(20px,2.2vw,42px);font-weight:900;letter-spacing:-1px}
+  .lug .pe{font-size:clamp(11px,.9vw,16px);color:var(--mut)}
+  .lug .deg{width:100%;margin-top:auto;background:linear-gradient(180deg,var(--card2),transparent)}
+  .lug.p1 .deg{height:clamp(20px,3vh,44px)} .lug.p2 .deg{height:clamp(12px,2vh,26px)} .lug.p3 .deg{height:clamp(8px,1.2vh,16px)}
+
+  /* ---------- rodapé / navegação ---------- */
+  .pe-nav{position:fixed;left:0;right:0;bottom:0;height:clamp(46px,5vh,64px);display:flex;align-items:center;
+          gap:14px;padding:0 clamp(24px,3vw,54px)}
+  .pontos{display:flex;gap:10px}
+  .pontos i{width:clamp(28px,3vw,54px);height:6px;border-radius:99px;background:var(--card2);overflow:hidden;position:relative}
+  .pontos i.on::after{content:"";position:absolute;inset:0;background:linear-gradient(90deg,var(--laranja),var(--verde2));
+                      transform-origin:left;animation:enche linear forwards}
+  @keyframes enche{from{transform:scaleX(0)}to{transform:scaleX(1)}}
+  .pe-nav .nome-tela{font-size:clamp(11px,.9vw,15px);font-weight:800;color:var(--mut);text-transform:uppercase;letter-spacing:2px}
+  .pe-nav .att{margin-left:auto;font-size:clamp(10px,.8vw,13px);color:var(--mut)}
+  .vazio{display:grid;place-items:center;height:100%;color:var(--mut);font-size:clamp(15px,1.4vw,24px);text-align:center;line-height:1.6}
+</style>
+</head>
+<body>
+  <div class="topo">
+    <div class="marca">instruc<i>tiva</i> <small>Vendas</small></div>
+    <div class="aovivo" style="margin-left:22px"><span class="bolha"></span><span id="statusTxt">ao vivo</span></div>
+    <div class="mes" id="mes">—</div>
+    <div class="relogio" id="relogio">--:--</div>
+  </div>
+
+  <div class="palco">
+    <!-- 1: visão geral -->
+    <section class="tela on" data-nome="Visão geral">
+      <div class="grid4">
+        <div class="cx dest"><span class="rot">Vendido no mês</span><span class="val grad" id="g_venda">—</span><span class="pe" id="g_qtd">—</span></div>
+        <div class="cx"><span class="rot">Já recebido</span><span class="val verde" id="g_receb">—</span><span class="pe" id="g_recebpct">—</span></div>
+        <div class="cx"><span class="rot">Ticket médio</span><span class="val" id="g_ticket">—</span><span class="pe" id="g_hoje">—</span></div>
+        <div class="cx"><span class="rot">Cursos vendidos</span><span class="val" id="g_cursos">—</span><span class="pe">tipos diferentes no mês</span></div>
+      </div>
+      <div class="meta-linha">
+        <div class="meta-cab"><span>Meta do time <b id="m_pct">—</b></span><span id="m_txt">—</span></div>
+        <div class="barra"><i id="m_barra" style="width:0"></i></div>
+      </div>
+      <div class="graf">
+        <span class="rot">Evolução do mês</span>
+        <div class="barras" id="g_barras"></div>
+      </div>
+    </section>
+
+    <!-- 2: formas de pagamento -->
+    <section class="tela" data-nome="Formas de pagamento">
+      <div class="titulo">Como o cliente pagou</div>
+      <div class="lista" id="l_formas"></div>
+    </section>
+
+    <!-- 3: pódio -->
+    <section class="tela" data-nome="Top 3 do mês">
+      <div class="titulo">Top 3 vendedores do mês</div>
+      <div class="podio" id="l_podio"></div>
+    </section>
+
+    <!-- 4: cursos -->
+    <section class="tela" data-nome="Cursos mais vendidos">
+      <div class="titulo">Cursos mais vendidos</div>
+      <div class="lista" id="l_cursos"></div>
+    </section>
+
+    <!-- 5: ranking completo -->
+    <section class="tela" data-nome="Ranking do time">
+      <div class="titulo">Ranking do time</div>
+      <div class="lista" id="l_rank"></div>
+    </section>
+  </div>
+
+  <div class="pe-nav">
+    <div class="pontos" id="pontos"></div>
+    <div class="nome-tela" id="nomeTela">—</div>
+    <div class="att" id="att">—</div>
+  </div>
+
+<script>
+(function(){
+  var TROCA = 20000;        // 20s por tela
+  var ATUALIZA = 15000;     // busca dados novos a cada 15s
+  var chave = new URLSearchParams(location.search).get("k") || "";
+  var telas = [].slice.call(document.querySelectorAll(".tela"));
+  var atual = 0, dados = null;
+
+  var din = function(n){
+    n = Number(n||0);
+    return "R$ " + n.toLocaleString("pt-BR",{minimumFractionDigits:2,maximumFractionDigits:2});
+  };
+  var dinK = function(n){
+    n = Number(n||0);
+    if (n >= 1000000) return "R$ " + (n/1000000).toFixed(1).replace(".",",") + "M";
+    if (n >= 1000) return "R$ " + (n/1000).toFixed(1).replace(".",",") + "k";
+    return din(n);
+  };
+  var ini = function(nome){
+    var p = String(nome||"?").trim().split(/\s+/);
+    return ((p[0]||"")[0]||"") + ((p[1]||"")[0]||"");
+  };
+  var esc = function(t){ return String(t==null?"":t).replace(/[&<>"]/g, function(c){
+    return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]; }); };
+
+  // ---------- pontinhos do rodapé ----------
+  var pontos = document.getElementById("pontos");
+  telas.forEach(function(){ pontos.appendChild(document.createElement("i")); });
+  function marcarPonto(i){
+    [].slice.call(pontos.children).forEach(function(p,j){
+      p.className = ""; 
+      if (j === i){ p.className = "on"; p.style.setProperty("--d", TROCA+"ms");
+        var a = p.querySelector; p.offsetWidth; }
+    });
+    var alvo = pontos.children[i];
+    if (alvo){ alvo.style.setProperty("animation-duration", ""); }
+    var estilo = document.getElementById("estiloPonto");
+    if (!estilo){ estilo = document.createElement("style"); estilo.id="estiloPonto"; document.head.appendChild(estilo); }
+    estilo.textContent = ".pontos i.on::after{animation-duration:" + TROCA + "ms}";
+    document.getElementById("nomeTela").textContent = telas[i].dataset.nome || "";
+  }
+
+  function mostrar(i){
+    telas[atual].classList.remove("on");
+    atual = (i + telas.length) % telas.length;
+    telas[atual].classList.add("on");
+    marcarPonto(atual);
+  }
+
+  // ---------- relógio ----------
+  setInterval(function(){
+    var d = new Date();
+    document.getElementById("relogio").textContent =
+      String(d.getHours()).padStart(2,"0") + ":" + String(d.getMinutes()).padStart(2,"0");
+  }, 1000);
+
+  // ---------- desenhar ----------
+  function desenhar(d){
+    var g = d.geral;
+    document.getElementById("mes").textContent = mesNome(d.mes);
+    document.getElementById("g_venda").textContent = din(g.venda);
+    document.getElementById("g_qtd").textContent = g.qtd + " venda(s) fechada(s)";
+    document.getElementById("g_receb").textContent = din(g.recebido);
+    document.getElementById("g_recebpct").textContent = (g.venda>0 ? Math.round(g.recebido/g.venda*100) : 0) + "% do que foi vendido";
+    document.getElementById("g_ticket").textContent = din(g.ticket);
+    document.getElementById("g_hoje").textContent = "hoje: " + din(g.vendidoHoje) + " · " + g.qtdHoje + " venda(s)";
+    document.getElementById("g_cursos").textContent = g.cursosVendidos;
+
+    document.getElementById("m_pct").textContent = g.pct + "%";
+    document.getElementById("m_txt").textContent = g.meta > 0
+      ? ("de " + dinK(g.meta) + " · faltam " + dinK(g.falta))
+      : "defina as metas no sistema";
+    document.getElementById("m_barra").style.width = Math.min(100, g.pct) + "%";
+
+    // gráfico do mês
+    var max = d.porDia.reduce(function(m,x){ return Math.max(m, x.valor); }, 0) || 1;
+    document.getElementById("g_barras").innerHTML = d.porDia.map(function(x){
+      var h = Math.max(x.valor>0?2:0.6, x.valor/max*100);
+      return '<div class="'+(x.dia===d.diaHoje?"hoje":"")+'" style="height:'+h+'%" title="dia '+x.dia+'"></div>';
+    }).join("");
+
+    // formas de pagamento
+    var maxF = d.formas.reduce(function(m,x){ return Math.max(m,x.valor); },0) || 1;
+    document.getElementById("l_formas").innerHTML = d.formas.length ? d.formas.slice(0,6).map(function(f,i){
+      return '<div class="item">'
+        + '<span class="pos">'+(i+1)+'º</span>'
+        + '<div class="nm"><b>'+esc(f.forma)+'</b>'
+        + '<div class="sub">'+f.qtd+' venda(s) · recebido '+dinK(f.recebido)+'</div>'
+        + '<div class="mini"><i style="width:'+(f.valor/maxF*100)+'%"></i></div></div>'
+        + '<div class="vl"><b>'+din(f.valor)+'</b><span>'+Math.round(f.valor/(d.geral.venda||1)*100)+'% do total</span></div>'
+        + '</div>';
+    }).join("") : '<div class="vazio">Nenhuma venda neste mês ainda.</div>';
+
+    // pódio (sem venda direta)
+    var conc = d.ranking.filter(function(r){ return !r.foraDoPodio && r.valor > 0; });
+    var top = conc.slice(0,3);
+    var ordem = [1,0,2]; // 2º, 1º, 3º
+    document.getElementById("l_podio").innerHTML = top.length ? ordem.map(function(idx){
+      var r = top[idx];
+      if (!r) return '<div></div>';
+      var lugar = idx+1, med = lugar===1?"🥇":lugar===2?"🥈":"🥉";
+      var av = r.foto ? '<img class="av" src="'+esc(r.foto)+'" alt="">' : '<div class="av">'+esc(ini(r.nome).toUpperCase())+'</div>';
+      return '<div class="lug p'+lugar+'">'
+        + '<div class="med">'+med+'</div>' + av
+        + '<div class="nome">'+esc(r.nome)+'</div>'
+        + '<div class="vl grad">'+din(r.valor)+'</div>'
+        + '<div class="pe">'+r.qtd+' venda(s)'+(r.meta>0?" · "+r.pct+"% da meta":"")+'</div>'
+        + '<div class="deg"></div></div>';
+    }).join("") : '<div class="vazio" style="grid-column:1/-1">Nenhuma venda neste mês ainda.</div>';
+
+    // cursos
+    var maxC = d.cursos.reduce(function(m,x){ return Math.max(m,x.valor); },0) || 1;
+    document.getElementById("l_cursos").innerHTML = d.cursos.length ? d.cursos.slice(0,6).map(function(c,i){
+      return '<div class="item">'
+        + '<span class="pos">'+(i+1)+'º</span>'
+        + '<div class="nm"><b>'+esc(c.curso)+'</b>'
+        + '<div class="sub">'+c.qtd+' venda(s)</div>'
+        + '<div class="mini"><i style="width:'+(c.valor/maxC*100)+'%"></i></div></div>'
+        + '<div class="vl"><b>'+din(c.valor)+'</b><span>'+Math.round(c.valor/(d.geral.venda||1)*100)+'% do total</span></div>'
+        + '</div>';
+    }).join("") : '<div class="vazio">Nenhuma venda neste mês ainda.</div>';
+
+    // ranking completo
+    var maxR = d.ranking.reduce(function(m,x){ return Math.max(m,x.valor); },0) || 1;
+    var posN = 0;
+    document.getElementById("l_rank").innerHTML = d.ranking.length ? d.ranking.slice(0,6).map(function(r){
+      if (!r.foraDoPodio) posN++;
+      var pos = r.foraDoPodio ? "—" : posN + "º";
+      var av = r.foto ? '<img class="av" style="width:44px;height:44px" src="'+esc(r.foto)+'">' : "";
+      return '<div class="item">'
+        + '<span class="pos">'+pos+'</span>'
+        + '<div class="nm"><b>'+esc(r.nome)+(r.foraDoPodio?' <span style="font-size:.55em;color:var(--mut)">venda direta</span>':"")+'</b>'
+        + '<div class="sub">'+r.qtd+' venda(s) · recebido '+dinK(r.recebido)+'</div>'
+        + '<div class="mini"><i style="width:'+(r.valor/maxR*100)+'%"></i></div></div>'
+        + '<div class="vl"><b>'+din(r.valor)+'</b><span>'+(r.meta>0?r.pct+"% da meta":"sem meta")+'</span></div>'
+        + '</div>';
+    }).join("") : '<div class="vazio">Nenhuma venda neste mês ainda.</div>';
+
+    var h = new Date(d.atualizadoEm);
+    document.getElementById("att").textContent = "atualizado às " +
+      String(h.getHours()).padStart(2,"0")+":"+String(h.getMinutes()).padStart(2,"0")+":"+String(h.getSeconds()).padStart(2,"0");
+  }
+
+  function mesNome(m){
+    if(!m) return "";
+    var n=["janeiro","fevereiro","março","abril","maio","junho","julho","agosto","setembro","outubro","novembro","dezembro"];
+    var p=m.split("-"); return (n[Number(p[1])-1]||"")+" de "+p[0];
+  }
+
+  function buscar(){
+    fetch("/api/vendas/tv?k="+encodeURIComponent(chave)+"&_="+Date.now())
+      .then(function(r){ if(!r.ok) throw new Error("HTTP "+r.status); return r.json(); })
+      .then(function(d){ dados=d; desenhar(d);
+        document.getElementById("statusTxt").textContent="ao vivo";
+        document.querySelector(".bolha").style.background="var(--verde2)";
+      })
+      .catch(function(e){
+        document.getElementById("statusTxt").textContent = (e.message.indexOf("401")>=0? "chave inválida":"sem conexão");
+        document.querySelector(".bolha").style.background="#ef4444";
+      });
+  }
+
+  marcarPonto(0);
+  buscar();
+  setInterval(buscar, ATUALIZA);
+  setInterval(function(){ mostrar(atual+1); }, TROCA);
+
+  // setas do teclado (útil no monitor com teclado)
+  document.addEventListener("keydown", function(e){
+    if(e.key==="ArrowRight") mostrar(atual+1);
+    if(e.key==="ArrowLeft") mostrar(atual-1);
+    if(e.key==="f"||e.key==="F"){ if(document.fullscreenElement) document.exitFullscreen(); else document.documentElement.requestFullscreen(); }
+  });
+})();
+</script>
+</body>
+</html>
