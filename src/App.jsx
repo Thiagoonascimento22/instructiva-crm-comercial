@@ -3930,6 +3930,23 @@ function GraficoDias({ porDia, diaHoje, diaSel, onDia }) {
 // Integração: outro sistema (ex.: suporte) manda a venda pra cá
 function ModalIntegracao({ onClose, showToast }) {
   const [dados, setDados] = useState(null);
+  const [apelidos, setApelidos] = useState([]);
+  const [pessoas, setPessoas] = useState([]);
+  const [novoApelido, setNovoApelido] = useState("");
+  const [novoDestino, setNovoDestino] = useState("");
+  const carregarApelidos = () => api.vdApelidos().then((d) => setApelidos(d.apelidos || [])).catch(() => {});
+  useEffect(() => { carregarApelidos(); api.vdPessoas().then((d) => setPessoas(d.pessoas || [])).catch(() => {}); }, []);
+  async function salvarApelido() {
+    try {
+      const r = await api.vdSalvarApelido(novoApelido, novoDestino);
+      showToast(r.movidas ? `✓ Ligado · ${r.movidas} venda(s) movida(s)` : "✓ Ligado");
+      setNovoApelido(""); setNovoDestino(""); carregarApelidos();
+    } catch (e) { showToast("✗ " + e.message); }
+  }
+  async function removerApelido(nome) {
+    try { await api.vdSalvarApelido(nome, ""); carregarApelidos(); showToast("✓ Desfeito"); }
+    catch (e) { showToast(e.message); }
+  }
   const origin = typeof window !== "undefined" ? window.location.origin : "https://SEU-DOMINIO";
   useEffect(() => { api.vdIntegracao().then(setDados).catch((e) => showToast(e.message)); /* eslint-disable-next-line */ }, []);
   const copiar = (txt, oque) => {
@@ -3983,6 +4000,31 @@ function ModalIntegracao({ onClose, showToast }) {
             Obrigatórios: <b>vendedor</b> e <b>valor</b>. O resto é opcional. Se o vendedor ainda não existir aqui,
             ele é criado. Venda com o mesmo <b>código</b> não entra duas vezes.
           </div>
+          <div className="vd-sec" style={{ marginTop: 22 }}>Nomes diferentes entre os sistemas</div>
+          <div className="vd-dica" style={{ marginTop: 0 }}>
+            Se lá o vendedor é <b>Cris</b> e aqui é <b>Cristiane Alves</b>, faça a ligação uma vez —
+            daí em diante toda venda dele cai na pessoa certa sozinha. (Juntar duas pessoas em
+            <b> Equipe &amp; metas</b> também cria essa ligação automaticamente.)
+          </div>
+          <div className="vd-apelido-novo">
+            <input className="input" placeholder="Nome como vem de lá (ex.: Cris)" value={novoApelido} onChange={(e) => setNovoApelido(e.target.value)} />
+            <span>→</span>
+            <select className="input" value={novoDestino} onChange={(e) => setNovoDestino(e.target.value)}>
+              <option value="">Pessoa daqui…</option>
+              {pessoas.map((p) => <option key={p.id} value={p.id}>{p.nome}</option>)}
+            </select>
+            <button className="onum-add" disabled={!novoApelido.trim() || !novoDestino} onClick={salvarApelido}>Ligar</button>
+          </div>
+          {apelidos.length > 0 && (
+            <div className="vd-apelidos">
+              {apelidos.map((a) => (
+                <div key={a.nomeFora} className="vd-apelido">
+                  <b>{a.nomeFora}</b><span>→</span><b>{a.pessoaNome}</b>
+                  <button className="crm-tarefa-del" title="Desfazer" onClick={() => removerApelido(a.nomeFora)}>✕</button>
+                </div>
+              ))}
+            </div>
+          )}
           <div className="vd-rodape">
             <button className="foto-del" onClick={novaChave}>gerar chave nova</button>
             <button className="onum-add" onClick={onClose}>Fechar</button>

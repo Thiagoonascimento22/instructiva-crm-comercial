@@ -18,6 +18,9 @@ export function instalarVendas({ app, getDb, saveDB, proximoId, auth, gerenteOnl
     if (!Array.isArray(db.vendas.pessoas)) db.vendas.pessoas = [];
     if (!Array.isArray(db.vendas.lista)) db.vendas.lista = [];
     if (!db.vendas.metasMes) db.vendas.metasMes = {}; // { "2026-07": { pessoaId: meta } }
+    // de-para de nomes que vêm de fora: { "cris": "pes_123" }
+    // serve pra "Cris" do sistema do suporte cair na "Cristiane Alves" daqui
+    if (!db.vendas.apelidos || typeof db.vendas.apelidos !== "object") db.vendas.apelidos = {};
     // quem foi criado antes dessa regra existir ainda não tem o marcador:
     // define uma vez pelo nome (Escola, Loja, Site... = venda direta, fora do pódio)
     let mudou = false;
@@ -63,6 +66,20 @@ export function instalarVendas({ app, getDb, saveDB, proximoId, auth, gerenteOnl
 
   // Liga o usuário logado à pessoa do painel: primeiro pelo vínculo, depois pelo nome.
   // Se achar pelo nome, grava o vínculo pra ficar rápido nas próximas.
+  const chaveNome = (n) => String(n || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim().toLowerCase();
+  // acha a pessoa por nome exato OU pelo de-para aprendido
+  function acharPessoaPorNome(nome) {
+    const k = chaveNome(nome);
+    if (!k) return null;
+    const viaApelido = db.vendas.apelidos[k];
+    if (viaApelido) {
+      const p = db.vendas.pessoas.find((x) => x.id === viaApelido);
+      if (p) return p;
+      delete db.vendas.apelidos[k]; // apontava pra alguém que não existe mais
+    }
+    return db.vendas.pessoas.find((x) => chaveNome(x.nome) === k) || null;
+  }
+
   function pessoaDoUser(u) {
     if (!u) return null;
     let p = db.vendas.pessoas.find((x) => x.userId === u.id);
@@ -293,9 +310,16 @@ export function instalarVendas({ app, getDb, saveDB, proximoId, auth, gerenteOnl
         delete mm[de.id];
       }
     });
+    // APRENDE: daqui pra frente, quem chegar de fora com o nome antigo
+    // (ex.: "Cris" vindo do sistema do suporte) cai direto na pessoa certa.
+    db.vendas.apelidos[chaveNome(de.nome)] = para.id;
+    // se a que sumiu já era destino de outros apelidos, redireciona todos
+    Object.keys(db.vendas.apelidos).forEach((k) => {
+      if (db.vendas.apelidos[k] === de.id) db.vendas.apelidos[k] = para.id;
+    });
     db.vendas.pessoas = db.vendas.pessoas.filter((p) => p.id !== de.id);
     salvar();
-    res.json({ ok: true, movidas, de: de.nome, para: para.nome });
+    res.json({ ok: true, movidas, de: de.nome, para: para.nome, apelidoCriado: de.nome });
   });
 
   /* ---------------- IMPORTAR VENDAS EM LOTE ---------------- */
@@ -306,11 +330,7 @@ export function instalarVendas({ app, getDb, saveDB, proximoId, auth, gerenteOnl
     const criarPessoas = b.criarPessoas !== false;
     const grupoPadrao = String(b.grupoPadrao || "").trim().slice(0, 40);
     let criados = 0, pulados = 0, novasPessoas = 0;
-    const achaPessoa = (nome) => {
-      const n = String(nome || "").trim().toLowerCase();
-      if (!n) return null;
-      return db.vendas.pessoas.find((p) => p.nome.trim().toLowerCase() === n) || null;
-    };
+    const achaPessoa = (nome) => acharPessoaPorNome(nome);
     // Anti-duplicata que NÃO come venda legítima:
     // a chave é a linha inteira (pessoa+cliente+valor+recebido+dia+código). Contamos quantas
     // iguais já existem no banco e quantas já vieram neste arquivo. Se o arquivo tem 2 linhas
@@ -408,7 +428,7 @@ export function instalarVendas({ app, getDb, saveDB, proximoId, auth, gerenteOnl
     if (valor <= 0) return res.status(400).json({ error: "Informe o valor vendido" });
     const nomeVend = String(b.vendedor || b.pessoaNome || "").trim();
     if (!nomeVend) return res.status(400).json({ error: "Informe o vendedor" });
-    let p = db.vendas.pessoas.find((x) => x.nome.trim().toLowerCase() === nomeVend.toLowerCase());
+    let p = acharPessoaPorNome(nomeVend);
     if (!p) {
       p = {
         id: proximoId ? proximoId("pes") : "pes_" + Date.now().toString(36) + Math.random().toString(36).slice(2, 5),
@@ -469,6 +489,34 @@ export function instalarVendas({ app, getDb, saveDB, proximoId, auth, gerenteOnl
     db.vendas.lista.unshift(venda);
     salvar();
     res.json({ ok: true, id: venda.id, vendedor: p.nome });
+  });
+
+  /* ---- de-para de nomes que vêm de outro sistema ---- */
+  app.get("/api/vendas/apelidos", auth, gerenteOnly, (req, res) => {
+    garantir();
+    const lista = Object.entries(db.vendas.apelidos).map(([nomeFora, pessoaId]) => ({
+      nomeFora, pessoaId, pessoaNome: (db.vendas.pessoas.find((p) => p.id === pessoaId) || {}).nome || "(removida)",
+    }));
+    res.json({ apelidos: lista });
+  });
+  app.post("/api/vendas/apelidos", auth, gerenteOnly, (req, res) => {
+    garantir();
+    const b = req.body || {};
+    const nomeFora = chaveNome(b.nomeFora);
+    if (!nomeFora) return res.status(400).json({ error: "Informe o nome que vem de fora" });
+    if (b.pessoaId === null || b.pessoaId === "") { delete db.vendas.apelidos[nomeFora]; salvar(); return res.json({ ok: true, removido: true }); }
+    const p = db.vendas.pessoas.find((x) => x.id === b.pessoaId);
+    if (!p) return res.status(404).json({ error: "Pessoa não encontrada" });
+    db.vendas.apelidos[nomeFora] = p.id;
+    // já leva as vendas que entraram com esse nome pra pessoa certa
+    let movidas = 0;
+    const dup = db.vendas.pessoas.find((x) => x.id !== p.id && chaveNome(x.nome) === nomeFora);
+    if (dup) {
+      db.vendas.lista.forEach((v) => { if (v.pessoaId === dup.id) { v.pessoaId = p.id; v.pessoaNome = p.nome; movidas++; } });
+      db.vendas.pessoas = db.vendas.pessoas.filter((x) => x.id !== dup.id);
+    }
+    salvar();
+    res.json({ ok: true, movidas, para: p.nome });
   });
 
   /* ---------------- PAINEL (a planilha) ---------------- */
