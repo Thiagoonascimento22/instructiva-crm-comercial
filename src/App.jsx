@@ -3644,6 +3644,38 @@ function Comemoracao({ tipo, nome, valor, vendedor, foto, onClose }) {
 }
 
 /* ============ VENDAS — metas, pódio e lançamentos ============ */
+// Cursos vendidos — lista única, usada aqui e no sistema do suporte.
+// Padronizada (tudo em caixa alta, sem ponto sobrando) pra depois dar métrica certa por curso.
+const CURSOS = [
+  "AMPLIFICADORES",
+  "ANÁLISE DC AVANÇADA",
+  "ELETRÔNICA DE POTÊNCIA",
+  "ELETRÔNICA DIGITAL",
+  "ELETRÔNICA INICIAL",
+  "EMAC",
+  "EMAC 3.0",
+  "EMAC 4.0",
+  "ESTEIRAS",
+  "FONTE DE GAME",
+  "FONTES CHAVEADAS",
+  "IMERSÃO EM ANÁLISE DE DEFEITOS",
+  "INTELIGÊNCIA ARTIFICIAL",
+  "INVERTER",
+  "LIVRO ANÁLISE DE CIRCUITOS",
+  "LIVRO FONTES FLYBACK",
+  "LIVRO FONTES RETIFICADOR PFC",
+  "LIVRO POTÊNCIA CONVERSORES CC-CC",
+  "LIVRO POTÊNCIA RETIFICADORES",
+  "LIVRO POTÊNCIA SEMICONDUTORES",
+  "MANUSEIO DE OSCILOSCÓPIO",
+  "NOBREAK",
+  "ODONTO",
+  "PROGRAMAÇÃO",
+  "SOFT-STARTER",
+  "SOLAR",
+  "TELEVISORES",
+  "TMTD",
+];
 const PLATAFORMAS = ["Hotmart", "Greenn", "Guru", "TMB", "Assiny", "Cademi", "Pix direto", "Outra"];
 const FORMAS_PG = ["Pix", "Cartão", "Boleto", "Recorrência", "Dinheiro", "Outro"];
 const dinheiro = (n) => "R$ " + Number(n || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -4497,6 +4529,7 @@ function ListaVendas({ vendas, onEditar, onExcluir }) {
 function FormVenda({ form, setForm, pessoas, isGer = true, onSalvo, showToast }) {
   const [salvando, setSalvando] = useState(false);
   const [repetida, setRepetida] = useState(null);   // aviso de código já usado
+  const [outroCurso, setOutroCurso] = useState(false);
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
 
   async function salvar(confirmar) {
@@ -4548,7 +4581,22 @@ function FormVenda({ form, setForm, pessoas, isGer = true, onSalvo, showToast })
             <div className="vd-full"><label className="lbl-mini">Nome do cliente</label><input className="input" value={form.cliente} onChange={(e) => set("cliente", e.target.value)} placeholder="Quem comprou" /></div>
             <div><label className="lbl-mini">E-mail</label><input className="input" value={form.email} onChange={(e) => set("email", e.target.value)} placeholder="cliente@email.com" /></div>
             <div><label className="lbl-mini">Telefone</label><input className="input" value={form.telefone} onChange={(e) => set("telefone", e.target.value)} placeholder="44 99999-9999" /></div>
-            <div className="vd-full"><label className="lbl-mini">Curso</label><input className="input" value={form.curso} onChange={(e) => set("curso", e.target.value)} placeholder="Ex.: Especialista em Manutenção em Inversores" /></div>
+            <div className="vd-full"><label className="lbl-mini">Curso vendido</label>
+              {outroCurso ? (
+                <div style={{ display: "flex", gap: 8 }}>
+                  <input className="input" autoFocus value={form.curso} onChange={(e) => set("curso", e.target.value)} placeholder="Digite o nome do curso" />
+                  <button className="btn btn-sm" onClick={() => { setOutroCurso(false); set("curso", ""); }}>Ver lista</button>
+                </div>
+              ) : (
+                <select className="input" value={CURSOS.includes(form.curso) ? form.curso : (form.curso ? "__manter" : "")}
+                  onChange={(e) => { if (e.target.value === "__outro") { setOutroCurso(true); set("curso", ""); } else if (e.target.value !== "__manter") set("curso", e.target.value); }}>
+                  <option value="">Escolher curso…</option>
+                  {form.curso && !CURSOS.includes(form.curso) && <option value="__manter">{form.curso} (como estava)</option>}
+                  {CURSOS.map((c) => <option key={c} value={c}>{c}</option>)}
+                  <option value="__outro">Outro — digitar…</option>
+                </select>
+              )}
+            </div>
             <div><label className="lbl-mini">Forma de pagamento</label>
               <select className="input" value={form.forma} onChange={(e) => set("forma", e.target.value)}>
                 {FORMAS_PG.map((f) => <option key={f} value={f}>{f}</option>)}
