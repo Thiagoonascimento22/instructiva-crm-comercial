@@ -3639,6 +3639,97 @@ const mesLegivel = (m) => {
   return (nomes[Number(mm) - 1] || "") + " de " + a;
 };
 
+// Importar vendas de uma planilha (CSV)
+function ModalImportarVendas({ onClose, onDone, showToast }) {
+  const [dados, setDados] = useState(null);
+  const [grupoPadrao, setGrupoPadrao] = useState("Time de vendas");
+  const [importando, setImportando] = useState(false);
+  const ref = useRef(null);
+
+  function lerArquivo(e) {
+    const file = e.target.files && e.target.files[0];
+    e.target.value = "";
+    if (!file) return;
+    const fr = new FileReader();
+    fr.onload = () => {
+      try {
+        const { headers, rows } = parseCSV(String(fr.result || ""));
+        const acha = (ops) => { for (let i = 0; i < headers.length; i++) if (ops.some((o) => headers[i].includes(o))) return i; return -1; };
+        const iVend = acha(["vendedor", "equipe", "responsavel", "responsável"]);
+        const iData = acha(["data"]);
+        const iNome = acha(["nome", "cliente"]);
+        const iMail = acha(["email", "e-mail"]);
+        const iTel = acha(["telefone", "whatsapp", "celular", "fone"]);
+        const iCurso = acha(["curso", "produto"]);
+        const iForma = acha(["forma", "pagto", "pagamento"]);
+        const iPlat = acha(["plataforma"]);
+        const iCod = acha(["codigo", "código", "cod venda", "transacao", "transação"]);
+        const iParc = acha(["parcela"]);
+        const iRec = acha(["recebido"]);
+        const iVal = acha(["vendido", "valor venda", "valor total", "valor"]);
+        if (iVend < 0 || iVal < 0) { showToast("O arquivo precisa ter as colunas VENDEDOR e VALOR VENDIDO"); return; }
+        const pega = (r, i) => (i >= 0 ? (r[i] || "") : "");
+        const vendas = rows.map((r) => ({
+          pessoaNome: pega(r, iVend), data: pega(r, iData), cliente: pega(r, iNome),
+          email: pega(r, iMail), telefone: pega(r, iTel), curso: pega(r, iCurso),
+          forma: pega(r, iForma), plataforma: pega(r, iPlat), codigo: pega(r, iCod),
+          parcelas: pega(r, iParc), recebido: pega(r, iRec), valor: pega(r, iVal),
+        })).filter((v) => v.pessoaNome.trim() && v.valor);
+        const pessoas = Array.from(new Set(vendas.map((v) => v.pessoaNome.trim())));
+        setDados({ vendas, pessoas });
+      } catch (err) { showToast("Não consegui ler o arquivo. Confira se é um CSV."); }
+    };
+    fr.readAsText(file, "utf-8");
+  }
+
+  async function importar() {
+    if (!dados || !dados.vendas.length) return;
+    setImportando(true);
+    try {
+      const r = await api.vdImportar({ vendas: dados.vendas, criarPessoas: true, grupoPadrao });
+      showToast(`✓ ${r.criados} venda(s) importada(s)` + (r.novasPessoas ? ` · ${r.novasPessoas} pessoa(s) criada(s)` : "") + (r.pulados ? ` · ${r.pulados} pulada(s)` : ""));
+      onDone(); onClose();
+    } catch (e) { showToast("✗ " + e.message); } finally { setImportando(false); }
+  }
+
+  return (
+    <Portal>
+    <div className="pop-bg centro" onClick={(e) => e.target === e.currentTarget && onClose()}>
+      <div className="pop-sheet" style={{ maxWidth: 620 }}>
+        <div className="pop-head"><b>Importar vendas da planilha</b><button className="crm-x" onClick={onClose}>✕</button></div>
+        <div className="pop-body">
+          <div className="rsv-hint" style={{ marginTop: 0 }}>
+            Suba um <b>CSV</b> com as colunas <b>VENDEDOR</b>, DATA, NOME, EMAIL, TELEFONE, CURSO, FORMA DE PAGTO,
+            PLATAFORMA, CÓDIGO VENDA, QUANTIDADE DE PARCELAS, VALOR RECEBIDO e <b>VALOR VENDIDO</b>.
+            Quem não estiver cadastrado é criado automaticamente. Venda repetida (mesmo código) é pulada.
+          </div>
+          <input ref={ref} type="file" accept=".csv,text/csv" style={{ display: "none" }} onChange={lerArquivo} />
+          <button className="btn btn-on" style={{ marginTop: 12 }} onClick={() => ref.current && ref.current.click()}>Escolher arquivo CSV</button>
+          {dados && (
+            <>
+              <div className="imp-resumo"><b>{dados.vendas.length}</b> venda(s) · <b>{dados.pessoas.length}</b> pessoa(s): {dados.pessoas.join(", ")}</div>
+              <div className="imp-preview">
+                {dados.vendas.slice(0, 4).map((v, i) => (
+                  <div key={i} className="imp-row"><b>{v.pessoaNome}</b> · {v.cliente || "—"} · R$ {v.valor}{v.data ? " · " + v.data : ""}</div>
+                ))}
+                {dados.vendas.length > 4 && <div className="imp-mais">…e mais {dados.vendas.length - 4}</div>}
+              </div>
+              <div style={{ marginTop: 12 }}>
+                <label className="lbl-mini">Equipe pra quem for criado agora</label>
+                <input className="input" value={grupoPadrao} onChange={(e) => setGrupoPadrao(e.target.value)} />
+              </div>
+              <button className="onum-add" style={{ marginTop: 16, display: "block" }} disabled={importando} onClick={importar}>
+                {importando ? "Importando…" : `Importar ${dados.vendas.length} vendas`}
+              </button>
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+    </Portal>
+  );
+}
+
 function PainelVendas({ showToast }) {
   const [mes, setMes] = useState("");
   const [dados, setDados] = useState(null);
@@ -3648,6 +3739,7 @@ function PainelVendas({ showToast }) {
   const [form, setForm] = useState(null);
   const [showPessoas, setShowPessoas] = useState(false);
   const [verLista, setVerLista] = useState(false);
+  const [showImportarV, setShowImportarV] = useState(false);
 
   const carregar = (m) => {
     setCarregando(true);
@@ -3685,6 +3777,7 @@ function PainelVendas({ showToast }) {
             data: new Date().toISOString().slice(0, 10),
           })}><I.plus className="ico" /> Lançar venda</button>
           <button className="onum-btn-ghost" onClick={() => setShowPessoas(true)}><I.users className="ico" /> Equipe & metas</button>
+          <button className="onum-btn-ghost" onClick={() => setShowImportarV(true)}><I.clip className="ico" /> Importar planilha</button>
           <button className="onum-btn-ghost" onClick={() => setVerLista((v) => !v)}><I.chat className="ico" /> {verLista ? "Ver ranking" : `Vendas do mês (${vendas.length})`}</button>
         </div>
       </div>
@@ -3788,6 +3881,7 @@ function PainelVendas({ showToast }) {
       )}
 
       {form && <FormVenda form={form} setForm={setForm} pessoas={pessoas} onSalvo={() => { setForm(null); carregar(); }} showToast={showToast} />}
+      {showImportarV && <ModalImportarVendas onClose={() => setShowImportarV(false)} onDone={carregar} showToast={showToast} />}
       {showPessoas && <ModalPessoas pessoas={pessoas} onClose={() => setShowPessoas(false)} onMudou={carregar} showToast={showToast} />}
     </div>
   );

@@ -117,6 +117,7 @@ export const api = {
   vdPessoaCriar: (d) => req("POST", "/api/vendas/pessoas", d),
   vdPessoaEditar: (id, d) => req("PUT", "/api/vendas/pessoas/" + id, d),
   vdPessoaExcluir: (id) => req("DELETE", "/api/vendas/pessoas/" + id),
+  vdImportar: (d) => req("POST", "/api/vendas/importar", d),
   ofCriarTemplate: (id, dados) => req("POST", "/api/oficial/numeros/" + id + "/templates", dados),
   ofVendedoresLista: () => req("GET", "/api/oficial/vendedores-lista"),
   ofLimparChats: (modo) => req("POST", "/api/oficial/chats/limpar", { modo }),

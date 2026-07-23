@@ -200,6 +200,67 @@ export function instalarVendas({ app, getDb, saveDB, proximoId, auth, gerenteOnl
     res.json({ ok: true });
   });
 
+  /* ---------------- IMPORTAR VENDAS EM LOTE ---------------- */
+  app.post("/api/vendas/importar", auth, gerenteOnly, (req, res) => {
+    garantir();
+    const b = req.body || {};
+    const linhas = Array.isArray(b.vendas) ? b.vendas.slice(0, 5000) : [];
+    const criarPessoas = b.criarPessoas !== false;
+    const grupoPadrao = String(b.grupoPadrao || "").trim().slice(0, 40);
+    let criados = 0, pulados = 0, novasPessoas = 0;
+    const achaPessoa = (nome) => {
+      const n = String(nome || "").trim().toLowerCase();
+      if (!n) return null;
+      return db.vendas.pessoas.find((p) => p.nome.trim().toLowerCase() === n) || null;
+    };
+    for (const r of linhas) {
+      const valor = num(r.valor);
+      let p = r.pessoaId ? db.vendas.pessoas.find((x) => x.id === r.pessoaId) : achaPessoa(r.pessoaNome);
+      if (!p && criarPessoas && String(r.pessoaNome || "").trim()) {
+        p = {
+          id: proximoId ? proximoId("pes") : "pes_" + Date.now().toString(36) + Math.random().toString(36).slice(2, 5),
+          nome: String(r.pessoaNome).trim().slice(0, 60),
+          grupo: grupoPadrao, metaMensal: 0, userId: null, ativo: true, criadoEm: Date.now(),
+        };
+        db.vendas.pessoas.push(p); novasPessoas++;
+      }
+      if (!p || valor <= 0) { pulados++; continue; }
+      let data = r.data ? new Date(r.data).getTime() : Date.now();
+      if (!isFinite(data)) data = Date.now();
+      const codigo = String(r.codigo || "").trim().slice(0, 60);
+      // não duplica: mesmo código, ou mesma pessoa+cliente+valor no mesmo dia
+      const dia = new Date(data).toDateString();
+      const repetida = db.vendas.lista.some((v) =>
+        (codigo && String(v.codigo || "").trim() === codigo) ||
+        (v.pessoaId === p.id && num(v.valor) === valor &&
+          String(v.cliente || "").trim().toLowerCase() === String(r.cliente || "").trim().toLowerCase() &&
+          new Date(v.data).toDateString() === dia)
+      );
+      if (repetida) { pulados++; continue; }
+      const recebido = num(r.recebido);
+      db.vendas.lista.unshift({
+        id: proximoId ? proximoId("vnd") : "vnd_" + Date.now().toString(36) + Math.random().toString(36).slice(2, 5),
+        pessoaId: p.id, pessoaNome: p.nome,
+        cliente: String(r.cliente || "").trim().slice(0, 90),
+        email: String(r.email || "").trim().slice(0, 120),
+        telefone: String(r.telefone || "").replace(/\D/g, "").slice(0, 15),
+        curso: String(r.curso || "").trim().slice(0, 90),
+        valor, recebido,
+        aGerar: Math.max(0, valor - recebido),
+        forma: String(r.forma || "").trim().slice(0, 30),
+        plataforma: String(r.plataforma || "").trim().slice(0, 40),
+        codigo,
+        parcelas: Math.max(0, Math.min(60, parseInt(r.parcelas, 10) || 0)),
+        obs: "",
+        data,
+        criadoPor: req.user.id, criadoPorNome: req.user.nome, criadoEm: Date.now(),
+      });
+      criados++;
+    }
+    salvar();
+    res.json({ ok: true, criados, pulados, novasPessoas });
+  });
+
   /* ---------------- PAINEL (a planilha) ---------------- */
   app.get("/api/vendas/painel", auth, gerenteOnly, (req, res) => {
     garantir();
