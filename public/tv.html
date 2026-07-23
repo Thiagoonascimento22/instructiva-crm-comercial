@@ -75,11 +75,11 @@ font-size:clamp(12px,1.15vw,22px);background:var(--card2);flex:none}
 .plot svg{position:absolute;inset:0;width:100%;height:100%;overflow:visible}
 .eix{display:flex;justify-content:space-between;font-size:clamp(6px,.52vw,10px);color:var(--mut);margin-top:4px;flex:none}
 /* ---- listas ranqueadas (cursos, pagamento, semanas) ---- */
-.grid{flex:1;min-height:0;display:flex;flex-direction:column;gap:clamp(6px,.8vh,12px);justify-content:center}
+.grid{flex:1;min-height:0;display:flex;flex-direction:column;gap:clamp(6px,.8vh,12px);justify-content:center;overflow:hidden}
 .grid.g1{}
 .vd{display:flex;align-items:center;gap:clamp(9px,1vw,20px);padding:0 clamp(13px,1.4vw,26px);border-radius:clamp(10px,1vw,16px);
 background:var(--card);border:1px solid var(--borda);position:relative;overflow:hidden;
-flex:0 0 auto;height:clamp(46px,8.6vh,86px)}
+flex:1 1 0;min-height:clamp(34px,4.6vh,58px);max-height:clamp(50px,8.6vh,86px)}
 .vd .fb{position:absolute;left:0;top:0;bottom:0;background:rgba(242,101,34,.10);transition:width 1s cubic-bezier(.2,.8,.2,1)}
 .vd>*{position:relative}
 .vd .p{font-family:Sora;font-size:clamp(12px,1.15vw,23px);font-weight:800;color:var(--mut);min-width:clamp(20px,1.9vw,38px);text-align:center}
@@ -91,6 +91,8 @@ display:grid;place-items:center;font-weight:800;font-size:clamp(9px,.85vw,16px);
 .vd .n b{display:block;font-size:clamp(11px,1.05vw,21px);font-weight:700;letter-spacing:-.3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .vd .n s{text-decoration:none;font-size:clamp(7px,.62vw,12px);color:var(--mut)}
 .vd .v{text-align:right;flex:none}
+.vd .v b{font-family:Sora;display:block;font-size:clamp(12px,1.2vw,24px);font-weight:800;letter-spacing:-.7px;white-space:nowrap}
+.vd .v s{text-decoration:none;display:block;font-size:clamp(6px,.56vw,11px);color:var(--mut);font-weight:700}
 /* ---- pódio ---- */
 .pod{flex:1;min-height:0;display:grid;grid-template-columns:1fr 1.3fr 1fr;gap:clamp(9px,1.1vw,22px);align-items:stretch}
 .lg{display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:clamp(10px,1.6vh,26px) clamp(7px,.9vw,18px);gap:clamp(2px,.5vh,9px)}
