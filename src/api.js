@@ -106,6 +106,7 @@ export const api = {
   ofDiagnostico: () => req("GET", "/api/oficial/diagnostico"),
   ofTemplates: (id) => req("GET", "/api/oficial/numeros/" + id + "/templates"),
   ofEnviarTemplate: (dados) => req("POST", "/api/oficial/enviar-template", dados),
+  ofMeusNumeros: () => req("GET", "/api/oficial/meus-numeros"),
   ofCriarTemplate: (id, dados) => req("POST", "/api/oficial/numeros/" + id + "/templates", dados),
   ofVendedoresLista: () => req("GET", "/api/oficial/vendedores-lista"),
   ofLimparChats: (modo) => req("POST", "/api/oficial/chats/limpar", { modo }),

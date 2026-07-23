@@ -1970,8 +1970,19 @@ const canalOficial = instalarCanalOficial({
    FRONTEND (build do Vite)
    ============================================================ */
 const dist = path.join(__dirname, "..", "dist");
-app.use(express.static(dist));
+app.use(express.static(dist, {
+  setHeaders: (res, filePath) => {
+    if (filePath.endsWith(".html")) {
+      // o index.html NUNCA fica em cache -> todo deploy novo aparece na hora pro vendedor
+      res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+    } else {
+      // assets têm hash no nome (index-ABC123.js) -> pode cachear forte sem risco
+      res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
+    }
+  },
+}));
 app.get("*", (req, res) => {
+  res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
   res.sendFile(path.join(dist, "index.html"));
 });
 

@@ -3644,3 +3644,19 @@ input:focus-visible, textarea:focus-visible, select:focus-visible {
 
 /* Nova conversa não-oficial (Evolution) */
 .wa-nova { display: flex; flex-direction: column; }
+
+/* ===== Próximo da vez na distribuição ===== */
+.of-vez { font-size: 10.5px; font-weight: 700; color: var(--brand); background: var(--surface-2); border: 1px solid var(--brand); border-radius: 5px; padding: 1px 6px; margin-left: 8px; text-transform: uppercase; letter-spacing: .3px; white-space: nowrap; }
+
+/* ===== Nova conversa oficial: prévia e variáveis ===== */
+.of-nova-preview { font-size: 13px; color: var(--text); background: var(--surface-2); border-radius: 10px; padding: 11px 13px; margin-top: 10px; line-height: 1.5; white-space: pre-wrap; }
+.of-nova-var { color: var(--brand); font-weight: 700; }
+.of-nova-vars { margin-top: 12px; }
+.of-nova-erro { font-size: 12.5px; color: #b91c1c; background: rgba(220,38,38,.08); border-radius: 8px; padding: 9px 11px; margin-top: 12px; }
+
+/* ===== Aviso quando não dá pra mandar mensagem livre (regra das 24h) ===== */
+.of-bloq { display: flex; align-items: center; gap: 14px; padding: 14px 18px; border-top: 1px solid var(--line); background: var(--surface-2); }
+.of-bloq-txt { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.of-bloq-txt b { font-size: 13.5px; color: var(--text); display: flex; align-items: center; gap: 6px; }
+.of-bloq-txt span { font-size: 12.5px; color: var(--muted); line-height: 1.45; }
+.of-bloq .btn { flex: none; }

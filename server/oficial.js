@@ -178,37 +178,55 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
     );
   }
 
+  // peso = quantos leads a pessoa recebe por rodada (padrão 1)
+  function pesoDe(v) { const n = Number(v.oficialPercentual); return n > 0 ? n : 1; }
+
+  /* RODÍZIO INTERCALADO (não olha histórico!)
+     Cada ligado tem um "crédito" que sobe pelo peso dele a cada lead. Quem tiver
+     o maior crédito leva o lead e devolve a soma dos pesos. Resultado: numa rodada
+     completa cada um recebe exatamente o peso dele, mas os leads ficam INTERCALADOS
+     (todo mundo aparece logo no começo, ninguém espera a rodada inteira).
+     Se alguém for ligado/desligado ou mudar de peso, o rodízio é refeito NA HORA. */
+  function estadoRodada(ativos) {
+    const chave = ativos.map((v) => v.id + ":" + pesoDe(v)).sort().join("|");
+    let r = db.oficial.rodada;
+    if (!r || r.chave !== chave || !r.credito) {
+      r = db.oficial.rodada = { chave, credito: {} };
+      ativos.forEach((v) => { r.credito[v.id] = 0; });
+    }
+    return r;
+  }
+
+  // escolhe o maior crédito; empate -> quem recebeu menos no total
+  function maiorCredito(ativos, credito) {
+    let escolhido = null;
+    for (const v of ativos) {
+      if (!escolhido) { escolhido = v; continue; }
+      const a = credito[v.id] || 0, b = credito[escolhido.id] || 0;
+      if (a > b || (a === b && (v.oficialLeadsRecebidos || 0) < (escolhido.oficialLeadsRecebidos || 0))) escolhido = v;
+    }
+    return escolhido;
+  }
+
+  // quem recebe o PRÓXIMO lead (sem consumir) — usado pra mostrar na tela
+  function proximoDaVez() {
+    const ativos = vendedoresElegiveis();
+    if (ativos.length === 0) return null;
+    const r = estadoRodada(ativos);
+    const simulado = {};
+    ativos.forEach((v) => { simulado[v.id] = (r.credito[v.id] || 0) + pesoDe(v); });
+    return maiorCredito(ativos, simulado);
+  }
+
   function escolherVendedor() {
     const ativos = vendedoresElegiveis();
     if (ativos.length === 0) return null;
-
-    // total de leads já distribuídos entre os ativos (pra calcular a cota)
-    const totalDistribuido = ativos.reduce(
-      (s, v) => s + (v.oficialLeadsRecebidos || 0), 0
-    );
-
-    // PESO de cada ativo = o número que o gerente definiu, ou 1 (padrão) se não mexeu.
-    // Assim "todos em 1" = 1 lead pra cada em rodízio; subir alguém pra 2 dá o dobro
-    // SEM zerar os outros. Nunca alguém ativo fica com peso 0 por engano.
-    const pesoDe = (v) => { const n = Number(v.oficialPercentual); return n > 0 ? n : 1; };
-    const somaPesos = ativos.reduce((s, v) => s + pesoDe(v), 0);
-
-    // próximo lead -> escolhe quem tem MAIOR déficit (cota esperada - recebido)
-    let escolhido = null;
-    let melhorDeficit = -Infinity;
-    for (const v of ativos) {
-      const peso = pesoDe(v);
-      const cotaEsperada = ((totalDistribuido + 1) * peso) / somaPesos;
-      const recebido = v.oficialLeadsRecebidos || 0;
-      const deficit = cotaEsperada - recebido;
-      if (
-        deficit > melhorDeficit ||
-        (deficit === melhorDeficit && recebido < (escolhido.oficialLeadsRecebidos || 0))
-      ) {
-        melhorDeficit = deficit;
-        escolhido = v;
-      }
-    }
+    const r = estadoRodada(ativos);
+    const total = ativos.reduce((s, v) => s + pesoDe(v), 0);
+    ativos.forEach((v) => { r.credito[v.id] = (r.credito[v.id] || 0) + pesoDe(v); });
+    const escolhido = maiorCredito(ativos, r.credito);
+    if (!escolhido) return null;
+    r.credito[escolhido.id] = (r.credito[escolhido.id] || 0) - total;
     return escolhido;
   }
 
@@ -913,6 +931,7 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
   });
 
   app.get("/api/oficial/vendedores", auth, gerenteOnly, (req, res) => {
+    const prox = proximoDaVez();
     const lista = db.users
       .filter((u) => u.role === "vendedor" && u.ativo)
       .map((u) => ({
@@ -921,6 +940,8 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
         oficialAtivo: !!u.oficialAtivo,
         oficialPercentual: Number(u.oficialPercentual) || 0,
         oficialLeadsRecebidos: u.oficialLeadsRecebidos || 0,
+        // se é quem recebe o próximo lead
+        proximo: !!(prox && prox.id === u.id),
       }));
     res.json(lista);
   });
@@ -948,6 +969,7 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
   // zera os contadores (recomeça a distribuição do zero)
   app.post("/api/oficial/vendedores/zerar", auth, gerenteOnly, (req, res) => {
     db.users.forEach((u) => { if (u.role === "vendedor") u.oficialLeadsRecebidos = 0; });
+    db.oficial.rodada = null; // recomeça a rodada do zero também
     salvar();
     res.json({ ok: true });
   });
@@ -2448,6 +2470,8 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
       numeroId: numeroCfg.id,
       criadoPor: req.user.id,        // quem disparou (pro vendedor ver só as dele)
       criadoPorNome: req.user.nome,
+      // pra onde vão os leads que responderem: "eu" (fica com quem disparou) ou "time" (distribui)
+      destinoLeads: b.destinoLeads === "time" ? "time" : "eu",
       template: templateName,
       idioma,
       iaId: iaCampanha ? iaCampanha.id : null,
@@ -2542,10 +2566,11 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
         chat.origemDisparo = true;
         chat.campanha = campanha.nome;
         chat.campanhaId = campanha.id;
-        // O disparo fica com QUEM disparou: carimba o dono da conversa como o remetente
-        // da campanha. Como atribuirLead() respeita dono já existente, a resposta (e um
+        // Se a campanha foi criada como "os leads ficam comigo", carimba o dono da conversa
+        // como o remetente. Como atribuirLead() respeita dono já existente, a resposta (e um
         // eventual repasse da IA) continua com ele, sem cair na distribuição pro time.
-        if (!chat.vendedorId && campanha.criadoPor) {
+        // Se foi "distribuir pro time", NÃO carimba: aí o rodízio decide quando a pessoa responder.
+        if (campanha.destinoLeads !== "time" && !chat.vendedorId && campanha.criadoPor) {
           chat.vendedorId = campanha.criadoPor;
           chat.vendedorNome = campanha.criadoPorNome || "";
           chat.atribuidoEm = Date.now();
@@ -2572,6 +2597,18 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
     console.log(`Campanha ${campanha.nome}: ${campanha.enviados} enviados, ${campanha.falhas} falhas — concluída`);
     salvar();
   }
+
+  /* Números que EU posso usar pra iniciar conversa (os meus + os sem dono) */
+  app.get("/api/oficial/meus-numeros", auth, (req, res) => {
+    garantirEstrutura();
+    const lista = (db.oficial.numeros || []).filter((n) => {
+      if (n.ativo === false) return false;
+      if (!tokenDe(n)) return false;
+      if (req.user.role === "gerente") return true;
+      return !n.vendedorId || n.vendedorId === req.user.id;
+    });
+    res.json({ numeros: lista.map(numeroPublico) });
+  });
 
   /* Enviar UM template pra um número — inicia a conversa oficial a partir do lead */
   app.post("/api/oficial/enviar-template", auth, async (req, res) => {
@@ -2938,7 +2975,11 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
       res.json({ ok: true });
     } catch (e) {
       // erro típico: janela de 24h fechada (precisa de template)
-      res.status(400).json({ error: e.message });
+      const m = String((e && e.message) || "");
+      if (/131047|24 hours|24h|re-?engagement/i.test(m)) {
+        return res.status(400).json({ error: "Esse contato ainda não respondeu (ou passou das 24h). O WhatsApp só entrega template aprovado agora — use o botão Enviar template." });
+      }
+      res.status(400).json({ error: m || "Falha ao enviar" });
     }
   });
 

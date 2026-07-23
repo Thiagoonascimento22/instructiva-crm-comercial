@@ -452,7 +452,7 @@ export default function App() {
           {view === "numeros" && isGer && mod("numeros") && <OficialNumeros showToast={showToast} />}
           {view === "ia" && isGer && mod("ia") && <OficialIAs showToast={showToast} />}
           {view === "ligacoes" && isGer && mod("ligacoes") && <OficialLigacoes showToast={showToast} />}
-          {view === "crm" && (isGer || vendPode("crm")) && mod("crm") && <OficialCRM showToast={showToast} isGer={isGer} onAbrirWhats={(tel, canal) => { setWaTarget({ numero: tel, canal }); setView("whatsapp"); }} />}
+          {view === "crm" && (isGer || vendPode("crm")) && mod("crm") && <OficialCRM showToast={showToast} isGer={isGer} onAbrirWhats={(tel, canal, nome) => { setWaTarget({ numero: tel, canal, nome }); setView("whatsapp"); }} />}
           {view === "temperatura" && (isGer || vendPode("temperatura")) && mod("temperatura") && <OficialTemperatura showToast={showToast} />}
           {view === "minhasSolicitacoes" && !isGer && !isSuporte && <PaginaMinhasSolicitacoes itens={minhasSol} recarregar={carregarMinhasSol} showToast={showToast} />}
           {view === "solicitacoes" && (isGer || isSuporte) && <PaginaSolicitacoes showToast={showToast} readonly={isGer} />}
@@ -2394,6 +2394,7 @@ function ModalDisparo({ isGer = true, numeros, showToast, onClose, onDone }) {
   const [textoManual, setTextoManual] = useState("");
   const [nomeCampanha, setNomeCampanha] = useState("");
   const [pularRecebidos, setPularRecebidos] = useState(false);
+  const [destinoLeads, setDestinoLeads] = useState("eu"); // "eu" = fica com quem disparou | "time" = distribui
   const [agendar, setAgendar] = useState(false);
   const [dataHora, setDataHora] = useState("");
   const [enviando, setEnviando] = useState(false);
@@ -2458,7 +2459,7 @@ function ModalDisparo({ isGer = true, numeros, showToast, onClose, onDone }) {
       const r = await api.ofDisparar({
         numeroId, template: template.name, idioma: template.language,
         nomeCampanha: nomeCampanha || template.name, contatos, iaId: iaId || null,
-        pularRecebidos, agendarPara: agendarPara || undefined,
+        pularRecebidos, agendarPara: agendarPara || undefined, destinoLeads,
       });
       if (r.agendadoPara) showToast(`Disparo agendado para ${new Date(r.agendadoPara).toLocaleString("pt-BR")} · ${r.total} contato(s)`);
       else showToast(`Disparo iniciado para ${r.total} contato(s)!`);
@@ -2586,6 +2587,18 @@ function ModalDisparo({ isGer = true, numeros, showToast, onClose, onDone }) {
                     👤 Quem responder cai <b>direto pra você</b>, na <b>Caixa de entrada</b> (aba Oficial).
                   </div>
                 )}
+              </div>
+              <div className="dispm-campo">
+                <label>Quem responder, vai pra quem?</label>
+                <select className="input" value={destinoLeads} onChange={(e) => setDestinoLeads(e.target.value)}>
+                  <option value="eu">Fica comigo (só eu atendo esses leads)</option>
+                  <option value="time">Distribuir pro time (rodízio de "Quem recebe os leads")</option>
+                </select>
+                <span style={{ fontSize: 12, color: "var(--muted)", marginTop: 5, display: "block" }}>
+                  {destinoLeads === "eu"
+                    ? "Todo mundo que responder esse disparo cai na SUA caixa de entrada e fica no seu nome."
+                    : "Quem responder é dividido entre os vendedores ligados em \"Quem recebe os leads\", em rodízio."}
+                </span>
               </div>
               <div className="dispm-campo">
                 <label>Nome da campanha (opcional)</label>
@@ -2784,7 +2797,7 @@ function OficialVendedores({ showToast }) {
               <span className="of-switch-dot" />
             </button>
             <div className="of-vend-nome">
-              <b>{v.nome}</b>
+              <b>{v.nome}{v.proximo && <span className="of-vez">← próximo</span>}</b>
               <span className="of-vend-sub">{v.oficialLeadsRecebidos || 0} leads recebidos{v.oficialAtivo ? "" : " · desligado"}</span>
             </div>
             {v.oficialAtivo && (
@@ -3486,7 +3499,7 @@ function OficialCRM({ showToast, isGer = true, onAbrirWhats }) {
                       <label className="crm-check" onClick={(e) => e.stopPropagation()}><input type="checkbox" checked={!!marcados[l.id]} onChange={() => toggleMarcado(l.id)} /></label>
                       <div className="crm-card-nome">{l.nome}</div>
                       {l.telefone && (
-                        <button className="crm-wa" onClick={(e) => { e.stopPropagation(); const r = e.currentTarget.getBoundingClientRect(); setWaMenu(waMenu && waMenu.id === l.id ? null : { id: l.id, tel: l.telefone, x: r.right, y: r.bottom, yt: r.top }); }} title="Chamar no WhatsApp"><I.wa className="ico" /></button>
+                        <button className="crm-wa" onClick={(e) => { e.stopPropagation(); const r = e.currentTarget.getBoundingClientRect(); setWaMenu(waMenu && waMenu.id === l.id ? null : { id: l.id, tel: l.telefone, nome: l.nome, x: r.right, y: r.bottom, yt: r.top }); }} title="Chamar no WhatsApp"><I.wa className="ico" /></button>
                       )}
                     </div>
                     {l.telefone && <div className="crm-card-tel">{l.telefone}</div>}
@@ -3651,8 +3664,8 @@ function OficialCRM({ showToast, isGer = true, onAbrirWhats }) {
       {waMenu && (
         <Portal>
           <div className="crm-wa-menu" style={{ top: (waMenu.y + 104 > window.innerHeight ? waMenu.yt - 100 : waMenu.y + 4), left: Math.max(8, Math.min(waMenu.x - 214, window.innerWidth - 224)) }} onClick={(e) => e.stopPropagation()}>
-            <button onClick={() => { const t = waMenu.tel; setWaMenu(null); onAbrirWhats && onAbrirWhats(t, "evolution"); }}><span className="crm-wa-dot nao" /><span><b>Não oficial</b><small>abre a conversa direto</small></span></button>
-            <button onClick={() => { const t = waMenu.tel; setWaMenu(null); onAbrirWhats && onAbrirWhats(t, "oficial"); }}><span className="crm-wa-dot ofi" /><span><b>Oficial</b><small>abre a conversa + template</small></span></button>
+            <button onClick={() => { const t = waMenu.tel, nm = waMenu.nome; setWaMenu(null); onAbrirWhats && onAbrirWhats(t, "evolution", nm); }}><span className="crm-wa-dot nao" /><span><b>Não oficial</b><small>abre a conversa direto</small></span></button>
+            <button onClick={() => { const t = waMenu.tel, nm = waMenu.nome; setWaMenu(null); onAbrirWhats && onAbrirWhats(t, "oficial", nm); }}><span className="crm-wa-dot ofi" /><span><b>Oficial</b><small>abre a conversa + template</small></span></button>
           </div>
         </Portal>
       )}
@@ -4678,6 +4691,9 @@ function InboxOficial({ isGer, showToast, onIrParaEvolution, target, onTargetUse
   const [numSel, setNumSel] = useState("");
   const [tpls, setTpls] = useState([]);
   const [tplSel, setTplSel] = useState("");
+  const [vars, setVars] = useState([]);
+  const [carregandoTpl, setCarregandoTpl] = useState(false);
+  const [erroNova, setErroNova] = useState("");
   const [enviandoTpl, setEnviandoTpl] = useState(false);
   const [sel, setSel] = useState(null);
   const [conversa, setConversa] = useState(null);
@@ -4735,33 +4751,58 @@ function InboxOficial({ isGer, showToast, onIrParaEvolution, target, onTargetUse
     const num = soDigitos(target.numero);
     const achado = chats.find((c) => numIgual(c.numero, target.numero));
     if (achado) { setSel(achado.id); setNovaConv(null); }
-    else { setSel(null); setNovaConv({ telefone: num }); }
+    else { setSel(null); setNovaConv({ telefone: num, nome: target.nome || "" }); }
     onTargetUsed && onTargetUsed();
     // eslint-disable-next-line
   }, [target, carregou, chats]);
 
-  // Ao iniciar uma conversa nova: carrega os números oficiais disponíveis
+  // Ao iniciar uma conversa nova: carrega os números que ESTE usuário pode usar
   useEffect(() => {
-    if (!novaConv) { setTpls([]); setTplSel(""); return; }
-    api.ofNumeros().then((r) => {
-      const ns = (r.numeros || r || []).filter((n) => n && n.phoneNumberId);
+    if (!novaConv) { setTpls([]); setTplSel(""); setErroNova(""); return; }
+    setErroNova("");
+    api.ofMeusNumeros().then((r) => {
+      const ns = r.numeros || [];
       setNumerosOf(ns);
       setNumSel(ns.length ? ns[0].id : "");
-    }).catch(() => {});
+      if (!ns.length) setErroNova("Você não tem nenhum número oficial liberado. Peça pro gerente vincular um número a você em Números.");
+    }).catch((e) => setErroNova(e.message));
   }, [novaConv]);
-  // Ao escolher o número: carrega os templates dele
+  // Ao escolher o número: carrega os templates aprovados dele
   useEffect(() => {
     if (!novaConv || !numSel) { setTpls([]); return; }
+    setCarregandoTpl(true);
     api.ofTemplates(numSel).then((r) => {
-      const ts = (r.templates || r || []).filter((t) => t && (t.status === "APPROVED" || !t.status));
-      setTpls(ts); setTplSel(ts.length ? (ts[0].name || ts[0].nome || "") : "");
-    }).catch(() => setTpls([]));
+      const ts = r.templates || [];
+      setTpls(ts);
+      setTplSel(ts.length ? ts[0].name : "");
+      if (!ts.length) setErroNova("Esse número não tem template aprovado. Crie um em Disparo › Templates.");
+    }).catch((e) => { setTpls([]); setErroNova(e.message); }).finally(() => setCarregandoTpl(false));
   }, [numSel, novaConv]);
+  // template escolhido (objeto completo: tem idioma, nº de variáveis e o texto)
+  const tplObj = tpls.find((t) => t.name === tplSel) || null;
+  // quando troca de template, prepara os campos das variáveis (1ª já vem com o nome do lead)
+  useEffect(() => {
+    if (!tplObj) { setVars([]); return; }
+    const n = tplObj.vars || 0;
+    setVars(Array.from({ length: n }, (_, i) => (i === 0 ? (novaConv && novaConv.nome) || "" : "")));
+    // eslint-disable-next-line
+  }, [tplSel, tpls]);
+
   async function enviarNovaConv() {
-    if (!novaConv || !numSel || !tplSel) { showToast("Escolha o número e o template"); return; }
+    if (!novaConv || !numSel || !tplObj) { showToast("Escolha o número e o template"); return; }
+    if ((tplObj.vars || 0) > 0 && vars.some((v) => !String(v || "").trim())) {
+      showToast("Preencha as informações do template"); return;
+    }
     setEnviandoTpl(true);
     try {
-      const r = await api.ofEnviarTemplate({ numeroId: numSel, telefone: novaConv.telefone, template: tplSel });
+      const r = await api.ofEnviarTemplate({
+        numeroId: numSel,
+        telefone: novaConv.telefone,
+        nome: novaConv.nome || "",
+        template: tplObj.name,
+        idioma: tplObj.language || "pt_BR", // idioma REAL do template (não chutar pt_BR)
+        variaveis: vars,
+      });
       showToast("✓ Conversa iniciada");
       setNovaConv(null);
       await carregarLista();
@@ -5042,13 +5083,38 @@ function InboxOficial({ isGer, showToast, onIrParaEvolution, target, onTargetUse
                 </div>
               )}
               <label className="lbl-mini">Template</label>
-              {tpls.length === 0 ? (
-                <div className="of-nova-semtpl">Nenhum template aprovado nesse número. Crie um em <b>Disparo › Templates</b>.</div>
+              {carregandoTpl ? (
+                <div className="of-nova-semtpl">Carregando templates…</div>
+              ) : tpls.length === 0 ? (
+                <div className="of-nova-semtpl">{erroNova || "Nenhum template aprovado nesse número."}</div>
               ) : (
                 <select className="input" value={tplSel} onChange={(e) => setTplSel(e.target.value)}>
-                  {tpls.map((t) => { const nm = t.name || t.nome || ""; return <option key={nm} value={nm}>{nm}</option>; })}
+                  {tpls.map((t) => <option key={t.name} value={t.name}>{t.name}</option>)}
                 </select>
               )}
+
+              {tplObj && tplObj.texto && (
+                <div className="of-nova-preview">
+                  {tplObj.texto.split(/(\{\{\d+\}\})/).map((p, i) => {
+                    const m = p.match(/^\{\{(\d+)\}\}$/);
+                    if (!m) return <span key={i}>{p}</span>;
+                    const val = vars[Number(m[1]) - 1];
+                    return <b key={i} className="of-nova-var">{val && val.trim() ? val : p}</b>;
+                  })}
+                </div>
+              )}
+
+              {tplObj && (tplObj.vars || 0) > 0 && (
+                <div className="of-nova-vars">
+                  <label className="lbl-mini">Preencha o que vai no lugar dos espaços</label>
+                  {vars.map((v, i) => (
+                    <input key={i} className="input" style={{ marginTop: 6 }} placeholder={`Informação ${i + 1} (aparece no lugar de {{${i + 1}}})`}
+                      value={v} onChange={(e) => setVars((xs) => xs.map((x, j) => (j === i ? e.target.value : x)))} />
+                  ))}
+                </div>
+              )}
+
+              {erroNova && tpls.length > 0 && <div className="of-nova-erro">{erroNova}</div>}
               <button className="btn btn-primary" style={{ marginTop: 16 }} disabled={enviandoTpl || !tplSel} onClick={enviarNovaConv}>{enviandoTpl ? "Enviando…" : "Enviar template e abrir conversa"}</button>
             </div>
           </div>
@@ -5070,7 +5136,7 @@ function InboxOficial({ isGer, showToast, onIrParaEvolution, target, onTargetUse
                 const ms = conversa.mensagens || [];
                 let ue = 0; for (let i = ms.length - 1; i >= 0; i--) { if (ms[i].role === "them") { ue = ms[i].ts || 0; break; } }
                 const jan = janela24h(ue);
-                if (!jan) return null;
+                if (!jan) return <span className="of-janela fechada" title="O lead ainda não te respondeu. No WhatsApp oficial, até ele responder, só template aprovado é entregue."><I.lock className="ico-inline" /> Ainda não respondeu · só template</span>;
                 return jan.aberta
                   ? <span className={"of-janela" + (jan.urgente ? " urg" : "")} title="Tempo restante da janela de 24h do WhatsApp. Ela renova toda vez que o lead te responde. Dentro dela você manda mensagem livre; fora, só template."><I.clock className="ico-inline" /> {jan.texto} de janela</span>
                   : <span className="of-janela fechada" title="Passou 24h desde a última mensagem do lead. Agora só template aprovado é entregue — a mensagem livre não chega."><I.lock className="ico-inline" /> Janela fechada · só template</span>;
@@ -5164,7 +5230,28 @@ function InboxOficial({ isGer, showToast, onIrParaEvolution, target, onTargetUse
                   </button>
                 )}
               </div>
-            ) : (
+            ) : (() => {
+              // Regra do WhatsApp oficial: só dá pra mandar mensagem livre DEPOIS que o lead
+              // responde, e só por 24h. Fora disso a Meta recusa (aquele "!" vermelho).
+              // Então em vez de deixar digitar e falhar, avisamos e oferecemos o template.
+              const ms = conversa.mensagens || [];
+              let ue = 0; for (let i = ms.length - 1; i >= 0; i--) { if (ms[i].role === "them") { ue = ms[i].ts || 0; break; } }
+              const jan = janela24h(ue);
+              const podeTextoLivre = !!(jan && jan.aberta);
+              if (!podeTextoLivre) {
+                return (
+                  <div className="of-bloq">
+                    <div className="of-bloq-txt">
+                      <b><I.lock className="ico-inline" /> {ue ? "Passou das 24h desde a última resposta" : "Esse contato ainda não te respondeu"}</b>
+                      <span>{ue
+                        ? "Fora da janela de 24h o WhatsApp só entrega template aprovado — mensagem escrita na mão não chega."
+                        : "No WhatsApp oficial, enquanto ele não responder, só chega template aprovado. Mensagem escrita na mão é recusada."}</span>
+                    </div>
+                    <button className="btn btn-primary" onClick={() => { setSel(null); setNovaConv({ telefone: conversa.numero, nome: conversa.nome || "" }); }}>Enviar template</button>
+                  </div>
+                );
+              }
+              return (
               <div className="of-conv-input" style={{ position: "relative" }}>
                 {showEmojiOf && (
                   <div className="wa-emoji-pop" style={{ bottom: "100%", marginBottom: 8 }}>
@@ -5197,7 +5284,8 @@ function InboxOficial({ isGer, showToast, onIrParaEvolution, target, onTargetUse
                   </button>
                 )}
               </div>
-            )}
+              );
+            })()}
           </>
         )}
       </div>
