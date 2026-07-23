@@ -164,15 +164,28 @@ export function instalarVendas({ app, getDb, saveDB, proximoId, auth, gerenteOnl
   }
   const ehVend = (u) => u && u.role === "vendedor";
 
+  /* Foto que aparece no painel/TV.
+     Prioridade: a foto colocada direto na pessoa (serve pra quem NÃO tem login
+     no sistema, tipo professor ou parceiro) e, se não tiver, a do usuário. */
+  function fotoDe(p) {
+    if (!p) return "";
+    if (p.foto) return p.foto;
+    const u = p.userId ? (db.users || []).find((x) => x.id === p.userId) : null;
+    return (u && u.foto) || "";
+  }
   function pessoaPublica(p) {
-    return { id: p.id, nome: p.nome, grupo: p.grupo || "", metaMensal: num(p.metaMensal), ativo: p.ativo !== false, userId: p.userId || null, foraDoPodio: !!p.foraDoPodio };
+    return {
+      id: p.id, nome: p.nome, grupo: p.grupo || "", metaMensal: num(p.metaMensal),
+      ativo: p.ativo !== false, userId: p.userId || null, foraDoPodio: !!p.foraDoPodio,
+      foto: fotoDe(p), fotoPropria: !!p.foto,
+    };
   }
   function vendaPublica(v) {
     const p = db.vendas.pessoas.find((x) => x.id === v.pessoaId);
     return {
       id: v.id, pessoaId: v.pessoaId, pessoaNome: p ? p.nome : (v.pessoaNome || ""),
       cliente: v.cliente || "", email: v.email || "", telefone: v.telefone || "",
-      curso: v.curso || "", forma: v.forma || "", plataforma: v.plataforma || "",
+      curso: v.curso || "", forma: v.forma || "", formaLabel: formaCanonica(v), plataforma: v.plataforma || "",
       codigo: v.codigo || "", parcelas: Number(v.parcelas) || 0,
       valor: num(v.valor), recebido: num(v.recebido), aGerar: num(v.aGerar),
       obs: v.obs || "", data: v.data, mes: mesDe(v.data),
@@ -223,6 +236,12 @@ export function instalarVendas({ app, getDb, saveDB, proximoId, auth, gerenteOnl
     if (b.userId !== undefined) p.userId = b.userId || null;
     if (b.ativo !== undefined) p.ativo = !!b.ativo;
     if (b.foraDoPodio !== undefined) p.foraDoPodio = !!b.foraDoPodio;
+    // foto de perfil da pessoa (funciona pra quem não tem usuário no sistema)
+    if (b.foto !== undefined) {
+      if (!b.foto) delete p.foto;
+      else if (typeof b.foto === "string" && b.foto.startsWith("data:image/") && b.foto.length < 400000) p.foto = b.foto;
+      else return res.status(400).json({ error: "Imagem inválida ou grande demais" });
+    }
     salvar();
     res.json({ ok: true, pessoa: pessoaPublica(p) });
   });
@@ -675,18 +694,62 @@ export function instalarVendas({ app, getDb, saveDB, proximoId, auth, gerenteOnl
   /* ============================================================
      PAINEL DE TV — tudo somado, sem login (usa a chave na URL)
      ============================================================ */
-  function grupoForma(f) {
-    const t = String(f || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
-    if (!t.trim()) return "Não informado";
-    const temCart = /cart/.test(t), temPix = /pix/.test(t);
+  /* ============================================================
+     FORMA DE PAGAMENTO
+     ------------------------------------------------------------
+     Junta as variações que chegam de fora (Hotmart, planilha, digitação
+     na mão) num nome só. E quando a venda vem SEM forma preenchida, o
+     sistema deduz pelo jeito que ela foi paga — parcelas e quanto já caiu.
+     Nada fica como "Não informado".
+     ============================================================ */
+  const semAcento = (t) => String(t == null ? "" : t).normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
+
+  function formaPeloTexto(txt) {
+    const t = semAcento(txt);
+    if (!t) return "";
+    // texto que não diz nada: trata como vazio pra cair na dedução
+    if (/^(-+|\.+|na|n\/a|nd|nda|outro|outros|nao informad[oa]|sem informacao|sem forma|indefinid[oa]|null|undefined|0)$/.test(t)) return "";
+    const temCart = /(cart[ao]|credit|cred\b|\bcc\b|visa|master|elo\b|amex|hipercard)/.test(t);
+    const temPix = /pix/.test(t);
     if (temCart && temPix) return "Cartão + Pix";
-    if (/recorr/.test(t)) return "Recorrência";
-    if (temCart) return "Cartão";
-    if (/boleto/.test(t)) return "Boleto";
+    if (/recorr|assinatur|mensalidad|subscription/.test(t)) return "Recorrência";
     if (temPix) return "Pix";
-    if (/dinheiro|especie/.test(t)) return "Dinheiro";
-    return String(f).trim();
+    if (/boleto|carne|bank.?slip/.test(t)) return "Boleto";
+    if (/debito|debit/.test(t) && !/credit/.test(t)) return "Cartão de débito";
+    if (temCart) return "Cartão";
+    if (/transfer|\bted\b|\bdoc\b|deposit/.test(t)) return "Transferência";
+    if (/dinheiro|especie|cash/.test(t)) return "Dinheiro";
+    if (/paypal|pic ?pay|mercado ?pago|pag ?seguro|nubank|stripe|apple ?pay|google ?pay/.test(t)) return "Carteira digital";
+    if (/cortesia|gratis|gratuit|bolsa|permuta|brinde|troca/.test(t)) return "Cortesia";
+    if (/link/.test(t)) return "Link de pagamento";
+    return String(txt).trim();
   }
+
+  // sem forma preenchida: deduz pelo comportamento do pagamento
+  function formaDeduzida(v) {
+    const parc = Number(v.parcelas) || 0;
+    const valor = num(v.valor), rec = num(v.recebido), falta = num(v.aGerar);
+    if (parc >= 2) return "Cartão";                          // parcelou = cartão
+    if (rec > 0 && rec >= valor * 0.97) return "Pix";         // entrou tudo de uma vez
+    if (rec <= 0 && (falta > 0 || valor > 0)) return "Boleto"; // gerado e ainda não caiu
+    if (rec > 0) return "Cartão";                            // entrou só uma parte
+    return "Pix";
+  }
+
+  // { forma, deduzida } — deduzida = true quando o sistema decidiu pelo padrão da venda
+  function classificarForma(v) {
+    const o = (v && typeof v === "object") ? v : { forma: v };
+    const direto = formaPeloTexto(o.forma);
+    if (direto) return { forma: direto, deduzida: false };
+    // às vezes a forma vem escrita no campo da plataforma ou na observação
+    for (const campo of ["plataforma", "obs"]) {
+      const bruto = String(o[campo] || "").trim();
+      const achou = formaPeloTexto(bruto);
+      if (achou && achou !== bruto) return { forma: achou, deduzida: false };
+    }
+    return { forma: formaDeduzida(o), deduzida: true };
+  }
+  const formaCanonica = (v) => classificarForma(v).forma;
 
   /* Junta as variações do mesmo curso: "Odonto, Estetico, Fisio", "odontomedico",
      "ODONTOLÓGICOS" -> tudo vira ODONTO. Sem isso a métrica por curso não presta. */
@@ -741,9 +804,10 @@ export function instalarVendas({ app, getDb, saveDB, proximoId, auth, gerenteOnl
     // ---- por forma de pagamento ----
     const formas = {};
     doMes.forEach((v) => {
-      const g = grupoForma(v.forma);
-      if (!formas[g]) formas[g] = { forma: g, qtd: 0, valor: 0, recebido: 0 };
+      const { forma: g, deduzida } = classificarForma(v);
+      if (!formas[g]) formas[g] = { forma: g, qtd: 0, valor: 0, recebido: 0, deduzidas: 0 };
       formas[g].qtd++; formas[g].valor += num(v.valor); formas[g].recebido += num(v.recebido);
+      if (deduzida) formas[g].deduzidas++;
     });
 
     // ---- por curso ----
@@ -757,7 +821,7 @@ export function instalarVendas({ app, getDb, saveDB, proximoId, auth, gerenteOnl
     // ---- por plataforma ----
     const plataformas = {};
     doMes.forEach((v) => {
-      const p = String(v.plataforma || "").trim() || "Não informada";
+      const p = String(v.plataforma || "").trim() || "Direto";
       if (!plataformas[p]) plataformas[p] = { plataforma: p, qtd: 0, valor: 0 };
       plataformas[p].qtd++; plataformas[p].valor += num(v.valor);
     });
@@ -770,10 +834,9 @@ export function instalarVendas({ app, getDb, saveDB, proximoId, auth, gerenteOnl
     });
     const ranking = Object.values(porPessoa).map((x) => {
       const p = db.vendas.pessoas.find((y) => y.id === x.pessoaId) || {};
-      const u = p.userId ? (db.users || []).find((y) => y.id === p.userId) : null;
       const meta = p.id ? metaDaPessoa(p, mes) : 0;
-      return { ...x, nome: p.nome || "—", foto: u ? (u.foto || "") : "", foraDoPodio: !!p.foraDoPodio,
-               meta, pct: meta > 0 ? Math.round((x.valor / meta) * 100) : 0 };
+      return { ...x, nome: p.nome || "—", foto: fotoDe(p), foraDoPodio: !!p.foraDoPodio,
+               equipe: (p.grupo || "").trim(), meta, pct: meta > 0 ? Math.round((x.valor / meta) * 100) : 0 };
     }).sort((a, b) => b.valor - a.valor);
 
     // ---- dia a dia ----
@@ -831,9 +894,8 @@ export function instalarVendas({ app, getDb, saveDB, proximoId, auth, gerenteOnl
     });
     const listaHoje = Object.values(hojePorPessoa).map((x) => {
       const p = db.vendas.pessoas.find((y) => y.id === x.pessoaId) || {};
-      const u = p.userId ? (db.users || []).find((y) => y.id === p.userId) : null;
       const top = Object.entries(x.cursos).sort((a, b) => b[1] - a[1])[0];
-      return { ...x, nome: p.nome || "—", foto: u ? (u.foto || "") : "", foraDoPodio: !!p.foraDoPodio,
+      return { ...x, nome: p.nome || "—", foto: fotoDe(p), foraDoPodio: !!p.foraDoPodio,
                equipe: p.grupo || "", cursoTop: top ? top[0] : "", cursosQtd: Object.keys(x.cursos).length };
     }).sort((a, b) => b.valor - a.valor);
     const destaque = listaHoje.filter((x) => !x.foraDoPodio)[0] || null;
@@ -843,14 +905,17 @@ export function instalarVendas({ app, getDb, saveDB, proximoId, auth, gerenteOnl
     const eq = {};
     ranking.forEach((r) => {
       if (r.foraDoPodio) return;
-      const p = db.vendas.pessoas.find((y) => y.id === r.pessoaId) || {};
-      const g2 = (p.grupo || "Sem equipe").trim() || "Sem equipe";
-      if (!eq[g2]) eq[g2] = { equipe: g2, valor: 0, recebido: 0, qtd: 0, pessoas: 0, meta: 0 };
+      const g2 = (r.equipe || "Sem equipe").trim() || "Sem equipe";
+      if (!eq[g2]) eq[g2] = { equipe: g2, valor: 0, recebido: 0, qtd: 0, pessoas: 0, meta: 0, membros: [] };
       eq[g2].valor += r.valor; eq[g2].recebido += r.recebido; eq[g2].qtd += r.qtd;
       eq[g2].pessoas++; eq[g2].meta += r.meta || 0;
+      eq[g2].membros.push({ nome: r.nome, foto: r.foto, valor: r.valor, qtd: r.qtd, meta: r.meta, pct: r.pct });
     });
-    const equipes = Object.values(eq).map((x) => ({ ...x, pct: x.meta > 0 ? Math.round((x.valor / x.meta) * 100) : 0 }))
-      .sort((a, b) => b.valor - a.valor);
+    const equipes = Object.values(eq).map((x) => ({
+      ...x,
+      membros: x.membros.sort((a, b) => b.valor - a.valor),
+      pct: x.meta > 0 ? Math.round((x.valor / x.meta) * 100) : 0,
+    })).sort((a, b) => b.valor - a.valor);
 
     res.json({
       mes, atualizadoEm: Date.now(), diasNoMes, diaHoje, equipes,
@@ -897,9 +962,8 @@ export function instalarVendas({ app, getDb, saveDB, proximoId, auth, gerenteOnl
         const recebido = minhas.reduce((s, v) => s + num(v.recebido), 0);
         const aGerar = minhas.reduce((s, v) => s + num(v.aGerar), 0);
         const meta = metaDaPessoa(p, mes);
-        const u = p.userId ? (db.users || []).find((x) => x.id === p.userId) : null;
         return {
-          pessoaId: p.id, nome: p.nome, grupo: p.grupo || "", foto: u ? (u.foto || "") : "", foraDoPodio: !!p.foraDoPodio,
+          pessoaId: p.id, nome: p.nome, grupo: p.grupo || "", foto: fotoDe(p), foraDoPodio: !!p.foraDoPodio,
           meta, venda, recebido, aGerar,
           falta: Math.max(0, meta - venda),
           pct: meta > 0 ? Math.round((venda / meta) * 100) : 0,
@@ -954,8 +1018,36 @@ export function instalarVendas({ app, getDb, saveDB, proximoId, auth, gerenteOnl
     const precisaPorDia = diasRestantes > 0 ? Math.max(0, geral.falta / diasRestantes) : 0;
     const melhorDia = porDia.reduce((mx, d) => (d.venda > (mx ? mx.venda : 0) ? d : mx), null);
 
+    /* ---- destaque do dia: quem mais vendeu hoje ----
+       Fica ao lado do ranking do mês, pra dar o pique do dia sem precisar
+       abrir o painel da TV. Sempre olha o time inteiro, mesmo no modo individual. */
+    const iniHoje = new Date(ano, mm - 1, diaHoje, 0, 0, 0).getTime();
+    const fimHoje = iniHoje + 86400000;
+    const vendasDeHoje = todasDoMes.filter((v) => v.data >= iniHoje && v.data < fimHoje);
+    const porPessoaHoje = {};
+    vendasDeHoje.forEach((v) => {
+      if (!porPessoaHoje[v.pessoaId]) porPessoaHoje[v.pessoaId] = { pessoaId: v.pessoaId, valor: 0, recebido: 0, qtd: 0, cursos: {} };
+      const r = porPessoaHoje[v.pessoaId];
+      r.valor += num(v.valor); r.recebido += num(v.recebido); r.qtd++;
+      const c = cursoCanonico(v.curso); r.cursos[c] = (r.cursos[c] || 0) + 1;
+    });
+    const rankHoje = Object.values(porPessoaHoje).map((x) => {
+      const p = db.vendas.pessoas.find((y) => y.id === x.pessoaId) || {};
+      const top = Object.entries(x.cursos).sort((a, b) => b[1] - a[1])[0];
+      return { pessoaId: x.pessoaId, valor: x.valor, recebido: x.recebido, qtd: x.qtd,
+               nome: p.nome || "—", grupo: p.grupo || "", foto: fotoDe(p),
+               foraDoPodio: !!p.foraDoPodio, cursoTop: top ? top[0] : "" };
+    }).filter((x) => !x.foraDoPodio).sort((a, b) => b.valor - a.valor);
+    const resumoHoje = {
+      dia: diaHoje, ehHoje: ehMesAtual,
+      total: vendasDeHoje.reduce((s, v) => s + num(v.valor), 0),
+      qtd: vendasDeHoje.length,
+      destaque: rankHoje[0] || null,
+      atras: rankHoje.slice(1, 4),
+    };
+
     res.json({
-      mes, meses, geral, grupos: listaGrupos, linhas,
+      mes, meses, geral, grupos: listaGrupos, linhas, hoje: resumoHoje,
       porDia, diasNoMes, diaHoje, diasRestantes, mediaDia, projecao, precisaPorDia,
       melhorDia: melhorDia && melhorDia.venda > 0 ? melhorDia : null,
       souEu: (pessoaDoUser(req.user) || {}).id || null, ehVendedor: ehVend(req.user),

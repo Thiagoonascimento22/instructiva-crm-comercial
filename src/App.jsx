@@ -3846,7 +3846,21 @@ function ModalPessoaRapida({ pessoa, pessoas, mes, isGer = true, onVerPainel, on
   const [salvando, setSalvando] = useState(false);
   const [aba, setAba] = useState("vendas");
   const [minhas, setMinhas] = useState(null);
+  const [foto, setFoto] = useState(pessoa.foto || "");
+  const fotoRef = useRef(null);
   const grupos = Array.from(new Set((pessoas || []).map((p) => p.grupo).filter(Boolean)));
+  async function trocarFoto(e) {
+    const f = e.target.files && e.target.files[0];
+    e.target.value = "";
+    if (!f) return;
+    try {
+      const dataUrl = await redimensionarImg(f, 160);
+      await api.vdPessoaEditar(pessoa.pessoaId, { foto: dataUrl });
+      setFoto(dataUrl);
+      showToast("✓ Foto atualizada");
+      onSalvo({ silencioso: true });
+    } catch (err) { showToast("✗ Não deu pra carregar a foto"); }
+  }
   useEffect(() => {
     api.vdLista(mes, pessoa.pessoaId).then((d) => setMinhas(d.vendas || [])).catch(() => setMinhas([]));
     // eslint-disable-next-line
@@ -3875,7 +3889,21 @@ function ModalPessoaRapida({ pessoa, pessoas, mes, isGer = true, onVerPainel, on
     <Portal>
     <div className="pop-bg centro" onClick={(e) => e.target === e.currentTarget && onClose()}>
       <div className="pop-sheet" style={{ maxWidth: 640 }}>
-        <div className="pop-head"><b>{pessoa.nome}</b><button className="crm-x" onClick={onClose}>✕</button></div>
+        <div className="pop-head">
+          <div className="vd-mp-cab">
+            {isGer ? (
+              <button className="vd-pessoa-foto" onClick={() => fotoRef.current && fotoRef.current.click()} title={foto ? "Trocar a foto" : "Colocar uma foto"}>
+                <Avatar nome={pessoa.nome} foto={foto} size={36} />
+                <span className="vd-pessoa-foto-ic">📷</span>
+              </button>
+            ) : (
+              <Avatar nome={pessoa.nome} foto={foto} size={36} />
+            )}
+            <b>{pessoa.nome}</b>
+          </div>
+          <input ref={fotoRef} type="file" accept="image/*" style={{ display: "none" }} onChange={trocarFoto} />
+          <button className="crm-x" onClick={onClose}>✕</button>
+        </div>
         <div className="pop-body">
           <div className="vd-abas">
             <button className={aba === "vendas" ? "on" : ""} onClick={() => setAba("vendas")}>Vendas dia a dia{minhas ? ` (${minhas.length})` : ""}</button>
@@ -3908,7 +3936,7 @@ function ModalPessoaRapida({ pessoa, pessoas, mes, isGer = true, onVerPainel, on
                       {d.vendas.map((v) => (
                         <div key={v.id} className="vd-dia-item">
                           <div className="vd-dia-cli">{v.cliente || "—"}
-                            <small>{[v.curso, v.forma, v.parcelas ? v.parcelas + "x" : "", v.plataforma].filter(Boolean).join(" · ")}</small>
+                            <small>{[v.curso, v.formaLabel || v.forma, v.parcelas ? v.parcelas + "x" : "", v.plataforma].filter(Boolean).join(" · ")}</small>
                           </div>
                           <div className="vd-dia-vals">{dinheiro(v.valor)}<small>recebido {dinheiro(v.recebido)}</small></div>
                         </div>
@@ -4191,7 +4219,7 @@ function DiaADia({ vendas, onEditar, onExcluir }) {
           {d.vendas.map((v) => (
             <div key={v.id} className="vd-dia-item">
               <div className="vd-dia-cli">{v.cliente || "—"}
-                <small>{[v.curso, v.forma, v.parcelas ? v.parcelas + "x" : "", v.plataforma].filter(Boolean).join(" · ")}</small>
+                <small>{[v.curso, v.formaLabel || v.forma, v.parcelas ? v.parcelas + "x" : "", v.plataforma].filter(Boolean).join(" · ")}</small>
               </div>
               <div className="vd-dia-vals">{dinheiro(v.valor)}<small>recebido {dinheiro(v.recebido)}</small></div>
               {(onEditar || onExcluir) && (
@@ -4243,6 +4271,7 @@ function PainelVendas({ showToast, isGer = true }) {
   const [showInteg, setShowInteg] = useState(false);
   const [showDup, setShowDup] = useState(false);
   const [pessoaRapida, setPessoaRapida] = useState(null);
+  const [porEquipe, setPorEquipe] = useState(true);   // ranking separado por time
 
   const carregar = (m, esc) => {
     const e = esc || escopo;
@@ -4277,6 +4306,26 @@ function PainelVendas({ showToast, isGer = true }) {
   const doDia = diaSel ? (vendas || []).filter((v) => new Date(v.data).getDate() === diaSel) : [];
   const totalDia = doDia.reduce((s2, v) => s2 + (Number(v.valor) || 0), 0);
   const recebidoDia = doDia.reduce((s2, v) => s2 + (Number(v.recebido) || 0), 0);
+  // ranking separado por time: cada equipe vira um bloco com o próprio subtotal
+  const times = (() => {
+    const m = {};
+    comVenda.forEach((l) => {
+      const k = (l.grupo || "").trim() || "Sem equipe";
+      if (!m[k]) m[k] = { nome: k, venda: 0, recebido: 0, meta: 0, qtd: 0, gente: [] };
+      m[k].venda += l.venda; m[k].recebido += l.recebido; m[k].meta += l.meta || 0; m[k].qtd += l.qtd || 0;
+      m[k].gente.push(l);
+    });
+    return Object.values(m).map((t) => ({
+      ...t,
+      pct: t.meta > 0 ? Math.round((t.venda / t.meta) * 100) : 0,
+      gente: t.gente.sort((a, b) => b.venda - a.venda),
+    })).sort((a, b) => b.venda - a.venda);
+  })();
+  const hoje = dados.hoje || {};
+  const destHoje = hoje.destaque || null;
+  // ritmo: onde a meta deveria estar hoje se o mês fosse parelho
+  const pctRitmo = dados.diasNoMes ? Math.min(100, Math.round((dados.diaHoje / dados.diasNoMes) * 100)) : 0;
+  const noRitmo = pctGeral >= pctRitmo;
 
   return (
     <div className="vd">
@@ -4313,27 +4362,43 @@ function PainelVendas({ showToast, isGer = true }) {
         </div>
       </div>
 
-      {/* HERO: anel da meta + números + evolução do mês */}
-      <div className="vd-hero">
-        <div className="vd-hero-esq">
-          <Anel pct={pctGeral} />
-          <div className="vd-hero-num">
-            <span className="vd-hero-lb">Vendido em {mesLegivel(mes)}</span>
-            <span className="vd-hero-vl">{dinheiro(g.venda)}</span>
-            <span className="vd-hero-sub">
-              {g.meta > 0
-                ? <>de <b>{dinheiroCurto(g.meta)}</b> · faltam <b>{dinheiroCurto(g.falta)}</b></>
-                : <>defina as metas em <b>Equipe &amp; metas</b></>}
-            </span>
-            <div className="vd-mini">
-              <div><span>{dados.diaHoje === dados.diasNoMes && !ehMesCorrente ? "Último dia" : "Hoje"}</span><b>{dinheiro(vendidoHoje)}</b></div>
-              <div><span>Recebido</span><b className="verde">{dinheiro(g.recebido)}</b></div>
-              <div><span>Vendas</span><b>{g.qtd}</b></div>
-              <div><span>Ticket médio</span><b>{g.qtd ? dinheiroCurto(g.venda / g.qtd) : "—"}</b></div>
+      {/* PLACAR DO MÊS */}
+      <div className="vd-placar">
+        <div className="vd-placar-esq">
+          <div className="vd-placar-cab">
+            <span className="vd-eyebrow">Vendido em {mesLegivel(mes)}</span>
+            {g.meta > 0 && ehMesCorrente && (
+              <span className={"vd-selo " + (noRitmo ? "ok" : "atras")}>
+                {noRitmo ? "no ritmo" : "atrás do ritmo"}
+              </span>
+            )}
+          </div>
+          <div className="vd-placar-vl">{dinheiro(g.venda)}</div>
+          <div className="vd-placar-sub">
+            {g.meta > 0
+              ? <><b>{pctGeral}%</b> da meta de {dinheiroCurto(g.meta)} · faltam <b>{dinheiroCurto(g.falta)}</b></>
+              : <>defina as metas em <b>Equipe &amp; metas</b></>}
+          </div>
+          {g.meta > 0 && (
+            <div className="vd-leds" title={pctGeral + "% da meta"}>
+              <div className="vd-leds-trilho">
+                <div className="vd-leds-fill" style={{ width: pctGeral + "%" }} />
+              </div>
+              {ehMesCorrente && (
+                <span className="vd-leds-marca" style={{ left: Math.min(97, pctRitmo) + "%" }}>
+                  <b>onde devia estar hoje</b>
+                </span>
+              )}
             </div>
+          )}
+          <div className="vd-kpis">
+            <div><span>{dados.diaHoje === dados.diasNoMes && !ehMesCorrente ? "Último dia" : "Hoje"}</span><b>{dinheiro(vendidoHoje)}</b></div>
+            <div><span>Recebido</span><b className="verde">{dinheiro(g.recebido)}</b></div>
+            <div><span>Vendas</span><b>{g.qtd}</b></div>
+            <div><span>Ticket médio</span><b>{g.qtd ? dinheiroCurto(g.venda / g.qtd) : "—"}</b></div>
           </div>
         </div>
-        <div className="vd-hero-dir">
+        <div className="vd-placar-dir">
           <div className="vd-graf-cab">
             <span>Evolução do mês <small className="vd-graf-dica">— clique num dia</small></span>
             <input type="date" className="vd-data" value={diaSel ? mes + "-" + String(diaSel).padStart(2, "0") : ""}
@@ -4372,7 +4437,7 @@ function PainelVendas({ showToast, isGer = true }) {
                 <div key={v.id} className="vd-dodia-item">
                   <span className="vd-dodia-vend">{v.pessoaNome}</span>
                   <div className="vd-dodia-cli">{v.cliente || "—"}
-                    <small>{[v.curso, v.forma, v.parcelas ? v.parcelas + "x" : "", v.plataforma].filter(Boolean).join(" · ")}</small>
+                    <small>{[v.curso, v.formaLabel || v.forma, v.parcelas ? v.parcelas + "x" : "", v.plataforma].filter(Boolean).join(" · ")}</small>
                   </div>
                   <div className="vd-dodia-vals">{dinheiro(v.valor)}<small>recebido {dinheiro(v.recebido)}</small></div>
                 </div>
@@ -4453,62 +4518,149 @@ function PainelVendas({ showToast, isGer = true }) {
             </div>
           )}
 
-          {/* RANKING */}
-          <div className="vd-sec">Ranking do mês</div>
-          <div className="vd-rank">
-            {comVenda.map((l, i) => (
-              <div key={l.pessoaId} className={"vd-linha clicavel" + (i < 3 ? " top" : "")} onClick={() => setPessoaRapida(l)} title="Clique pra definir a equipe e a meta">
-                <span className="vd-pos">{i + 1}º</span>
-                <Avatar nome={l.nome} foto={l.foto} size={34} />
-                <div className="vd-linha-info">
-                  <div className="vd-linha-nome">{l.nome}{l.grupo && <span className="vd-grupo">{l.grupo}</span>}</div>
-                  <div className="vd-barra fina"><div className="vd-barra-in" style={{ width: Math.min(100, l.pct) + "%" }} /></div>
-                </div>
-                <div className="vd-linha-nums">
-                  <span className="vd-vendido">{dinheiro(l.venda)}</span>
-                  <span className="vd-detalhe">{l.pct}% de {dinheiroCurto(l.meta)} · recebido {dinheiroCurto(l.recebido)}</span>
-                </div>
-              </div>
-            ))}
-            {foraPodio.map((l) => (
-              <div key={l.pessoaId} className="vd-linha clicavel fora" onClick={() => setPessoaRapida(l)} title="Venda direta — não concorre no pódio">
-                <span className="vd-pos">—</span>
-                <Avatar nome={l.nome} foto={l.foto} size={34} />
-                <div className="vd-linha-info">
-                  <div className="vd-linha-nome">{l.nome}<span className="vd-grupo">venda direta</span></div>
-                  <div className="vd-barra fina"><div className="vd-barra-in" style={{ width: Math.min(100, l.pct) + "%" }} /></div>
-                </div>
-                <div className="vd-linha-nums">
-                  <span className="vd-vendido">{dinheiro(l.venda)}</span>
-                  <span className="vd-detalhe">{l.pct}% de {dinheiroCurto(l.meta)} · recebido {dinheiroCurto(l.recebido)}</span>
-                </div>
-              </div>
-            ))}
-            {comVenda.length === 0 && foraPodio.length === 0 && <div className="crm-col-vazio">Nenhuma venda lançada neste mês ainda.</div>}
-            {semVenda.length > 0 && (
-              <div className="vd-zerados">
-                <span>Ainda sem venda no mês:</span>
-                {semVenda.map((l) => <span key={l.pessoaId} className="vd-zerado">{l.nome}</span>)}
-              </div>
-            )}
+          {/* RANKING DO MÊS + DESTAQUE DO DIA */}
+          <div className="vd-sec-linha">
+            <div className="vd-sec">Ranking do mês</div>
+            <div className="vd-toggle">
+              <button className={porEquipe ? "on" : ""} onClick={() => setPorEquipe(true)}>Por equipe</button>
+              <button className={!porEquipe ? "on" : ""} onClick={() => setPorEquipe(false)}>Geral</button>
+            </div>
           </div>
 
-          {/* GRUPOS */}
-          {(dados.grupos || []).length > 1 && (
-            <>
-              <div className="vd-sec">Por equipe</div>
-              <div className="vd-grupos">
-                {dados.grupos.map((gr) => (
-                  <div key={gr.grupo} className="vd-grupo-card">
-                    <div className="vd-grupo-nome">{gr.grupo} <span>{gr.pessoas} pessoa(s)</span></div>
-                    <div className="vd-grupo-vl">{dinheiro(gr.venda)}</div>
-                    <div className="vd-barra fina"><div className="vd-barra-in" style={{ width: Math.min(100, gr.pct) + "%" }} /></div>
-                    <div className="vd-grupo-pe">{gr.pct}% da meta de {dinheiroCurto(gr.meta)} · recebido {dinheiroCurto(gr.recebido)}</div>
+          <div className="vd-rank-wrap">
+            <div className="vd-rank-col">
+              {porEquipe ? (
+                times.map((t) => (
+                  <section key={t.nome} className="vd-time">
+                    <header className="vd-time-cab">
+                      <div className="vd-time-id">
+                        <span className="vd-time-nome">{t.nome}</span>
+                        <span className="vd-time-gente">{t.gente.length} pessoa(s) · {t.qtd} venda(s)</span>
+                      </div>
+                      <div className="vd-time-num">
+                        <span className="vd-time-vl">{dinheiro(t.venda)}</span>
+                        <span className="vd-time-pe">{t.meta > 0 ? `${t.pct}% de ${dinheiroCurto(t.meta)}` : "sem meta definida"}</span>
+                      </div>
+                    </header>
+                    <div className="vd-time-barra"><i style={{ width: Math.min(100, t.pct) + "%" }} /></div>
+                    <div className="vd-rank">
+                      {t.gente.map((l, i) => (
+                        <div key={l.pessoaId} className={"vd-linha clicavel" + (i === 0 ? " lider" : "")} onClick={() => setPessoaRapida(l)} title="Clique pra definir a equipe e a meta">
+                          <span className="vd-pos">{i + 1}º</span>
+                          <Avatar nome={l.nome} foto={l.foto} size={34} />
+                          <div className="vd-linha-info">
+                            <div className="vd-linha-nome">{l.nome}</div>
+                            <div className="vd-barra fina"><div className="vd-barra-in" style={{ width: Math.min(100, l.pct) + "%" }} /></div>
+                          </div>
+                          <div className="vd-linha-nums">
+                            <span className="vd-vendido">{dinheiro(l.venda)}</span>
+                            <span className="vd-detalhe">{l.meta > 0 ? `${l.pct}% de ${dinheiroCurto(l.meta)} · ` : ""}recebido {dinheiroCurto(l.recebido)}</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </section>
+                ))
+              ) : (
+                <div className="vd-rank">
+                  {comVenda.map((l, i) => (
+                    <div key={l.pessoaId} className={"vd-linha clicavel" + (i < 3 ? " top" : "")} onClick={() => setPessoaRapida(l)} title="Clique pra definir a equipe e a meta">
+                      <span className="vd-pos">{i + 1}º</span>
+                      <Avatar nome={l.nome} foto={l.foto} size={34} />
+                      <div className="vd-linha-info">
+                        <div className="vd-linha-nome">{l.nome}{l.grupo && <span className="vd-grupo">{l.grupo}</span>}</div>
+                        <div className="vd-barra fina"><div className="vd-barra-in" style={{ width: Math.min(100, l.pct) + "%" }} /></div>
+                      </div>
+                      <div className="vd-linha-nums">
+                        <span className="vd-vendido">{dinheiro(l.venda)}</span>
+                        <span className="vd-detalhe">{l.meta > 0 ? `${l.pct}% de ${dinheiroCurto(l.meta)} · ` : ""}recebido {dinheiroCurto(l.recebido)}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {foraPodio.length > 0 && (
+                <section className="vd-time direta">
+                  <header className="vd-time-cab">
+                    <div className="vd-time-id">
+                      <span className="vd-time-nome">Venda direta</span>
+                      <span className="vd-time-gente">não concorre no pódio</span>
+                    </div>
+                    <div className="vd-time-num">
+                      <span className="vd-time-vl">{dinheiro(foraPodio.reduce((s, l) => s + l.venda, 0))}</span>
+                      <span className="vd-time-pe">{foraPodio.reduce((s, l) => s + (l.qtd || 0), 0)} venda(s)</span>
+                    </div>
+                  </header>
+                  <div className="vd-rank">
+                    {foraPodio.map((l) => (
+                      <div key={l.pessoaId} className="vd-linha clicavel fora" onClick={() => setPessoaRapida(l)} title="Venda direta — não concorre no pódio">
+                        <span className="vd-pos">—</span>
+                        <Avatar nome={l.nome} foto={l.foto} size={34} />
+                        <div className="vd-linha-info">
+                          <div className="vd-linha-nome">{l.nome}</div>
+                          <div className="vd-barra fina"><div className="vd-barra-in" style={{ width: Math.min(100, l.pct) + "%" }} /></div>
+                        </div>
+                        <div className="vd-linha-nums">
+                          <span className="vd-vendido">{dinheiro(l.venda)}</span>
+                          <span className="vd-detalhe">recebido {dinheiroCurto(l.recebido)}</span>
+                        </div>
+                      </div>
+                    ))}
                   </div>
-                ))}
+                </section>
+              )}
+
+              {comVenda.length === 0 && foraPodio.length === 0 && <div className="crm-col-vazio">Nenhuma venda lançada neste mês ainda.</div>}
+              {semVenda.length > 0 && (
+                <div className="vd-zerados">
+                  <span>Ainda sem venda no mês:</span>
+                  {semVenda.map((l) => <span key={l.pessoaId} className="vd-zerado">{l.nome}</span>)}
+                </div>
+              )}
+            </div>
+
+            {/* DESTAQUE DO DIA — colado no ranking do mês */}
+            <aside className="vd-hoje">
+              <div className="vd-hoje-cab">
+                <span className="vd-eyebrow">Destaque do dia</span>
+                <span className="vd-hoje-data">{String(hoje.dia || dados.diaHoje).padStart(2, "0")}/{mes.slice(5)}</span>
               </div>
-            </>
-          )}
+              {destHoje ? (
+                <>
+                  <div className="vd-hoje-card">
+                    <div className="vd-hoje-coroa">👑</div>
+                    <Avatar nome={destHoje.nome} foto={destHoje.foto} size={76} />
+                    <div className="vd-hoje-nome">{destHoje.nome}</div>
+                    {destHoje.grupo && <div className="vd-hoje-eq">{destHoje.grupo}</div>}
+                    <div className="vd-hoje-vl">{dinheiro(destHoje.valor)}</div>
+                    <div className="vd-hoje-pe">
+                      {destHoje.qtd} venda(s) hoje{destHoje.cursoTop ? " · " + destHoje.cursoTop : ""}
+                    </div>
+                  </div>
+                  {(hoje.atras || []).length > 0 && (
+                    <div className="vd-hoje-atras">
+                      <span className="vd-eyebrow">Logo atrás</span>
+                      {hoje.atras.map((r, i) => (
+                        <div key={r.pessoaId} className="vd-hoje-item">
+                          <span className="vd-hoje-pos">{i + 2}º</span>
+                          <Avatar nome={r.nome} foto={r.foto} size={26} />
+                          <b>{r.nome.split(" ").slice(0, 2).join(" ")}</b>
+                          <span>{dinheiroCurto(r.valor)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  <div className="vd-hoje-tot">O time fez <b>{dinheiro(hoje.total || 0)}</b> hoje em {hoje.qtd || 0} venda(s)</div>
+                </>
+              ) : (
+                <div className="vd-hoje-vazio">
+                  <span>🚀</span>
+                  Ninguém abriu o dia ainda.<br />A primeira venda de hoje aparece aqui.
+                </div>
+              )}
+            </aside>
+          </div>
         </>
       )}
 
@@ -4533,7 +4685,7 @@ function ListaVendas({ vendas, onEditar, onExcluir }) {
             <div className="vd-item-sub">
               {new Date(v.data).toLocaleDateString("pt-BR")}
               {v.curso ? " · " + v.curso : ""}
-              {v.forma ? " · " + v.forma : ""}
+              {(v.formaLabel || v.forma) ? " · " + (v.formaLabel || v.forma) : ""}
               {v.parcelas ? " " + v.parcelas + "x" : ""}
               {v.plataforma ? " · " + v.plataforma : ""}
               {v.codigo ? " · cód " + v.codigo : ""}
@@ -4675,10 +4827,11 @@ function FormVenda({ form, setForm, pessoas, isGer = true, onSalvo, showToast })
 
 // Uma linha da lista de Equipe & metas. Guarda o que você digita AQUI e só manda
 // pro servidor quando você sai do campo (ou aperta Enter) — sem travar nem apagar letra.
-function LinhaPessoa({ p, onSalvar, onJuntar, onExcluir, onToggle }) {
+function LinhaPessoa({ p, onSalvar, onJuntar, onExcluir, onToggle, onFoto }) {
   const [nome, setNome] = useState(p.nome);
   const [grupo, setGrupo] = useState(p.grupo || "");
   const [meta, setMeta] = useState(String(p.metaMensal ?? ""));
+  const fotoRef = useRef(null);
   useEffect(() => { setNome(p.nome); setGrupo(p.grupo || ""); setMeta(String(p.metaMensal ?? "")); }, [p.id]);
   const salvarSeMudou = (campo, valor, original) => {
     if (String(valor) === String(original ?? "")) return;   // não mudou: nem chama o servidor
@@ -4688,6 +4841,13 @@ function LinhaPessoa({ p, onSalvar, onJuntar, onExcluir, onToggle }) {
   return (
     <div className={"vd-pessoa" + (p.ativo ? "" : " off")}>
       <button className={p.ativo ? "of-switch on" : "of-switch"} onClick={() => onToggle(p)} title={p.ativo ? "No painel" : "Fora do painel"}><span className="of-switch-dot" /></button>
+      <button className="vd-pessoa-foto" onClick={() => fotoRef.current && fotoRef.current.click()}
+        title={p.foto ? "Trocar a foto" : "Colocar uma foto"}>
+        <Avatar nome={p.nome} foto={p.foto} size={30} />
+        <span className="vd-pessoa-foto-ic">📷</span>
+      </button>
+      <input ref={fotoRef} type="file" accept="image/*" style={{ display: "none" }}
+        onChange={(e) => { const f = e.target.files && e.target.files[0]; e.target.value = ""; if (f) onFoto(p, f); }} />
       <input className="vd-pessoa-nome" value={nome} onChange={(e) => setNome(e.target.value)}
         onBlur={() => salvarSeMudou("nome", nome.trim() || p.nome, p.nome)} onKeyDown={aoTeclar} />
       <input className="vd-pessoa-grupo" value={grupo} placeholder="equipe" list="vd-grupos"
@@ -4763,6 +4923,15 @@ function ModalPessoas({ pessoas, onClose, onMudou, showToast }) {
     try { await api.vdPessoaExcluir(p.id); onMudou(); showToast("✓ Removido"); }
     catch (e) { showToast(e.message); }
   }
+  // foto de perfil de quem não tem login no sistema (professor, parceiro, etc.)
+  async function trocarFoto(p, file) {
+    try {
+      const dataUrl = await redimensionarImg(file, 160);
+      await api.vdPessoaEditar(p.id, { foto: dataUrl });
+      showToast(`✓ Foto de ${p.nome.split(" ")[0]} atualizada`);
+      onMudou();
+    } catch (e) { showToast("✗ " + (e.message || "não deu pra carregar a foto")); }
+  }
 
   return (
     <Portal>
@@ -4804,6 +4973,7 @@ function ModalPessoas({ pessoas, onClose, onMudou, showToast }) {
             {pessoas.map((p) => (
               <LinhaPessoa key={p.id} p={p}
                 onSalvar={editar}
+                onFoto={trocarFoto}
                 onToggle={(x) => editar(x, "ativo", !x.ativo)}
                 onJuntar={(x) => { setJuntando(x.id); setDestino(""); }}
                 onExcluir={excluir} />
