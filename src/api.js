@@ -25,6 +25,7 @@ async function req(method, url, body) {
     const msg = (data && data.error) || "Erro " + res.status;
     const err = new Error(msg);
     err.status = res.status;
+    err.dados = data;          // corpo da resposta (ex.: aviso de venda repetida)
     throw err;
   }
   return data;
@@ -123,6 +124,7 @@ export const api = {
   vdNovaChave: () => req("POST", "/api/vendas/integracao/nova-chave"),
   aviso: () => req("GET", "/api/aviso"),
   salvarAviso: (d) => req("PUT", "/api/aviso", d),
+  vdDuplicadas: (mes) => req("GET", "/api/vendas/duplicadas" + (mes ? "?mes=" + mes : "")),
   vdApelidos: () => req("GET", "/api/vendas/apelidos"),
   vdSalvarApelido: (nomeFora, pessoaId) => req("POST", "/api/vendas/apelidos", { nomeFora, pessoaId }),
   vdLimparMes: (mes) => req("POST", "/api/vendas/limpar-mes", { mes }),

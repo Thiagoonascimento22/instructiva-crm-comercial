@@ -4001,3 +4001,25 @@ select.input:disabled, .input:disabled { color: var(--muted); opacity: 1; -webki
 .aviso-off { flex: none; background: rgba(255,255,255,.18); border: 1px solid rgba(255,255,255,.35); color: #fff; font-size: 11.5px; font-weight: 700; border-radius: 7px; padding: 5px 11px; cursor: pointer; white-space: nowrap; }
 .aviso-off:hover { background: rgba(255,255,255,.28); }
 @media (max-width: 700px) { .aviso-manut { padding: 10px 16px; font-size: 12.5px; } }
+
+/* ===== Conferir vendas repetidas ===== */
+.vd-ok-dup { background: rgba(5,150,105,.10); color: #047857; border-radius: 10px; padding: 16px; text-align: center; font-weight: 600; font-size: 14px; }
+[data-theme="dark"] .vd-ok-dup { color: #34d399; background: rgba(52,211,153,.12); }
+.vd-dupgrupo { border: 1px solid var(--line); border-radius: 12px; overflow: hidden; margin-top: 12px; }
+.vd-dupgrupo.forte { border-color: #dc2626; }
+.vd-dupgrupo-cab { background: var(--surface-2); padding: 8px 13px; font-size: 12px; font-weight: 700; color: var(--text); display: flex; justify-content: space-between; gap: 10px; }
+.vd-dupgrupo.forte .vd-dupgrupo-cab { background: rgba(220,38,38,.10); color: #b91c1c; }
+[data-theme="dark"] .vd-dupgrupo.forte .vd-dupgrupo-cab { color: #f87171; }
+.vd-dupgrupo-cab span { font-weight: 500; color: var(--muted); font-family: ui-monospace, monospace; font-size: 11px; }
+.vd-dupvenda { display: flex; align-items: center; gap: 12px; padding: 10px 13px; border-top: 1px solid var(--line); }
+.vd-dupvenda > div { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.vd-dupvenda b { font-size: 13.5px; color: var(--text); }
+.vd-dupvenda small { font-size: 11.5px; color: var(--muted); margin-top: 1px; }
+.vd-dupvalor { font-size: 14px; font-weight: 800; color: var(--text); flex: none; }
+
+/* aviso de venda com código repetido */
+.vd-repetida { background: rgba(240,180,41,.12); border: 1px solid #f0b429; border-radius: 11px; padding: 12px 14px; margin-top: 16px; }
+.vd-repetida > b { font-size: 13.5px; color: var(--text); display: block; margin-bottom: 8px; }
+.vd-repetida-item { display: flex; justify-content: space-between; gap: 12px; background: var(--card); border-radius: 8px; padding: 8px 11px; font-size: 12.5px; color: var(--muted); margin-bottom: 5px; }
+.vd-repetida-item b { color: var(--text); }
+.vd-repetida-p { font-size: 12.5px; color: var(--muted); display: block; margin-top: 6px; }

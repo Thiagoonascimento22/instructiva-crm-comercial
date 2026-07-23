@@ -3941,6 +3941,62 @@ function GraficoDias({ porDia, diaHoje, diaSel, onDia }) {
   );
 }
 
+// Conferir vendas repetidas (a mesma venda veio da planilha e do outro sistema)
+function ModalDuplicadas({ mes, onClose, onMudou, showToast }) {
+  const [dados, setDados] = useState(null);
+  const [apagando, setApagando] = useState("");
+  const carregar = () => api.vdDuplicadas(mes).then(setDados).catch((e) => showToast(e.message));
+  useEffect(() => { carregar(); /* eslint-disable-next-line */ }, []);
+  async function apagar(v) {
+    if (!window.confirm(`Excluir esta venda?\n\n${v.cliente || "—"} · ${dinheiro(v.valor)} · ${v.pessoaNome}`)) return;
+    setApagando(v.id);
+    try { await api.vdExcluir(v.id); showToast("✓ Venda excluída"); await carregar(); onMudou(); }
+    catch (e) { showToast("✗ " + e.message); } finally { setApagando(""); }
+  }
+  return (
+    <Portal>
+    <div className="pop-bg centro" onClick={(e) => e.target === e.currentTarget && onClose()}>
+      <div className="pop-sheet" style={{ maxWidth: 720 }}>
+        <div className="pop-head"><b>Vendas repetidas — {mesLegivel(mes)}</b><button className="crm-x" onClick={onClose}>✕</button></div>
+        <div className="pop-body">
+          {!dados ? <div className="dash-empty"><span className="spin" /> Procurando…</div>
+          : dados.quantos === 0 ? (
+            <div className="vd-ok-dup">✓ Nenhuma venda repetida encontrada neste mês.</div>
+          ) : (
+            <>
+              <div className="rsv-hint" style={{ marginTop: 0 }}>
+                Achei <b>{dados.quantos}</b> caso(s) suspeito(s), somando <b>{dinheiro(dados.totalRepetido)}</b> que pode estar
+                contado a mais. Confira cada um e apague o que for repetido — <b>não apago nada sozinho</b>.
+              </div>
+              {dados.grupos.map((g, i) => (
+                <div key={i} className={"vd-dupgrupo" + (g.forte ? " forte" : "")}>
+                  <div className="vd-dupgrupo-cab">
+                    {g.forte ? "⚠ " : ""}{g.motivo}
+                    <span>{g.chave}</span>
+                  </div>
+                  {g.vendas.map((v) => (
+                    <div key={v.id} className="vd-dupvenda">
+                      <div>
+                        <b>{v.cliente || "—"}</b>
+                        <small>{new Date(v.data).toLocaleDateString("pt-BR")} · {v.pessoaNome}{v.curso ? " · " + v.curso : ""}{v.plataforma ? " · " + v.plataforma : ""}</small>
+                      </div>
+                      <span className="vd-dupvalor">{dinheiro(v.valor)}</span>
+                      <button className="crm-lote-del" disabled={apagando === v.id} onClick={() => apagar(v)}>
+                        {apagando === v.id ? "…" : "Excluir"}
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              ))}
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+    </Portal>
+  );
+}
+
 // Integração: outro sistema (ex.: suporte) manda a venda pra cá
 function ModalIntegracao({ onClose, showToast }) {
   const [dados, setDados] = useState(null);
@@ -4126,6 +4182,7 @@ function PainelVendas({ showToast, isGer = true }) {
   const [diaSel, setDiaSel] = useState(null);   // dia do mês escolhido (número) ou null
   const [showImportarV, setShowImportarV] = useState(false);
   const [showInteg, setShowInteg] = useState(false);
+  const [showDup, setShowDup] = useState(false);
   const [pessoaRapida, setPessoaRapida] = useState(null);
 
   const carregar = (m, esc) => {
@@ -4192,6 +4249,7 @@ function PainelVendas({ showToast, isGer = true }) {
           {isGer && <button className="onum-btn-ghost" onClick={() => setShowPessoas(true)}><I.users className="ico" /> Equipe & metas</button>}
           {isGer && <button className="onum-btn-ghost" onClick={() => setShowImportarV(true)}><I.clip className="ico" /> Importar planilha</button>}
           {isGer && <button className="onum-btn-ghost" onClick={() => setShowInteg(true)}><I.link className="ico" /> Integrar sistema</button>}
+          {isGer && <button className="onum-btn-ghost" onClick={() => setShowDup(true)}><I.search className="ico" /> Conferir repetidas</button>}
           {isGer && <button className="onum-btn-ghost" onClick={() => setVerLista((v) => !v)}><I.chat className="ico" /> {verLista ? "Ver ranking" : `Vendas do mês (${vendas.length})`}</button>}
         </div>
       </div>
@@ -4397,6 +4455,7 @@ function PainelVendas({ showToast, isGer = true }) {
 
       {form && <FormVenda form={form} setForm={setForm} pessoas={pessoas} isGer={isGer} onSalvo={() => { setForm(null); carregar(); }} showToast={showToast} />}
       {pessoaRapida && <ModalPessoaRapida pessoa={pessoaRapida} pessoas={pessoas} mes={mes} isGer={isGer} onVerPainel={(id) => trocarEscopo(id)} onClose={() => setPessoaRapida(null)} onSalvo={carregar} showToast={showToast} />}
+      {showDup && <ModalDuplicadas mes={mes} onClose={() => setShowDup(false)} onMudou={carregar} showToast={showToast} />}
       {showInteg && <ModalIntegracao onClose={() => setShowInteg(false)} showToast={showToast} />}
       {showImportarV && <ModalImportarVendas mesAtual={mes} onClose={() => setShowImportarV(false)} onDone={carregar} showToast={showToast} />}
       {showPessoas && <ModalPessoas pessoas={pessoas} onClose={() => setShowPessoas(false)} onMudou={carregar} showToast={showToast} />}
@@ -4437,9 +4496,10 @@ function ListaVendas({ vendas, onEditar, onExcluir }) {
 
 function FormVenda({ form, setForm, pessoas, isGer = true, onSalvo, showToast }) {
   const [salvando, setSalvando] = useState(false);
+  const [repetida, setRepetida] = useState(null);   // aviso de código já usado
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
 
-  async function salvar() {
+  async function salvar(confirmar) {
     if (isGer && !form.pessoaId) { showToast("Escolha de quem é a venda"); return; }
     if (!(Number(String(form.valor).replace(",", ".")) > 0)) { showToast("Informe o valor vendido"); return; }
     setSalvando(true);
@@ -4447,13 +4507,17 @@ function FormVenda({ form, setForm, pessoas, isGer = true, onSalvo, showToast })
       pessoaId: form.pessoaId, cliente: form.cliente, email: form.email, telefone: form.telefone,
       curso: form.curso, forma: form.forma, plataforma: form.plataforma, codigo: form.codigo,
       parcelas: form.parcelas, valor: form.valor, recebido: form.recebido,
-      data: form.data,
+      data: form.data, confirmar: !!confirmar,
     };
     try {
       if (form.id) await api.vdEditar(form.id, dados); else await api.vdCriar(dados);
       showToast(form.id ? "✓ Venda atualizada" : "🎉 Venda lançada!");
+      setRepetida(null);
       onSalvo();
-    } catch (e) { showToast("✗ " + e.message); } finally { setSalvando(false); }
+    } catch (e) {
+      if (e.status === 409 && e.dados && e.dados.jaExiste) setRepetida(e.dados);
+      else showToast("✗ " + e.message);
+    } finally { setSalvando(false); }
   }
 
   return (
@@ -4500,11 +4564,32 @@ function FormVenda({ form, setForm, pessoas, isGer = true, onSalvo, showToast })
             <div><label className="lbl-mini">Valor vendido</label><input className="input" value={form.valor} onChange={(e) => set("valor", e.target.value)} placeholder="2497,00" /></div>
             <div><label className="lbl-mini">Valor recebido</label><input className="input" value={form.recebido} onChange={(e) => set("recebido", e.target.value)} placeholder="quanto já caiu" /></div>
           </div>
+          {repetida && (
+            <div className="vd-repetida">
+              <b>⚠ Já existe venda com o código {repetida.codigo}</b>
+              {repetida.vendas.map((v) => (
+                <div key={v.id} className="vd-repetida-item">
+                  <span><b>{v.pessoaNome}</b> · {v.cliente || "—"}</span>
+                  <span>{new Date(v.data).toLocaleDateString("pt-BR")} · {dinheiro(v.valor)}</span>
+                </div>
+              ))}
+              <span className="vd-repetida-p">Quer lançar mesmo assim? (às vezes a mesma venda é dividida entre dois vendedores)</span>
+            </div>
+          )}
           <div className="vd-rodape">
             <button className="btn" onClick={() => setForm(null)}>Cancelar</button>
-            <button className="onum-add" disabled={salvando} onClick={salvar}>
-              {salvando ? "Salvando…" : form.id ? "Salvar alterações" : "Lançar venda"}
-            </button>
+            {repetida ? (
+              <>
+                <button className="btn" onClick={() => setRepetida(null)}>Voltar e revisar</button>
+                <button className="onum-add" disabled={salvando} onClick={() => salvar(true)}>
+                  {salvando ? "Lançando…" : "Lançar mesmo assim"}
+                </button>
+              </>
+            ) : (
+              <button className="onum-add" disabled={salvando} onClick={() => salvar(false)}>
+                {salvando ? "Salvando…" : form.id ? "Salvar alterações" : "Lançar venda"}
+              </button>
+            )}
           </div>
         </div>
       </div>

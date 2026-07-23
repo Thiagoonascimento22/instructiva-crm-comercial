@@ -274,6 +274,15 @@ export function instalarVendas({ app, getDb, saveDB, proximoId, auth, gerenteOnl
     if (!p) return res.status(400).json({ error: "Escolha de quem é a venda" });
     const valor = num(b.valor);
     if (valor <= 0) return res.status(400).json({ error: "Informe o valor da venda" });
+    // AVISO (não bloqueia): já existe venda com esse mesmo código de venda?
+    // Devolve quem já tem, e a tela pergunta se quer lançar mesmo assim.
+    const cod = String(b.codigo || "").trim();
+    if (cod && !b.confirmar) {
+      const iguais = (db.vendas.lista || []).filter((v) => String(v.codigo || "").trim() === cod);
+      if (iguais.length) {
+        return res.status(409).json({ jaExiste: true, codigo: cod, vendas: iguais.map(vendaPublica) });
+      }
+    }
     const data = paraData(b.data);
     const v = {
       id: proximoId ? proximoId("vnd") : "vnd_" + Date.now().toString(36) + Math.random().toString(36).slice(2, 5),
@@ -578,6 +587,69 @@ export function instalarVendas({ app, getDb, saveDB, proximoId, auth, gerenteOnl
     }
     salvar();
     res.json({ ok: true, movidas, para: p.nome });
+  });
+
+  /* Procura vendas repetidas (ex.: a mesma venda veio da planilha E do outro sistema) */
+  app.get("/api/vendas/duplicadas", auth, gerenteOnly, (req, res) => {
+    garantir();
+    const mes = mesValido(req.query.mes) ? req.query.mes : null;
+    const lista = (db.vendas.lista || []).filter((v) => !mes || mesDe(v.data) === mes);
+    const limpa = (t) => String(t || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/\s+/g, " ").trim();
+    const grupos = [];
+    const usados = new Set();
+
+    // 1) mesmo CÓDIGO DE VENDA = praticamente certeza de duplicata
+    const porCodigo = {};
+    lista.forEach((v) => {
+      const c = String(v.codigo || "").trim();
+      if (!c) return;
+      (porCodigo[c] = porCodigo[c] || []).push(v);
+    });
+    Object.entries(porCodigo).forEach(([c, vs]) => {
+      if (vs.length > 1) {
+        vs.forEach((v) => usados.add(v.id));
+        grupos.push({ motivo: "mesmo código de venda", chave: c, forte: true, vendas: vs.map(vendaPublica) });
+      }
+    });
+
+    // 2) mesmo cliente + mesmo valor com até 7 dias de diferença
+    const porCliente = {};
+    lista.forEach((v) => {
+      const k = limpa(v.cliente) + "|" + Number(v.valor).toFixed(2);
+      if (!limpa(v.cliente)) return;
+      (porCliente[k] = porCliente[k] || []).push(v);
+    });
+    Object.values(porCliente).forEach((vs) => {
+      if (vs.length < 2) return;
+      const ord = vs.slice().sort((a, b) => a.data - b.data);
+      const perto = ord.filter((v, i) => i === 0 || v.data - ord[i - 1].data <= 7 * 86400000);
+      if (perto.length > 1 && perto.some((v) => !usados.has(v.id))) {
+        perto.forEach((v) => usados.add(v.id));
+        grupos.push({ motivo: "mesmo cliente e mesmo valor", chave: perto[0].cliente, forte: false, vendas: perto.map(vendaPublica) });
+      }
+    });
+
+    // 3) mesmo telefone + mesmo valor com até 7 dias
+    const porTel = {};
+    lista.forEach((v) => {
+      const t = String(v.telefone || "").replace(/\D/g, "").slice(-9);
+      if (t.length < 8) return;
+      const k = t + "|" + Number(v.valor).toFixed(2);
+      (porTel[k] = porTel[k] || []).push(v);
+    });
+    Object.values(porTel).forEach((vs) => {
+      if (vs.length < 2) return;
+      if (vs.every((v) => usados.has(v.id))) return;
+      const ord = vs.slice().sort((a, b) => a.data - b.data);
+      const perto = ord.filter((v, i) => i === 0 || v.data - ord[i - 1].data <= 7 * 86400000);
+      if (perto.length > 1) {
+        perto.forEach((v) => usados.add(v.id));
+        grupos.push({ motivo: "mesmo telefone e mesmo valor", chave: perto[0].telefone, forte: false, vendas: perto.map(vendaPublica) });
+      }
+    });
+
+    const totalRepetido = grupos.reduce((s, g) => s + g.vendas.slice(1).reduce((x, v) => x + num(v.valor), 0), 0);
+    res.json({ grupos, quantos: grupos.length, totalRepetido });
   });
 
   /* ---------------- PAINEL (a planilha) ---------------- */
