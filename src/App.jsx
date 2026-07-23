@@ -393,6 +393,7 @@ export default function App() {
     ia: { t: "Atendente IA", s: "SDR de IA que qualifica os leads e passa pro vendedor" },
     ligacoes: { t: "Ligações IA", s: "A IA liga pro lead, qualifica por voz e passa pro vendedor" },
     crm: { t: "Pipeline", s: "Funil de leads — arraste entre as etapas, atribua e acompanhe" },
+    vendas: { t: "Vendas", s: "Metas, ranking e todas as vendas do time" },
     sistema: { t: "Sistema", s: "Controle dos módulos entregues — visível só pra você (dono)" },
     temperatura: { t: "Temperatura", s: "Melhores horários e dias — quando os leads mais respondem" },
     minhasSolicitacoes: { t: "Minhas solicitações", s: "Acompanhe seus pedidos ao suporte" },
@@ -412,6 +413,7 @@ export default function App() {
         </div>
         <nav className="nav">
           {(isGer || vendPode("crm")) && mod("crm") && <NavBtn ic={I.pipe} label="Pipeline" active={view === "crm"} onClick={() => setView("crm")} />}
+          {isGer && mod("vendas") && <NavBtn ic={I.gauge} label="Vendas" active={view === "vendas"} onClick={() => setView("vendas")} />}
           {!isSuporte && mod("caixa") && <NavBtn ic={I.wa} label="Caixa de entrada" active={view === "whatsapp"} onClick={() => setView("whatsapp")} />}
           {(isGer || isVend) && mod("disparo") && <NavBtn ic={I.send} label="Disparo" active={view === "disparo"} onClick={() => setView("disparo")} />}
           {isGer && mod("numeros") && <NavBtn ic={I.wa} label="Números" active={view === "numeros"} onClick={() => setView("numeros")} />}
@@ -452,6 +454,7 @@ export default function App() {
           {view === "numeros" && isGer && mod("numeros") && <OficialNumeros showToast={showToast} />}
           {view === "ia" && isGer && mod("ia") && <OficialIAs showToast={showToast} />}
           {view === "ligacoes" && isGer && mod("ligacoes") && <OficialLigacoes showToast={showToast} />}
+          {view === "vendas" && isGer && mod("vendas") && <PainelVendas showToast={showToast} />}
           {view === "crm" && (isGer || vendPode("crm")) && mod("crm") && <OficialCRM showToast={showToast} isGer={isGer} onAbrirWhats={(tel, canal, nome) => { setWaTarget({ numero: tel, canal, nome }); setView("whatsapp"); }} />}
           {view === "temperatura" && (isGer || vendPode("temperatura")) && mod("temperatura") && <OficialTemperatura showToast={showToast} />}
           {view === "minhasSolicitacoes" && !isGer && !isSuporte && <PaginaMinhasSolicitacoes itens={minhasSol} recarregar={carregarMinhasSol} showToast={showToast} />}
@@ -3616,6 +3619,333 @@ function Comemoracao({ tipo, nome, valor, vendedor, foto, onClose }) {
         </div>
       </div>
     </Portal>
+  );
+}
+
+/* ============ VENDAS — metas, pódio e lançamentos ============ */
+const PLATAFORMAS = ["Hotmart", "Greenn", "Guru", "TMB", "Assiny", "Cademi", "Pix direto", "Outra"];
+const FORMAS_PG = ["Pix", "Cartão", "Boleto", "Recorrência", "Dinheiro", "Outro"];
+const dinheiro = (n) => "R$ " + Number(n || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const dinheiroCurto = (n) => {
+  const v = Number(n || 0);
+  if (v >= 1000000) return "R$ " + (v / 1000000).toFixed(1).replace(".", ",") + "M";
+  if (v >= 1000) return "R$ " + (v / 1000).toFixed(1).replace(".", ",") + "k";
+  return dinheiro(v);
+};
+const mesLegivel = (m) => {
+  if (!m) return "";
+  const [a, mm] = m.split("-");
+  const nomes = ["janeiro", "fevereiro", "março", "abril", "maio", "junho", "julho", "agosto", "setembro", "outubro", "novembro", "dezembro"];
+  return (nomes[Number(mm) - 1] || "") + " de " + a;
+};
+
+function PainelVendas({ showToast }) {
+  const [mes, setMes] = useState("");
+  const [dados, setDados] = useState(null);
+  const [vendas, setVendas] = useState([]);
+  const [pessoas, setPessoas] = useState([]);
+  const [carregando, setCarregando] = useState(true);
+  const [form, setForm] = useState(null);
+  const [showPessoas, setShowPessoas] = useState(false);
+  const [verLista, setVerLista] = useState(false);
+
+  const carregar = (m) => {
+    setCarregando(true);
+    return Promise.all([
+      api.vdPainel(m || mes).then((d) => { setDados(d); if (!mes) setMes(d.mes); return d; }),
+      api.vdLista(m || mes).then((d) => setVendas(d.vendas || [])),
+      api.vdPessoas().then((d) => setPessoas(d.pessoas || [])),
+    ]).catch((e) => showToast(e.message)).finally(() => setCarregando(false));
+  };
+  useEffect(() => { carregar(); /* eslint-disable-next-line */ }, []);
+  function trocarMes(m) { setMes(m); carregar(m); }
+
+  if (carregando && !dados) return <div className="dash-empty"><span className="spin" /> Carregando…</div>;
+  if (!dados) return null;
+
+  const g = dados.geral;
+  const linhas = dados.linhas || [];
+  const comVenda = linhas.filter((l) => l.venda > 0);
+  const podio = comVenda.slice(0, 3);
+  const resto = comVenda.slice(3);
+  const semVenda = linhas.filter((l) => l.venda <= 0);
+  const pctGeral = Math.min(100, g.pct || 0);
+
+  return (
+    <div className="vd">
+      {/* topo */}
+      <div className="vd-top">
+        <select className="vd-mes" value={mes} onChange={(e) => trocarMes(e.target.value)}>
+          {(dados.meses || []).map((m) => <option key={m} value={m}>{mesLegivel(m)}</option>)}
+        </select>
+        <div className="vd-top-acoes">
+          <button className="onum-add" onClick={() => setForm({
+            pessoaId: pessoas[0] ? pessoas[0].id : "", cliente: "", email: "", telefone: "", curso: "",
+            forma: "Pix", plataforma: "Hotmart", codigo: "", parcelas: "", valor: "", recebido: "", aGerar: "",
+            data: new Date().toISOString().slice(0, 10),
+          })}><I.plus className="ico" /> Lançar venda</button>
+          <button className="onum-btn-ghost" onClick={() => setShowPessoas(true)}><I.users className="ico" /> Equipe & metas</button>
+          <button className="onum-btn-ghost" onClick={() => setVerLista((v) => !v)}><I.chat className="ico" /> {verLista ? "Ver ranking" : `Vendas do mês (${vendas.length})`}</button>
+        </div>
+      </div>
+
+      {/* números grandes */}
+      <div className="vd-cards">
+        <div className="vd-card destaque">
+          <span className="vd-card-lb">Vendido em {mesLegivel(mes)}</span>
+          <span className="vd-card-vl">{dinheiro(g.venda)}</span>
+          <div className="vd-barra"><div className="vd-barra-in" style={{ width: pctGeral + "%" }} /></div>
+          <span className="vd-card-pe"><b>{g.pct}%</b> da meta de {dinheiroCurto(g.meta)} · faltam {dinheiroCurto(g.falta)}</span>
+        </div>
+        <div className="vd-card">
+          <span className="vd-card-lb">Já recebido</span>
+          <span className="vd-card-vl verde">{dinheiro(g.recebido)}</span>
+          <span className="vd-card-pe">{g.venda > 0 ? Math.round((g.recebido / g.venda) * 100) : 0}% do que foi vendido</span>
+        </div>
+        <div className="vd-card">
+          <span className="vd-card-lb">A gerar</span>
+          <span className="vd-card-vl">{dinheiro(g.aGerar || 0)}</span>
+          <span className="vd-card-pe">parcelas que ainda vão cair</span>
+        </div>
+        <div className="vd-card">
+          <span className="vd-card-lb">Vendas fechadas</span>
+          <span className="vd-card-vl">{g.qtd}</span>
+          <span className="vd-card-pe">ticket médio {g.qtd ? dinheiroCurto(g.venda / g.qtd) : "—"}</span>
+        </div>
+      </div>
+
+      {verLista ? (
+        <ListaVendas vendas={vendas} onEditar={(v) => setForm({
+          ...v, data: new Date(v.data).toISOString().slice(0, 10),
+          valor: String(v.valor), recebido: String(v.recebido), aGerar: String(v.aGerar || 0), parcelas: String(v.parcelas || ""),
+        })} onExcluir={async (v) => {
+          if (!window.confirm(`Excluir a venda de ${v.cliente || v.pessoaNome}?`)) return;
+          try { await api.vdExcluir(v.id); showToast("✓ Venda excluída"); carregar(); } catch (e) { showToast(e.message); }
+        }} />
+      ) : (
+        <>
+          {/* PÓDIO */}
+          {podio.length > 0 && (
+            <div className="vd-podio">
+              {[1, 0, 2].map((i) => {
+                const p = podio[i]; if (!p) return <div key={i} className="vd-lug vazio" />;
+                const lugar = i + 1;
+                return (
+                  <div key={p.pessoaId} className={"vd-lug l" + lugar}>
+                    <div className="vd-medalha">{lugar === 1 ? "🥇" : lugar === 2 ? "🥈" : "🥉"}</div>
+                    <Avatar nome={p.nome} foto={p.foto} size={lugar === 1 ? 74 : 58} />
+                    <div className="vd-lug-nome">{p.nome}</div>
+                    <div className="vd-lug-vl">{dinheiro(p.venda)}</div>
+                    <div className="vd-lug-meta">
+                      <div className="vd-barra fina"><div className="vd-barra-in" style={{ width: Math.min(100, p.pct) + "%" }} /></div>
+                      <span>{p.pct}% da meta</span>
+                    </div>
+                    <div className="vd-degrau" />
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {/* RANKING */}
+          <div className="vd-sec">Ranking do mês</div>
+          <div className="vd-rank">
+            {comVenda.map((l, i) => (
+              <div key={l.pessoaId} className={"vd-linha" + (i < 3 ? " top" : "")}>
+                <span className="vd-pos">{i + 1}º</span>
+                <Avatar nome={l.nome} foto={l.foto} size={34} />
+                <div className="vd-linha-info">
+                  <div className="vd-linha-nome">{l.nome}{l.grupo && <span className="vd-grupo">{l.grupo}</span>}</div>
+                  <div className="vd-barra fina"><div className="vd-barra-in" style={{ width: Math.min(100, l.pct) + "%" }} /></div>
+                </div>
+                <div className="vd-linha-nums">
+                  <span className="vd-vendido">{dinheiro(l.venda)}</span>
+                  <span className="vd-detalhe">{l.pct}% de {dinheiroCurto(l.meta)} · recebido {dinheiroCurto(l.recebido)}</span>
+                </div>
+              </div>
+            ))}
+            {comVenda.length === 0 && <div className="crm-col-vazio">Nenhuma venda lançada neste mês ainda.</div>}
+            {semVenda.length > 0 && (
+              <div className="vd-zerados">
+                <span>Ainda sem venda no mês:</span>
+                {semVenda.map((l) => <span key={l.pessoaId} className="vd-zerado">{l.nome}</span>)}
+              </div>
+            )}
+          </div>
+
+          {/* GRUPOS */}
+          {(dados.grupos || []).length > 1 && (
+            <>
+              <div className="vd-sec">Por equipe</div>
+              <div className="vd-grupos">
+                {dados.grupos.map((gr) => (
+                  <div key={gr.grupo} className="vd-grupo-card">
+                    <div className="vd-grupo-nome">{gr.grupo} <span>{gr.pessoas} pessoa(s)</span></div>
+                    <div className="vd-grupo-vl">{dinheiro(gr.venda)}</div>
+                    <div className="vd-barra fina"><div className="vd-barra-in" style={{ width: Math.min(100, gr.pct) + "%" }} /></div>
+                    <div className="vd-grupo-pe">{gr.pct}% da meta de {dinheiroCurto(gr.meta)} · recebido {dinheiroCurto(gr.recebido)}</div>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+        </>
+      )}
+
+      {form && <FormVenda form={form} setForm={setForm} pessoas={pessoas} onSalvo={() => { setForm(null); carregar(); }} showToast={showToast} />}
+      {showPessoas && <ModalPessoas pessoas={pessoas} onClose={() => setShowPessoas(false)} onMudou={carregar} showToast={showToast} />}
+    </div>
+  );
+}
+
+function ListaVendas({ vendas, onEditar, onExcluir }) {
+  if (!vendas.length) return <div className="crm-col-vazio" style={{ marginTop: 18 }}>Nenhuma venda lançada neste mês.</div>;
+  return (
+    <div className="vd-lista">
+      {vendas.map((v) => (
+        <div key={v.id} className="vd-item">
+          <div className="vd-item-esq">
+            <div className="vd-item-cli">{v.cliente || "—"}<span className="vd-item-vend">{v.pessoaNome}</span></div>
+            <div className="vd-item-sub">
+              {new Date(v.data).toLocaleDateString("pt-BR")}
+              {v.curso ? " · " + v.curso : ""}
+              {v.forma ? " · " + v.forma : ""}
+              {v.parcelas ? " " + v.parcelas + "x" : ""}
+              {v.plataforma ? " · " + v.plataforma : ""}
+              {v.codigo ? " · cód " + v.codigo : ""}
+            </div>
+          </div>
+          <div className="vd-item-vals">
+            <span className="vd-item-vl">{dinheiro(v.valor)}</span>
+            <span className="vd-item-rec">recebido {dinheiro(v.recebido)}{v.aGerar > 0 ? " · a gerar " + dinheiro(v.aGerar) : ""}</span>
+          </div>
+          <div className="vd-item-acoes">
+            <button className="btn btn-sm" onClick={() => onEditar(v)}>Editar</button>
+            <button className="crm-tarefa-del" onClick={() => onExcluir(v)} title="Excluir">✕</button>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function FormVenda({ form, setForm, pessoas, onSalvo, showToast }) {
+  const [salvando, setSalvando] = useState(false);
+  const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
+  const nAGerar = form.aGerar !== "" && form.aGerar != null
+    ? Number(String(form.aGerar).replace(",", "."))
+    : Math.max(0, (Number(String(form.valor).replace(",", ".")) || 0) - (Number(String(form.recebido).replace(",", ".")) || 0));
+
+  async function salvar() {
+    if (!form.pessoaId) { showToast("Escolha de quem é a venda"); return; }
+    if (!(Number(String(form.valor).replace(",", ".")) > 0)) { showToast("Informe o valor vendido"); return; }
+    setSalvando(true);
+    const dados = {
+      pessoaId: form.pessoaId, cliente: form.cliente, email: form.email, telefone: form.telefone,
+      curso: form.curso, forma: form.forma, plataforma: form.plataforma, codigo: form.codigo,
+      parcelas: form.parcelas, valor: form.valor, recebido: form.recebido, aGerar: form.aGerar,
+      data: form.data,
+    };
+    try {
+      if (form.id) await api.vdEditar(form.id, dados); else await api.vdCriar(dados);
+      showToast(form.id ? "✓ Venda atualizada" : "🎉 Venda lançada!");
+      onSalvo();
+    } catch (e) { showToast("✗ " + e.message); } finally { setSalvando(false); }
+  }
+
+  return (
+    <div className="pop-bg" onClick={(e) => e.target === e.currentTarget && setForm(null)}>
+      <div className="pop-sheet" style={{ maxWidth: 720 }}>
+        <div className="pop-head"><b>{form.id ? "Editar venda" : "Lançar venda"}</b><button className="crm-x" onClick={() => setForm(null)}>✕</button></div>
+        <div className="pop-body">
+          <div className="vd-form">
+            <div><label className="lbl-mini">Data</label><input className="input" type="date" value={form.data} onChange={(e) => set("data", e.target.value)} /></div>
+            <div><label className="lbl-mini">Vendedor(a)</label>
+              <select className="input" value={form.pessoaId} onChange={(e) => set("pessoaId", e.target.value)}>
+                <option value="">Escolher…</option>
+                {pessoas.filter((p) => p.ativo).map((p) => <option key={p.id} value={p.id}>{p.nome}</option>)}
+              </select>
+            </div>
+            <div className="vd-full"><label className="lbl-mini">Nome do cliente</label><input className="input" value={form.cliente} onChange={(e) => set("cliente", e.target.value)} placeholder="Quem comprou" /></div>
+            <div><label className="lbl-mini">E-mail</label><input className="input" value={form.email} onChange={(e) => set("email", e.target.value)} placeholder="cliente@email.com" /></div>
+            <div><label className="lbl-mini">Telefone</label><input className="input" value={form.telefone} onChange={(e) => set("telefone", e.target.value)} placeholder="44 99999-9999" /></div>
+            <div className="vd-full"><label className="lbl-mini">Curso</label><input className="input" value={form.curso} onChange={(e) => set("curso", e.target.value)} placeholder="Ex.: Especialista em Manutenção em Inversores" /></div>
+            <div><label className="lbl-mini">Forma de pagamento</label>
+              <select className="input" value={form.forma} onChange={(e) => set("forma", e.target.value)}>
+                {FORMAS_PG.map((f) => <option key={f} value={f}>{f}</option>)}
+              </select>
+            </div>
+            <div><label className="lbl-mini">Plataforma</label>
+              <select className="input" value={form.plataforma} onChange={(e) => set("plataforma", e.target.value)}>
+                {PLATAFORMAS.map((f) => <option key={f} value={f}>{f}</option>)}
+              </select>
+            </div>
+            <div><label className="lbl-mini">Código da venda</label><input className="input" value={form.codigo} onChange={(e) => set("codigo", e.target.value)} placeholder="Código da plataforma" /></div>
+            <div><label className="lbl-mini">Quantidade de parcelas</label><input className="input" type="number" min="0" max="60" value={form.parcelas} onChange={(e) => set("parcelas", e.target.value)} placeholder="Ex.: 12" /></div>
+            <div><label className="lbl-mini">Valor vendido</label><input className="input" value={form.valor} onChange={(e) => set("valor", e.target.value)} placeholder="2497,00" /></div>
+            <div><label className="lbl-mini">Valor recebido</label><input className="input" value={form.recebido} onChange={(e) => set("recebido", e.target.value)} placeholder="quanto já caiu" /></div>
+            <div className="vd-full"><label className="lbl-mini">Venda a gerar</label>
+              <input className="input" value={form.aGerar} onChange={(e) => set("aGerar", e.target.value)} placeholder={"deixe vazio pra calcular sozinho: " + dinheiro(nAGerar)} />
+              <div className="vd-dica">Se deixar vazio, o sistema usa <b>vendido − recebido</b> = {dinheiro(nAGerar)}</div>
+            </div>
+          </div>
+          <button className="onum-add" style={{ marginTop: 18, display: "block" }} disabled={salvando} onClick={salvar}>
+            {salvando ? "Salvando…" : form.id ? "Salvar alterações" : "Lançar venda"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ModalPessoas({ pessoas, onClose, onMudou, showToast }) {
+  const [nome, setNome] = useState("");
+  const [grupo, setGrupo] = useState("");
+  const [meta, setMeta] = useState("");
+  const gruposExistentes = Array.from(new Set(pessoas.map((p) => p.grupo).filter(Boolean)));
+
+  async function criar() {
+    if (!nome.trim()) { showToast("Informe o nome"); return; }
+    try { await api.vdPessoaCriar({ nome, grupo, metaMensal: meta }); setNome(""); setMeta(""); onMudou(); showToast("✓ Adicionado"); }
+    catch (e) { showToast("✗ " + e.message); }
+  }
+  async function editar(p, campo, valor) {
+    try { await api.vdPessoaEditar(p.id, { [campo]: valor }); onMudou(); } catch (e) { showToast(e.message); }
+  }
+  async function excluir(p) {
+    if (!window.confirm(`Remover ${p.nome} do painel?`)) return;
+    try { await api.vdPessoaExcluir(p.id); onMudou(); showToast("✓ Removido"); }
+    catch (e) { showToast(e.message); }
+  }
+
+  return (
+    <div className="pop-bg" onClick={(e) => e.target === e.currentTarget && onClose()}>
+      <div className="pop-sheet" style={{ maxWidth: 640 }}>
+        <div className="pop-head"><b>Equipe & metas</b><button className="crm-x" onClick={onClose}>✕</button></div>
+        <div className="pop-body">
+          <div className="rsv-hint" style={{ marginTop: 0 }}>Quem aparece no painel e quanto é a meta de cada um por mês. Pode ser vendedor, marketing, professor — qualquer pessoa que gera venda.</div>
+          <div className="vd-nova-pessoa">
+            <input className="input" placeholder="Nome" value={nome} onChange={(e) => setNome(e.target.value)} />
+            <input className="input" placeholder="Equipe (ex.: Time de vendas)" value={grupo} onChange={(e) => setGrupo(e.target.value)} list="vd-grupos" />
+            <datalist id="vd-grupos">{gruposExistentes.map((g) => <option key={g} value={g} />)}</datalist>
+            <input className="input" placeholder="Meta do mês" value={meta} onChange={(e) => setMeta(e.target.value)} />
+            <button className="onum-add" onClick={criar}><I.plus className="ico" /></button>
+          </div>
+          <div className="vd-pessoas">
+            {pessoas.map((p) => (
+              <div key={p.id} className={"vd-pessoa" + (p.ativo ? "" : " off")}>
+                <button className={p.ativo ? "of-switch on" : "of-switch"} onClick={() => editar(p, "ativo", !p.ativo)} title={p.ativo ? "No painel" : "Fora do painel"}><span className="of-switch-dot" /></button>
+                <input className="vd-pessoa-nome" value={p.nome} onChange={(e) => editar(p, "nome", e.target.value)} />
+                <input className="vd-pessoa-grupo" value={p.grupo} placeholder="equipe" onChange={(e) => editar(p, "grupo", e.target.value)} list="vd-grupos" />
+                <input className="vd-pessoa-meta" value={p.metaMensal} onChange={(e) => editar(p, "metaMensal", e.target.value)} title="Meta do mês" />
+                <button className="crm-tarefa-del" onClick={() => excluir(p)} title="Remover">✕</button>
+              </div>
+            ))}
+            {pessoas.length === 0 && <div className="crm-col-vazio">Ninguém cadastrado ainda.</div>}
+          </div>
+        </div>
+      </div>
+    </div>
   );
 }
 

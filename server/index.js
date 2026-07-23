@@ -4,6 +4,7 @@ import path from "path";
 import crypto from "crypto";
 import { fileURLToPath } from "url";
 import { instalarCanalOficial } from "./oficial.js";
+import { instalarVendas } from "./vendas.js";
 
 // horário comercial / dias da semana são calculados no fuso de Brasília
 process.env.TZ = process.env.TZ || "America/Sao_Paulo";
@@ -1954,6 +1955,8 @@ Escreva em português brasileiro, tom direto e construtivo, sem ser ofensivo.`;
 /* ============================================================
    CANAL OFICIAL (WhatsApp Cloud API) — rotas /api/oficial/*
    ============================================================ */
+instalarVendas({ app, getDb: () => db, saveDB, proximoId, auth, gerenteOnly });
+
 const canalOficial = instalarCanalOficial({
   app,
   getDb: () => db,
