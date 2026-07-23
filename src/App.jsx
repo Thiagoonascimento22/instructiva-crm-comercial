@@ -3756,11 +3756,29 @@ function ModalImportarVendas({ onClose, onDone, showToast, mesAtual }) {
 }
 
 // Clicou no nome no ranking: define a equipe e a meta dessa pessoa
-function ModalPessoaRapida({ pessoa, pessoas, onClose, onSalvo, showToast }) {
+function ModalPessoaRapida({ pessoa, pessoas, mes, onClose, onSalvo, showToast }) {
   const [grupo, setGrupo] = useState(pessoa.grupo || "");
   const [meta, setMeta] = useState(String(pessoa.meta || ""));
   const [salvando, setSalvando] = useState(false);
+  const [aba, setAba] = useState("vendas");
+  const [minhas, setMinhas] = useState(null);
   const grupos = Array.from(new Set((pessoas || []).map((p) => p.grupo).filter(Boolean)));
+  useEffect(() => {
+    api.vdLista(mes, pessoa.pessoaId).then((d) => setMinhas(d.vendas || [])).catch(() => setMinhas([]));
+    // eslint-disable-next-line
+  }, []);
+  // agrupa as vendas por dia, do mais recente pro mais antigo
+  const dias = useMemo(() => {
+    const m = {};
+    (minhas || []).forEach((v) => {
+      const d = new Date(v.data);
+      const k = d.toISOString().slice(0, 10);
+      if (!m[k]) m[k] = { k, data: d, vendas: [], total: 0, recebido: 0 };
+      m[k].vendas.push(v); m[k].total += Number(v.valor) || 0; m[k].recebido += Number(v.recebido) || 0;
+    });
+    return Object.values(m).sort((a, b) => b.k.localeCompare(a.k));
+  }, [minhas]);
+  const maxDia = dias.reduce((mx, d) => Math.max(mx, d.total), 0);
   async function salvar() {
     setSalvando(true);
     try {
@@ -3772,9 +3790,51 @@ function ModalPessoaRapida({ pessoa, pessoas, onClose, onSalvo, showToast }) {
   return (
     <Portal>
     <div className="pop-bg centro" onClick={(e) => e.target === e.currentTarget && onClose()}>
-      <div className="pop-sheet" style={{ maxWidth: 460 }}>
+      <div className="pop-sheet" style={{ maxWidth: 640 }}>
         <div className="pop-head"><b>{pessoa.nome}</b><button className="crm-x" onClick={onClose}>✕</button></div>
         <div className="pop-body">
+          <div className="vd-abas">
+            <button className={aba === "vendas" ? "on" : ""} onClick={() => setAba("vendas")}>Vendas dia a dia{minhas ? ` (${minhas.length})` : ""}</button>
+            <button className={aba === "config" ? "on" : ""} onClick={() => setAba("config")}>Equipe & meta</button>
+          </div>
+
+          {aba === "vendas" ? (
+            <>
+              <div className="vd-resumo-pessoa">
+                <div><span>Vendido</span><b>{dinheiro(pessoa.venda)}</b></div>
+                <div><span>Recebido</span><b>{dinheiro(pessoa.recebido)}</b></div>
+                <div><span>Vendas</span><b>{minhas ? minhas.length : "…"}</b></div>
+                <div><span>Dias com venda</span><b>{dias.length}</b></div>
+              </div>
+              {minhas === null ? (
+                <div className="dash-empty"><span className="spin" /> Carregando…</div>
+              ) : dias.length === 0 ? (
+                <div className="crm-col-vazio">Nenhuma venda neste mês.</div>
+              ) : (
+                <div className="vd-dias">
+                  {dias.map((d) => (
+                    <div key={d.k} className="vd-dia">
+                      <div className="vd-dia-cab">
+                        <span className="vd-dia-data">{d.data.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })}
+                          <small>{d.data.toLocaleDateString("pt-BR", { weekday: "short" })}</small></span>
+                        <div className="vd-dia-barra"><div style={{ width: (maxDia ? (d.total / maxDia) * 100 : 0) + "%" }} /></div>
+                        <span className="vd-dia-tot">{dinheiro(d.total)}<small>{d.vendas.length} venda(s)</small></span>
+                      </div>
+                      {d.vendas.map((v) => (
+                        <div key={v.id} className="vd-dia-item">
+                          <div className="vd-dia-cli">{v.cliente || "—"}
+                            <small>{[v.curso, v.forma, v.parcelas ? v.parcelas + "x" : "", v.plataforma].filter(Boolean).join(" · ")}</small>
+                          </div>
+                          <div className="vd-dia-vals">{dinheiro(v.valor)}<small>recebido {dinheiro(v.recebido)}</small></div>
+                        </div>
+                      ))}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </>
+          ) : (
+          <>
           <label className="lbl-mini">Equipe</label>
           <input className="input" value={grupo} onChange={(e) => setGrupo(e.target.value)} list="vd-grupos-rapido" placeholder="Ex.: Time de vendas" />
           <datalist id="vd-grupos-rapido">{grupos.map((g) => <option key={g} value={g} />)}</datalist>
@@ -3790,6 +3850,8 @@ function ModalPessoaRapida({ pessoa, pessoas, onClose, onSalvo, showToast }) {
             <button className="btn" onClick={onClose}>Cancelar</button>
             <button className="onum-add" disabled={salvando} onClick={salvar}>{salvando ? "Salvando…" : "Salvar"}</button>
           </div>
+          </>
+          )}
         </div>
       </div>
     </div>
@@ -3959,7 +4021,7 @@ function PainelVendas({ showToast }) {
       )}
 
       {form && <FormVenda form={form} setForm={setForm} pessoas={pessoas} onSalvo={() => { setForm(null); carregar(); }} showToast={showToast} />}
-      {pessoaRapida && <ModalPessoaRapida pessoa={pessoaRapida} pessoas={pessoas} onClose={() => setPessoaRapida(null)} onSalvo={carregar} showToast={showToast} />}
+      {pessoaRapida && <ModalPessoaRapida pessoa={pessoaRapida} pessoas={pessoas} mes={mes} onClose={() => setPessoaRapida(null)} onSalvo={carregar} showToast={showToast} />}
       {showImportarV && <ModalImportarVendas mesAtual={mes} onClose={() => setShowImportarV(false)} onDone={carregar} showToast={showToast} />}
       {showPessoas && <ModalPessoas pessoas={pessoas} onClose={() => setShowPessoas(false)} onMudou={carregar} showToast={showToast} />}
     </div>

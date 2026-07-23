@@ -3816,3 +3816,26 @@ input:focus-visible, textarea:focus-visible, select:focus-visible {
 .vd-chip { font-size: 12px; font-weight: 600; color: var(--muted); background: var(--surface-2); border: 1px solid var(--line); border-radius: 99px; padding: 4px 12px; cursor: pointer; }
 .vd-chip.on { color: #fff; background: var(--brand); border-color: var(--brand); }
 .vd-lista-top { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 4px 0 10px; font-size: 13px; color: var(--muted); }
+
+/* ===== Vendas do vendedor, dia a dia ===== */
+.vd-abas { display: flex; gap: 6px; margin-bottom: 16px; background: var(--surface-2); padding: 4px; border-radius: 10px; }
+.vd-abas button { flex: 1; border: 0; background: transparent; color: var(--muted); font-size: 13px; font-weight: 600; padding: 8px; border-radius: 8px; cursor: pointer; }
+.vd-abas button.on { background: var(--card); color: var(--text); box-shadow: 0 1px 3px rgba(0,0,0,.08); }
+.vd-resumo-pessoa { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 14px; }
+.vd-resumo-pessoa div { background: var(--surface-2); border-radius: 10px; padding: 9px 11px; display: flex; flex-direction: column; }
+.vd-resumo-pessoa span { font-size: 10px; text-transform: uppercase; letter-spacing: .4px; color: var(--muted); font-weight: 700; }
+.vd-resumo-pessoa b { font-size: 15px; color: var(--text); margin-top: 2px; }
+.vd-dias { display: flex; flex-direction: column; gap: 14px; }
+.vd-dia { border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
+.vd-dia-cab { display: flex; align-items: center; gap: 12px; background: var(--surface-2); padding: 9px 13px; }
+.vd-dia-data { font-size: 13.5px; font-weight: 800; color: var(--text); display: flex; flex-direction: column; min-width: 52px; }
+.vd-dia-data small { font-size: 10px; font-weight: 600; color: var(--muted); text-transform: capitalize; }
+.vd-dia-barra { flex: 1; height: 6px; background: var(--card); border-radius: 99px; overflow: hidden; }
+.vd-dia-barra div { height: 100%; background: linear-gradient(90deg, #F26522, #25A06B); border-radius: 99px; }
+.vd-dia-tot { font-size: 13.5px; font-weight: 800; color: var(--text); text-align: right; display: flex; flex-direction: column; }
+.vd-dia-tot small { font-size: 10px; font-weight: 500; color: var(--muted); }
+.vd-dia-item { display: flex; align-items: center; gap: 12px; padding: 9px 13px; border-top: 1px solid var(--line); }
+.vd-dia-cli { flex: 1; min-width: 0; font-size: 13px; font-weight: 600; color: var(--text); display: flex; flex-direction: column; }
+.vd-dia-cli small { font-size: 11px; font-weight: 400; color: var(--muted); margin-top: 1px; }
+.vd-dia-vals { text-align: right; font-size: 13.5px; font-weight: 700; color: var(--text); display: flex; flex-direction: column; flex: none; }
+.vd-dia-vals small { font-size: 10.5px; font-weight: 400; color: var(--muted); }
