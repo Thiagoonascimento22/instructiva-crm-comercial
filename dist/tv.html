@@ -150,6 +150,7 @@ display:grid;place-items:center;font-weight:800;font-size:clamp(9px,.9vw,17px);c
 .eq-col{display:flex;flex-direction:column;gap:clamp(8px,1vh,16px);min-height:0}
 .eq-col:empty{display:none}
 .eqs:has(.eq-col:only-child){grid-template-columns:1fr}
+@media (orientation:portrait){.eqs{grid-template-columns:1fr}}
 .eq-card{background:var(--card);border:1px solid var(--borda);border-radius:clamp(13px,1.3vw,22px);padding:clamp(9px,1.2vh,18px) clamp(13px,1.4vw,26px);
 display:flex;flex-direction:column;flex:1 1 0;min-height:0;overflow:hidden;position:relative}
 .eq-card.eq1{border-color:rgba(242,101,34,.4);background:linear-gradient(180deg,rgba(242,101,34,.06),var(--card))}
@@ -166,19 +167,19 @@ display:flex;flex-direction:column;flex:1 1 0;min-height:0;overflow:hidden;posit
 .eq-bar i{display:block;height:100%;border-radius:99px;background:linear-gradient(90deg,var(--lar),var(--ver))}
 .eq-mbs{flex:1;min-height:0;display:flex;flex-direction:column;gap:clamp(4px,.6vh,9px);overflow:hidden}
 .eq-mbs.g2{display:grid;grid-template-columns:1fr 1fr;grid-auto-rows:minmax(0,1fr);gap:clamp(4px,.55vh,8px) clamp(6px,.7vw,12px);align-content:stretch}
-.eq-mb{flex:1 1 0;display:flex;align-items:center;gap:clamp(7px,.8vw,14px);padding:clamp(2px,.4vh,7px) clamp(8px,.9vw,16px);
+.eq-card{--esc:1}
+.eq-mb{flex:0 1 auto;display:flex;align-items:center;gap:calc(clamp(7px,.8vw,14px)*var(--esc));
+padding:calc(clamp(3px,.55vh,8px)*var(--esc)) calc(clamp(8px,.9vw,16px)*var(--esc));
 border-radius:clamp(8px,.8vw,13px);background:rgba(255,255,255,.035);min-height:0;overflow:hidden}
-.eq-card.denso .eq-mb .n b{font-size:clamp(9px,.8vw,15px)}
-.eq-card.denso .eq-mb .n s{font-size:clamp(6px,.5vw,10px)}
-.eq-card.denso .eq-mb .v{font-size:clamp(9px,.85vw,16px)}
-.eq-card.denso .eq-mb .av{width:clamp(17px,1.6vw,30px);height:clamp(17px,1.6vw,30px);font-size:clamp(7px,.62vw,12px)}
+.eq-card.denso{--esc:.88}
+.eq-card.sem-detalhe .eq-mb .n s{display:none}
 .eq-mb.mb1{background:rgba(242,101,34,.09)}
-.eq-mb .av{width:clamp(20px,1.9vw,36px);height:clamp(20px,1.9vw,36px);border-radius:50%;object-fit:cover;overflow:hidden;flex:none;
-display:grid;place-items:center;font-weight:800;font-size:clamp(8px,.75vw,14px);color:#fff;background:var(--card2);border:1.5px solid var(--borda)}
-.eq-mb .n{flex:1;min-width:0}
-.eq-mb .n b{display:block;font-size:clamp(10px,.92vw,18px);font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.eq-mb .n s{text-decoration:none;font-size:clamp(6px,.56vw,11px);color:var(--mut)}
-.eq-mb .v{font-family:Sora;font-size:clamp(10px,1vw,20px);font-weight:800;white-space:nowrap;flex:none}
+.eq-mb .av{width:calc(clamp(18px,1.8vw,34px)*var(--esc));height:calc(clamp(18px,1.8vw,34px)*var(--esc));border-radius:50%;object-fit:cover;overflow:hidden;flex:none;
+display:grid;place-items:center;font-weight:800;font-size:calc(clamp(8px,.72vw,13px)*var(--esc));color:#fff;background:var(--card2);border:1.5px solid var(--borda)}
+.eq-mb .n{flex:1;min-width:0;display:flex;align-items:baseline;gap:calc(clamp(6px,.7vw,12px)*var(--esc))}
+.eq-mb .n b{flex:0 1 auto;font-size:calc(clamp(10px,.95vw,19px)*var(--esc));font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.eq-mb .n s{text-decoration:none;flex:none;font-size:calc(clamp(7px,.62vw,12px)*var(--esc));color:var(--mut);white-space:nowrap}
+.eq-mb .v{font-family:Sora;font-size:calc(clamp(10px,1vw,20px)*var(--esc));font-weight:800;white-space:nowrap;flex:none}
 
 </style></head>
 <body>
@@ -305,7 +306,7 @@ function cardEq(e,i){
 var mbs=e.membros||[];
 var membros=mbs.map(function(mb,j){
   return '<div class="eq-mb'+(j===0?" mb1":"")+'">'+av(mb,"av")
-  +'<div class="n"><b>'+esc(mb.nome)+'</b><s>'+mb.qtd+' venda(s)'+(mb.meta>0?" · "+mb.pct+"% da meta":"")+'</s></div>'
+  +'<div class="n"><b>'+esc(mb.nome)+'</b><s>'+mb.qtd+' venda(s)'+(mb.meta>0?" · "+mb.pct+"%":"")+'</s></div>'
   +'<span class="v">'+dk(mb.valor)+'</span></div>'}).join("");
 return '<div class="eq-card'+(i===0?" eq1":"")+(mbs.length>=9?" denso":"")+'" style="flex-grow:'+(mbs.length+2)+'">'
 +'<div class="eq-cab"><span class="p">'+(i+1)+'</span>'
@@ -315,10 +316,12 @@ return '<div class="eq-card'+(i===0?" eq1":"")+(mbs.length>=9?" denso":"")+'" st
 +'<div class="eq-mbs'+(mbs.length>14?" g2":"")+'">'+membros+'</div>'
 +'</div>'}
 if(eqs.length){
-var cols=[{h:0,html:""},{h:0,html:""}];
-eqs.forEach(function(e,i){var c=cols[0].h<=cols[1].h?cols[0]:cols[1];
+var deitada=window.innerWidth>=window.innerHeight;
+var cols=deitada?[{h:0,html:""},{h:0,html:""}]:[{h:0,html:""}];
+eqs.forEach(function(e,i){var c=cols.reduce(function(a,b){return a.h<=b.h?a:b});
 c.html+=cardEq(e,i);c.h+=(e.membros||[]).length+3});
-$("le").innerHTML='<div class="eq-col">'+cols[0].html+'</div><div class="eq-col">'+cols[1].html+'</div>';
+$("le").innerHTML=cols.map(function(c){return '<div class="eq-col">'+c.html+'</div>'}).join("");
+ajustarEquipes();
 }else{$("le").innerHTML='<div class="nd">Sem equipes definidas.</div>';}
 // cursos
 var mc=d.cursos.reduce(function(m,x){return Math.max(m,x.valor)},0)||1;
@@ -341,6 +344,22 @@ return linha((i+1)+"ª",(w.atual?"t1":""),"",esc(w.rot)+(w.atual?' <s style="col
 var h=new Date(d.atualizadoEm);
 $("at").textContent="atualizado "+String(h.getHours()).padStart(2,"0")+":"+String(h.getMinutes()).padStart(2,"0")+":"+String(h.getSeconds()).padStart(2,"0");
 }
+/* Mede cada lista de membros na TELA REAL: se não coube, primeiro esconde
+   o detalhe (vendas · %), e se ainda faltar, reduz a escala do card aos poucos.
+   Assim nenhuma TV corta ninguém, seja qual for o tamanho ou proporção. */
+function ajustarEquipes(){
+requestAnimationFrame(function(){
+document.querySelectorAll(".eq-card").forEach(function(card){
+  var mbs=card.querySelector(".eq-mbs");if(!mbs)return;
+  card.classList.remove("sem-detalhe");card.style.removeProperty("--esc");
+  var cabe=function(){return mbs.scrollHeight<=mbs.clientHeight+1};
+  if(cabe())return;
+  card.classList.add("sem-detalhe");
+  if(cabe())return;
+  for(var k=.94;k>=.55;k-=.06){card.style.setProperty("--esc",k);if(cabe())return}
+});
+});}
+var _rt;window.addEventListener("resize",function(){clearTimeout(_rt);_rt=setTimeout(ajustarEquipes,250)});
 function buscar(){fetch("/api/vendas/tv?k="+encodeURIComponent(chave)+"&_="+Date.now())
 .then(function(r){if(!r.ok)throw new Error("HTTP "+r.status);return r.json()})
 .then(function(d){desenhar(d);$("st").textContent="ao vivo";$("luz").style.background="var(--ver)";$("luz").style.boxShadow="0 0 14px var(--ver)"})
