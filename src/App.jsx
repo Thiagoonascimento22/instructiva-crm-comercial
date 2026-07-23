@@ -3056,6 +3056,94 @@ function PainelSistema({ modulos, onSalvo, showToast }) {
   );
 }
 
+// Exportar leads escolhendo por tag
+function ModalExportar({ leads, etapas, onClose, showToast }) {
+  const [sel, setSel] = useState({});
+  const [busca, setBusca] = useState("");
+  const tags = useMemo(() => {
+    const m = {};
+    (leads || []).forEach((l) => (l.tags || []).forEach((t) => { const k = String(t).trim(); if (k) m[k] = (m[k] || 0) + 1; }));
+    return Object.entries(m).sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], "pt-BR"));
+  }, [leads]);
+  const escolhidas = Object.keys(sel).filter((k) => sel[k]);
+  const filtrados = escolhidas.length
+    ? (leads || []).filter((l) => (l.tags || []).some((t) => escolhidas.includes(String(t).trim())))
+    : (leads || []);
+  const semTag = (leads || []).filter((l) => !(l.tags || []).length).length;
+  const visiveis = tags.filter(([t]) => t.toLowerCase().includes(busca.trim().toLowerCase()));
+
+  function baixar() {
+    if (!filtrados.length) { showToast("Nenhum lead pra exportar"); return; }
+    const nomeEt = (k) => (etapas.find((e) => e.k === k) || {}).lb || k;
+    const cab = ["Nome", "Telefone", "E-mail", "Valor", "Forma de pagamento", "Curso", "Etapa", "Vendedor", "Tags", "Criado em"];
+    const linhas = filtrados.map((l) => [
+      l.nome || "", l.telefone || "", l.email || "",
+      l.valor ? Number(l.valor).toFixed(2).replace(".", ",") : "",
+      l.formaPagamento || "",
+      l.curso || "", nomeEt(l.etapa), l.vendedorNome || "",
+      (l.tags || []).join(" | "),
+      l.criadoEm ? new Date(l.criadoEm).toLocaleString("pt-BR") : "",
+    ]);
+    const esc = (v) => { const s = String(v == null ? "" : v); return /[",;\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
+    const csv = "\uFEFF" + [cab, ...linhas].map((r) => r.map(esc).join(";")).join("\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    const sufixo = escolhidas.length === 1 ? "-" + escolhidas[0].replace(/[^\w\-]+/g, "_") : escolhidas.length ? "-" + escolhidas.length + "tags" : "-todos";
+    a.href = url; a.download = "leads" + sufixo + ".csv"; a.click();
+    URL.revokeObjectURL(url);
+    showToast(`✓ ${filtrados.length} lead(s) exportado(s)`);
+    onClose();
+  }
+
+  return (
+    <div className="pop-bg" onClick={(e) => e.target === e.currentTarget && onClose()}>
+      <div className="pop-sheet" style={{ maxWidth: 560 }}>
+        <div className="pop-head"><b>Exportar leads</b><button className="crm-x" onClick={onClose}>✕</button></div>
+        <div className="pop-body">
+          <div className="rsv-hint" style={{ marginTop: 0 }}>
+            Escolha as <b>tags</b> que quer exportar. Sem escolher nenhuma, sai <b>tudo</b>. O arquivo vem com
+            nome, telefone, e-mail, valor e a forma de pagamento (pix, boleto ou cartão).
+          </div>
+
+          {tags.length === 0 ? (
+            <div className="of-nova-semtpl" style={{ marginTop: 14 }}>Nenhum lead tem tag ainda — dá pra exportar todos mesmo assim.</div>
+          ) : (
+            <>
+              {tags.length > 8 && (
+                <input className="input" style={{ marginTop: 14 }} placeholder="Buscar tag…" value={busca} onChange={(e) => setBusca(e.target.value)} />
+              )}
+              <div className="exp-tags">
+                {visiveis.map(([t, n]) => (
+                  <label key={t} className={"exp-tag" + (sel[t] ? " on" : "")}>
+                    <input type="checkbox" checked={!!sel[t]} onChange={() => setSel((s) => ({ ...s, [t]: !s[t] }))} />
+                    <span className="exp-tag-nm">{t}</span>
+                    <span className="exp-tag-n">{n}</span>
+                  </label>
+                ))}
+                {visiveis.length === 0 && <div className="imp-mais">Nenhuma tag com esse nome.</div>}
+              </div>
+              {escolhidas.length > 0 && (
+                <button className="foto-del" style={{ marginTop: 8 }} onClick={() => setSel({})}>limpar seleção</button>
+              )}
+            </>
+          )}
+
+          <div className="exp-resumo">
+            Vão ser exportados <b>{filtrados.length}</b> lead(s)
+            {escolhidas.length ? <> com {escolhidas.length === 1 ? "a tag" : "as tags"} <b>{escolhidas.join(", ")}</b></> : <> (todos)</>}
+            {!escolhidas.length && semTag > 0 && <span className="exp-obs"> · {semTag} sem tag nenhuma</span>}
+          </div>
+
+          <button className="onum-add" style={{ marginTop: 14, display: "block" }} disabled={!filtrados.length} onClick={baixar}>
+            <I.download className="ico" /> Baixar planilha ({filtrados.length})
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // Importar leads de uma planilha CSV
 function ModalImportar({ etapas, onClose, onDone, showToast }) {
   const [dados, setDados] = useState(null);
@@ -3354,72 +3442,142 @@ function tipoDaColuna(lb) {
   if (/perdid|perda|perdeu|descartad|sem interesse|desistiu|não quis|nao quis/.test(t)) return "perda";
   return null;
 }
+// Frases que aparecem na comemoração (sorteia uma a cada venda)
+const FRASES_GANHO = [
+  "Isso é resultado de quem não desiste no primeiro não!",
+  "Quem trabalha o funil todo dia, colhe assim!",
+  "Mais um cliente que vai mudar de vida com a Instructiva!",
+  "Persistência vira comissão. Bora pra próxima!",
+  "Foi no detalhe, no follow-up e no atendimento. Merecido!",
+  "É assim que se faz! O time todo agradece.",
+  "Cada venda dessas é uma família com uma profissão nova.",
+  "Ninguém segura esse time. Próximo!",
+  "Fechou! Agora repete a dose.",
+  "Talento é bom, mas insistência fecha contrato. Parabéns!",
+];
+const FRASES_PERDA = [
+  "Faz parte. O próximo é seu.",
+  "Não foi dessa vez — mas o aprendizado fica.",
+  "Um não te aproxima do próximo sim.",
+  "Bola pra frente, tem lead esperando.",
+  "Anota o motivo e volta mais forte na próxima.",
+];
 // Som gerado na hora pelo navegador (não precisa de arquivo de áudio)
 function tocarSom(tipo) {
   try {
     const AC = window.AudioContext || window.webkitAudioContext;
     if (!AC) return;
     const ctx = new AC();
-    const agora = ctx.currentTime;
+    const t0 = ctx.currentTime + 0.05;
+    const master = ctx.createGain(); master.gain.value = 0.9; master.connect(ctx.destination);
+
     if (tipo === "ganho") {
-      [523.25, 659.25, 783.99, 1046.5].forEach((f, i) => {
+      // --- nota de metal (trompete): 2 osciladores desafinados + filtro ---
+      const metal = (freq, inicio, dur, vol) => {
+        const g = ctx.createGain();
+        const f = ctx.createBiquadFilter();
+        f.type = "lowpass";
+        f.frequency.setValueAtTime(900, inicio);
+        f.frequency.linearRampToValueAtTime(4200, inicio + 0.05);
+        f.frequency.linearRampToValueAtTime(2200, inicio + dur);
+        g.gain.setValueAtTime(0.0001, inicio);
+        g.gain.linearRampToValueAtTime(vol, inicio + 0.025);       // ataque seco = "tan"
+        g.gain.setValueAtTime(vol, inicio + dur * 0.55);
+        g.gain.exponentialRampToValueAtTime(0.0001, inicio + dur);
+        [0, 4, -5].forEach((cent, i) => {
+          const o = ctx.createOscillator();
+          o.type = i === 2 ? "square" : "sawtooth";
+          o.frequency.value = freq;
+          o.detune.value = cent;
+          const gv = ctx.createGain(); gv.gain.value = i === 2 ? 0.18 : 0.5;
+          o.connect(gv); gv.connect(f);
+          o.start(inicio); o.stop(inicio + dur + 0.05);
+        });
+        f.connect(g); g.connect(master);
+      };
+      // --- pancada grave (timbale) em cada nota ---
+      const tambor = (inicio, vol) => {
         const o = ctx.createOscillator(), g = ctx.createGain();
-        o.type = "triangle"; o.frequency.value = f;
-        g.gain.setValueAtTime(0, agora + i * 0.11);
-        g.gain.linearRampToValueAtTime(0.28, agora + i * 0.11 + 0.03);
-        g.gain.exponentialRampToValueAtTime(0.001, agora + i * 0.11 + 0.42);
-        o.connect(g); g.connect(ctx.destination);
-        o.start(agora + i * 0.11); o.stop(agora + i * 0.11 + 0.45);
-      });
-      // palmas: rajadas curtas de ruído filtrado
-      const dur = 1.7;
+        o.type = "sine";
+        o.frequency.setValueAtTime(150, inicio);
+        o.frequency.exponentialRampToValueAtTime(48, inicio + 0.16);
+        g.gain.setValueAtTime(vol, inicio);
+        g.gain.exponentialRampToValueAtTime(0.001, inicio + 0.24);
+        o.connect(g); g.connect(master);
+        o.start(inicio); o.stop(inicio + 0.26);
+      };
+      // FANFARRA: tan-tan-tan-tan  ...  TAN-TAN-TAAAN (acorde final segurado)
+      const G4 = 392.00, C5 = 523.25, E5 = 659.25, G5 = 783.99, C6 = 1046.50;
+      const bat = 0.17;
+      const seq = [
+        [G4, 0, bat * 0.8, 0.30], [G4, bat, bat * 0.8, 0.30],
+        [C5, bat * 2, bat * 0.8, 0.34], [E5, bat * 3, bat * 0.8, 0.34],
+        [G5, bat * 4, bat * 1.6, 0.38],
+      ];
+      seq.forEach(([f, off, d, v]) => { metal(f, t0 + off, d, v); tambor(t0 + off, 0.5); });
+      // acorde final triunfal
+      const fim = t0 + bat * 6;
+      [C5, E5, G5, C6].forEach((f, i) => metal(f, fim, 1.5 - i * 0.05, 0.26));
+      metal(G4 / 2, fim, 1.6, 0.30); // baixo
+      tambor(fim, 0.75); tambor(fim + 0.18, 0.45); tambor(fim + 0.34, 0.3);
+
+      // --- plateia batendo palmas depois da fanfarra ---
+      const dur = 2.6, inicioPalmas = t0 + bat * 5.2;
       const buf = ctx.createBuffer(1, Math.floor(ctx.sampleRate * dur), ctx.sampleRate);
       const dados = buf.getChannelData(0);
       for (let i = 0; i < dados.length; i++) {
         const t = i / ctx.sampleRate;
-        const env = Math.max(0, 1 - t / dur);
-        const batida = Math.random() < 0.014 ? 1 : 0.1;
-        dados[i] = (Math.random() * 2 - 1) * env * batida;
+        const sobe = Math.min(1, t / 0.25);
+        const desce = Math.max(0, 1 - Math.max(0, t - 1.4) / 1.2);
+        const batida = Math.random() < 0.02 ? 1 : 0.12;
+        dados[i] = (Math.random() * 2 - 1) * sobe * desce * batida;
       }
       const src = ctx.createBufferSource(); src.buffer = buf;
-      const filtro = ctx.createBiquadFilter(); filtro.type = "bandpass"; filtro.frequency.value = 1800; filtro.Q.value = 0.7;
-      const gp = ctx.createGain(); gp.gain.value = 0.5;
-      src.connect(filtro); filtro.connect(gp); gp.connect(ctx.destination);
-      src.start(agora + 0.12);
-      setTimeout(() => { try { ctx.close(); } catch (e) {} }, 2600);
+      const bp = ctx.createBiquadFilter(); bp.type = "bandpass"; bp.frequency.value = 1700; bp.Q.value = 0.6;
+      const gp = ctx.createGain(); gp.gain.value = 0.55;
+      src.connect(bp); bp.connect(gp); gp.connect(master);
+      src.start(inicioPalmas);
+      setTimeout(() => { try { ctx.close(); } catch (e) {} }, 5200);
     } else {
+      // "ahhh" triste descendo
       const o = ctx.createOscillator(), g = ctx.createGain();
       o.type = "sawtooth";
-      o.frequency.setValueAtTime(392, agora);
-      o.frequency.exponentialRampToValueAtTime(155, agora + 1.05);
-      g.gain.setValueAtTime(0.001, agora);
-      g.gain.linearRampToValueAtTime(0.2, agora + 0.09);
-      g.gain.exponentialRampToValueAtTime(0.001, agora + 1.15);
+      o.frequency.setValueAtTime(392, t0);
+      o.frequency.exponentialRampToValueAtTime(155, t0 + 1.05);
+      g.gain.setValueAtTime(0.001, t0);
+      g.gain.linearRampToValueAtTime(0.2, t0 + 0.09);
+      g.gain.exponentialRampToValueAtTime(0.001, t0 + 1.15);
       const lp = ctx.createBiquadFilter(); lp.type = "lowpass"; lp.frequency.value = 950;
-      o.connect(lp); lp.connect(g); g.connect(ctx.destination);
-      o.start(agora); o.stop(agora + 1.2);
-      setTimeout(() => { try { ctx.close(); } catch (e) {} }, 1600);
+      o.connect(lp); lp.connect(g); g.connect(master);
+      o.start(t0); o.stop(t0 + 1.2);
+      setTimeout(() => { try { ctx.close(); } catch (e) {} }, 1700);
     }
   } catch (e) { /* sem som, sem problema */ }
 }
-function Comemoracao({ tipo, nome, valor, onClose }) {
+function Comemoracao({ tipo, nome, valor, vendedor, foto, onClose }) {
+  const frase = useMemo(() => {
+    const lista = tipo === "ganho" ? FRASES_GANHO : FRASES_PERDA;
+    return lista[Math.floor(Math.random() * lista.length)];
+    // eslint-disable-next-line
+  }, []);
   useEffect(() => {
     tocarSom(tipo);
-    const t = setTimeout(onClose, tipo === "ganho" ? 4200 : 2600);
+    const t = setTimeout(onClose, tipo === "ganho" ? 6000 : 2800);
     return () => clearTimeout(t);
     // eslint-disable-next-line
   }, []);
   const confetes = tipo === "ganho"
-    ? Array.from({ length: 70 }, (_, i) => ({
+    ? Array.from({ length: 90 }, (_, i) => ({
         i,
         left: Math.random() * 100,
-        atraso: Math.random() * 0.9,
-        dur: 2.2 + Math.random() * 1.6,
+        atraso: Math.random() * 1.6,
+        dur: 2.4 + Math.random() * 1.8,
         cor: ["#F26522", "#25A06B", "#facc15", "#3b82f6", "#ec4899", "#10b981"][i % 6],
         gira: Math.round(Math.random() * 720 - 360),
-        tam: 7 + Math.random() * 7,
+        tam: 7 + Math.random() * 8,
       }))
     : [];
+  const primeiro = (vendedor || "").trim().split(/\s+/)[0] || "";
   return (
     <Portal>
       <div className={"comemora " + tipo} onClick={onClose}>
@@ -3430,13 +3588,30 @@ function Comemoracao({ tipo, nome, valor, onClose }) {
           }} />
         ))}
         <div className="comemora-card">
-          <div className="comemora-emoji">{tipo === "ganho" ? "🎉" : "😞"}</div>
-          <div className="comemora-tit">{tipo === "ganho" ? "PARABÉNS!" : "Que pena…"}</div>
-          <div className="comemora-sub">
-            {tipo === "ganho"
-              ? <>Mais uma venda fechada com <b>{nome}</b>{valor > 0 ? <> — <b>R$ {Number(valor).toLocaleString("pt-BR")}</b></> : null}!</>
-              : <>O lead <b>{nome}</b> foi pra perdido. Bola pra frente!</>}
-          </div>
+          {tipo === "ganho" ? (
+            <>
+              <div className="comemora-emoji">🏆</div>
+              <div className="comemora-tit">PARABÉNS{primeiro ? ", " + primeiro.toUpperCase() : ""}!</div>
+              {vendedor && (
+                <div className="comemora-vend">
+                  <Avatar nome={vendedor} foto={foto} size={44} />
+                  <span>{vendedor}</span>
+                </div>
+              )}
+              <div className="comemora-venda">
+                Venda fechada com <b>{nome}</b>
+                {valor > 0 && <div className="comemora-valor">R$ {Number(valor).toLocaleString("pt-BR")}</div>}
+              </div>
+              <div className="comemora-frase">“{frase}”</div>
+            </>
+          ) : (
+            <>
+              <div className="comemora-emoji">😞</div>
+              <div className="comemora-tit">Que pena…</div>
+              <div className="comemora-venda">O lead <b>{nome}</b> foi pra perdido.</div>
+              <div className="comemora-frase">“{frase}”</div>
+            </>
+          )}
           <div className="comemora-dica">clique pra fechar</div>
         </div>
       </div>
@@ -3477,6 +3652,7 @@ function OficialCRM({ showToast, isGer = true, onAbrirWhats }) {
   const [showReserva, setShowReserva] = useState(false);
   const [showColunas, setShowColunas] = useState(false);
   const [showImportar, setShowImportar] = useState(false);
+  const [showExportar, setShowExportar] = useState(false);
   const [showDistrib, setShowDistrib] = useState(false);
   const [filtroVend, setFiltroVend] = useState("");
   const [dragId, setDragId] = useState(null);
@@ -3499,7 +3675,7 @@ function OficialCRM({ showToast, isGer = true, onAbrirWhats }) {
     // ganhou ou perdeu? mostra a comemoração (ou o consolo)
     const col = etapas.find((e) => e.k === etapa);
     const tipo = tipoDaColuna(col && col.lb);
-    if (tipo) setComemora({ tipo, nome: l.nome, valor: l.valor || 0 });
+    if (tipo) setComemora({ tipo, nome: l.nome, valor: l.valor || 0, vendedor: l.vendedorNome || "", foto: l.vendedorFoto || "" });
     try { await api.ofCrmEditar(id, { etapa }); } catch (e) { showToast(e.message); carregar(); }
   }
   async function salvarCampo(id, campo, valor) {
@@ -3635,7 +3811,7 @@ function OficialCRM({ showToast, isGer = true, onAbrirWhats }) {
         {isGer && <button className="onum-btn-ghost" onClick={() => setShowColunas(true)}><I.cog className="ico" /> Colunas</button>}
         {isGer && <button className="onum-btn-ghost" onClick={() => setConfig(true)}><I.suporte className="ico" /> Distribuição das ligações</button>}
         {isGer && <button className="onum-btn-ghost" onClick={() => setShowImportar(true)} title="Importar leads de uma planilha CSV"><I.clip className="ico" /> Importar</button>}
-        {isGer && <button className="onum-btn-ghost" onClick={exportarCSV} title="Baixar todos os leads em CSV"><I.download className="ico" /> Exportar</button>}
+        {isGer && <button className="onum-btn-ghost" onClick={() => setShowExportar(true)} title="Exportar leads (dá pra escolher por tag)"><I.download className="ico" /> Exportar</button>}
         <div className="crm-top-right">
           <div className="crm-busca"><I.search className="ico" /><input value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Buscar por nome, telefone, curso, tag..." /></div>
           {isGer && vendedores.length > 0 && (
@@ -3856,9 +4032,10 @@ function OficialCRM({ showToast, isGer = true, onAbrirWhats }) {
         </Portal>
       )}
 
-      {comemora && <Comemoracao tipo={comemora.tipo} nome={comemora.nome} valor={comemora.valor} onClose={() => setComemora(null)} />}
+      {comemora && <Comemoracao tipo={comemora.tipo} nome={comemora.nome} valor={comemora.valor} vendedor={comemora.vendedor} foto={comemora.foto} onClose={() => setComemora(null)} />}
 
       {showColunas && <ModalColunas etapas={etapas} onClose={() => setShowColunas(false)} onChanged={carregar} showToast={showToast} />}
+      {showExportar && <ModalExportar leads={leads} etapas={etapas} onClose={() => setShowExportar(false)} showToast={showToast} />}
       {showImportar && <ModalImportar etapas={etapas} onClose={() => setShowImportar(false)} onDone={carregar} showToast={showToast} />}
       {showDistrib && (
         <div className="pop-bg" onClick={(e) => e.target === e.currentTarget && setShowDistrib(false)}>
