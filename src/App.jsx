@@ -3346,6 +3346,104 @@ function ModalCadastrarPipeline({ prefill, onClose, showToast }) {
   );
 }
 
+// ---- Comemoração ao mover o lead pra Ganho / Perdido ----
+// Descobre pelo nome da coluna se é vitória ou perda (funciona com as colunas que já existem)
+function tipoDaColuna(lb) {
+  const t = (lb || "").toLowerCase();
+  if (/ganho|ganha|vendid|venda|matricul|fechad|fechou|convertid|sucesso/.test(t)) return "ganho";
+  if (/perdid|perda|perdeu|descartad|sem interesse|desistiu|não quis|nao quis/.test(t)) return "perda";
+  return null;
+}
+// Som gerado na hora pelo navegador (não precisa de arquivo de áudio)
+function tocarSom(tipo) {
+  try {
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) return;
+    const ctx = new AC();
+    const agora = ctx.currentTime;
+    if (tipo === "ganho") {
+      [523.25, 659.25, 783.99, 1046.5].forEach((f, i) => {
+        const o = ctx.createOscillator(), g = ctx.createGain();
+        o.type = "triangle"; o.frequency.value = f;
+        g.gain.setValueAtTime(0, agora + i * 0.11);
+        g.gain.linearRampToValueAtTime(0.28, agora + i * 0.11 + 0.03);
+        g.gain.exponentialRampToValueAtTime(0.001, agora + i * 0.11 + 0.42);
+        o.connect(g); g.connect(ctx.destination);
+        o.start(agora + i * 0.11); o.stop(agora + i * 0.11 + 0.45);
+      });
+      // palmas: rajadas curtas de ruído filtrado
+      const dur = 1.7;
+      const buf = ctx.createBuffer(1, Math.floor(ctx.sampleRate * dur), ctx.sampleRate);
+      const dados = buf.getChannelData(0);
+      for (let i = 0; i < dados.length; i++) {
+        const t = i / ctx.sampleRate;
+        const env = Math.max(0, 1 - t / dur);
+        const batida = Math.random() < 0.014 ? 1 : 0.1;
+        dados[i] = (Math.random() * 2 - 1) * env * batida;
+      }
+      const src = ctx.createBufferSource(); src.buffer = buf;
+      const filtro = ctx.createBiquadFilter(); filtro.type = "bandpass"; filtro.frequency.value = 1800; filtro.Q.value = 0.7;
+      const gp = ctx.createGain(); gp.gain.value = 0.5;
+      src.connect(filtro); filtro.connect(gp); gp.connect(ctx.destination);
+      src.start(agora + 0.12);
+      setTimeout(() => { try { ctx.close(); } catch (e) {} }, 2600);
+    } else {
+      const o = ctx.createOscillator(), g = ctx.createGain();
+      o.type = "sawtooth";
+      o.frequency.setValueAtTime(392, agora);
+      o.frequency.exponentialRampToValueAtTime(155, agora + 1.05);
+      g.gain.setValueAtTime(0.001, agora);
+      g.gain.linearRampToValueAtTime(0.2, agora + 0.09);
+      g.gain.exponentialRampToValueAtTime(0.001, agora + 1.15);
+      const lp = ctx.createBiquadFilter(); lp.type = "lowpass"; lp.frequency.value = 950;
+      o.connect(lp); lp.connect(g); g.connect(ctx.destination);
+      o.start(agora); o.stop(agora + 1.2);
+      setTimeout(() => { try { ctx.close(); } catch (e) {} }, 1600);
+    }
+  } catch (e) { /* sem som, sem problema */ }
+}
+function Comemoracao({ tipo, nome, valor, onClose }) {
+  useEffect(() => {
+    tocarSom(tipo);
+    const t = setTimeout(onClose, tipo === "ganho" ? 4200 : 2600);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line
+  }, []);
+  const confetes = tipo === "ganho"
+    ? Array.from({ length: 70 }, (_, i) => ({
+        i,
+        left: Math.random() * 100,
+        atraso: Math.random() * 0.9,
+        dur: 2.2 + Math.random() * 1.6,
+        cor: ["#F26522", "#25A06B", "#facc15", "#3b82f6", "#ec4899", "#10b981"][i % 6],
+        gira: Math.round(Math.random() * 720 - 360),
+        tam: 7 + Math.random() * 7,
+      }))
+    : [];
+  return (
+    <Portal>
+      <div className={"comemora " + tipo} onClick={onClose}>
+        {confetes.map((c) => (
+          <span key={c.i} className="confete" style={{
+            left: c.left + "%", background: c.cor, width: c.tam, height: c.tam * 1.5,
+            animationDelay: c.atraso + "s", animationDuration: c.dur + "s", "--gira": c.gira + "deg",
+          }} />
+        ))}
+        <div className="comemora-card">
+          <div className="comemora-emoji">{tipo === "ganho" ? "🎉" : "😞"}</div>
+          <div className="comemora-tit">{tipo === "ganho" ? "PARABÉNS!" : "Que pena…"}</div>
+          <div className="comemora-sub">
+            {tipo === "ganho"
+              ? <>Mais uma venda fechada com <b>{nome}</b>{valor > 0 ? <> — <b>R$ {Number(valor).toLocaleString("pt-BR")}</b></> : null}!</>
+              : <>O lead <b>{nome}</b> foi pra perdido. Bola pra frente!</>}
+          </div>
+          <div className="comemora-dica">clique pra fechar</div>
+        </div>
+      </div>
+    </Portal>
+  );
+}
+
 function OficialCRM({ showToast, isGer = true, onAbrirWhats }) {
   const [etapas, setEtapas] = useState([]);
   const [leads, setLeads] = useState([]);
@@ -3355,6 +3453,9 @@ function OficialCRM({ showToast, isGer = true, onAbrirWhats }) {
   const [criar, setCriar] = useState(null);
   const [waMenu, setWaMenu] = useState(null);
   const [busca, setBusca] = useState("");
+  const [comemora, setComemora] = useState(null);
+  const boardRef = useRef(null);
+  const autoScrollRef = useRef(0);
   const [marcados, setMarcados] = useState({});
   const [tarefaTexto, setTarefaTexto] = useState("");
   const [tarefaQuando, setTarefaQuando] = useState("");
@@ -3395,6 +3496,10 @@ function OficialCRM({ showToast, isGer = true, onAbrirWhats }) {
   async function mover(id, etapa) {
     const l = leads.find((x) => x.id === id); if (!l || l.etapa === etapa) return;
     setLeads((ls) => ls.map((x) => x.id === id ? { ...x, etapa } : x));
+    // ganhou ou perdeu? mostra a comemoração (ou o consolo)
+    const col = etapas.find((e) => e.k === etapa);
+    const tipo = tipoDaColuna(col && col.lb);
+    if (tipo) setComemora({ tipo, nome: l.nome, valor: l.valor || 0 });
     try { await api.ofCrmEditar(id, { etapa }); } catch (e) { showToast(e.message); carregar(); }
   }
   async function salvarCampo(id, campo, valor) {
@@ -3421,6 +3526,72 @@ function OficialCRM({ showToast, isGer = true, onAbrirWhats }) {
     const a = document.createElement("a"); a.href = url; a.download = "leads-pipeline.csv"; a.click();
     URL.revokeObjectURL(url);
   }
+  // ---- Mobilidade do quadro ----
+  // 1) enquanto arrasta um card, se chegar perto da borda o quadro anda sozinho
+  useEffect(() => {
+    if (!dragId) { autoScrollRef.current = 0; return; }
+    let raf = 0;
+    const passo = () => {
+      const el = boardRef.current;
+      if (el && autoScrollRef.current) el.scrollLeft += autoScrollRef.current;
+      raf = requestAnimationFrame(passo);
+    };
+    raf = requestAnimationFrame(passo);
+    return () => { cancelAnimationFrame(raf); autoScrollRef.current = 0; };
+  }, [dragId]);
+  function aoArrastarSobreQuadro(e) {
+    e.preventDefault();
+    const el = boardRef.current; if (!el) return;
+    const r = el.getBoundingClientRect();
+    const margem = 110; // zona sensível nas laterais
+    const x = e.clientX;
+    if (x < r.left + margem) autoScrollRef.current = -Math.ceil((r.left + margem - x) / 6);
+    else if (x > r.right - margem) autoScrollRef.current = Math.ceil((x - (r.right - margem)) / 6);
+    else autoScrollRef.current = 0;
+  }
+  // 2) segurar no fundo do quadro e puxar pro lado (como um mapa)
+  const panRef = useRef(null);
+  function aoPressionarQuadro(e) {
+    if (e.button !== 0) return;
+    const alvo = e.target;
+    // só se clicou no "fundo" (não em card, botão, input…)
+    if (alvo.closest(".crm-card, button, input, select, textarea, a, label")) return;
+    const el = boardRef.current; if (!el) return;
+    panRef.current = { x: e.clientX, scroll: el.scrollLeft };
+    el.classList.add("arrastando");
+  }
+  useEffect(() => {
+    const mover = (e) => {
+      const p = panRef.current, el = boardRef.current;
+      if (!p || !el) return;
+      el.scrollLeft = p.scroll - (e.clientX - p.x);
+    };
+    const soltar = () => {
+      panRef.current = null;
+      if (boardRef.current) boardRef.current.classList.remove("arrastando");
+    };
+    window.addEventListener("mousemove", mover);
+    window.addEventListener("mouseup", soltar);
+    return () => { window.removeEventListener("mousemove", mover); window.removeEventListener("mouseup", soltar); };
+  }, []);
+  // 3) roda do mouse anda pro lado quando não há o que rolar pra baixo
+  useEffect(() => {
+    const el = boardRef.current; if (!el) return;
+    const aoRolar = (e) => {
+      if (e.shiftKey || Math.abs(e.deltaX) > Math.abs(e.deltaY)) return; // já é horizontal
+      const cb = e.target.closest && e.target.closest(".crm-col-body");
+      if (cb) {
+        const podeDescer = cb.scrollHeight > cb.clientHeight && cb.scrollTop + cb.clientHeight < cb.scrollHeight - 1;
+        const podeSubir = cb.scrollTop > 0;
+        if ((e.deltaY > 0 && podeDescer) || (e.deltaY < 0 && podeSubir)) return; // deixa a coluna rolar
+      }
+      el.scrollLeft += e.deltaY;
+      e.preventDefault();
+    };
+    el.addEventListener("wheel", aoRolar, { passive: false });
+    return () => el.removeEventListener("wheel", aoRolar);
+  }, []);
+
   const qtdMarcados = Object.keys(marcados).length;
   const toggleMarcado = (id) => setMarcados((m) => { const n = { ...m }; if (n[id]) delete n[id]; else n[id] = true; return n; });
   const marcarColuna = (ids, on) => setMarcados((m) => { const n = { ...m }; ids.forEach((id) => { if (on) n[id] = true; else delete n[id]; }); return n; });
@@ -3477,7 +3648,7 @@ function OficialCRM({ showToast, isGer = true, onAbrirWhats }) {
         </div>
       </div>
 
-      <div className="crm-board">
+      <div className="crm-board" ref={boardRef} onDragOver={aoArrastarSobreQuadro} onMouseDown={aoPressionarQuadro}>
         {etapas.map((et) => {
           const doEt = leads.filter((l) => l.etapa === et.k && (!filtroVend || (filtroVend === "__sem" ? !l.vendedorId : l.vendedorId === filtroVend)) && matchBusca(l));
           const totalCol = doEt.reduce((s, l) => s + (Number(l.valor) || 0), 0);
@@ -3684,6 +3855,8 @@ function OficialCRM({ showToast, isGer = true, onAbrirWhats }) {
           </div>
         </Portal>
       )}
+
+      {comemora && <Comemoracao tipo={comemora.tipo} nome={comemora.nome} valor={comemora.valor} onClose={() => setComemora(null)} />}
 
       {showColunas && <ModalColunas etapas={etapas} onClose={() => setShowColunas(false)} onChanged={carregar} showToast={showToast} />}
       {showImportar && <ModalImportar etapas={etapas} onClose={() => setShowImportar(false)} onDone={carregar} showToast={showToast} />}

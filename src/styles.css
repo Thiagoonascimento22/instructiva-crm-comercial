@@ -3660,3 +3660,29 @@ input:focus-visible, textarea:focus-visible, select:focus-visible {
 .of-bloq-txt b { font-size: 13.5px; color: var(--text); display: flex; align-items: center; gap: 6px; }
 .of-bloq-txt span { font-size: 12.5px; color: var(--muted); line-height: 1.45; }
 .of-bloq .btn { flex: none; }
+
+/* ===== Mobilidade do quadro ===== */
+.crm-board { scroll-behavior: auto; overscroll-behavior-x: contain; cursor: default; }
+.crm-board.arrastando { cursor: grabbing; user-select: none; }
+.crm-board::-webkit-scrollbar { height: 12px; }
+.crm-board::-webkit-scrollbar-thumb { background: var(--line); border-radius: 8px; border: 3px solid transparent; background-clip: padding-box; }
+.crm-board::-webkit-scrollbar-thumb:hover { background: var(--muted); background-clip: padding-box; border: 3px solid transparent; }
+.crm-card { cursor: grab; }
+.crm-card:active { cursor: grabbing; }
+
+/* ===== Comemoração (ganho) e consolo (perda) ===== */
+.comemora { position: fixed; inset: 0; z-index: 4000; display: flex; align-items: center; justify-content: center; overflow: hidden; animation: comemoraFade .18s ease; }
+.comemora.ganho { background: rgba(16, 40, 30, .55); }
+.comemora.perda { background: rgba(20, 20, 25, .5); }
+@keyframes comemoraFade { from { opacity: 0 } to { opacity: 1 } }
+.comemora-card { background: var(--card); border-radius: 20px; padding: 34px 46px; text-align: center; box-shadow: 0 30px 80px rgba(0,0,0,.35); max-width: 92vw; animation: comemoraPop .42s cubic-bezier(.2,1.5,.4,1); position: relative; z-index: 2; }
+@keyframes comemoraPop { 0% { transform: scale(.6); opacity: 0 } 100% { transform: scale(1); opacity: 1 } }
+.comemora-emoji { font-size: 60px; line-height: 1; margin-bottom: 8px; }
+.comemora.ganho .comemora-emoji { animation: pula .6s ease infinite alternate; }
+@keyframes pula { from { transform: translateY(0) } to { transform: translateY(-9px) } }
+.comemora-tit { font-size: 30px; font-weight: 800; letter-spacing: .5px; color: var(--text); }
+.comemora.ganho .comemora-tit { background: linear-gradient(90deg, #F26522, #25A06B); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; }
+.comemora-sub { font-size: 15px; color: var(--muted); margin-top: 8px; }
+.comemora-dica { font-size: 11.5px; color: var(--muted); margin-top: 16px; opacity: .7; }
+.confete { position: absolute; top: -24px; border-radius: 2px; opacity: .95; animation-name: cai; animation-timing-function: linear; animation-iteration-count: 1; z-index: 1; }
+@keyframes cai { 0% { transform: translateY(-30px) rotate(0deg); opacity: 1 } 100% { transform: translateY(102vh) rotate(var(--gira, 360deg)); opacity: .85 } }
