@@ -377,6 +377,100 @@ export function instalarVendas({ app, getDb, saveDB, proximoId, auth, gerenteOnl
     res.json({ ok: true, excluidas: antes - db.vendas.lista.length });
   });
 
+  /* ============================================================
+     ENTRADA EXTERNA DE VENDA (outro sistema manda pra cá)
+     Ex.: o time de suporte registra a venda no sistema deles e ela
+     cai aqui automaticamente. Protegido por uma chave.
+     ============================================================ */
+  function chaveIntegracao() {
+    if (!db.vendas.chaveApi) {
+      db.vendas.chaveApi = "vnd_" + Math.random().toString(36).slice(2, 10) + Math.random().toString(36).slice(2, 10);
+      salvar();
+    }
+    return db.vendas.chaveApi;
+  }
+  app.get("/api/vendas/integracao", auth, gerenteOnly, (req, res) => {
+    garantir();
+    res.json({ chave: chaveIntegracao(), rota: "/api/vendas/externa" });
+  });
+  app.post("/api/vendas/integracao/nova-chave", auth, gerenteOnly, (req, res) => {
+    garantir();
+    db.vendas.chaveApi = null; salvar();
+    res.json({ ok: true, chave: chaveIntegracao() });
+  });
+
+  app.post("/api/vendas/externa", (req, res) => {
+    garantir();
+    const enviada = String(req.headers["x-api-key"] || (req.headers.authorization || "").replace(/^Bearer\s+/i, "")).trim();
+    if (!enviada || enviada !== chaveIntegracao()) return res.status(401).json({ error: "Chave inválida" });
+    const b = req.body || {};
+    const valor = num(b.valor !== undefined ? b.valor : b.valorVendido);
+    if (valor <= 0) return res.status(400).json({ error: "Informe o valor vendido" });
+    const nomeVend = String(b.vendedor || b.pessoaNome || "").trim();
+    if (!nomeVend) return res.status(400).json({ error: "Informe o vendedor" });
+    let p = db.vendas.pessoas.find((x) => x.nome.trim().toLowerCase() === nomeVend.toLowerCase());
+    if (!p) {
+      p = {
+        id: proximoId ? proximoId("pes") : "pes_" + Date.now().toString(36) + Math.random().toString(36).slice(2, 5),
+        nome: nomeVend.slice(0, 60), grupo: String(b.equipe || "Suporte").trim().slice(0, 40),
+        metaMensal: 0, userId: null, ativo: true, foraDoPodio: false, criadoEm: Date.now(),
+      };
+      db.vendas.pessoas.push(p);
+    }
+    const codigo = String(b.codigo || b.codigoVenda || "").trim().slice(0, 60);
+    const data = paraData(b.data);
+    const recebido = num(b.recebido !== undefined ? b.recebido : b.valorRecebido);
+    const cliente = String(b.cliente || b.nome || "").trim().slice(0, 90);
+    const ref = String(b.refExterna || "").trim().slice(0, 60);
+
+    // Se o outro sistema mandar a referência dele (refExterna), a gente ATUALIZA a venda
+    // quando ele editar lá — em vez de criar outra. É o que mantém os dois iguais.
+    if (ref) {
+      const atual = db.vendas.lista.find((v) => v.refExterna === ref);
+      if (atual) {
+        Object.assign(atual, {
+          pessoaId: p.id, pessoaNome: p.nome, cliente,
+          email: String(b.email || "").trim().slice(0, 120),
+          telefone: String(b.telefone || "").replace(/\D/g, "").slice(0, 15),
+          curso: String(b.curso || "").trim().slice(0, 90),
+          valor, recebido, aGerar: Math.max(0, valor - recebido),
+          forma: String(b.forma || b.formaPagamento || atual.forma || "").trim().slice(0, 30),
+          plataforma: String(b.plataforma || atual.plataforma || "").trim().slice(0, 40),
+          codigo, parcelas: Math.max(0, Math.min(60, parseInt(b.parcelas, 10) || atual.parcelas || 0)),
+          data, atualizadoEm: Date.now(),
+        });
+        salvar();
+        return res.json({ ok: true, atualizada: true, id: atual.id });
+      }
+    }
+
+    // sem referência: evita duplicar por código ou por linha igual no mesmo dia
+    const dia = new Date(data).toDateString();
+    const repetida = db.vendas.lista.some((v) =>
+      (codigo && String(v.codigo || "").trim() === codigo) ||
+      (v.pessoaId === p.id && num(v.valor) === valor &&
+        String(v.cliente || "").trim().toLowerCase() === cliente.toLowerCase() &&
+        new Date(v.data).toDateString() === dia));
+    if (repetida) { salvar(); return res.json({ ok: true, jaExistia: true }); }
+    const venda = {
+      id: proximoId ? proximoId("vnd") : "vnd_" + Date.now().toString(36) + Math.random().toString(36).slice(2, 5),
+      pessoaId: p.id, pessoaNome: p.nome,
+      cliente, email: String(b.email || "").trim().slice(0, 120),
+      telefone: String(b.telefone || "").replace(/\D/g, "").slice(0, 15),
+      curso: String(b.curso || "").trim().slice(0, 90),
+      valor, recebido, aGerar: Math.max(0, valor - recebido),
+      forma: String(b.forma || b.formaPagamento || "").trim().slice(0, 30),
+      plataforma: String(b.plataforma || "").trim().slice(0, 40),
+      codigo, parcelas: Math.max(0, Math.min(60, parseInt(b.parcelas, 10) || 0)),
+      obs: String(b.obs || "").trim().slice(0, 200),
+      data, origem: "externa", refExterna: ref || null,
+      criadoPorNome: String(b.origem || "Sistema externo").slice(0, 40), criadoEm: Date.now(),
+    };
+    db.vendas.lista.unshift(venda);
+    salvar();
+    res.json({ ok: true, id: venda.id, vendedor: p.nome });
+  });
+
   /* ---------------- PAINEL (a planilha) ---------------- */
   app.get("/api/vendas/painel", auth, permiteVend("vendas"), (req, res) => {
     garantir();

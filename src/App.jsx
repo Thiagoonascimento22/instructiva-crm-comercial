@@ -3927,6 +3927,73 @@ function GraficoDias({ porDia, diaHoje, diaSel, onDia }) {
   );
 }
 
+// Integração: outro sistema (ex.: suporte) manda a venda pra cá
+function ModalIntegracao({ onClose, showToast }) {
+  const [dados, setDados] = useState(null);
+  const origin = typeof window !== "undefined" ? window.location.origin : "https://SEU-DOMINIO";
+  useEffect(() => { api.vdIntegracao().then(setDados).catch((e) => showToast(e.message)); /* eslint-disable-next-line */ }, []);
+  const copiar = (txt, oque) => {
+    if (navigator.clipboard) navigator.clipboard.writeText(txt).then(() => showToast("✓ " + oque + " copiado")).catch(() => showToast(txt));
+    else showToast(txt);
+  };
+  async function novaChave() {
+    if (!window.confirm("Gerar uma chave nova? A antiga para de funcionar na hora — quem estiver usando precisa atualizar.")) return;
+    try { const r = await api.vdNovaChave(); setDados((d) => ({ ...d, chave: r.chave })); showToast("✓ Chave nova gerada"); }
+    catch (e) { showToast(e.message); }
+  }
+  const url = origin + "/api/vendas/externa";
+  const exemplo = `curl -X POST ${url} \\
+  -H "x-api-key: ${dados ? dados.chave : "SUA-CHAVE"}" \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "vendedor": "Nome de quem vendeu",
+    "data": "2026-07-23",
+    "cliente": "Nome do cliente",
+    "email": "cliente@email.com",
+    "telefone": "44999999999",
+    "curso": "Especialista em Inversores",
+    "forma": "Cartão de crédito",
+    "plataforma": "Hotmart",
+    "codigo": "HP123456",
+    "parcelas": 12,
+    "valor": 2497.00,
+    "recebido": 208.08
+  }'`;
+  return (
+    <Portal>
+    <div className="pop-bg centro" onClick={(e) => e.target === e.currentTarget && onClose()}>
+      <div className="pop-sheet" style={{ maxWidth: 680 }}>
+        <div className="pop-head"><b>Integrar outro sistema</b><button className="crm-x" onClick={onClose}>✕</button></div>
+        <div className="pop-body">
+          <div className="rsv-hint" style={{ marginTop: 0 }}>
+            Passe estes dados pro time que cuida do outro sistema. Quando eles registrarem uma venda lá,
+            ela cai aqui na hora — no ranking, no painel e nos totais.
+          </div>
+          <label className="lbl-mini" style={{ marginTop: 14, display: "block" }}>Endereço (POST)</label>
+          <div className="rsv-link api" onClick={() => copiar(url, "Endereço")}>
+            <span className="rsv-link-tag">Endpoint</span><span className="rsv-link-url">{url}</span><span className="rsv-copy">copiar</span>
+          </div>
+          <label className="lbl-mini" style={{ marginTop: 12, display: "block" }}>Chave de acesso (cabeçalho <code>x-api-key</code>)</label>
+          <div className="rsv-link api" onClick={() => dados && copiar(dados.chave, "Chave")}>
+            <span className="rsv-link-tag">Chave</span><span className="rsv-link-url">{dados ? dados.chave : "carregando…"}</span><span className="rsv-copy">copiar</span>
+          </div>
+          <label className="lbl-mini" style={{ marginTop: 14, display: "block" }}>Exemplo pronto</label>
+          <pre className="vd-code">{exemplo}</pre>
+          <div className="vd-dica">
+            Obrigatórios: <b>vendedor</b> e <b>valor</b>. O resto é opcional. Se o vendedor ainda não existir aqui,
+            ele é criado. Venda com o mesmo <b>código</b> não entra duas vezes.
+          </div>
+          <div className="vd-rodape">
+            <button className="foto-del" onClick={novaChave}>gerar chave nova</button>
+            <button className="onum-add" onClick={onClose}>Fechar</button>
+          </div>
+        </div>
+      </div>
+    </div>
+    </Portal>
+  );
+}
+
 // Lista de vendas agrupada por dia (usada no "Minhas vendas" e no popup do vendedor)
 function DiaADia({ vendas, onEditar, onExcluir }) {
   const dias = useMemo(() => {
@@ -4002,6 +4069,7 @@ function PainelVendas({ showToast, isGer = true }) {
   const [escopo, setEscopo] = useState(isGer ? "time" : "minhas");   // "time" | "minhas"
   const [diaSel, setDiaSel] = useState(null);   // dia do mês escolhido (número) ou null
   const [showImportarV, setShowImportarV] = useState(false);
+  const [showInteg, setShowInteg] = useState(false);
   const [pessoaRapida, setPessoaRapida] = useState(null);
 
   const carregar = (m, esc) => {
@@ -4067,6 +4135,7 @@ function PainelVendas({ showToast, isGer = true }) {
           })}><I.plus className="ico" /> Lançar venda</button>
           {isGer && <button className="onum-btn-ghost" onClick={() => setShowPessoas(true)}><I.users className="ico" /> Equipe & metas</button>}
           {isGer && <button className="onum-btn-ghost" onClick={() => setShowImportarV(true)}><I.clip className="ico" /> Importar planilha</button>}
+          {isGer && <button className="onum-btn-ghost" onClick={() => setShowInteg(true)}><I.link className="ico" /> Integrar sistema</button>}
           {isGer && <button className="onum-btn-ghost" onClick={() => setVerLista((v) => !v)}><I.chat className="ico" /> {verLista ? "Ver ranking" : `Vendas do mês (${vendas.length})`}</button>}
         </div>
       </div>
@@ -4272,6 +4341,7 @@ function PainelVendas({ showToast, isGer = true }) {
 
       {form && <FormVenda form={form} setForm={setForm} pessoas={pessoas} isGer={isGer} onSalvo={() => { setForm(null); carregar(); }} showToast={showToast} />}
       {pessoaRapida && <ModalPessoaRapida pessoa={pessoaRapida} pessoas={pessoas} mes={mes} isGer={isGer} onVerPainel={(id) => trocarEscopo(id)} onClose={() => setPessoaRapida(null)} onSalvo={carregar} showToast={showToast} />}
+      {showInteg && <ModalIntegracao onClose={() => setShowInteg(false)} showToast={showToast} />}
       {showImportarV && <ModalImportarVendas mesAtual={mes} onClose={() => setShowImportarV(false)} onDone={carregar} showToast={showToast} />}
       {showPessoas && <ModalPessoas pessoas={pessoas} onClose={() => setShowPessoas(false)} onMudou={carregar} showToast={showToast} />}
     </div>

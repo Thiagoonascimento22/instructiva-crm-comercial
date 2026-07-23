@@ -3945,3 +3945,42 @@ input:focus-visible, textarea:focus-visible, select:focus-visible {
 .vd-dodia-cli small { font-size: 11px; font-weight: 400; color: var(--muted); margin-top: 1px; }
 .vd-dodia-vals { text-align: right; font-size: 14px; font-weight: 700; color: var(--text); display: flex; flex-direction: column; flex: none; }
 .vd-dodia-vals small { font-size: 10.5px; font-weight: 400; color: var(--muted); }
+
+/* ============ MODO ESCURO: campos e controles nativos ============ */
+/* Sem isso o navegador desenha calendário, listas e setinhas no tema CLARO,
+   deixando letra escura em fundo escuro (o pessoal reclamou disso). */
+[data-theme="dark"] { color-scheme: dark; }
+[data-theme="light"] { color-scheme: light; }
+
+/* as opções da lista suspensa: eu usei <select class="input">, e só .select estava tratado */
+.input option, select.input option, select option { background: var(--card); color: var(--text); }
+select.input, select.input:focus { color: var(--text); }
+select.input:disabled, .input:disabled { color: var(--muted); opacity: 1; -webkit-text-fill-color: var(--muted); }
+
+/* calendário e horário: ícone e texto visíveis no escuro */
+[data-theme="dark"] input[type="date"],
+[data-theme="dark"] input[type="datetime-local"],
+[data-theme="dark"] input[type="time"],
+[data-theme="dark"] input[type="number"] { color: var(--text); }
+[data-theme="dark"] input[type="date"]::-webkit-calendar-picker-indicator,
+[data-theme="dark"] input[type="datetime-local"]::-webkit-calendar-picker-indicator,
+[data-theme="dark"] input[type="time"]::-webkit-calendar-picker-indicator { filter: invert(1) brightness(1.6); cursor: pointer; }
+[data-theme="dark"] input[type="date"]::-webkit-datetime-edit,
+[data-theme="dark"] input[type="datetime-local"]::-webkit-datetime-edit { color: var(--text); }
+
+/* textos que precisam seguir o tema (estavam presos ao claro) */
+.vd-hero-vl, .vd-card-vl, .vd-anel-txt b, .vd-lug-nome, .vd-linha-nome,
+.vd-dia-cli, .vd-dodia-cli, .vd-item-cli, .comemora-tit { color: var(--text); }
+.vd-mes, .vd-data, .vd-switch-sel { color: var(--text); }
+[data-theme="dark"] .vd-hero-esq { background: linear-gradient(135deg, rgba(242,101,34,.14), rgba(37,160,107,.14)); }
+[data-theme="dark"] .vd-posicao, [data-theme="dark"] .vd-dodia-cab { background: linear-gradient(135deg, rgba(242,101,34,.14), rgba(37,160,107,.14)); }
+[data-theme="dark"] .vd-card.destaque { background: linear-gradient(135deg, rgba(242,101,34,.14), rgba(37,160,107,.14)); }
+[data-theme="dark"] .vd-dup { background: rgba(240,180,41,.12); }
+[data-theme="dark"] .comemora-card { box-shadow: 0 30px 80px rgba(0,0,0,.6); }
+[data-theme="dark"] .vd-card-valor, [data-theme="dark"] .vd-mini b.verde, [data-theme="dark"] .vd-card-vl.verde { color: #34d399; }
+[data-theme="dark"] .crm-card-valor { background: rgba(52,211,153,.14); color: #34d399; }
+[data-theme="dark"] .of-bloq-txt b { color: var(--text); }
+/* verdes escuros ficam ilegíveis no modo escuro */
+[data-theme="dark"] .of-acao-btn.venda, [data-theme="dark"] .btn-venda { color: #34d399; border-color: rgba(52,211,153,.4); }
+[data-theme="dark"] .btn-venda:hover, [data-theme="dark"] .of-acao-btn.venda:hover { background: rgba(52,211,153,.12); }
+.vd-code { background: var(--surface-2); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11.5px; line-height: 1.6; color: var(--text); overflow-x: auto; white-space: pre; margin: 6px 0 0; }
