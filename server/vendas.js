@@ -77,7 +77,7 @@ export function instalarVendas({ app, getDb, saveDB, proximoId, auth, gerenteOnl
   const ehVend = (u) => u && u.role === "vendedor";
 
   function pessoaPublica(p) {
-    return { id: p.id, nome: p.nome, grupo: p.grupo || "", metaMensal: num(p.metaMensal), ativo: p.ativo !== false, userId: p.userId || null };
+    return { id: p.id, nome: p.nome, grupo: p.grupo || "", metaMensal: num(p.metaMensal), ativo: p.ativo !== false, userId: p.userId || null, foraDoPodio: !!p.foraDoPodio };
   }
   function vendaPublica(v) {
     const p = db.vendas.pessoas.find((x) => x.id === v.pessoaId);
@@ -114,6 +114,8 @@ export function instalarVendas({ app, getDb, saveDB, proximoId, auth, gerenteOnl
       grupo: String(b.grupo || "").trim().slice(0, 40),
       metaMensal: num(b.metaMensal),
       userId: b.userId || null,
+      // "Escola" e afins são venda direta (live), não concorrem no pódio dos vendedores
+      foraDoPodio: b.foraDoPodio !== undefined ? !!b.foraDoPodio : /^(escola|instructiva|loja|site|geral)$/i.test(nome),
       ativo: true,
       criadoEm: Date.now(),
     };
@@ -132,6 +134,7 @@ export function instalarVendas({ app, getDb, saveDB, proximoId, auth, gerenteOnl
     if (b.metaMensal !== undefined) p.metaMensal = num(b.metaMensal);
     if (b.userId !== undefined) p.userId = b.userId || null;
     if (b.ativo !== undefined) p.ativo = !!b.ativo;
+    if (b.foraDoPodio !== undefined) p.foraDoPodio = !!b.foraDoPodio;
     salvar();
     res.json({ ok: true, pessoa: pessoaPublica(p) });
   });
@@ -319,6 +322,7 @@ export function instalarVendas({ app, getDb, saveDB, proximoId, auth, gerenteOnl
           id: proximoId ? proximoId("pes") : "pes_" + Date.now().toString(36) + Math.random().toString(36).slice(2, 5),
           nome: String(r.pessoaNome).trim().slice(0, 60),
           grupo: grupoPadrao, metaMensal: 0, userId: null, ativo: true, criadoEm: Date.now(),
+          foraDoPodio: /^(escola|instructiva|loja|site|geral)$/i.test(String(r.pessoaNome).trim()),
         };
         db.vendas.pessoas.push(p); novasPessoas++;
       }
@@ -367,19 +371,26 @@ export function instalarVendas({ app, getDb, saveDB, proximoId, auth, gerenteOnl
   app.get("/api/vendas/painel", auth, permiteVend("vendas"), (req, res) => {
     garantir();
     const mes = mesValido(req.query.mes) ? req.query.mes : mesDe(Date.now());
-    const doMes = db.vendas.lista.filter((v) => mesDe(v.data) === mes);
+    // ?pessoaId= -> painel individual ("Minhas vendas"). Vendedor só pode ver o próprio.
+    let soDe = req.query.pessoaId || "";
+    if (soDe && ehVend(req.user)) {
+      const minha = pessoaDoUser(req.user);
+      soDe = minha ? minha.id : "__nenhuma__";
+    }
+    const todasDoMes = db.vendas.lista.filter((v) => mesDe(v.data) === mes);
+    const doMes = soDe ? todasDoMes.filter((v) => v.pessoaId === soDe) : todasDoMes;
 
     const linhas = db.vendas.pessoas
       .filter((p) => p.ativo !== false)
       .map((p) => {
-        const minhas = doMes.filter((v) => v.pessoaId === p.id);
+        const minhas = todasDoMes.filter((v) => v.pessoaId === p.id);
         const venda = minhas.reduce((s, v) => s + num(v.valor), 0);
         const recebido = minhas.reduce((s, v) => s + num(v.recebido), 0);
         const aGerar = minhas.reduce((s, v) => s + num(v.aGerar), 0);
         const meta = metaDaPessoa(p, mes);
         const u = p.userId ? (db.users || []).find((x) => x.id === p.userId) : null;
         return {
-          pessoaId: p.id, nome: p.nome, grupo: p.grupo || "", foto: u ? (u.foto || "") : "",
+          pessoaId: p.id, nome: p.nome, grupo: p.grupo || "", foto: u ? (u.foto || "") : "", foraDoPodio: !!p.foraDoPodio,
           meta, venda, recebido, aGerar,
           falta: Math.max(0, meta - venda),
           pct: meta > 0 ? Math.round((venda / meta) * 100) : 0,
@@ -401,12 +412,16 @@ export function instalarVendas({ app, getDb, saveDB, proximoId, auth, gerenteOnl
       pct: g.meta > 0 ? Math.round((g.venda / g.meta) * 100) : 0,
     })).sort((a, b) => b.venda - a.venda);
 
-    const geral = linhas.reduce((s, l) => ({
+    const base = soDe ? linhas.filter((l) => l.pessoaId === soDe) : linhas;
+    const geral = base.reduce((s, l) => ({
       meta: s.meta + l.meta, venda: s.venda + l.venda, recebido: s.recebido + l.recebido, aGerar: s.aGerar + (l.aGerar || 0),
     }), { meta: 0, venda: 0, recebido: 0, aGerar: 0 });
     geral.falta = Math.max(0, geral.meta - geral.venda);
     geral.pct = geral.meta > 0 ? Math.round((geral.venda / geral.meta) * 100) : 0;
     geral.qtd = doMes.length;
+    // posição da pessoa no ranking do time (só faz sentido no modo individual)
+    const comVenda = linhas.filter((l) => l.venda > 0 && !l.foraDoPodio);
+    const posicao = soDe ? comVenda.findIndex((l) => l.pessoaId === soDe) + 1 : 0;
 
     // meses que já têm venda lançada (pro seletor)
     const meses = Array.from(new Set(db.vendas.lista.map((v) => mesDe(v.data)))).sort().reverse();
@@ -435,6 +450,8 @@ export function instalarVendas({ app, getDb, saveDB, proximoId, auth, gerenteOnl
       porDia, diasNoMes, diaHoje, diasRestantes, mediaDia, projecao, precisaPorDia,
       melhorDia: melhorDia && melhorDia.venda > 0 ? melhorDia : null,
       souEu: (pessoaDoUser(req.user) || {}).id || null, ehVendedor: ehVend(req.user),
+      escopoPessoa: soDe || null, posicao, totalNoRanking: comVenda.length,
+      nomeEscopo: soDe ? ((db.vendas.pessoas.find((p) => p.id === soDe) || {}).nome || "") : "",
     });
   });
 }

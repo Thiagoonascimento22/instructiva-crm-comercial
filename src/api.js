@@ -108,7 +108,7 @@ export const api = {
   ofEnviarTemplate: (dados) => req("POST", "/api/oficial/enviar-template", dados),
   ofMeusNumeros: () => req("GET", "/api/oficial/meus-numeros"),
   // ---- Vendas (metas e lançamentos) ----
-  vdPainel: (mes) => req("GET", "/api/vendas/painel" + (mes ? "?mes=" + mes : "")),
+  vdPainel: (mes, pessoaId) => req("GET", "/api/vendas/painel?mes=" + (mes || "") + (pessoaId ? "&pessoaId=" + pessoaId : "")),
   vdLista: (mes, pessoaId) => req("GET", "/api/vendas?mes=" + (mes || "") + (pessoaId ? "&pessoaId=" + pessoaId : "")),
   vdCriar: (d) => req("POST", "/api/vendas", d),
   vdEditar: (id, d) => req("PUT", "/api/vendas/" + id, d),

@@ -3783,6 +3783,7 @@ function acharDuplicadas(pessoas) {
 function ModalPessoaRapida({ pessoa, pessoas, mes, isGer = true, onClose, onSalvo, showToast }) {
   const [grupo, setGrupo] = useState(pessoa.grupo || "");
   const [meta, setMeta] = useState(String(pessoa.meta || ""));
+  const [fora, setFora] = useState(!!pessoa.foraDoPodio);
   const [salvando, setSalvando] = useState(false);
   const [aba, setAba] = useState("vendas");
   const [minhas, setMinhas] = useState(null);
@@ -3806,7 +3807,7 @@ function ModalPessoaRapida({ pessoa, pessoas, mes, isGer = true, onClose, onSalv
   async function salvar() {
     setSalvando(true);
     try {
-      await api.vdPessoaEditar(pessoa.pessoaId, { grupo, metaMensal: meta });
+      await api.vdPessoaEditar(pessoa.pessoaId, { grupo, metaMensal: meta, foraDoPodio: fora });
       showToast("✓ Salvo");
       onSalvo(); onClose();
     } catch (e) { showToast("✗ " + e.message); } finally { setSalvando(false); }
@@ -3867,6 +3868,10 @@ function ModalPessoaRapida({ pessoa, pessoas, mes, isGer = true, onClose, onSalv
               {grupos.map((g) => <button key={g} className={"vd-chip" + (grupo === g ? " on" : "")} onClick={() => setGrupo(g)}>{g}</button>)}
             </div>
           )}
+          <label className="vd-check">
+            <input type="checkbox" checked={!!fora} onChange={(e) => setFora(e.target.checked)} />
+            <span><b>Não concorre no pódio</b><small>marque pra venda direta (Escola, live, site). Continua no ranking e nos totais.</small></span>
+          </label>
           <label className="lbl-mini" style={{ marginTop: 14, display: "block" }}>Meta do mês</label>
           <input className="input" value={meta} onChange={(e) => setMeta(e.target.value)} placeholder="Ex.: 150.000,00" />
           <div className="vd-dica">Vendido neste mês: <b>{dinheiro(pessoa.venda)}</b> · recebido {dinheiro(pessoa.recebido)}</div>
@@ -3920,6 +3925,43 @@ function GraficoDias({ porDia, diaHoje }) {
   );
 }
 
+// Lista de vendas agrupada por dia (usada no "Minhas vendas" e no popup do vendedor)
+function DiaADia({ vendas }) {
+  const dias = useMemo(() => {
+    const m = {};
+    (vendas || []).forEach((v) => {
+      const d = new Date(v.data), k = d.toISOString().slice(0, 10);
+      if (!m[k]) m[k] = { k, data: d, vendas: [], total: 0, recebido: 0 };
+      m[k].vendas.push(v); m[k].total += Number(v.valor) || 0; m[k].recebido += Number(v.recebido) || 0;
+    });
+    return Object.values(m).sort((a, b) => b.k.localeCompare(a.k));
+  }, [vendas]);
+  const maxDia = dias.reduce((mx, d) => Math.max(mx, d.total), 0);
+  if (!dias.length) return <div className="crm-col-vazio">Nenhuma venda neste mês ainda.</div>;
+  return (
+    <div className="vd-dias">
+      {dias.map((d) => (
+        <div key={d.k} className="vd-dia">
+          <div className="vd-dia-cab">
+            <span className="vd-dia-data">{d.data.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })}
+              <small>{d.data.toLocaleDateString("pt-BR", { weekday: "short" })}</small></span>
+            <div className="vd-dia-barra"><div style={{ width: (maxDia ? (d.total / maxDia) * 100 : 0) + "%" }} /></div>
+            <span className="vd-dia-tot">{dinheiro(d.total)}<small>{d.vendas.length} venda(s)</small></span>
+          </div>
+          {d.vendas.map((v) => (
+            <div key={v.id} className="vd-dia-item">
+              <div className="vd-dia-cli">{v.cliente || "—"}
+                <small>{[v.curso, v.forma, v.parcelas ? v.parcelas + "x" : "", v.plataforma].filter(Boolean).join(" · ")}</small>
+              </div>
+              <div className="vd-dia-vals">{dinheiro(v.valor)}<small>recebido {dinheiro(v.recebido)}</small></div>
+            </div>
+          ))}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 // Registrar venda direto da conversa (já vem com nome e telefone do cliente)
 function ModalRegistrarVenda({ prefill, isGer, onClose, showToast }) {
   const [pessoas, setPessoas] = useState([]);
@@ -3949,28 +3991,32 @@ function PainelVendas({ showToast, isGer = true }) {
   const [form, setForm] = useState(null);
   const [showPessoas, setShowPessoas] = useState(false);
   const [verLista, setVerLista] = useState(false);
+  const [escopo, setEscopo] = useState(isGer ? "time" : "minhas");   // "time" | "minhas"
   const [showImportarV, setShowImportarV] = useState(false);
   const [pessoaRapida, setPessoaRapida] = useState(null);
 
-  const carregar = (m) => {
+  const carregar = (m, esc) => {
+    const e = esc || escopo;
     setCarregando(true);
     return Promise.all([
-      api.vdPainel(m || mes).then((d) => { setDados(d); if (!mes) setMes(d.mes); return d; }),
+      api.vdPainel(m || mes, e === "minhas" ? (dados && dados.souEu) || "eu" : "").then((d) => { setDados(d); if (!mes) setMes(d.mes); return d; }),
       api.vdLista(m || mes).then((d) => setVendas(d.vendas || [])),
       api.vdPessoas().then((d) => setPessoas(d.pessoas || [])).catch(() => {}),
     ]).catch((e) => showToast(e.message)).finally(() => setCarregando(false));
   };
   useEffect(() => { carregar(); /* eslint-disable-next-line */ }, []);
   function trocarMes(m) { setMes(m); carregar(m); }
+  function trocarEscopo(e) { setEscopo(e); setVerLista(false); carregar(mes, e); }
 
   if (carregando && !dados) return <div className="dash-empty"><span className="spin" /> Carregando…</div>;
   if (!dados) return null;
 
   const g = dados.geral;
   const linhas = dados.linhas || [];
-  const comVenda = linhas.filter((l) => l.venda > 0);
-  const podio = comVenda.slice(0, 3);
-  const resto = comVenda.slice(3);
+  const concorrem = linhas.filter((l) => l.venda > 0 && !l.foraDoPodio);
+  const foraPodio = linhas.filter((l) => l.venda > 0 && l.foraDoPodio);
+  const comVenda = concorrem;
+  const podio = concorrem.slice(0, 3);
   const semVenda = linhas.filter((l) => l.venda <= 0);
   const pctGeral = Math.min(100, g.pct || 0);
 
@@ -3981,6 +4027,12 @@ function PainelVendas({ showToast, isGer = true }) {
         <select className="vd-mes" value={mes} onChange={(e) => trocarMes(e.target.value)}>
           {(dados.meses || []).map((m) => <option key={m} value={m}>{mesLegivel(m)}</option>)}
         </select>
+        {(dados && (dados.souEu || !isGer)) && (
+          <div className="vd-switch">
+            <button className={escopo === "time" ? "on" : ""} onClick={() => trocarEscopo("time")}>Time</button>
+            <button className={escopo === "minhas" ? "on" : ""} onClick={() => trocarEscopo("minhas")}>Minhas vendas</button>
+          </div>
+        )}
         <div className="vd-top-acoes">
           <button className="onum-add" onClick={() => setForm({
             pessoaId: pessoas[0] ? pessoas[0].id : "", cliente: "", email: "", telefone: "", curso: "",
@@ -4031,7 +4083,22 @@ function PainelVendas({ showToast, isGer = true }) {
         </div>
       </div>
 
-      {verLista ? (
+      {escopo === "minhas" && !verLista ? (
+        <>
+          {dados.posicao > 0 && (
+            <div className="vd-posicao">
+              <span className="vd-pos-medal">{dados.posicao === 1 ? "🥇" : dados.posicao === 2 ? "🥈" : dados.posicao === 3 ? "🥉" : "🏅"}</span>
+              <div>
+                <b>{dados.posicao}º lugar</b>
+                <span>de {dados.totalNoRanking} que venderam em {mesLegivel(mes)}</span>
+              </div>
+              <button className="btn btn-sm" onClick={() => trocarEscopo("time")}>Ver o ranking do time</button>
+            </div>
+          )}
+          <div className="vd-sec">Suas vendas, dia a dia</div>
+          <DiaADia vendas={vendas} />
+        </>
+      ) : verLista ? (
         <>
         <div className="vd-lista-top">
           <span><b>{vendas.length}</b> {isGer ? "venda(s) lançada(s)" : "venda(s) sua(s)"} em {mesLegivel(mes)}</span>
@@ -4091,7 +4158,21 @@ function PainelVendas({ showToast, isGer = true }) {
                 </div>
               </div>
             ))}
-            {comVenda.length === 0 && <div className="crm-col-vazio">Nenhuma venda lançada neste mês ainda.</div>}
+            {foraPodio.map((l) => (
+              <div key={l.pessoaId} className="vd-linha clicavel fora" onClick={() => setPessoaRapida(l)} title="Venda direta — não concorre no pódio">
+                <span className="vd-pos">—</span>
+                <Avatar nome={l.nome} foto={l.foto} size={34} />
+                <div className="vd-linha-info">
+                  <div className="vd-linha-nome">{l.nome}<span className="vd-grupo">venda direta</span></div>
+                  <div className="vd-barra fina"><div className="vd-barra-in" style={{ width: Math.min(100, l.pct) + "%" }} /></div>
+                </div>
+                <div className="vd-linha-nums">
+                  <span className="vd-vendido">{dinheiro(l.venda)}</span>
+                  <span className="vd-detalhe">{l.pct}% de {dinheiroCurto(l.meta)} · recebido {dinheiroCurto(l.recebido)}</span>
+                </div>
+              </div>
+            ))}
+            {comVenda.length === 0 && foraPodio.length === 0 && <div className="crm-col-vazio">Nenhuma venda lançada neste mês ainda.</div>}
             {semVenda.length > 0 && (
               <div className="vd-zerados">
                 <span>Ainda sem venda no mês:</span>
