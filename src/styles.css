@@ -3993,3 +3993,11 @@ select.input:disabled, .input:disabled { color: var(--muted); opacity: 1; -webki
 .vd-apelido b { color: var(--text); }
 .vd-apelido > span { color: var(--brand); font-weight: 800; }
 .vd-apelido .crm-tarefa-del { margin-left: auto; }
+
+/* ===== Aviso de manutenção no topo ===== */
+.aviso-manut { display: flex; align-items: center; gap: 11px; background: #dc2626; color: #fff; padding: 11px 24px; font-size: 13.5px; font-weight: 600; line-height: 1.4; }
+.aviso-ic { font-size: 17px; flex: none; }
+.aviso-txt { flex: 1; min-width: 0; }
+.aviso-off { flex: none; background: rgba(255,255,255,.18); border: 1px solid rgba(255,255,255,.35); color: #fff; font-size: 11.5px; font-weight: 700; border-radius: 7px; padding: 5px 11px; cursor: pointer; white-space: nowrap; }
+.aviso-off:hover { background: rgba(255,255,255,.28); }
+@media (max-width: 700px) { .aviso-manut { padding: 10px 16px; font-size: 12.5px; } }

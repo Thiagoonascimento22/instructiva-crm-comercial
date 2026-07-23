@@ -4,14 +4,75 @@
    Entrega o painel igual ao da planilha:
      EQUIPE/NOME | META | VENDA | FALTA | % META | RECEBIDO
    ============================================================ */
-export function instalarVendas({ app, getDb, saveDB, proximoId, auth, gerenteOnly, permiteVend }) {
+import fs from "fs";
+import path from "path";
+
+export function instalarVendas({ app, getDb, saveDB, proximoId, auth, gerenteOnly, permiteVend, dbPath }) {
+  /* ============================================================
+     ARQUIVO PRÓPRIO PRA VENDAS
+     ------------------------------------------------------------
+     As vendas ficam em /data/vendas.json, separado do crm.json.
+     Motivo: o banco principal é gravado inteiro de uma vez, e num
+     deploy dois containers rodam juntos por alguns segundos — se o
+     antigo grava a memória dele por cima, leva junto o que ele não
+     conhece. Com arquivo próprio, isso não alcança as vendas.
+     ============================================================ */
+  const VENDAS_PATH = path.join(path.dirname(dbPath || "/data/crm.json"), "vendas.json");
+  let _v = null;
+
+  function lerArquivo() {
+    try {
+      if (fs.existsSync(VENDAS_PATH)) {
+        const j = JSON.parse(fs.readFileSync(VENDAS_PATH, "utf8"));
+        if (j && typeof j === "object") return j;
+      }
+    } catch (e) { console.error("[vendas] erro ao ler", VENDAS_PATH, e.message); }
+    return null;
+  }
+  function gravarArquivo() {
+    try {
+      const dir = path.dirname(VENDAS_PATH);
+      if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+      const tmp = VENDAS_PATH + ".tmp";
+      fs.writeFileSync(tmp, JSON.stringify(_v, null, 2));
+      fs.renameSync(tmp, VENDAS_PATH);
+      // cópia extra de segurança a cada gravação (fica sempre a penúltima versão)
+      try { fs.copyFileSync(VENDAS_PATH, VENDAS_PATH + ".bak"); } catch (_) {}
+    } catch (e) { console.error("[vendas] erro ao gravar:", e.message); }
+  }
+  function carregar() {
+    if (_v) return _v;
+    _v = lerArquivo();
+    if (!_v) {
+      // tenta a cópia de segurança
+      try {
+        if (fs.existsSync(VENDAS_PATH + ".bak")) {
+          _v = JSON.parse(fs.readFileSync(VENDAS_PATH + ".bak", "utf8"));
+          console.log("[vendas] recuperado da cópia .bak");
+        }
+      } catch (_) {}
+    }
+    if (!_v) {
+      // primeira vez: migra o que estiver no banco principal
+      const antigo = (getDb() || {}).vendas;
+      _v = antigo && typeof antigo === "object"
+        ? { pessoas: antigo.pessoas || [], lista: antigo.lista || [], metasMes: antigo.metasMes || {}, apelidos: antigo.apelidos || {}, chaveApi: antigo.chaveApi || null }
+        : { pessoas: [], lista: [], metasMes: {}, apelidos: {}, chaveApi: null };
+      if (antigo) console.log("[vendas] migrado do banco principal:", (_v.lista || []).length, "venda(s)");
+      gravarArquivo();
+    }
+    return _v;
+  }
   // mesmo padrão do canal oficial: o index.js reatribui o db, então resolvemos por Proxy
+  // db.users, db.oficial etc. continuam vindo do banco principal;
+  // db.vendas passa a vir do arquivo próprio.
   const db = new Proxy({}, {
-    get: (_t, k) => getDb()[k],
-    set: (_t, k, v) => { getDb()[k] = v; return true; },
-    has: (_t, k) => k in getDb(),
+    get: (_t, k) => (k === "vendas" ? carregar() : getDb()[k]),
+    set: (_t, k, v) => { if (k === "vendas") { _v = v; gravarArquivo(); } else getDb()[k] = v; return true; },
+    has: (_t, k) => (k === "vendas" ? true : k in getDb()),
   });
-  const salvar = saveDB;
+  // salvar() agora grava o arquivo de vendas (e o banco principal, pro resto)
+  const salvar = () => { gravarArquivo(); try { saveDB(); } catch (_) {} };
 
   function garantir() {
     if (!db.vendas) db.vendas = { pessoas: [], lista: [], metasMes: {} };

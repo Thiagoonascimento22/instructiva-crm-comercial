@@ -314,8 +314,10 @@ export default function App() {
   const [modulos, setModulos] = useState(null);
   const [ehDono, setEhDono] = useState(false);
   const [acessoVend, setAcessoVend] = useState({});
+  const [aviso, setAviso] = useState(null);
   const carregarModulos = () => api.getModulos().then((r) => { setModulos(r.modulos); setEhDono(!!r.dono); }).catch(() => {});
   const carregarAcessoVend = () => api.ofAcessoVend().then((r) => setAcessoVend(r.acessoVend || {})).catch(() => {});
+  useEffect(() => { if (user) api.aviso().then(setAviso).catch(() => {}); }, [user]);
   const [view, setView] = useState(() => {
     try { return localStorage.getItem("instructiva_view") || "whatsapp"; } catch (e) { return "whatsapp"; }
   });
@@ -441,6 +443,18 @@ export default function App() {
       </aside>
 
       <main className="main">
+        {aviso && aviso.ativo && (
+          <div className="aviso-manut">
+            <span className="aviso-ic">⚠</span>
+            <span className="aviso-txt">{aviso.texto}</span>
+            {isGer && (
+              <button className="aviso-off" title="Tirar este aviso"
+                onClick={async () => { try { const a = await api.salvarAviso({ ativo: false }); setAviso(a); } catch (e) { showToast(e.message); } }}>
+                tirar aviso
+              </button>
+            )}
+          </div>
+        )}
         <div className="topbar">
           <div>
             <div className="greet">{view === "painel" ? `${saud}, ${user.nome.split(" ")[0]} 👋` : titulos[view].t}</div>

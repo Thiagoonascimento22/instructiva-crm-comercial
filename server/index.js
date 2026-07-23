@@ -2065,9 +2065,27 @@ const permiteVendVendas = (chave) => (req, res, next) => {
   if (req.user.role === "vendedor" && ((db.oficial && db.oficial.acessoVend) || {})[chave] === true) return next();
   return res.status(403).json({ error: "Acesso restrito" });
 };
-instalarVendas({ app, getDb: () => db, saveDB, proximoId, auth, gerenteOnly, permiteVend: permiteVendVendas });
+instalarVendas({ app, getDb: () => db, saveDB, proximoId, auth, gerenteOnly, permiteVend: permiteVendVendas, dbPath: DB_PATH });
 
 instalarRotasBackup(app, auth, gerenteOnly);
+
+/* ---- Aviso no topo do sistema (manutenção) ---- */
+const AVISO_PADRAO = {
+  ativo: true,
+  texto: "O sistema está em manutenção e pode apresentar falhas. Se algo sumir ou não salvar, avise a equipe antes de refazer.",
+};
+app.get("/api/aviso", auth, (req, res) => {
+  if (!db.aviso || typeof db.aviso !== "object") db.aviso = { ...AVISO_PADRAO };
+  res.json(db.aviso);
+});
+app.put("/api/aviso", auth, gerenteOnly, (req, res) => {
+  const b = req.body || {};
+  if (!db.aviso || typeof db.aviso !== "object") db.aviso = { ...AVISO_PADRAO };
+  if (b.ativo !== undefined) db.aviso.ativo = !!b.ativo;
+  if (typeof b.texto === "string") db.aviso.texto = b.texto.slice(0, 300);
+  saveSoon();
+  res.json(db.aviso);
+});
 
 const canalOficial = instalarCanalOficial({
   app,
