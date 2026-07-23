@@ -3166,7 +3166,13 @@ function ModalImportar({ etapas, onClose, onDone, showToast }) {
     fr.onload = () => {
       try {
         const { headers, rows } = parseCSV(String(fr.result || ""));
-        const acha = (ops) => { for (let i = 0; i < headers.length; i++) if (ops.some((o) => headers[i].includes(o))) return i; return -1; };
+        const acha = (ops) => {
+          // procura na ORDEM das opções (a mais específica primeiro), não na ordem das colunas.
+          // senão "valor" casaria com "VALOR RECEBIDO" antes de achar "VALOR VENDIDO".
+          for (const o of ops) { const i = headers.findIndex((h) => h === o); if (i >= 0) return i; }
+          for (const o of ops) { const i = headers.findIndex((h) => h.includes(o)); if (i >= 0) return i; }
+          return -1;
+        };
         const iNome = acha(["nome", "name"]);
         const iTel = acha(["whatsapp", "telefone", "celular", "fone", "tel", "numero", "número", "phone"]);
         const iEmail = acha(["email", "e-mail", "mail"]);
@@ -3640,8 +3646,15 @@ const mesLegivel = (m) => {
 };
 
 // Importar vendas de uma planilha (CSV)
-function ModalImportarVendas({ onClose, onDone, showToast }) {
+function ModalImportarVendas({ onClose, onDone, showToast, mesAtual }) {
   const [dados, setDados] = useState(null);
+  const [limpando, setLimpando] = useState(false);
+  async function limparMes() {
+    if (!window.confirm(`Apagar TODAS as vendas lançadas em ${mesLegivel(mesAtual)}? Não dá pra desfazer.`)) return;
+    setLimpando(true);
+    try { const r = await api.vdLimparMes(mesAtual); showToast(`✓ ${r.excluidas} venda(s) apagada(s)`); onDone(); }
+    catch (e) { showToast("✗ " + e.message); } finally { setLimpando(false); }
+  }
   const [grupoPadrao, setGrupoPadrao] = useState("Time de vendas");
   const [importando, setImportando] = useState(false);
   const ref = useRef(null);
@@ -3654,7 +3667,13 @@ function ModalImportarVendas({ onClose, onDone, showToast }) {
     fr.onload = () => {
       try {
         const { headers, rows } = parseCSV(String(fr.result || ""));
-        const acha = (ops) => { for (let i = 0; i < headers.length; i++) if (ops.some((o) => headers[i].includes(o))) return i; return -1; };
+        const acha = (ops) => {
+          // procura na ORDEM das opções (a mais específica primeiro), não na ordem das colunas.
+          // senão "valor" casaria com "VALOR RECEBIDO" antes de achar "VALOR VENDIDO".
+          for (const o of ops) { const i = headers.findIndex((h) => h === o); if (i >= 0) return i; }
+          for (const o of ops) { const i = headers.findIndex((h) => h.includes(o)); if (i >= 0) return i; }
+          return -1;
+        };
         const iVend = acha(["vendedor", "equipe", "responsavel", "responsável"]);
         const iData = acha(["data"]);
         const iNome = acha(["nome", "cliente"]);
@@ -3705,6 +3724,12 @@ function ModalImportarVendas({ onClose, onDone, showToast }) {
           </div>
           <input ref={ref} type="file" accept=".csv,text/csv" style={{ display: "none" }} onChange={lerArquivo} />
           <button className="btn btn-on" style={{ marginTop: 12 }} onClick={() => ref.current && ref.current.click()}>Escolher arquivo CSV</button>
+          <div className="vd-limpar">
+            <b>Importou errado?</b> Dá pra apagar tudo que já foi lançado no mês <b>{mesLegivel(mesAtual)}</b> e importar de novo do zero.
+            <button className="crm-lote-del" style={{ marginTop: 8 }} disabled={limpando} onClick={limparMes}>
+              <I.trash className="ico" /> {limpando ? "Apagando…" : "Apagar as vendas de " + mesLegivel(mesAtual)}
+            </button>
+          </div>
           {dados && (
             <>
               <div className="imp-resumo"><b>{dados.vendas.length}</b> venda(s) · <b>{dados.pessoas.length}</b> pessoa(s): {dados.pessoas.join(", ")}</div>
@@ -3730,6 +3755,48 @@ function ModalImportarVendas({ onClose, onDone, showToast }) {
   );
 }
 
+// Clicou no nome no ranking: define a equipe e a meta dessa pessoa
+function ModalPessoaRapida({ pessoa, pessoas, onClose, onSalvo, showToast }) {
+  const [grupo, setGrupo] = useState(pessoa.grupo || "");
+  const [meta, setMeta] = useState(String(pessoa.meta || ""));
+  const [salvando, setSalvando] = useState(false);
+  const grupos = Array.from(new Set((pessoas || []).map((p) => p.grupo).filter(Boolean)));
+  async function salvar() {
+    setSalvando(true);
+    try {
+      await api.vdPessoaEditar(pessoa.pessoaId, { grupo, metaMensal: meta });
+      showToast("✓ Salvo");
+      onSalvo(); onClose();
+    } catch (e) { showToast("✗ " + e.message); } finally { setSalvando(false); }
+  }
+  return (
+    <Portal>
+    <div className="pop-bg centro" onClick={(e) => e.target === e.currentTarget && onClose()}>
+      <div className="pop-sheet" style={{ maxWidth: 460 }}>
+        <div className="pop-head"><b>{pessoa.nome}</b><button className="crm-x" onClick={onClose}>✕</button></div>
+        <div className="pop-body">
+          <label className="lbl-mini">Equipe</label>
+          <input className="input" value={grupo} onChange={(e) => setGrupo(e.target.value)} list="vd-grupos-rapido" placeholder="Ex.: Time de vendas" />
+          <datalist id="vd-grupos-rapido">{grupos.map((g) => <option key={g} value={g} />)}</datalist>
+          {grupos.length > 0 && (
+            <div className="vd-chips">
+              {grupos.map((g) => <button key={g} className={"vd-chip" + (grupo === g ? " on" : "")} onClick={() => setGrupo(g)}>{g}</button>)}
+            </div>
+          )}
+          <label className="lbl-mini" style={{ marginTop: 14, display: "block" }}>Meta do mês</label>
+          <input className="input" value={meta} onChange={(e) => setMeta(e.target.value)} placeholder="Ex.: 150.000,00" />
+          <div className="vd-dica">Vendido neste mês: <b>{dinheiro(pessoa.venda)}</b> · recebido {dinheiro(pessoa.recebido)}</div>
+          <div className="vd-rodape">
+            <button className="btn" onClick={onClose}>Cancelar</button>
+            <button className="onum-add" disabled={salvando} onClick={salvar}>{salvando ? "Salvando…" : "Salvar"}</button>
+          </div>
+        </div>
+      </div>
+    </div>
+    </Portal>
+  );
+}
+
 function PainelVendas({ showToast }) {
   const [mes, setMes] = useState("");
   const [dados, setDados] = useState(null);
@@ -3740,6 +3807,7 @@ function PainelVendas({ showToast }) {
   const [showPessoas, setShowPessoas] = useState(false);
   const [verLista, setVerLista] = useState(false);
   const [showImportarV, setShowImportarV] = useState(false);
+  const [pessoaRapida, setPessoaRapida] = useState(null);
 
   const carregar = (m) => {
     setCarregando(true);
@@ -3803,6 +3871,15 @@ function PainelVendas({ showToast }) {
       </div>
 
       {verLista ? (
+        <>
+        <div className="vd-lista-top">
+          <span><b>{vendas.length}</b> venda(s) lançada(s) em {mesLegivel(mes)}</span>
+          <button className="crm-lote-del" onClick={async () => {
+            if (!window.confirm(`Apagar TODAS as ${vendas.length} vendas de ${mesLegivel(mes)}? Isso não dá pra desfazer.`)) return;
+            try { const r = await api.vdLimparMes(mes); showToast(`✓ ${r.excluidas} venda(s) apagada(s)`); carregar(); }
+            catch (e) { showToast("✗ " + e.message); }
+          }}><I.trash className="ico" /> Limpar o mês</button>
+        </div>
         <ListaVendas vendas={vendas} onEditar={(v) => setForm({
           ...v, data: new Date(v.data).toISOString().slice(0, 10),
           valor: String(v.valor), recebido: String(v.recebido), parcelas: String(v.parcelas || ""),
@@ -3810,6 +3887,7 @@ function PainelVendas({ showToast }) {
           if (!window.confirm(`Excluir a venda de ${v.cliente || v.pessoaNome}?`)) return;
           try { await api.vdExcluir(v.id); showToast("✓ Venda excluída"); carregar(); } catch (e) { showToast(e.message); }
         }} />
+        </>
       ) : (
         <>
           {/* PÓDIO */}
@@ -3839,7 +3917,7 @@ function PainelVendas({ showToast }) {
           <div className="vd-sec">Ranking do mês</div>
           <div className="vd-rank">
             {comVenda.map((l, i) => (
-              <div key={l.pessoaId} className={"vd-linha" + (i < 3 ? " top" : "")}>
+              <div key={l.pessoaId} className={"vd-linha clicavel" + (i < 3 ? " top" : "")} onClick={() => setPessoaRapida(l)} title="Clique pra definir a equipe e a meta">
                 <span className="vd-pos">{i + 1}º</span>
                 <Avatar nome={l.nome} foto={l.foto} size={34} />
                 <div className="vd-linha-info">
@@ -3881,7 +3959,8 @@ function PainelVendas({ showToast }) {
       )}
 
       {form && <FormVenda form={form} setForm={setForm} pessoas={pessoas} onSalvo={() => { setForm(null); carregar(); }} showToast={showToast} />}
-      {showImportarV && <ModalImportarVendas onClose={() => setShowImportarV(false)} onDone={carregar} showToast={showToast} />}
+      {pessoaRapida && <ModalPessoaRapida pessoa={pessoaRapida} pessoas={pessoas} onClose={() => setPessoaRapida(null)} onSalvo={carregar} showToast={showToast} />}
+      {showImportarV && <ModalImportarVendas mesAtual={mes} onClose={() => setShowImportarV(false)} onDone={carregar} showToast={showToast} />}
       {showPessoas && <ModalPessoas pessoas={pessoas} onClose={() => setShowPessoas(false)} onMudou={carregar} showToast={showToast} />}
     </div>
   );

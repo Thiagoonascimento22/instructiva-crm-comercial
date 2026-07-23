@@ -25,6 +25,18 @@ export function instalarVendas({ app, getDb, saveDB, proximoId, auth, gerenteOnl
     return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0");
   };
   const mesValido = (m) => /^\d{4}-\d{2}$/.test(String(m || ""));
+  // "2026-07-01" tem que virar 1º de julho NO NOSSO FUSO. Se usar new Date() direto,
+  // o JS entende como UTC e no Brasil (UTC-3) volta pro dia 30/06 -> a venda cai no mês errado.
+  function paraData(v) {
+    if (v == null || v === "") return Date.now();
+    const s = String(v).trim();
+    let m = s.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (m) return new Date(+m[1], +m[2] - 1, +m[3], 12, 0, 0).getTime();
+    m = s.match(/^(\d{2})\/(\d{2})\/(\d{4})$/); // 01/07/2026 (dia/mês/ano)
+    if (m) return new Date(+m[3], +m[2] - 1, +m[1], 12, 0, 0).getTime();
+    const t = new Date(s).getTime();
+    return isFinite(t) ? t : Date.now();
+  }
   const num = (v) => {
     if (typeof v === "number") return isFinite(v) ? v : 0;
     const s = String(v == null ? "" : v).replace(/[^\d,.-]/g, "").replace(/\.(?=\d{3}\b)/g, "").replace(",", ".");
@@ -138,8 +150,7 @@ export function instalarVendas({ app, getDb, saveDB, proximoId, auth, gerenteOnl
     if (!p) return res.status(400).json({ error: "Escolha de quem é a venda" });
     const valor = num(b.valor);
     if (valor <= 0) return res.status(400).json({ error: "Informe o valor da venda" });
-    let data = b.data ? new Date(b.data).getTime() : Date.now();
-    if (!isFinite(data)) data = Date.now();
+    const data = paraData(b.data);
     const v = {
       id: proximoId ? proximoId("vnd") : "vnd_" + Date.now().toString(36) + Math.random().toString(36).slice(2, 5),
       pessoaId: p.id,
@@ -188,7 +199,7 @@ export function instalarVendas({ app, getDb, saveDB, proximoId, auth, gerenteOnl
     if (b.parcelas !== undefined) v.parcelas = Math.max(0, Math.min(60, parseInt(b.parcelas, 10) || 0));
     if (b.forma !== undefined) v.forma = String(b.forma).trim().slice(0, 30);
     if (b.obs !== undefined) v.obs = String(b.obs).trim().slice(0, 200);
-    if (b.data !== undefined) { const t = new Date(b.data).getTime(); if (isFinite(t)) v.data = t; }
+    if (b.data !== undefined) v.data = paraData(b.data);
     salvar();
     res.json({ ok: true, venda: vendaPublica(v) });
   });
@@ -213,6 +224,19 @@ export function instalarVendas({ app, getDb, saveDB, proximoId, auth, gerenteOnl
       if (!n) return null;
       return db.vendas.pessoas.find((p) => p.nome.trim().toLowerCase() === n) || null;
     };
+    // Anti-duplicata que NÃO come venda legítima:
+    // a chave é a linha inteira (pessoa+cliente+valor+recebido+dia+código). Contamos quantas
+    // iguais já existem no banco e quantas já vieram neste arquivo. Se o arquivo tem 2 linhas
+    // iguais e o banco tem 0, entram as 2. Se subir o mesmo arquivo de novo, aí sim pula tudo.
+    const chaveDe = (pessoaId, cliente, valor, recebido, data, codigo) =>
+      [pessoaId, String(cliente || "").trim().toLowerCase(), Number(valor).toFixed(2),
+       Number(recebido).toFixed(2), new Date(data).toDateString(), String(codigo || "").trim()].join("|");
+    const jaNoBanco = {};
+    for (const v of db.vendas.lista) {
+      const k = chaveDe(v.pessoaId, v.cliente, num(v.valor), num(v.recebido), v.data, v.codigo);
+      jaNoBanco[k] = (jaNoBanco[k] || 0) + 1;
+    }
+    const nesteArquivo = {};
     for (const r of linhas) {
       const valor = num(r.valor);
       let p = r.pessoaId ? db.vendas.pessoas.find((x) => x.id === r.pessoaId) : achaPessoa(r.pessoaNome);
@@ -225,19 +249,12 @@ export function instalarVendas({ app, getDb, saveDB, proximoId, auth, gerenteOnl
         db.vendas.pessoas.push(p); novasPessoas++;
       }
       if (!p || valor <= 0) { pulados++; continue; }
-      let data = r.data ? new Date(r.data).getTime() : Date.now();
-      if (!isFinite(data)) data = Date.now();
+      const data = paraData(r.data);
       const codigo = String(r.codigo || "").trim().slice(0, 60);
-      // não duplica: mesmo código, ou mesma pessoa+cliente+valor no mesmo dia
-      const dia = new Date(data).toDateString();
-      const repetida = db.vendas.lista.some((v) =>
-        (codigo && String(v.codigo || "").trim() === codigo) ||
-        (v.pessoaId === p.id && num(v.valor) === valor &&
-          String(v.cliente || "").trim().toLowerCase() === String(r.cliente || "").trim().toLowerCase() &&
-          new Date(v.data).toDateString() === dia)
-      );
-      if (repetida) { pulados++; continue; }
       const recebido = num(r.recebido);
+      const k = chaveDe(p.id, r.cliente, valor, recebido, data, codigo);
+      nesteArquivo[k] = (nesteArquivo[k] || 0) + 1;
+      if ((jaNoBanco[k] || 0) >= nesteArquivo[k]) { pulados++; continue; } // já tinha essa mesma linha
       db.vendas.lista.unshift({
         id: proximoId ? proximoId("vnd") : "vnd_" + Date.now().toString(36) + Math.random().toString(36).slice(2, 5),
         pessoaId: p.id, pessoaNome: p.nome,
@@ -259,6 +276,28 @@ export function instalarVendas({ app, getDb, saveDB, proximoId, auth, gerenteOnl
     }
     salvar();
     res.json({ ok: true, criados, pulados, novasPessoas });
+  });
+
+  /* apaga TODAS as vendas de um mês (pra reimportar do zero) */
+  app.post("/api/vendas/limpar-mes", auth, gerenteOnly, (req, res) => {
+    garantir();
+    const mes = (req.body || {}).mes;
+    if (!mesValido(mes)) return res.status(400).json({ error: "Mês inválido" });
+    const antes = db.vendas.lista.length;
+    db.vendas.lista = db.vendas.lista.filter((v) => mesDe(v.data) !== mes);
+    salvar();
+    res.json({ ok: true, excluidas: antes - db.vendas.lista.length });
+  });
+
+  /* apaga TODAS as vendas de um mês (pra reimportar do zero) */
+  app.post("/api/vendas/limpar-mes", auth, gerenteOnly, (req, res) => {
+    garantir();
+    const mes = mesValido((req.body || {}).mes) ? req.body.mes : null;
+    if (!mes) return res.status(400).json({ error: "Mês inválido" });
+    const antes = db.vendas.lista.length;
+    db.vendas.lista = db.vendas.lista.filter((v) => mesDe(v.data) !== mes);
+    salvar();
+    res.json({ ok: true, excluidas: antes - db.vendas.lista.length });
   });
 
   /* ---------------- PAINEL (a planilha) ---------------- */
