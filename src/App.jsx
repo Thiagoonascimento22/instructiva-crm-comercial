@@ -3780,7 +3780,7 @@ function acharDuplicadas(pessoas) {
 }
 
 // Clicou no nome no ranking: define a equipe e a meta dessa pessoa
-function ModalPessoaRapida({ pessoa, pessoas, mes, isGer = true, onClose, onSalvo, showToast }) {
+function ModalPessoaRapida({ pessoa, pessoas, mes, isGer = true, onVerPainel, onClose, onSalvo, showToast }) {
   const [grupo, setGrupo] = useState(pessoa.grupo || "");
   const [meta, setMeta] = useState(String(pessoa.meta || ""));
   const [fora, setFora] = useState(!!pessoa.foraDoPodio);
@@ -3821,6 +3821,7 @@ function ModalPessoaRapida({ pessoa, pessoas, mes, isGer = true, onClose, onSalv
           <div className="vd-abas">
             <button className={aba === "vendas" ? "on" : ""} onClick={() => setAba("vendas")}>Vendas dia a dia{minhas ? ` (${minhas.length})` : ""}</button>
             {isGer && <button className={aba === "config" ? "on" : ""} onClick={() => setAba("config")}>Equipe & meta</button>}
+            {isGer && onVerPainel && <button onClick={() => { onVerPainel(pessoa.pessoaId); onClose(); }}>Painel completo →</button>}
           </div>
 
           {aba === "vendas" ? (
@@ -3910,12 +3911,13 @@ function Anel({ pct }) {
   );
 }
 // Gráfico de barras: quanto vendeu em cada dia do mês
-function GraficoDias({ porDia, diaHoje }) {
+function GraficoDias({ porDia, diaHoje, diaSel, onDia }) {
   const max = porDia.reduce((m, d) => Math.max(m, d.venda), 0) || 1;
   return (
     <div className="vd-graf">
       {porDia.map((d) => (
-        <div key={d.dia} className={"vd-graf-col" + (d.dia === diaHoje ? " hoje" : "")}
+        <div key={d.dia} className={"vd-graf-col" + (d.dia === diaHoje ? " hoje" : "") + (d.dia === diaSel ? " sel" : "") + (onDia ? " clicavel" : "")}
+          onClick={() => onDia && onDia(d.dia)}
           title={`Dia ${d.dia}: ${d.qtd} venda(s) · R$ ${d.venda.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`}>
           <div className="vd-graf-barra" style={{ height: Math.max(d.venda > 0 ? 4 : 1, (d.venda / max) * 100) + "%" }} />
           {(d.dia === 1 || d.dia % 5 === 0) && <span className="vd-graf-dia">{d.dia}</span>}
@@ -3998,15 +4000,18 @@ function PainelVendas({ showToast, isGer = true }) {
   const [showPessoas, setShowPessoas] = useState(false);
   const [verLista, setVerLista] = useState(false);
   const [escopo, setEscopo] = useState(isGer ? "time" : "minhas");   // "time" | "minhas"
+  const [diaSel, setDiaSel] = useState(null);   // dia do mês escolhido (número) ou null
   const [showImportarV, setShowImportarV] = useState(false);
   const [pessoaRapida, setPessoaRapida] = useState(null);
 
   const carregar = (m, esc) => {
     const e = esc || escopo;
+    // "time" = todo mundo | "minhas" = eu | qualquer outro valor = id da pessoa escolhida
+    const alvo = e === "time" ? "" : e === "minhas" ? ((dados && dados.souEu) || "eu") : e;
     setCarregando(true);
     return Promise.all([
-      api.vdPainel(m || mes, e === "minhas" ? (dados && dados.souEu) || "eu" : "").then((d) => { setDados(d); if (!mes) setMes(d.mes); return d; }),
-      api.vdLista(m || mes).then((d) => setVendas(d.vendas || [])),
+      api.vdPainel(m || mes, alvo).then((d) => { setDados(d); if (!mes) setMes(d.mes); return d; }),
+      api.vdLista(m || mes, alvo && alvo !== "eu" ? alvo : "").then((d) => setVendas(d.vendas || [])),
       api.vdPessoas().then((d) => setPessoas(d.pessoas || [])).catch(() => {}),
     ]).catch((e) => showToast(e.message)).finally(() => setCarregando(false));
   };
@@ -4025,6 +4030,13 @@ function PainelVendas({ showToast, isGer = true }) {
   const podio = concorrem.slice(0, 3);
   const semVenda = linhas.filter((l) => l.venda <= 0);
   const pctGeral = Math.min(100, g.pct || 0);
+  const hojeReal = new Date();
+  const ehMesCorrente = mes === hojeReal.getFullYear() + "-" + String(hojeReal.getMonth() + 1).padStart(2, "0");
+  const vendidoHoje = ((dados.porDia || []).find((d) => d.dia === dados.diaHoje) || {}).venda || 0;
+  // vendas do dia escolhido (clicando no gráfico ou pelo calendário)
+  const doDia = diaSel ? (vendas || []).filter((v) => new Date(v.data).getDate() === diaSel) : [];
+  const totalDia = doDia.reduce((s2, v) => s2 + (Number(v.valor) || 0), 0);
+  const recebidoDia = doDia.reduce((s2, v) => s2 + (Number(v.recebido) || 0), 0);
 
   return (
     <div className="vd">
@@ -4033,12 +4045,20 @@ function PainelVendas({ showToast, isGer = true }) {
         <select className="vd-mes" value={mes} onChange={(e) => trocarMes(e.target.value)}>
           {(dados.meses || []).map((m) => <option key={m} value={m}>{mesLegivel(m)}</option>)}
         </select>
-        {(dados && (dados.souEu || !isGer)) && (
-          <div className="vd-switch">
-            <button className={escopo === "time" ? "on" : ""} onClick={() => trocarEscopo("time")}>Time</button>
+        <div className="vd-switch">
+          <button className={escopo === "time" ? "on" : ""} onClick={() => trocarEscopo("time")}>Time</button>
+          {dados && (dados.souEu || !isGer) && (
             <button className={escopo === "minhas" ? "on" : ""} onClick={() => trocarEscopo("minhas")}>Minhas vendas</button>
-          </div>
-        )}
+          )}
+          {isGer && (
+            <select className={"vd-switch-sel" + (escopo !== "time" && escopo !== "minhas" ? " on" : "")}
+              value={escopo !== "time" && escopo !== "minhas" ? escopo : ""}
+              onChange={(e) => trocarEscopo(e.target.value || "time")}>
+              <option value="">Ver de um vendedor…</option>
+              {(dados ? dados.linhas : []).map((l) => <option key={l.pessoaId} value={l.pessoaId}>{l.nome}</option>)}
+            </select>
+          )}
+        </div>
         <div className="vd-top-acoes">
           <button className="onum-add" onClick={() => setForm({
             pessoaId: pessoas[0] ? pessoas[0].id : "", cliente: "", email: "", telefone: "", curso: "",
@@ -4064,6 +4084,7 @@ function PainelVendas({ showToast, isGer = true }) {
                 : <>defina as metas em <b>Equipe &amp; metas</b></>}
             </span>
             <div className="vd-mini">
+              <div><span>{dados.diaHoje === dados.diasNoMes && !ehMesCorrente ? "Último dia" : "Hoje"}</span><b>{dinheiro(vendidoHoje)}</b></div>
               <div><span>Recebido</span><b className="verde">{dinheiro(g.recebido)}</b></div>
               <div><span>Vendas</span><b>{g.qtd}</b></div>
               <div><span>Ticket médio</span><b>{g.qtd ? dinheiroCurto(g.venda / g.qtd) : "—"}</b></div>
@@ -4072,10 +4093,12 @@ function PainelVendas({ showToast, isGer = true }) {
         </div>
         <div className="vd-hero-dir">
           <div className="vd-graf-cab">
-            <span>Evolução do mês</span>
-            {dados.melhorDia && <small>melhor dia: <b>{dados.melhorDia.dia}</b> com {dinheiroCurto(dados.melhorDia.venda)}</small>}
+            <span>Evolução do mês <small className="vd-graf-dica">— clique num dia</small></span>
+            <input type="date" className="vd-data" value={diaSel ? mes + "-" + String(diaSel).padStart(2, "0") : ""}
+              min={mes + "-01"} max={mes + "-" + String(dados.diasNoMes).padStart(2, "0")}
+              onChange={(e) => setDiaSel(e.target.value ? Number(e.target.value.slice(8, 10)) : null)} />
           </div>
-          <GraficoDias porDia={dados.porDia || []} diaHoje={dados.diaHoje} />
+          <GraficoDias porDia={dados.porDia || []} diaHoje={dados.diaHoje} diaSel={diaSel} onDia={(d) => setDiaSel(diaSel === d ? null : d)} />
           <div className="vd-proj">
             {dados.diasRestantes > 0 ? (
               <>
@@ -4089,8 +4112,43 @@ function PainelVendas({ showToast, isGer = true }) {
         </div>
       </div>
 
-      {escopo === "minhas" && !verLista ? (
+      {diaSel && (
+        <div className="vd-dodia">
+          <div className="vd-dodia-cab">
+            <div>
+              <b>{String(diaSel).padStart(2, "0")}/{mes.slice(5)} </b>
+              <span>{doDia.length} venda(s) · recebido {dinheiro(recebidoDia)}</span>
+            </div>
+            <span className="vd-dodia-tot">{dinheiro(totalDia)}</span>
+            <button className="crm-x" onClick={() => setDiaSel(null)} title="Fechar">✕</button>
+          </div>
+          {doDia.length === 0 ? (
+            <div className="crm-col-vazio">Nenhuma venda nesse dia.</div>
+          ) : (
+            <div className="vd-dodia-lista">
+              {doDia.slice().sort((a, b) => b.valor - a.valor).map((v) => (
+                <div key={v.id} className="vd-dodia-item">
+                  <span className="vd-dodia-vend">{v.pessoaNome}</span>
+                  <div className="vd-dodia-cli">{v.cliente || "—"}
+                    <small>{[v.curso, v.forma, v.parcelas ? v.parcelas + "x" : "", v.plataforma].filter(Boolean).join(" · ")}</small>
+                  </div>
+                  <div className="vd-dodia-vals">{dinheiro(v.valor)}<small>recebido {dinheiro(v.recebido)}</small></div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {escopo !== "time" && !verLista ? (
         <>
+          {escopo !== "minhas" && dados.nomeEscopo && (
+            <div className="vd-vendo">
+              <Avatar nome={dados.nomeEscopo} foto={(dados.linhas.find((l) => l.pessoaId === escopo) || {}).foto} size={34} />
+              <div><b>Painel de {dados.nomeEscopo}</b><span>você está vendo os números de uma pessoa</span></div>
+              <button className="btn btn-sm" onClick={() => trocarEscopo("time")}>← Voltar pro time</button>
+            </div>
+          )}
           {dados.posicao > 0 && (
             <div className="vd-posicao">
               <span className="vd-pos-medal">{dados.posicao === 1 ? "🥇" : dados.posicao === 2 ? "🥈" : dados.posicao === 3 ? "🥉" : "🏅"}</span>
@@ -4101,7 +4159,7 @@ function PainelVendas({ showToast, isGer = true }) {
               <button className="btn btn-sm" onClick={() => trocarEscopo("time")}>Ver o ranking do time</button>
             </div>
           )}
-          <div className="vd-sec">Suas vendas, dia a dia ({vendas.length})</div>
+          <div className="vd-sec">{escopo === "minhas" ? "Suas vendas" : "Vendas de " + (dados.nomeEscopo || "")}, dia a dia ({vendas.length})</div>
           <DiaADia vendas={vendas}
             onEditar={(v) => setForm({ ...v, data: new Date(v.data).toISOString().slice(0, 10),
               valor: String(v.valor), recebido: String(v.recebido), parcelas: String(v.parcelas || "") })}
@@ -4213,7 +4271,7 @@ function PainelVendas({ showToast, isGer = true }) {
       )}
 
       {form && <FormVenda form={form} setForm={setForm} pessoas={pessoas} isGer={isGer} onSalvo={() => { setForm(null); carregar(); }} showToast={showToast} />}
-      {pessoaRapida && <ModalPessoaRapida pessoa={pessoaRapida} pessoas={pessoas} mes={mes} isGer={isGer} onClose={() => setPessoaRapida(null)} onSalvo={carregar} showToast={showToast} />}
+      {pessoaRapida && <ModalPessoaRapida pessoa={pessoaRapida} pessoas={pessoas} mes={mes} isGer={isGer} onVerPainel={(id) => trocarEscopo(id)} onClose={() => setPessoaRapida(null)} onSalvo={carregar} showToast={showToast} />}
       {showImportarV && <ModalImportarVendas mesAtual={mes} onClose={() => setShowImportarV(false)} onDone={carregar} showToast={showToast} />}
       {showPessoas && <ModalPessoas pessoas={pessoas} onClose={() => setShowPessoas(false)} onMudou={carregar} showToast={showToast} />}
     </div>
