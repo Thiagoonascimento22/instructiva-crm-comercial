@@ -505,8 +505,13 @@ app.post("/api/users", auth, gerenteOnly, (req, res) => {
 app.put("/api/users/:id", auth, gerenteOnly, (req, res) => {
   const u = db.users.find((x) => x.id === req.params.id);
   if (!u) return res.status(404).json({ error: "Usuário não encontrado" });
-  const { nome, login, senha, role, meta, ativo, podeResponder } = req.body || {};
+  const { nome, login, senha, role, meta, ativo, podeResponder, foto } = req.body || {};
   if (nome && nome.trim()) u.nome = nome.trim();
+  // o gerente pode colocar/trocar a foto de qualquer pessoa da equipe
+  if (foto !== undefined) {
+    if (!foto) u.foto = "";
+    else if (typeof foto === "string" && foto.startsWith("data:image/") && foto.length < 400000) u.foto = foto;
+  }
   if (login && login.trim()) {
     const l = login.trim();
     if (db.users.some((x) => x.id !== u.id && (x.login || "").toLowerCase() === l.toLowerCase()))

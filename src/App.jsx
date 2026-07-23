@@ -1057,7 +1057,20 @@ function Equipe({ showToast, meId }) {
         <div className="panel-h"><h3>Equipe ({users.length})<span className="panel-sub">vendedores são monitorados; gerentes acessam o sistema</span></h3></div>
         {users.map((u) => (
           <div className="urow" key={u.id}>
-            <div className="avatar">{iniciais(u.nome)}</div>
+            <label className="av-troca" title="Clique pra colocar a foto">
+              <Avatar nome={u.nome} foto={u.foto} size={44} />
+              <span className="av-lupa">📷</span>
+              <input type="file" accept="image/*" style={{ display: "none" }} onChange={async (e) => {
+                const f = e.target.files && e.target.files[0]; e.target.value = "";
+                if (!f || !f.type.startsWith("image/")) return;
+                try {
+                  const dataUrl = await redimensionarImg(f, 160);
+                  const at = await api.updateUser(u.id, { foto: dataUrl });
+                  setUsers((l) => l.map((x) => (x.id === u.id ? at : x)));
+                  showToast("✓ Foto de " + u.nome.split(" ")[0] + " atualizada");
+                } catch (err) { showToast("✗ " + err.message); }
+              }} />
+            </label>
             <div className="info">
               <div className="nm">{u.nome} {!u.ativo && <span className="tag-off">• desativado</span>}</div>
               <div className="sub">{u.role === "vendedor" ? "vendedor monitorado no WhatsApp" : "@" + u.login + " · acessa o sistema"}</div>

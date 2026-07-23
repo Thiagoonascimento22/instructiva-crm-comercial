@@ -4030,3 +4030,9 @@ select.input:disabled, .input:disabled { color: var(--muted); opacity: 1; -webki
 .of-nova-pe { flex: none; display: flex; justify-content: flex-end; gap: 10px; padding: 14px 22px; border-top: 1px solid var(--line); background: var(--card); }
 .of-nova-preview { max-height: 260px; overflow-y: auto; }
 @media (max-width: 700px) { .of-nova-pe { flex-direction: column-reverse; } .of-nova-pe .btn { width: 100%; } }
+
+/* trocar a foto de alguém da equipe */
+.av-troca { position: relative; cursor: pointer; flex: none; display: inline-flex; border-radius: 50%; }
+.av-troca .av-lupa { position: absolute; right: -2px; bottom: -2px; width: 19px; height: 19px; border-radius: 50%;
+  background: var(--brand); color: #fff; font-size: 10px; display: grid; place-items: center; border: 2px solid var(--card); }
+.av-troca:hover .uav { filter: brightness(.75); }

@@ -817,8 +817,44 @@ export function instalarVendas({ app, getDb, saveDB, proximoId, auth, gerenteOnl
       ini2 = new Date(ano, mm - 1, ate + 1);
     }
 
+    // ---- DESTAQUE DO DIA: quem mais vendeu hoje ----
+    const inicioHoje = new Date(ano, mm - 1, diaHoje, 0, 0, 0).getTime();
+    const fimHoje = inicioHoje + 86400000;
+    const vendasHoje = (db.vendas.lista || []).filter((v) => v.data >= inicioHoje && v.data < fimHoje);
+    const hojePorPessoa = {};
+    vendasHoje.forEach((v) => {
+      if (!hojePorPessoa[v.pessoaId]) hojePorPessoa[v.pessoaId] = { pessoaId: v.pessoaId, valor: 0, qtd: 0, cursos: {} };
+      hojePorPessoa[v.pessoaId].valor += num(v.valor);
+      hojePorPessoa[v.pessoaId].qtd++;
+      const c = cursoCanonico(v.curso);
+      hojePorPessoa[v.pessoaId].cursos[c] = (hojePorPessoa[v.pessoaId].cursos[c] || 0) + 1;
+    });
+    const listaHoje = Object.values(hojePorPessoa).map((x) => {
+      const p = db.vendas.pessoas.find((y) => y.id === x.pessoaId) || {};
+      const u = p.userId ? (db.users || []).find((y) => y.id === p.userId) : null;
+      const top = Object.entries(x.cursos).sort((a, b) => b[1] - a[1])[0];
+      return { ...x, nome: p.nome || "—", foto: u ? (u.foto || "") : "", foraDoPodio: !!p.foraDoPodio,
+               equipe: p.grupo || "", cursoTop: top ? top[0] : "", cursosQtd: Object.keys(x.cursos).length };
+    }).sort((a, b) => b.valor - a.valor);
+    const destaque = listaHoje.filter((x) => !x.foraDoPodio)[0] || null;
+    const perseguidores = listaHoje.filter((x) => !x.foraDoPodio).slice(1, 4);
+
+    // ---- ranking por equipe (sem quem é venda direta) ----
+    const eq = {};
+    ranking.forEach((r) => {
+      if (r.foraDoPodio) return;
+      const p = db.vendas.pessoas.find((y) => y.id === r.pessoaId) || {};
+      const g2 = (p.grupo || "Sem equipe").trim() || "Sem equipe";
+      if (!eq[g2]) eq[g2] = { equipe: g2, valor: 0, recebido: 0, qtd: 0, pessoas: 0, meta: 0 };
+      eq[g2].valor += r.valor; eq[g2].recebido += r.recebido; eq[g2].qtd += r.qtd;
+      eq[g2].pessoas++; eq[g2].meta += r.meta || 0;
+    });
+    const equipes = Object.values(eq).map((x) => ({ ...x, pct: x.meta > 0 ? Math.round((x.valor / x.meta) * 100) : 0 }))
+      .sort((a, b) => b.valor - a.valor);
+
     res.json({
-      mes, atualizadoEm: Date.now(), diasNoMes, diaHoje,
+      mes, atualizadoEm: Date.now(), diasNoMes, diaHoje, equipes,
+      destaque, perseguidores, vendasHojeQtd: vendasHoje.length,
       geral: {
         venda, recebido, qtd: doMes.length, meta: metaTotal,
         pct: metaTotal > 0 ? Math.round((venda / metaTotal) * 100) : 0,
