@@ -3443,10 +3443,10 @@ input:focus-visible, textarea:focus-visible, select:focus-visible {
 .crm-card-curso { font-size: 11.5px; font-weight: 600; color: var(--brand); margin-top: 3px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 /* ===== Popups do Disparo (Templates / Quem recebe os leads) ===== */
-.pop-bg { position: fixed; inset: 0; background: rgba(15,23,42,.5); z-index: 120; display: flex; align-items: flex-start; justify-content: center; padding: 40px 20px; overflow-y: auto; }
+.pop-bg { position: fixed; inset: 0; background: rgba(15,23,42,.5); z-index: 120; display: flex; align-items: flex-start; justify-content: center; padding: 40px 20px; overflow-y: auto; overscroll-behavior: contain; }
 .pop-sheet { background: var(--card, #fff); width: 100%; max-width: 1000px; border-radius: 16px; box-shadow: 0 20px 60px rgba(0,0,0,.3); display: flex; flex-direction: column; max-height: calc(100vh - 80px); overflow: hidden; }
 .pop-head { display: flex; align-items: center; justify-content: space-between; padding: 16px 20px; border-bottom: 1px solid var(--line, #e6e8ef); font-size: 16px; flex: none; }
-.pop-body { padding: 18px 20px 22px; overflow-y: auto; }
+.pop-body { padding: 18px 20px 22px; overflow-y: auto; flex: 1 1 auto; min-height: 0; -webkit-overflow-scrolling: touch; }
 .pop-body .cfg-wrap, .pop-body .of-wrap, .pop-body .disp-wrap { padding: 0; }
 
 /* ===== Listas de reserva (captação) ===== */
@@ -3797,3 +3797,6 @@ input:focus-visible, textarea:focus-visible, select:focus-visible {
 .vd-pessoa input:focus { border-color: var(--brand); background: var(--card); outline: none; }
 .vd-pessoa-nome { font-weight: 600; }
 .vd-pessoa-meta { text-align: right; }
+
+/* rodapé fixo do formulário de venda (botão sempre visível) */
+.vd-rodape { position: sticky; bottom: -22px; margin: 18px -20px -22px; padding: 14px 20px; background: var(--card); border-top: 1px solid var(--line); display: flex; justify-content: flex-end; gap: 10px; }

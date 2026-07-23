@@ -3858,6 +3858,11 @@ function FormVenda({ form, setForm, pessoas, onSalvo, showToast }) {
       <div className="pop-sheet" style={{ maxWidth: 720 }}>
         <div className="pop-head"><b>{form.id ? "Editar venda" : "Lançar venda"}</b><button className="crm-x" onClick={() => setForm(null)}>✕</button></div>
         <div className="pop-body">
+          {pessoas.length === 0 && (
+            <div className="of-nova-semtpl" style={{ marginBottom: 14 }}>
+              Nenhuma pessoa cadastrada ainda. Feche aqui e clique em <b>Equipe & metas</b> pra cadastrar o time (dá pra puxar todo mundo do sistema de uma vez).
+            </div>
+          )}
           <div className="vd-form">
             <div><label className="lbl-mini">Data</label><input className="input" type="date" value={form.data} onChange={(e) => set("data", e.target.value)} /></div>
             <div><label className="lbl-mini">Vendedor(a)</label>
@@ -3889,9 +3894,12 @@ function FormVenda({ form, setForm, pessoas, onSalvo, showToast }) {
               <div className="vd-dica">Se deixar vazio, o sistema usa <b>vendido − recebido</b> = {dinheiro(nAGerar)}</div>
             </div>
           </div>
-          <button className="onum-add" style={{ marginTop: 18, display: "block" }} disabled={salvando} onClick={salvar}>
-            {salvando ? "Salvando…" : form.id ? "Salvar alterações" : "Lançar venda"}
-          </button>
+          <div className="vd-rodape">
+            <button className="btn" onClick={() => setForm(null)}>Cancelar</button>
+            <button className="onum-add" disabled={salvando} onClick={salvar}>
+              {salvando ? "Salvando…" : form.id ? "Salvar alterações" : "Lançar venda"}
+            </button>
+          </div>
         </div>
       </div>
     </div>
@@ -3902,7 +3910,23 @@ function ModalPessoas({ pessoas, onClose, onMudou, showToast }) {
   const [nome, setNome] = useState("");
   const [grupo, setGrupo] = useState("");
   const [meta, setMeta] = useState("");
+  const [users, setUsers] = useState([]);
+  const [puxando, setPuxando] = useState(false);
   const gruposExistentes = Array.from(new Set(pessoas.map((p) => p.grupo).filter(Boolean)));
+  useEffect(() => { api.listUsers().then(setUsers).catch(() => {}); }, []);
+  const faltando = users.filter((u) => u.ativo && !pessoas.some((p) => p.nome.toLowerCase() === (u.nome || "").toLowerCase()));
+
+  async function puxarDoSistema() {
+    if (!faltando.length) return;
+    setPuxando(true);
+    try {
+      for (const u of faltando) {
+        await api.vdPessoaCriar({ nome: u.nome, grupo: u.role === "vendedor" ? "Time de vendas" : "", metaMensal: 0, userId: u.id });
+      }
+      showToast(`✓ ${faltando.length} pessoa(s) adicionada(s) — agora é só pôr a meta de cada um`);
+      onMudou();
+    } catch (e) { showToast("✗ " + e.message); } finally { setPuxando(false); }
+  }
 
   async function criar() {
     if (!nome.trim()) { showToast("Informe o nome"); return; }
@@ -3924,6 +3948,11 @@ function ModalPessoas({ pessoas, onClose, onMudou, showToast }) {
         <div className="pop-head"><b>Equipe & metas</b><button className="crm-x" onClick={onClose}>✕</button></div>
         <div className="pop-body">
           <div className="rsv-hint" style={{ marginTop: 0 }}>Quem aparece no painel e quanto é a meta de cada um por mês. Pode ser vendedor, marketing, professor — qualquer pessoa que gera venda.</div>
+          {faltando.length > 0 && (
+            <button className="btn btn-on" style={{ marginTop: 12 }} disabled={puxando} onClick={puxarDoSistema}>
+              <I.users className="ico" /> {puxando ? "Trazendo…" : `Trazer os ${faltando.length} do sistema`}
+            </button>
+          )}
           <div className="vd-nova-pessoa">
             <input className="input" placeholder="Nome" value={nome} onChange={(e) => setNome(e.target.value)} />
             <input className="input" placeholder="Equipe (ex.: Time de vendas)" value={grupo} onChange={(e) => setGrupo(e.target.value)} list="vd-grupos" />
