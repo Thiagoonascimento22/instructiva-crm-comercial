@@ -1955,7 +1955,13 @@ Escreva em português brasileiro, tom direto e construtivo, sem ser ofensivo.`;
 /* ============================================================
    CANAL OFICIAL (WhatsApp Cloud API) — rotas /api/oficial/*
    ============================================================ */
-instalarVendas({ app, getDb: () => db, saveDB, proximoId, auth, gerenteOnly });
+// mesma regra de acesso usada no canal oficial: gerente sempre; vendedor só se o dono liberou
+const permiteVendVendas = (chave) => (req, res, next) => {
+  if (req.user.role === "gerente") return next();
+  if (req.user.role === "vendedor" && ((db.oficial && db.oficial.acessoVend) || {})[chave] === true) return next();
+  return res.status(403).json({ error: "Acesso restrito" });
+};
+instalarVendas({ app, getDb: () => db, saveDB, proximoId, auth, gerenteOnly, permiteVend: permiteVendVendas });
 
 const canalOficial = instalarCanalOficial({
   app,

@@ -1587,7 +1587,7 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
   /* ---- ACESSO DOS VENDEDORES (o dono decide o que cada vendedor pode ver) ---- */
   // Mapa por tela: liga/desliga o acesso do vendedor. Default: tudo desligado
   // (mantém o comportamento antigo, em que essas telas eram só do gerente).
-  const ACESSO_VEND_CHAVES = ["crm", "temperatura"];
+  const ACESSO_VEND_CHAVES = ["crm", "temperatura", "vendas"];
   function acessoVend() {
     const a = (db.oficial && db.oficial.acessoVend) || {};
     const out = {};

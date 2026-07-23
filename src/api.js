@@ -118,6 +118,7 @@ export const api = {
   vdPessoaEditar: (id, d) => req("PUT", "/api/vendas/pessoas/" + id, d),
   vdPessoaExcluir: (id) => req("DELETE", "/api/vendas/pessoas/" + id),
   vdImportar: (d) => req("POST", "/api/vendas/importar", d),
+  vdJuntarPessoas: (deId, paraId) => req("POST", "/api/vendas/pessoas/juntar", { deId, paraId }),
   vdLimparMes: (mes) => req("POST", "/api/vendas/limpar-mes", { mes }),
   vdLimparMes: (mes) => req("POST", "/api/vendas/limpar-mes", { mes }),
   ofCriarTemplate: (id, dados) => req("POST", "/api/oficial/numeros/" + id + "/templates", dados),

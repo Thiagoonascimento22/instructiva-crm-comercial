@@ -4,7 +4,7 @@
    Entrega o painel igual ao da planilha:
      EQUIPE/NOME | META | VENDA | FALTA | % META | RECEBIDO
    ============================================================ */
-export function instalarVendas({ app, getDb, saveDB, proximoId, auth, gerenteOnly }) {
+export function instalarVendas({ app, getDb, saveDB, proximoId, auth, gerenteOnly, permiteVend }) {
   // mesmo padrão do canal oficial: o index.js reatribui o db, então resolvemos por Proxy
   const db = new Proxy({}, {
     get: (_t, k) => getDb()[k],
@@ -51,6 +51,31 @@ export function instalarVendas({ app, getDb, saveDB, proximoId, auth, gerenteOnl
     return num(p.metaMensal);
   }
 
+  // Liga o usuário logado à pessoa do painel: primeiro pelo vínculo, depois pelo nome.
+  // Se achar pelo nome, grava o vínculo pra ficar rápido nas próximas.
+  function pessoaDoUser(u) {
+    if (!u) return null;
+    let p = db.vendas.pessoas.find((x) => x.userId === u.id);
+    if (p) return p;
+    const n = String(u.nome || "").trim().toLowerCase();
+    p = db.vendas.pessoas.find((x) => x.nome.trim().toLowerCase() === n);
+    if (p) { p.userId = u.id; salvar(); }
+    return p || null;
+  }
+  // cria a pessoa do vendedor na hora, se ele ainda não existir no painel
+  function garantirPessoaDoUser(u) {
+    let p = pessoaDoUser(u);
+    if (p) return p;
+    p = {
+      id: proximoId ? proximoId("pes") : "pes_" + Date.now().toString(36) + Math.random().toString(36).slice(2, 5),
+      nome: String(u.nome || "Sem nome").trim().slice(0, 60),
+      grupo: "", metaMensal: 0, userId: u.id, ativo: true, criadoEm: Date.now(),
+    };
+    db.vendas.pessoas.push(p); salvar();
+    return p;
+  }
+  const ehVend = (u) => u && u.role === "vendedor";
+
   function pessoaPublica(p) {
     return { id: p.id, nome: p.nome, grupo: p.grupo || "", metaMensal: num(p.metaMensal), ativo: p.ativo !== false, userId: p.userId || null };
   }
@@ -68,9 +93,11 @@ export function instalarVendas({ app, getDb, saveDB, proximoId, auth, gerenteOnl
   }
 
   /* ---------------- PESSOAS (quem aparece no painel) ---------------- */
-  app.get("/api/vendas/pessoas", auth, gerenteOnly, (req, res) => {
+  app.get("/api/vendas/pessoas", auth, permiteVend("vendas"), (req, res) => {
     garantir();
-    res.json({ pessoas: db.vendas.pessoas.map(pessoaPublica) });
+    const cont = {}, soma = {};
+    db.vendas.lista.forEach((v) => { cont[v.pessoaId] = (cont[v.pessoaId] || 0) + 1; soma[v.pessoaId] = (soma[v.pessoaId] || 0) + num(v.valor); });
+    res.json({ pessoas: db.vendas.pessoas.map((p) => ({ ...pessoaPublica(p), vendas: cont[p.id] || 0, total: soma[p.id] || 0 })) });
   });
 
   app.post("/api/vendas/pessoas", auth, gerenteOnly, (req, res) => {
@@ -133,20 +160,26 @@ export function instalarVendas({ app, getDb, saveDB, proximoId, auth, gerenteOnl
   });
 
   /* ---------------- VENDAS ---------------- */
-  app.get("/api/vendas", auth, gerenteOnly, (req, res) => {
+  app.get("/api/vendas", auth, permiteVend("vendas"), (req, res) => {
     garantir();
     const mes = mesValido(req.query.mes) ? req.query.mes : mesDe(Date.now());
-    const pessoaId = req.query.pessoaId || "";
+    let pessoaId = req.query.pessoaId || "";
+    if (ehVend(req.user)) {                       // vendedor só enxerga as vendas dele
+      const minha = pessoaDoUser(req.user);
+      pessoaId = minha ? minha.id : "__nenhuma__";
+    }
     let lista = db.vendas.lista.filter((v) => mesDe(v.data) === mes);
     if (pessoaId) lista = lista.filter((v) => v.pessoaId === pessoaId);
     lista = lista.sort((a, b) => b.data - a.data);
     res.json({ mes, vendas: lista.map(vendaPublica) });
   });
 
-  app.post("/api/vendas", auth, gerenteOnly, (req, res) => {
+  app.post("/api/vendas", auth, permiteVend("vendas"), (req, res) => {
     garantir();
     const b = req.body || {};
-    const p = db.vendas.pessoas.find((x) => x.id === b.pessoaId);
+    let p;
+    if (ehVend(req.user)) p = garantirPessoaDoUser(req.user);   // sempre no próprio nome
+    else p = db.vendas.pessoas.find((x) => x.id === b.pessoaId);
     if (!p) return res.status(400).json({ error: "Escolha de quem é a venda" });
     const valor = num(b.valor);
     if (valor <= 0) return res.status(400).json({ error: "Informe o valor da venda" });
@@ -177,12 +210,16 @@ export function instalarVendas({ app, getDb, saveDB, proximoId, auth, gerenteOnl
     res.json({ ok: true, venda: vendaPublica(v) });
   });
 
-  app.put("/api/vendas/:id", auth, gerenteOnly, (req, res) => {
+  app.put("/api/vendas/:id", auth, permiteVend("vendas"), (req, res) => {
     garantir();
     const v = db.vendas.lista.find((x) => x.id === req.params.id);
     if (!v) return res.status(404).json({ error: "Venda não encontrada" });
+    if (ehVend(req.user)) {
+      const minha = pessoaDoUser(req.user);
+      if (!minha || v.pessoaId !== minha.id) return res.status(403).json({ error: "Essa venda não é sua" });
+    }
     const b = req.body || {};
-    if (b.pessoaId !== undefined) {
+    if (b.pessoaId !== undefined && !ehVend(req.user)) {
       const p = db.vendas.pessoas.find((x) => x.id === b.pessoaId);
       if (!p) return res.status(400).json({ error: "Pessoa inválida" });
       v.pessoaId = p.id; v.pessoaNome = p.nome;
@@ -204,11 +241,48 @@ export function instalarVendas({ app, getDb, saveDB, proximoId, auth, gerenteOnl
     res.json({ ok: true, venda: vendaPublica(v) });
   });
 
-  app.delete("/api/vendas/:id", auth, gerenteOnly, (req, res) => {
+  app.delete("/api/vendas/:id", auth, permiteVend("vendas"), (req, res) => {
     garantir();
+    if (ehVend(req.user)) {                        // vendedor só apaga as próprias
+      const minha = pessoaDoUser(req.user);
+      const v = db.vendas.lista.find((x) => x.id === req.params.id);
+      if (!v) return res.status(404).json({ error: "Venda não encontrada" });
+      if (!minha || v.pessoaId !== minha.id) return res.status(403).json({ error: "Essa venda não é sua" });
+    }
     db.vendas.lista = db.vendas.lista.filter((x) => x.id !== req.params.id);
     salvar();
     res.json({ ok: true });
+  });
+
+  /* Juntar duas pessoas: leva TODAS as vendas de uma pra outra e apaga a duplicada.
+     Serve pra quando o mesmo vendedor entrou duas vezes (ex.: "Dalit" da planilha
+     e "Dalit Castro" do sistema). Nenhuma venda se perde. */
+  app.post("/api/vendas/pessoas/juntar", auth, gerenteOnly, (req, res) => {
+    garantir();
+    const b = req.body || {};
+    const de = db.vendas.pessoas.find((p) => p.id === b.deId);
+    const para = db.vendas.pessoas.find((p) => p.id === b.paraId);
+    if (!de || !para) return res.status(404).json({ error: "Pessoa não encontrada" });
+    if (de.id === para.id) return res.status(400).json({ error: "Escolha duas pessoas diferentes" });
+    let movidas = 0;
+    db.vendas.lista.forEach((v) => {
+      if (v.pessoaId === de.id) { v.pessoaId = para.id; v.pessoaNome = para.nome; movidas++; }
+    });
+    // o destino herda o que estiver faltando nele
+    if (!para.grupo && de.grupo) para.grupo = de.grupo;
+    if (!num(para.metaMensal) && num(de.metaMensal)) para.metaMensal = num(de.metaMensal);
+    if (!para.userId && de.userId) para.userId = de.userId;
+    // metas por mês da duplicada passam pro destino (se o destino não tiver)
+    Object.keys(db.vendas.metasMes || {}).forEach((m) => {
+      const mm = db.vendas.metasMes[m];
+      if (mm && mm[de.id] !== undefined) {
+        if (mm[para.id] === undefined) mm[para.id] = mm[de.id];
+        delete mm[de.id];
+      }
+    });
+    db.vendas.pessoas = db.vendas.pessoas.filter((p) => p.id !== de.id);
+    salvar();
+    res.json({ ok: true, movidas, de: de.nome, para: para.nome });
   });
 
   /* ---------------- IMPORTAR VENDAS EM LOTE ---------------- */
@@ -289,19 +363,8 @@ export function instalarVendas({ app, getDb, saveDB, proximoId, auth, gerenteOnl
     res.json({ ok: true, excluidas: antes - db.vendas.lista.length });
   });
 
-  /* apaga TODAS as vendas de um mês (pra reimportar do zero) */
-  app.post("/api/vendas/limpar-mes", auth, gerenteOnly, (req, res) => {
-    garantir();
-    const mes = mesValido((req.body || {}).mes) ? req.body.mes : null;
-    if (!mes) return res.status(400).json({ error: "Mês inválido" });
-    const antes = db.vendas.lista.length;
-    db.vendas.lista = db.vendas.lista.filter((v) => mesDe(v.data) !== mes);
-    salvar();
-    res.json({ ok: true, excluidas: antes - db.vendas.lista.length });
-  });
-
   /* ---------------- PAINEL (a planilha) ---------------- */
-  app.get("/api/vendas/painel", auth, gerenteOnly, (req, res) => {
+  app.get("/api/vendas/painel", auth, permiteVend("vendas"), (req, res) => {
     garantir();
     const mes = mesValido(req.query.mes) ? req.query.mes : mesDe(Date.now());
     const doMes = db.vendas.lista.filter((v) => mesDe(v.data) === mes);
@@ -349,6 +412,7 @@ export function instalarVendas({ app, getDb, saveDB, proximoId, auth, gerenteOnl
     const meses = Array.from(new Set(db.vendas.lista.map((v) => mesDe(v.data)))).sort().reverse();
     if (!meses.includes(mes)) meses.unshift(mes);
 
-    res.json({ mes, meses, geral, grupos: listaGrupos, linhas });
+    const minha = pessoaDoUser(req.user);
+    res.json({ mes, meses, geral, grupos: listaGrupos, linhas, souEu: minha ? minha.id : null, ehVendedor: ehVend(req.user) });
   });
 }

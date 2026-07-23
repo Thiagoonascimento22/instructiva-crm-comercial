@@ -413,7 +413,7 @@ export default function App() {
         </div>
         <nav className="nav">
           {(isGer || vendPode("crm")) && mod("crm") && <NavBtn ic={I.pipe} label="Pipeline" active={view === "crm"} onClick={() => setView("crm")} />}
-          {isGer && mod("vendas") && <NavBtn ic={I.gauge} label="Vendas" active={view === "vendas"} onClick={() => setView("vendas")} />}
+          {(isGer || vendPode("vendas")) && mod("vendas") && <NavBtn ic={I.gauge} label="Vendas" active={view === "vendas"} onClick={() => setView("vendas")} />}
           {!isSuporte && mod("caixa") && <NavBtn ic={I.wa} label="Caixa de entrada" active={view === "whatsapp"} onClick={() => setView("whatsapp")} />}
           {(isGer || isVend) && mod("disparo") && <NavBtn ic={I.send} label="Disparo" active={view === "disparo"} onClick={() => setView("disparo")} />}
           {isGer && mod("numeros") && <NavBtn ic={I.wa} label="Números" active={view === "numeros"} onClick={() => setView("numeros")} />}
@@ -454,7 +454,7 @@ export default function App() {
           {view === "numeros" && isGer && mod("numeros") && <OficialNumeros showToast={showToast} />}
           {view === "ia" && isGer && mod("ia") && <OficialIAs showToast={showToast} />}
           {view === "ligacoes" && isGer && mod("ligacoes") && <OficialLigacoes showToast={showToast} />}
-          {view === "vendas" && isGer && mod("vendas") && <PainelVendas showToast={showToast} />}
+          {view === "vendas" && (isGer || vendPode("vendas")) && mod("vendas") && <PainelVendas showToast={showToast} isGer={isGer} />}
           {view === "crm" && (isGer || vendPode("crm")) && mod("crm") && <OficialCRM showToast={showToast} isGer={isGer} onAbrirWhats={(tel, canal, nome) => { setWaTarget({ numero: tel, canal, nome }); setView("whatsapp"); }} />}
           {view === "temperatura" && (isGer || vendPode("temperatura")) && mod("temperatura") && <OficialTemperatura showToast={showToast} />}
           {view === "minhasSolicitacoes" && !isGer && !isSuporte && <PaginaMinhasSolicitacoes itens={minhasSol} recarregar={carregarMinhasSol} showToast={showToast} />}
@@ -2985,6 +2985,7 @@ function PainelSistema({ modulos, onSalvo, showToast }) {
   const AC_VEND_LISTA = [
     ["crm", "Pipeline", "Vê e move leads no funil — mas só os que são dele.", false, false],
     ["temperatura", "Temperatura", "Melhores horários e dias pra falar com os leads.", false, false],
+    ["vendas", "Vendas", "Lança as próprias vendas e vê o ranking do time. Não importa planilha nem mexe em venda dos outros.", false, false],
     ["ligacoes", "Ligações IA", "Disparo e histórico de ligações por voz.", false, true],
     ["ia", "Atendente IA", "Deixa editar o cérebro e a base da IA.", true, true],
     ["numeros", "Números", "Mostra os tokens da Meta e permite excluir números.", true, true],
@@ -2995,7 +2996,7 @@ function PainelSistema({ modulos, onSalvo, showToast }) {
   const toggleAV = (k) => setAcVend((a) => ({ ...a, [k]: !a[k] }));
   async function salvarAV() {
     setSavingAV(true);
-    try { await api.ofSetAcessoVend({ crm: !!acVend.crm, temperatura: !!acVend.temperatura }); onSalvo && onSalvo(); showToast("Acessos dos vendedores atualizados"); }
+    try { await api.ofSetAcessoVend({ crm: !!acVend.crm, temperatura: !!acVend.temperatura, vendas: !!acVend.vendas }); onSalvo && onSalvo(); showToast("Acessos dos vendedores atualizados"); }
     catch (e) { showToast(e.message); }
     finally { setSavingAV(false); }
   }
@@ -3755,8 +3756,31 @@ function ModalImportarVendas({ onClose, onDone, showToast, mesAtual }) {
   );
 }
 
+// Acha pessoas repetidas: "Dalit" x "Dalit Castro" (uma é o começo da outra).
+// O destino é sempre o nome MAIS COMPLETO (normalmente o cadastrado no sistema).
+function acharDuplicadas(pessoas) {
+  const limpa = (t) => String(t || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim().replace(/\s+/g, " ");
+  const pares = [];
+  for (let i = 0; i < pessoas.length; i++) {
+    for (let j = 0; j < pessoas.length; j++) {
+      if (i === j) continue;
+      const a = pessoas[i], b = pessoas[j];
+      const na = limpa(a.nome), nb = limpa(b.nome);
+      if (nb.length <= na.length) continue;
+      if (!nb.startsWith(na + " ")) continue;      // "dalit castro" começa com "dalit "
+      pares.push({ de: a, para: b });               // leva do curto pro completo
+    }
+  }
+  // se a mesma pessoa aparecer em vários pares, fica só o primeiro
+  const vistos = new Set();
+  return pares.filter((p) => {
+    if (vistos.has(p.de.id)) return false;
+    vistos.add(p.de.id); return true;
+  });
+}
+
 // Clicou no nome no ranking: define a equipe e a meta dessa pessoa
-function ModalPessoaRapida({ pessoa, pessoas, mes, onClose, onSalvo, showToast }) {
+function ModalPessoaRapida({ pessoa, pessoas, mes, isGer = true, onClose, onSalvo, showToast }) {
   const [grupo, setGrupo] = useState(pessoa.grupo || "");
   const [meta, setMeta] = useState(String(pessoa.meta || ""));
   const [salvando, setSalvando] = useState(false);
@@ -3795,7 +3819,7 @@ function ModalPessoaRapida({ pessoa, pessoas, mes, onClose, onSalvo, showToast }
         <div className="pop-body">
           <div className="vd-abas">
             <button className={aba === "vendas" ? "on" : ""} onClick={() => setAba("vendas")}>Vendas dia a dia{minhas ? ` (${minhas.length})` : ""}</button>
-            <button className={aba === "config" ? "on" : ""} onClick={() => setAba("config")}>Equipe & meta</button>
+            {isGer && <button className={aba === "config" ? "on" : ""} onClick={() => setAba("config")}>Equipe & meta</button>}
           </div>
 
           {aba === "vendas" ? (
@@ -3859,7 +3883,7 @@ function ModalPessoaRapida({ pessoa, pessoas, mes, onClose, onSalvo, showToast }
   );
 }
 
-function PainelVendas({ showToast }) {
+function PainelVendas({ showToast, isGer = true }) {
   const [mes, setMes] = useState("");
   const [dados, setDados] = useState(null);
   const [vendas, setVendas] = useState([]);
@@ -3876,7 +3900,7 @@ function PainelVendas({ showToast }) {
     return Promise.all([
       api.vdPainel(m || mes).then((d) => { setDados(d); if (!mes) setMes(d.mes); return d; }),
       api.vdLista(m || mes).then((d) => setVendas(d.vendas || [])),
-      api.vdPessoas().then((d) => setPessoas(d.pessoas || [])),
+      api.vdPessoas().then((d) => setPessoas(d.pessoas || [])).catch(() => {}),
     ]).catch((e) => showToast(e.message)).finally(() => setCarregando(false));
   };
   useEffect(() => { carregar(); /* eslint-disable-next-line */ }, []);
@@ -3906,9 +3930,9 @@ function PainelVendas({ showToast }) {
             forma: "Pix", plataforma: "Hotmart", codigo: "", parcelas: "", valor: "", recebido: "",
             data: new Date().toISOString().slice(0, 10),
           })}><I.plus className="ico" /> Lançar venda</button>
-          <button className="onum-btn-ghost" onClick={() => setShowPessoas(true)}><I.users className="ico" /> Equipe & metas</button>
-          <button className="onum-btn-ghost" onClick={() => setShowImportarV(true)}><I.clip className="ico" /> Importar planilha</button>
-          <button className="onum-btn-ghost" onClick={() => setVerLista((v) => !v)}><I.chat className="ico" /> {verLista ? "Ver ranking" : `Vendas do mês (${vendas.length})`}</button>
+          {isGer && <button className="onum-btn-ghost" onClick={() => setShowPessoas(true)}><I.users className="ico" /> Equipe & metas</button>}
+          {isGer && <button className="onum-btn-ghost" onClick={() => setShowImportarV(true)}><I.clip className="ico" /> Importar planilha</button>}
+          <button className="onum-btn-ghost" onClick={() => setVerLista((v) => !v)}><I.chat className="ico" /> {verLista ? "Ver ranking" : (isGer ? `Vendas do mês (${vendas.length})` : `Minhas vendas (${vendas.length})`)}</button>
         </div>
       </div>
 
@@ -3935,12 +3959,12 @@ function PainelVendas({ showToast }) {
       {verLista ? (
         <>
         <div className="vd-lista-top">
-          <span><b>{vendas.length}</b> venda(s) lançada(s) em {mesLegivel(mes)}</span>
-          <button className="crm-lote-del" onClick={async () => {
+          <span><b>{vendas.length}</b> {isGer ? "venda(s) lançada(s)" : "venda(s) sua(s)"} em {mesLegivel(mes)}</span>
+          {isGer && <button className="crm-lote-del" onClick={async () => {
             if (!window.confirm(`Apagar TODAS as ${vendas.length} vendas de ${mesLegivel(mes)}? Isso não dá pra desfazer.`)) return;
             try { const r = await api.vdLimparMes(mes); showToast(`✓ ${r.excluidas} venda(s) apagada(s)`); carregar(); }
             catch (e) { showToast("✗ " + e.message); }
-          }}><I.trash className="ico" /> Limpar o mês</button>
+          }}><I.trash className="ico" /> Limpar o mês</button>}
         </div>
         <ListaVendas vendas={vendas} onEditar={(v) => setForm({
           ...v, data: new Date(v.data).toISOString().slice(0, 10),
@@ -4020,8 +4044,8 @@ function PainelVendas({ showToast }) {
         </>
       )}
 
-      {form && <FormVenda form={form} setForm={setForm} pessoas={pessoas} onSalvo={() => { setForm(null); carregar(); }} showToast={showToast} />}
-      {pessoaRapida && <ModalPessoaRapida pessoa={pessoaRapida} pessoas={pessoas} mes={mes} onClose={() => setPessoaRapida(null)} onSalvo={carregar} showToast={showToast} />}
+      {form && <FormVenda form={form} setForm={setForm} pessoas={pessoas} isGer={isGer} onSalvo={() => { setForm(null); carregar(); }} showToast={showToast} />}
+      {pessoaRapida && <ModalPessoaRapida pessoa={pessoaRapida} pessoas={pessoas} mes={mes} isGer={isGer} onClose={() => setPessoaRapida(null)} onSalvo={carregar} showToast={showToast} />}
       {showImportarV && <ModalImportarVendas mesAtual={mes} onClose={() => setShowImportarV(false)} onDone={carregar} showToast={showToast} />}
       {showPessoas && <ModalPessoas pessoas={pessoas} onClose={() => setShowPessoas(false)} onMudou={carregar} showToast={showToast} />}
     </div>
@@ -4059,12 +4083,12 @@ function ListaVendas({ vendas, onEditar, onExcluir }) {
   );
 }
 
-function FormVenda({ form, setForm, pessoas, onSalvo, showToast }) {
+function FormVenda({ form, setForm, pessoas, isGer = true, onSalvo, showToast }) {
   const [salvando, setSalvando] = useState(false);
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
 
   async function salvar() {
-    if (!form.pessoaId) { showToast("Escolha de quem é a venda"); return; }
+    if (isGer && !form.pessoaId) { showToast("Escolha de quem é a venda"); return; }
     if (!(Number(String(form.valor).replace(",", ".")) > 0)) { showToast("Informe o valor vendido"); return; }
     setSalvando(true);
     const dados = {
@@ -4086,19 +4110,25 @@ function FormVenda({ form, setForm, pessoas, onSalvo, showToast }) {
       <div className="pop-sheet" style={{ maxWidth: 720 }}>
         <div className="pop-head"><b>{form.id ? "Editar venda" : "Lançar venda"}</b><button className="crm-x" onClick={() => setForm(null)}>✕</button></div>
         <div className="pop-body">
-          {pessoas.length === 0 && (
+          {isGer && pessoas.length === 0 && (
             <div className="of-nova-semtpl" style={{ marginBottom: 14 }}>
               Nenhuma pessoa cadastrada ainda. Feche aqui e clique em <b>Equipe & metas</b> pra cadastrar o time (dá pra puxar todo mundo do sistema de uma vez).
             </div>
           )}
           <div className="vd-form">
             <div><label className="lbl-mini">Data</label><input className="input" type="date" value={form.data} onChange={(e) => set("data", e.target.value)} /></div>
-            <div><label className="lbl-mini">Vendedor(a)</label>
-              <select className="input" value={form.pessoaId} onChange={(e) => set("pessoaId", e.target.value)}>
-                <option value="">Escolher…</option>
-                {pessoas.filter((p) => p.ativo).map((p) => <option key={p.id} value={p.id}>{p.nome}</option>)}
-              </select>
-            </div>
+            {isGer ? (
+              <div><label className="lbl-mini">Vendedor(a)</label>
+                <select className="input" value={form.pessoaId} onChange={(e) => set("pessoaId", e.target.value)}>
+                  <option value="">Escolher…</option>
+                  {pessoas.filter((p) => p.ativo).map((p) => <option key={p.id} value={p.id}>{p.nome}</option>)}
+                </select>
+              </div>
+            ) : (
+              <div><label className="lbl-mini">Vendedor(a)</label>
+                <input className="input" value="Você" disabled />
+              </div>
+            )}
             <div className="vd-full"><label className="lbl-mini">Nome do cliente</label><input className="input" value={form.cliente} onChange={(e) => set("cliente", e.target.value)} placeholder="Quem comprou" /></div>
             <div><label className="lbl-mini">E-mail</label><input className="input" value={form.email} onChange={(e) => set("email", e.target.value)} placeholder="cliente@email.com" /></div>
             <div><label className="lbl-mini">Telefone</label><input className="input" value={form.telefone} onChange={(e) => set("telefone", e.target.value)} placeholder="44 99999-9999" /></div>
@@ -4137,6 +4167,29 @@ function ModalPessoas({ pessoas, onClose, onMudou, showToast }) {
   const [meta, setMeta] = useState("");
   const [users, setUsers] = useState([]);
   const [puxando, setPuxando] = useState(false);
+  const [juntando, setJuntando] = useState(null);   // id da pessoa que vai ser juntada
+  const [destino, setDestino] = useState("");
+  const [ocupado, setOcupado] = useState(false);
+  const duplicadas = acharDuplicadas(pessoas);
+
+  async function juntar(deId, paraId) {
+    if (!deId || !paraId) return;
+    setOcupado(true);
+    try {
+      const r = await api.vdJuntarPessoas(deId, paraId);
+      showToast(`✓ ${r.movidas} venda(s) de ${r.de} foram pra ${r.para}`);
+      setJuntando(null); setDestino(""); onMudou();
+    } catch (e) { showToast("✗ " + e.message); } finally { setOcupado(false); }
+  }
+  async function juntarTodas() {
+    setOcupado(true);
+    try {
+      let n = 0;
+      for (const d of duplicadas) { const r = await api.vdJuntarPessoas(d.de.id, d.para.id); n += r.movidas; }
+      showToast(`✓ ${duplicadas.length} duplicada(s) juntada(s) · ${n} venda(s) movida(s)`);
+      onMudou();
+    } catch (e) { showToast("✗ " + e.message); } finally { setOcupado(false); }
+  }
   const gruposExistentes = Array.from(new Set(pessoas.map((p) => p.grupo).filter(Boolean)));
   useEffect(() => { api.listUsers().then(setUsers).catch(() => {}); }, []);
   const faltando = users.filter((u) => u.ativo && !pessoas.some((p) => p.nome.toLowerCase() === (u.nome || "").toLowerCase()));
@@ -4174,6 +4227,23 @@ function ModalPessoas({ pessoas, onClose, onMudou, showToast }) {
         <div className="pop-head"><b>Equipe & metas</b><button className="crm-x" onClick={onClose}>✕</button></div>
         <div className="pop-body">
           <div className="rsv-hint" style={{ marginTop: 0 }}>Quem aparece no painel e quanto é a meta de cada um por mês. Pode ser vendedor, marketing, professor — qualquer pessoa que gera venda.</div>
+          {duplicadas.length > 0 && (
+            <div className="vd-dup">
+              <div className="vd-dup-cab">
+                <b>⚠ {duplicadas.length} pessoa(s) repetida(s)</b>
+                <button className="btn btn-on btn-sm" disabled={ocupado} onClick={juntarTodas}>Juntar todas</button>
+              </div>
+              <div className="vd-dup-txt">As vendas vão pro nome completo (o do sistema) e a repetida some. Nada se perde.</div>
+              {duplicadas.map((d) => (
+                <div key={d.de.id} className="vd-dup-item">
+                  <span><b>{d.de.nome}</b> <small>{d.de.vendas || 0} venda(s) · {dinheiro(d.de.total || 0)}</small></span>
+                  <span className="vd-dup-seta">→</span>
+                  <span><b>{d.para.nome}</b> <small>{d.para.vendas || 0} venda(s)</small></span>
+                  <button className="btn btn-sm" disabled={ocupado} onClick={() => juntar(d.de.id, d.para.id)}>Juntar</button>
+                </div>
+              ))}
+            </div>
+          )}
           {faltando.length > 0 && (
             <button className="btn btn-on" style={{ marginTop: 12 }} disabled={puxando} onClick={puxarDoSistema}>
               <I.users className="ico" /> {puxando ? "Trazendo…" : `Trazer os ${faltando.length} do sistema`}
@@ -4188,13 +4258,28 @@ function ModalPessoas({ pessoas, onClose, onMudou, showToast }) {
           </div>
           <div className="vd-pessoas">
             {pessoas.map((p) => (
-              <div key={p.id} className={"vd-pessoa" + (p.ativo ? "" : " off")}>
+              <React.Fragment key={p.id}>
+              <div className={"vd-pessoa" + (p.ativo ? "" : " off")}>
                 <button className={p.ativo ? "of-switch on" : "of-switch"} onClick={() => editar(p, "ativo", !p.ativo)} title={p.ativo ? "No painel" : "Fora do painel"}><span className="of-switch-dot" /></button>
                 <input className="vd-pessoa-nome" value={p.nome} onChange={(e) => editar(p, "nome", e.target.value)} />
                 <input className="vd-pessoa-grupo" value={p.grupo} placeholder="equipe" onChange={(e) => editar(p, "grupo", e.target.value)} list="vd-grupos" />
                 <input className="vd-pessoa-meta" value={p.metaMensal} onChange={(e) => editar(p, "metaMensal", e.target.value)} title="Meta do mês" />
+                <span className="vd-pessoa-qtd" title="vendas lançadas">{p.vendas || 0}</span>
+                <button className="btn btn-sm" onClick={() => { setJuntando(juntando === p.id ? null : p.id); setDestino(""); }} title="Juntar com outra pessoa">⇄</button>
                 <button className="crm-tarefa-del" onClick={() => excluir(p)} title="Remover">✕</button>
               </div>
+              {juntando === p.id && (
+                <div className="vd-juntar">
+                  <span>Levar as <b>{p.vendas || 0}</b> venda(s) de <b>{p.nome}</b> para:</span>
+                  <select className="input" value={destino} onChange={(e) => setDestino(e.target.value)}>
+                    <option value="">Escolher pessoa…</option>
+                    {pessoas.filter((x) => x.id !== p.id).map((x) => <option key={x.id} value={x.id}>{x.nome}</option>)}
+                  </select>
+                  <button className="onum-add" disabled={!destino || ocupado} onClick={() => juntar(p.id, destino)}>Juntar</button>
+                  <button className="btn btn-sm" onClick={() => setJuntando(null)}>Cancelar</button>
+                </div>
+              )}
+              </React.Fragment>
             ))}
             {pessoas.length === 0 && <div className="crm-col-vazio">Ninguém cadastrado ainda.</div>}
           </div>
