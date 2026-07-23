@@ -234,7 +234,32 @@ function loadDB() {
 
 function saveDB() {
   try {
-    const json = JSON.stringify(db, null, 2);
+    // PROTEÇÃO CONTRA PERDA DE DADOS EM DEPLOY
+    // ------------------------------------------------------------------
+    // No Railway, durante um deploy, o container ANTIGO e o NOVO rodam
+    // juntos por alguns segundos, os dois com o mesmo arquivo de banco.
+    // Se o container antigo (rodando uma versão que ainda não conhece um
+    // módulo, ex.: "vendas") gravar a memória dele por cima, a parte que
+    // ele não conhece é APAGADA do arquivo.
+    // Por isso: antes de gravar, olhamos o que já está no disco e
+    // preservamos qualquer bloco que exista lá e que não exista aqui.
+    let paraGravar = db;
+    try {
+      if (fs.existsSync(DB_PATH)) {
+        const noDisco = JSON.parse(fs.readFileSync(DB_PATH, "utf8"));
+        const faltando = {};
+        let achouAlgo = false;
+        for (const chave of Object.keys(noDisco)) {
+          if (db[chave] === undefined) { faltando[chave] = noDisco[chave]; achouAlgo = true; }
+        }
+        if (achouAlgo) {
+          console.warn("[banco] preservando blocos que só existem no disco:", Object.keys(faltando).join(", "));
+          paraGravar = { ...faltando, ...db };
+        }
+      }
+    } catch (_) { /* se não der pra ler, grava do jeito normal */ }
+
+    const json = JSON.stringify(paraGravar, null, 2);
     // SALVAMENTO SEGURO: grava primeiro num arquivo temporário e só depois
     // renomeia por cima do real. rename é atômico — se o servidor reiniciar no
     // meio, o arquivo real continua intacto (nunca fica pela metade/corrompido).
@@ -260,8 +285,24 @@ function fazerBackup() {
     const d = new Date();
     const dia = d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
     const destino = path.join(BACKUP_DIR, `crm-${dia}.json`);
+
+    // SEGURANÇA: o backup do dia é sobrescrito a cada restart. Se o banco tiver
+    // ENCOLHIDO muito (sinal de que algo se perdeu), NÃO joga a cópia boa fora —
+    // guarda ela à parte antes, pra dar pra voltar atrás.
+    try {
+      if (fs.existsSync(destino)) {
+        const antes = fs.statSync(destino).size;
+        const agora = fs.statSync(DB_PATH).size;
+        if (antes > 2000 && agora < antes * 0.7) {
+          const salvaVidas = path.join(BACKUP_DIR, `crm-${dia}-ANTES-DE-ENCOLHER-${Date.now()}.json`);
+          fs.copyFileSync(destino, salvaVidas);
+          console.warn(`[backup] o banco encolheu (${antes} -> ${agora} bytes). Cópia de segurança guardada: ${salvaVidas}`);
+        }
+      }
+    } catch (_) {}
+
     fs.copyFileSync(DB_PATH, destino); // um backup por dia (sobrescreve se já houver do dia)
-    // rotação: mantém os 14 mais recentes
+    // rotação: mantém os 14 mais recentes (as cópias "ANTES-DE-ENCOLHER" ficam)
     const arquivos = fs.readdirSync(BACKUP_DIR).filter((f) => /^crm-\d{4}-\d{2}-\d{2}\.json$/.test(f)).sort();
     while (arquivos.length > 14) {
       const velho = arquivos.shift();
@@ -271,6 +312,69 @@ function fazerBackup() {
   } catch (e) {
     console.error("Erro no backup do banco:", e.message);
   }
+}
+/* Listar e restaurar backups pela tela — sem precisar de ninguém técnico */
+function instalarRotasBackup(app, auth, gerenteOnly) {
+  app.get("/api/sistema/backups", auth, gerenteOnly, (req, res) => {
+    try {
+      if (!fs.existsSync(BACKUP_DIR)) return res.json({ backups: [] });
+      const lista = fs.readdirSync(BACKUP_DIR).filter((f) => f.endsWith(".json")).map((f) => {
+        const p = path.join(BACKUP_DIR, f);
+        const st = fs.statSync(p);
+        let resumo = {};
+        try {
+          const j = JSON.parse(fs.readFileSync(p, "utf8"));
+          resumo = {
+            vendas: ((j.vendas || {}).lista || []).length,
+            pessoas: ((j.vendas || {}).pessoas || []).length,
+            leads: ((j.oficial || {}).crmLeads || []).length,
+            usuarios: (j.users || []).length,
+          };
+        } catch (_) {}
+        return { arquivo: f, tamanho: st.size, quando: st.mtimeMs, ...resumo };
+      }).sort((a, b) => b.quando - a.quando);
+      res.json({ backups: lista });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+  });
+
+  app.post("/api/sistema/restaurar", auth, gerenteOnly, (req, res) => {
+    try {
+      const arq = String((req.body || {}).arquivo || "").replace(/[^\w.\-]/g, "");
+      const p = path.join(BACKUP_DIR, arq);
+      if (!arq || !fs.existsSync(p)) return res.status(404).json({ error: "Backup não encontrado" });
+      const j = JSON.parse(fs.readFileSync(p, "utf8"));
+      // guarda o estado atual antes de restaurar (dá pra voltar atrás)
+      try { fs.copyFileSync(DB_PATH, path.join(BACKUP_DIR, `crm-ANTES-DA-RESTAURACAO-${Date.now()}.json`)); } catch (_) {}
+      db = j;
+      if (!Array.isArray(db.users)) db.users = dbVazio().users;
+      if (!db.waConfig) db.waConfig = dbVazio().waConfig;
+      if (!db.waChats || typeof db.waChats !== "object") db.waChats = {};
+      saveDB();
+      res.json({ ok: true, restaurado: arq, vendas: ((db.vendas || {}).lista || []).length });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+  });
+
+  /* Recuperar SÓ as vendas de um backup, sem mexer no resto do sistema */
+  app.post("/api/sistema/recuperar-vendas", auth, gerenteOnly, (req, res) => {
+    try {
+      const arq = String((req.body || {}).arquivo || "").replace(/[^\w.\-]/g, "");
+      const p = path.join(BACKUP_DIR, arq);
+      if (!arq || !fs.existsSync(p)) return res.status(404).json({ error: "Backup não encontrado" });
+      const j = JSON.parse(fs.readFileSync(p, "utf8"));
+      const vendas = (j.vendas || {}).lista || [];
+      const pessoas = (j.vendas || {}).pessoas || [];
+      if (!vendas.length && !pessoas.length) return res.status(400).json({ error: "Esse backup não tem vendas" });
+      if (!db.vendas) db.vendas = { pessoas: [], lista: [], metasMes: {} };
+      const idsAtuais = new Set((db.vendas.lista || []).map((v) => v.id));
+      const pesAtuais = new Set((db.vendas.pessoas || []).map((x) => x.id));
+      let novasV = 0, novasP = 0;
+      pessoas.forEach((x) => { if (!pesAtuais.has(x.id)) { db.vendas.pessoas.push(x); novasP++; } });
+      vendas.forEach((v) => { if (!idsAtuais.has(v.id)) { db.vendas.lista.push(v); novasV++; } });
+      if (!db.vendas.metasMes) db.vendas.metasMes = (j.vendas || {}).metasMes || {};
+      saveDB();
+      res.json({ ok: true, vendasRecuperadas: novasV, pessoasRecuperadas: novasP, totalAgora: db.vendas.lista.length });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+  });
 }
 setTimeout(fazerBackup, 20000);            // um backup ~20s depois de subir
 setInterval(fazerBackup, 24 * 3600000);    // e a cada 24h
@@ -1962,6 +2066,8 @@ const permiteVendVendas = (chave) => (req, res, next) => {
   return res.status(403).json({ error: "Acesso restrito" });
 };
 instalarVendas({ app, getDb: () => db, saveDB, proximoId, auth, gerenteOnly, permiteVend: permiteVendVendas });
+
+instalarRotasBackup(app, auth, gerenteOnly);
 
 const canalOficial = instalarCanalOficial({
   app,
