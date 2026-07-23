@@ -904,8 +904,8 @@ export function instalarVendas({ app, getDb, saveDB, proximoId, auth, gerenteOnl
     // ---- ranking por equipe (sem quem é venda direta) ----
     const eq = {};
     ranking.forEach((r) => {
-      if (r.foraDoPodio) return;
-      const g2 = (r.equipe || "Sem equipe").trim() || "Sem equipe";
+      // venda direta (Escola, live, site) soma no Marketing — pedido do Celso
+      const g2 = ((r.equipe || "").trim()) || (r.foraDoPodio ? "Marketing" : "Sem equipe");
       if (!eq[g2]) eq[g2] = { equipe: g2, valor: 0, recebido: 0, qtd: 0, pessoas: 0, meta: 0, membros: [] };
       eq[g2].valor += r.valor; eq[g2].recebido += r.recebido; eq[g2].qtd += r.qtd;
       eq[g2].pessoas++; eq[g2].meta += r.meta || 0;
