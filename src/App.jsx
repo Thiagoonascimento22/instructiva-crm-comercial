@@ -3681,7 +3681,7 @@ function PainelVendas({ showToast }) {
         <div className="vd-top-acoes">
           <button className="onum-add" onClick={() => setForm({
             pessoaId: pessoas[0] ? pessoas[0].id : "", cliente: "", email: "", telefone: "", curso: "",
-            forma: "Pix", plataforma: "Hotmart", codigo: "", parcelas: "", valor: "", recebido: "", aGerar: "",
+            forma: "Pix", plataforma: "Hotmart", codigo: "", parcelas: "", valor: "", recebido: "",
             data: new Date().toISOString().slice(0, 10),
           })}><I.plus className="ico" /> Lançar venda</button>
           <button className="onum-btn-ghost" onClick={() => setShowPessoas(true)}><I.users className="ico" /> Equipe & metas</button>
@@ -3703,11 +3703,6 @@ function PainelVendas({ showToast }) {
           <span className="vd-card-pe">{g.venda > 0 ? Math.round((g.recebido / g.venda) * 100) : 0}% do que foi vendido</span>
         </div>
         <div className="vd-card">
-          <span className="vd-card-lb">A gerar</span>
-          <span className="vd-card-vl">{dinheiro(g.aGerar || 0)}</span>
-          <span className="vd-card-pe">parcelas que ainda vão cair</span>
-        </div>
-        <div className="vd-card">
           <span className="vd-card-lb">Vendas fechadas</span>
           <span className="vd-card-vl">{g.qtd}</span>
           <span className="vd-card-pe">ticket médio {g.qtd ? dinheiroCurto(g.venda / g.qtd) : "—"}</span>
@@ -3717,7 +3712,7 @@ function PainelVendas({ showToast }) {
       {verLista ? (
         <ListaVendas vendas={vendas} onEditar={(v) => setForm({
           ...v, data: new Date(v.data).toISOString().slice(0, 10),
-          valor: String(v.valor), recebido: String(v.recebido), aGerar: String(v.aGerar || 0), parcelas: String(v.parcelas || ""),
+          valor: String(v.valor), recebido: String(v.recebido), parcelas: String(v.parcelas || ""),
         })} onExcluir={async (v) => {
           if (!window.confirm(`Excluir a venda de ${v.cliente || v.pessoaNome}?`)) return;
           try { await api.vdExcluir(v.id); showToast("✓ Venda excluída"); carregar(); } catch (e) { showToast(e.message); }
@@ -3817,7 +3812,7 @@ function ListaVendas({ vendas, onEditar, onExcluir }) {
           </div>
           <div className="vd-item-vals">
             <span className="vd-item-vl">{dinheiro(v.valor)}</span>
-            <span className="vd-item-rec">recebido {dinheiro(v.recebido)}{v.aGerar > 0 ? " · a gerar " + dinheiro(v.aGerar) : ""}</span>
+            <span className="vd-item-rec">recebido {dinheiro(v.recebido)}</span>
           </div>
           <div className="vd-item-acoes">
             <button className="btn btn-sm" onClick={() => onEditar(v)}>Editar</button>
@@ -3832,9 +3827,6 @@ function ListaVendas({ vendas, onEditar, onExcluir }) {
 function FormVenda({ form, setForm, pessoas, onSalvo, showToast }) {
   const [salvando, setSalvando] = useState(false);
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
-  const nAGerar = form.aGerar !== "" && form.aGerar != null
-    ? Number(String(form.aGerar).replace(",", "."))
-    : Math.max(0, (Number(String(form.valor).replace(",", ".")) || 0) - (Number(String(form.recebido).replace(",", ".")) || 0));
 
   async function salvar() {
     if (!form.pessoaId) { showToast("Escolha de quem é a venda"); return; }
@@ -3843,7 +3835,7 @@ function FormVenda({ form, setForm, pessoas, onSalvo, showToast }) {
     const dados = {
       pessoaId: form.pessoaId, cliente: form.cliente, email: form.email, telefone: form.telefone,
       curso: form.curso, forma: form.forma, plataforma: form.plataforma, codigo: form.codigo,
-      parcelas: form.parcelas, valor: form.valor, recebido: form.recebido, aGerar: form.aGerar,
+      parcelas: form.parcelas, valor: form.valor, recebido: form.recebido,
       data: form.data,
     };
     try {
@@ -3854,7 +3846,8 @@ function FormVenda({ form, setForm, pessoas, onSalvo, showToast }) {
   }
 
   return (
-    <div className="pop-bg" onClick={(e) => e.target === e.currentTarget && setForm(null)}>
+    <Portal>
+    <div className="pop-bg centro" onClick={(e) => e.target === e.currentTarget && setForm(null)}>
       <div className="pop-sheet" style={{ maxWidth: 720 }}>
         <div className="pop-head"><b>{form.id ? "Editar venda" : "Lançar venda"}</b><button className="crm-x" onClick={() => setForm(null)}>✕</button></div>
         <div className="pop-body">
@@ -3889,10 +3882,6 @@ function FormVenda({ form, setForm, pessoas, onSalvo, showToast }) {
             <div><label className="lbl-mini">Quantidade de parcelas</label><input className="input" type="number" min="0" max="60" value={form.parcelas} onChange={(e) => set("parcelas", e.target.value)} placeholder="Ex.: 12" /></div>
             <div><label className="lbl-mini">Valor vendido</label><input className="input" value={form.valor} onChange={(e) => set("valor", e.target.value)} placeholder="2497,00" /></div>
             <div><label className="lbl-mini">Valor recebido</label><input className="input" value={form.recebido} onChange={(e) => set("recebido", e.target.value)} placeholder="quanto já caiu" /></div>
-            <div className="vd-full"><label className="lbl-mini">Venda a gerar</label>
-              <input className="input" value={form.aGerar} onChange={(e) => set("aGerar", e.target.value)} placeholder={"deixe vazio pra calcular sozinho: " + dinheiro(nAGerar)} />
-              <div className="vd-dica">Se deixar vazio, o sistema usa <b>vendido − recebido</b> = {dinheiro(nAGerar)}</div>
-            </div>
           </div>
           <div className="vd-rodape">
             <button className="btn" onClick={() => setForm(null)}>Cancelar</button>
@@ -3903,6 +3892,7 @@ function FormVenda({ form, setForm, pessoas, onSalvo, showToast }) {
         </div>
       </div>
     </div>
+    </Portal>
   );
 }
 
@@ -3943,7 +3933,8 @@ function ModalPessoas({ pessoas, onClose, onMudou, showToast }) {
   }
 
   return (
-    <div className="pop-bg" onClick={(e) => e.target === e.currentTarget && onClose()}>
+    <Portal>
+    <div className="pop-bg centro" onClick={(e) => e.target === e.currentTarget && onClose()}>
       <div className="pop-sheet" style={{ maxWidth: 640 }}>
         <div className="pop-head"><b>Equipe & metas</b><button className="crm-x" onClick={onClose}>✕</button></div>
         <div className="pop-body">
@@ -3975,6 +3966,7 @@ function ModalPessoas({ pessoas, onClose, onMudou, showToast }) {
         </div>
       </div>
     </div>
+    </Portal>
   );
 }
 
