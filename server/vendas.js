@@ -688,6 +688,43 @@ export function instalarVendas({ app, getDb, saveDB, proximoId, auth, gerenteOnl
     return String(f).trim();
   }
 
+  /* Junta as variações do mesmo curso: "Odonto, Estetico, Fisio", "odontomedico",
+     "ODONTOLÓGICOS" -> tudo vira ODONTO. Sem isso a métrica por curso não presta. */
+  function cursoCanonico(txt) {
+    const t = String(txt || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
+    if (!t) return "Sem curso";
+    const tem = (...ps) => ps.some((x) => t.includes(x));
+    if (tem("odonto", "odontolog")) return "ODONTO";
+    if (tem("esteira")) return "ESTEIRAS";
+    if (tem("soft", "soft start")) return "SOFT-STARTER";
+    if (tem("solar")) return "SOLAR";
+    if (tem("inverter", "inversor")) return "INVERTER";
+    if (tem("flyback")) return "LIVRO FONTES FLYBACK";
+    if (tem("retificador pfc", "pfc")) return "LIVRO FONTES RETIFICADOR PFC";
+    if (tem("analise de circuitos", "análise de circuitos")) return "LIVRO ANÁLISE DE CIRCUITOS";
+    if (tem("livro") && tem("fontes")) return "LIVRO FONTES CHAVEADAS";
+    if (tem("combo") && tem("livro")) return "COMBO DE LIVROS";
+    if (t === "livro" || t === "livros") return "LIVROS";
+    if (tem("fontes chaveadas", "fonte chaveada")) return "FONTES CHAVEADAS";
+    if (tem("osciloscop")) return "MANUSEIO DE OSCILOSCÓPIO";
+    if (tem("solda")) return "MÁQUINA DE SOLDA";
+    if (tem("microondas", "micro-ondas")) return "MICROONDAS";
+    if (tem("televisor", "tv ")) return "TELEVISORES";
+    if (tem("amplificador")) return "AMPLIFICADORES";
+    if (tem("emac")) return t.includes("4") ? "EMAC 4.0" : t.includes("3") ? "EMAC 3.0" : "EMAC";
+    if (tem("analise dc", "análise dc")) return "ANÁLISE DC AVANÇADA";
+    if (tem("eletronica inicial", "eletrônica inicial")) return "ELETRÔNICA INICIAL";
+    if (tem("eletronica digital")) return "ELETRÔNICA DIGITAL";
+    if (tem("eletronica de potencia")) return "ELETRÔNICA DE POTÊNCIA";
+    if (tem("nobreak")) return "NOBREAK";
+    if (tem("programa")) return "PROGRAMAÇÃO";
+    if (tem("inteligencia artificial")) return "INTELIGÊNCIA ARTIFICIAL";
+    if (tem("low ticket")) return "LOW TICKET";
+    if (tem("fonte de game")) return "FONTE DE GAME";
+    if (tem("imersao", "imersão")) return "IMERSÃO EM ANÁLISE DE DEFEITOS";
+    return String(txt).trim().toUpperCase();
+  }
+
   app.get("/api/vendas/tv", (req, res) => {
     garantir();
     const k = String(req.query.k || "").trim();
@@ -712,7 +749,7 @@ export function instalarVendas({ app, getDb, saveDB, proximoId, auth, gerenteOnl
     // ---- por curso ----
     const cursos = {};
     doMes.forEach((v) => {
-      const c = String(v.curso || "").trim() || "Sem curso";
+      const c = cursoCanonico(v.curso);
       if (!cursos[c]) cursos[c] = { curso: c, qtd: 0, valor: 0 };
       cursos[c].qtd++; cursos[c].valor += num(v.valor);
     });
@@ -749,6 +786,36 @@ export function instalarVendas({ app, getDb, saveDB, proximoId, auth, gerenteOnl
     doMes.forEach((v) => { const d = new Date(v.data).getDate(); if (porDia[d - 1]) { porDia[d - 1].valor += num(v.valor); porDia[d - 1].qtd++; } });
     const vendidoHoje = (porDia[diaHoje - 1] || {}).valor || 0;
     const qtdHoje = (porDia[diaHoje - 1] || {}).qtd || 0;
+    // ---- semana (domingo a sábado) ----
+    const ref = ehMesAtual ? new Date() : new Date(ano, mm - 1, diasNoMes);
+    const ini = new Date(ref); ini.setHours(0, 0, 0, 0); ini.setDate(ini.getDate() - ini.getDay());
+    const fim = new Date(ini); fim.setDate(fim.getDate() + 7);
+    const daSemana = (db.vendas.lista || []).filter((v) => v.data >= ini.getTime() && v.data < fim.getTime());
+    const semana = {
+      valor: daSemana.reduce((s2, v) => s2 + num(v.valor), 0),
+      recebido: daSemana.reduce((s2, v) => s2 + num(v.recebido), 0),
+      qtd: daSemana.length,
+    };
+    const ontem = (porDia[diaHoje - 2] || {}).valor || 0;
+    // ---- dias úteis do mês (pra meta diária, como vocês usavam) ----
+    let diasUteis = 0;
+    for (let d = 1; d <= diasNoMes; d++) { const w = new Date(ano, mm - 1, d).getDay(); if (w !== 0 && w !== 6) diasUteis++; }
+    const metaDia = metaTotal > 0 ? metaTotal / diasUteis : 0;
+    // ---- faturamento por semana do mês ----
+    const semanas = [];
+    let ini2 = new Date(ano, mm - 1, 1);
+    while (ini2.getMonth() === mm - 1) {
+      const fim2 = new Date(ini2); fim2.setDate(fim2.getDate() + 6);
+      const ate = fim2.getMonth() === mm - 1 ? fim2.getDate() : diasNoMes;
+      const dias = porDia.slice(ini2.getDate() - 1, ate);
+      semanas.push({
+        rot: String(ini2.getDate()).padStart(2, "0") + "/" + String(mm).padStart(2, "0") + " a " + String(ate).padStart(2, "0") + "/" + String(mm).padStart(2, "0"),
+        valor: dias.reduce((s2, x) => s2 + x.valor, 0),
+        qtd: dias.reduce((s2, x) => s2 + x.qtd, 0),
+        atual: diaHoje >= ini2.getDate() && diaHoje <= ate,
+      });
+      ini2 = new Date(ano, mm - 1, ate + 1);
+    }
 
     res.json({
       mes, atualizadoEm: Date.now(), diasNoMes, diaHoje,
@@ -758,8 +825,14 @@ export function instalarVendas({ app, getDb, saveDB, proximoId, auth, gerenteOnl
         falta: Math.max(0, metaTotal - venda),
         ticket: doMes.length ? venda / doMes.length : 0,
         cursosVendidos: Object.keys(cursos).length,
-        vendidoHoje, qtdHoje,
+        vendidoHoje, qtdHoje, ontem,
+        semana: semana.valor, semanaQtd: semana.qtd, semanaRecebido: semana.recebido,
+        mediaDia: diaHoje > 0 ? venda / diaHoje : 0,
+        projecao: diaHoje > 0 ? Math.round((venda / diaHoje) * diasNoMes) : 0,
+        diasRestantes: Math.max(0, diasNoMes - diaHoje),
+        metaDia, pctDia: metaDia > 0 ? Math.round((vendidoHoje / metaDia) * 100) : 0, diasUteis,
       },
+      semanas,
       formas: Object.values(formas).sort((a, b) => b.valor - a.valor),
       cursos: Object.values(cursos).sort((a, b) => b.valor - a.valor),
       plataformas: Object.values(plataformas).sort((a, b) => b.valor - a.valor),
