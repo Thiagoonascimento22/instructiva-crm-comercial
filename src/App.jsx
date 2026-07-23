@@ -4598,6 +4598,34 @@ function FormVenda({ form, setForm, pessoas, isGer = true, onSalvo, showToast })
   );
 }
 
+// Uma linha da lista de Equipe & metas. Guarda o que você digita AQUI e só manda
+// pro servidor quando você sai do campo (ou aperta Enter) — sem travar nem apagar letra.
+function LinhaPessoa({ p, onSalvar, onJuntar, onExcluir, onToggle }) {
+  const [nome, setNome] = useState(p.nome);
+  const [grupo, setGrupo] = useState(p.grupo || "");
+  const [meta, setMeta] = useState(String(p.metaMensal ?? ""));
+  useEffect(() => { setNome(p.nome); setGrupo(p.grupo || ""); setMeta(String(p.metaMensal ?? "")); }, [p.id]);
+  const salvarSeMudou = (campo, valor, original) => {
+    if (String(valor) === String(original ?? "")) return;   // não mudou: nem chama o servidor
+    onSalvar(p, campo, valor);
+  };
+  const aoTeclar = (e) => { if (e.key === "Enter") e.currentTarget.blur(); };
+  return (
+    <div className={"vd-pessoa" + (p.ativo ? "" : " off")}>
+      <button className={p.ativo ? "of-switch on" : "of-switch"} onClick={() => onToggle(p)} title={p.ativo ? "No painel" : "Fora do painel"}><span className="of-switch-dot" /></button>
+      <input className="vd-pessoa-nome" value={nome} onChange={(e) => setNome(e.target.value)}
+        onBlur={() => salvarSeMudou("nome", nome.trim() || p.nome, p.nome)} onKeyDown={aoTeclar} />
+      <input className="vd-pessoa-grupo" value={grupo} placeholder="equipe" list="vd-grupos"
+        onChange={(e) => setGrupo(e.target.value)} onBlur={() => salvarSeMudou("grupo", grupo, p.grupo)} onKeyDown={aoTeclar} />
+      <input className="vd-pessoa-meta" value={meta} placeholder="meta" title="Meta do mês"
+        onChange={(e) => setMeta(e.target.value)} onBlur={() => salvarSeMudou("metaMensal", meta, p.metaMensal)} onKeyDown={aoTeclar} />
+      <span className="vd-pessoa-qtd" title="vendas lançadas">{p.vendas || 0}</span>
+      <button className="btn btn-sm" onClick={() => onJuntar(p)} title="Juntar com outra pessoa">⇄</button>
+      <button className="crm-tarefa-del" onClick={() => onExcluir(p)} title="Remover">✕</button>
+    </div>
+  );
+}
+
 function ModalPessoas({ pessoas, onClose, onMudou, showToast }) {
   const [nome, setNome] = useState("");
   const [grupo, setGrupo] = useState("");
@@ -4649,7 +4677,11 @@ function ModalPessoas({ pessoas, onClose, onMudou, showToast }) {
     catch (e) { showToast("✗ " + e.message); }
   }
   async function editar(p, campo, valor) {
-    try { await api.vdPessoaEditar(p.id, { [campo]: valor }); onMudou(); } catch (e) { showToast(e.message); }
+    try {
+      await api.vdPessoaEditar(p.id, { [campo]: valor });
+      // atualiza a tela sem recarregar tudo (evita o campo "piscar" enquanto digita)
+      onMudou({ silencioso: true });
+    } catch (e) { showToast("✗ " + e.message); }
   }
   async function excluir(p) {
     if (!window.confirm(`Remover ${p.nome} do painel?`)) return;
@@ -4695,17 +4727,11 @@ function ModalPessoas({ pessoas, onClose, onMudou, showToast }) {
           </div>
           <div className="vd-pessoas">
             {pessoas.map((p) => (
-              <React.Fragment key={p.id}>
-              <div className={"vd-pessoa" + (p.ativo ? "" : " off")}>
-                <button className={p.ativo ? "of-switch on" : "of-switch"} onClick={() => editar(p, "ativo", !p.ativo)} title={p.ativo ? "No painel" : "Fora do painel"}><span className="of-switch-dot" /></button>
-                <input className="vd-pessoa-nome" value={p.nome} onChange={(e) => editar(p, "nome", e.target.value)} />
-                <input className="vd-pessoa-grupo" value={p.grupo} placeholder="equipe" onChange={(e) => editar(p, "grupo", e.target.value)} list="vd-grupos" />
-                <input className="vd-pessoa-meta" value={p.metaMensal} onChange={(e) => editar(p, "metaMensal", e.target.value)} title="Meta do mês" />
-                <span className="vd-pessoa-qtd" title="vendas lançadas">{p.vendas || 0}</span>
-                <button className="btn btn-sm" onClick={() => { setJuntando(juntando === p.id ? null : p.id); setDestino(""); }} title="Juntar com outra pessoa">⇄</button>
-                <button className="crm-tarefa-del" onClick={() => excluir(p)} title="Remover">✕</button>
-              </div>
-              </React.Fragment>
+              <LinhaPessoa key={p.id} p={p}
+                onSalvar={editar}
+                onToggle={(x) => editar(x, "ativo", !x.ativo)}
+                onJuntar={(x) => { setJuntando(x.id); setDestino(""); }}
+                onExcluir={excluir} />
             ))}
             {pessoas.length === 0 && <div className="crm-col-vazio">Ninguém cadastrado ainda.</div>}
           </div>
@@ -6598,7 +6624,10 @@ function InboxOficial({ isGer, showToast, onIrParaEvolution, target, onTargetUse
               )}
 
               {erroNova && tpls.length > 0 && <div className="of-nova-erro">{erroNova}</div>}
-              <button className="btn btn-primary" style={{ marginTop: 16 }} disabled={enviandoTpl || !tplSel} onClick={enviarNovaConv}>{enviandoTpl ? "Enviando…" : "Enviar template e abrir conversa"}</button>
+            </div>
+            <div className="of-nova-pe">
+              <button className="btn" onClick={() => setNovaConv(null)}>Cancelar</button>
+              <button className="btn btn-primary" disabled={enviandoTpl || !tplSel} onClick={enviarNovaConv}>{enviandoTpl ? "Enviando…" : "Enviar template e abrir conversa"}</button>
             </div>
           </div>
         ) : !conversa ? (
