@@ -3883,6 +3883,63 @@ function ModalPessoaRapida({ pessoa, pessoas, mes, isGer = true, onClose, onSalv
   );
 }
 
+// Anel de progresso da meta
+function Anel({ pct }) {
+  const r = 52, c = 2 * Math.PI * r;
+  const p = Math.max(0, Math.min(100, pct || 0));
+  return (
+    <div className="vd-anel">
+      <svg width="128" height="128" viewBox="0 0 128 128">
+        <defs>
+          <linearGradient id="gAnel" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0%" stopColor="#F26522" /><stop offset="100%" stopColor="#25A06B" />
+          </linearGradient>
+        </defs>
+        <circle cx="64" cy="64" r={r} fill="none" stroke="var(--surface-2)" strokeWidth="12" />
+        <circle cx="64" cy="64" r={r} fill="none" stroke="url(#gAnel)" strokeWidth="12" strokeLinecap="round"
+          strokeDasharray={c} strokeDashoffset={c - (c * p) / 100} transform="rotate(-90 64 64)"
+          style={{ transition: "stroke-dashoffset .8s ease" }} />
+      </svg>
+      <div className="vd-anel-txt"><b>{Math.round(pct || 0)}%</b><span>da meta</span></div>
+    </div>
+  );
+}
+// Gráfico de barras: quanto vendeu em cada dia do mês
+function GraficoDias({ porDia, diaHoje }) {
+  const max = porDia.reduce((m, d) => Math.max(m, d.venda), 0) || 1;
+  return (
+    <div className="vd-graf">
+      {porDia.map((d) => (
+        <div key={d.dia} className={"vd-graf-col" + (d.dia === diaHoje ? " hoje" : "")}
+          title={`Dia ${d.dia}: ${d.qtd} venda(s) · R$ ${d.venda.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`}>
+          <div className="vd-graf-barra" style={{ height: Math.max(d.venda > 0 ? 4 : 1, (d.venda / max) * 100) + "%" }} />
+          {(d.dia === 1 || d.dia % 5 === 0) && <span className="vd-graf-dia">{d.dia}</span>}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// Registrar venda direto da conversa (já vem com nome e telefone do cliente)
+function ModalRegistrarVenda({ prefill, isGer, onClose, showToast }) {
+  const [pessoas, setPessoas] = useState([]);
+  const [form, setForm] = useState({
+    pessoaId: "", cliente: prefill.nome || "", email: "", telefone: prefill.telefone || "",
+    curso: "", forma: "Pix", plataforma: "Hotmart", codigo: "", parcelas: "",
+    valor: "", recebido: "", data: new Date().toISOString().slice(0, 10),
+  });
+  useEffect(() => {
+    if (!isGer) return;
+    api.vdPessoas().then((d) => {
+      const ps = d.pessoas || [];
+      setPessoas(ps);
+      setForm((f) => ({ ...f, pessoaId: ps[0] ? ps[0].id : "" }));
+    }).catch(() => {});
+  }, [isGer]);
+  return <FormVenda form={form} setForm={(f) => { const nv = typeof f === "function" ? f(form) : f; if (nv === null) { onClose(); return; } setForm(nv); }}
+    pessoas={pessoas} isGer={isGer} onSalvo={() => { showToast("🎉 Venda registrada!"); onClose(); }} showToast={showToast} />;
+}
+
 function PainelVendas({ showToast, isGer = true }) {
   const [mes, setMes] = useState("");
   const [dados, setDados] = useState(null);
@@ -3936,23 +3993,41 @@ function PainelVendas({ showToast, isGer = true }) {
         </div>
       </div>
 
-      {/* números grandes */}
-      <div className="vd-cards">
-        <div className="vd-card destaque">
-          <span className="vd-card-lb">Vendido em {mesLegivel(mes)}</span>
-          <span className="vd-card-vl">{dinheiro(g.venda)}</span>
-          <div className="vd-barra"><div className="vd-barra-in" style={{ width: pctGeral + "%" }} /></div>
-          <span className="vd-card-pe"><b>{g.pct}%</b> da meta de {dinheiroCurto(g.meta)} · faltam {dinheiroCurto(g.falta)}</span>
+      {/* HERO: anel da meta + números + evolução do mês */}
+      <div className="vd-hero">
+        <div className="vd-hero-esq">
+          <Anel pct={pctGeral} />
+          <div className="vd-hero-num">
+            <span className="vd-hero-lb">Vendido em {mesLegivel(mes)}</span>
+            <span className="vd-hero-vl">{dinheiro(g.venda)}</span>
+            <span className="vd-hero-sub">
+              {g.meta > 0
+                ? <>de <b>{dinheiroCurto(g.meta)}</b> · faltam <b>{dinheiroCurto(g.falta)}</b></>
+                : <>defina as metas em <b>Equipe &amp; metas</b></>}
+            </span>
+            <div className="vd-mini">
+              <div><span>Recebido</span><b className="verde">{dinheiro(g.recebido)}</b></div>
+              <div><span>Vendas</span><b>{g.qtd}</b></div>
+              <div><span>Ticket médio</span><b>{g.qtd ? dinheiroCurto(g.venda / g.qtd) : "—"}</b></div>
+            </div>
+          </div>
         </div>
-        <div className="vd-card">
-          <span className="vd-card-lb">Já recebido</span>
-          <span className="vd-card-vl verde">{dinheiro(g.recebido)}</span>
-          <span className="vd-card-pe">{g.venda > 0 ? Math.round((g.recebido / g.venda) * 100) : 0}% do que foi vendido</span>
-        </div>
-        <div className="vd-card">
-          <span className="vd-card-lb">Vendas fechadas</span>
-          <span className="vd-card-vl">{g.qtd}</span>
-          <span className="vd-card-pe">ticket médio {g.qtd ? dinheiroCurto(g.venda / g.qtd) : "—"}</span>
+        <div className="vd-hero-dir">
+          <div className="vd-graf-cab">
+            <span>Evolução do mês</span>
+            {dados.melhorDia && <small>melhor dia: <b>{dados.melhorDia.dia}</b> com {dinheiroCurto(dados.melhorDia.venda)}</small>}
+          </div>
+          <GraficoDias porDia={dados.porDia || []} diaHoje={dados.diaHoje} />
+          <div className="vd-proj">
+            {dados.diasRestantes > 0 ? (
+              <>
+                <div><span>No ritmo de hoje, fecha em</span><b>{dinheiroCurto(dados.projecao)}</b></div>
+                <div><span>Faltam {dados.diasRestantes} dia(s) · precisa por dia</span><b>{dinheiroCurto(dados.precisaPorDia)}</b></div>
+              </>
+            ) : (
+              <div><span>Média por dia no mês</span><b>{dinheiroCurto(dados.mediaDia)}</b></div>
+            )}
+          </div>
         </div>
       </div>
 
@@ -5709,6 +5784,7 @@ function OfMidia({ chatId, m }) {
 function InboxOficial({ isGer, showToast, onIrParaEvolution, target, onTargetUsed }) {
   const [chats, setChats] = useState([]);
   const [carregou, setCarregou] = useState(false);
+  const [regVenda, setRegVenda] = useState(false);
   const [novaConv, setNovaConv] = useState(null); // { telefone } quando iniciando conversa nova
   const [numerosOf, setNumerosOf] = useState([]);
   const [numSel, setNumSel] = useState("");
@@ -6186,6 +6262,9 @@ function InboxOficial({ isGer, showToast, onIrParaEvolution, target, onTargetUse
                     <I.pipe className="ico" /> Pipeline
                   </button>
                 )}
+                <button className="of-acao-btn venda" title="Registrar uma venda deste cliente" onClick={() => setRegVenda(true)}>
+                  <I.gauge className="ico" /> Registrar venda
+                </button>
                 <button className="of-acao-btn fim" title="Encerrar atendimento" onClick={() => encerrar()}>
                   <I.check className="ico" /> Encerrar
                 </button>
@@ -6321,6 +6400,11 @@ function InboxOficial({ isGer, showToast, onIrParaEvolution, target, onTargetUse
         />
       )}
 
+      {regVenda && conversa && (
+        <ModalRegistrarVenda prefill={{ nome: conversa.nome, telefone: conversa.numero }} isGer={isGer}
+          onClose={() => setRegVenda(false)} showToast={showToast} />
+      )}
+
       {cadPipeline && conversa && (
         <ModalCadastrarPipeline
           prefill={{ nome: conversa.nome, telefone: conversa.numero }}
@@ -6356,6 +6440,7 @@ function WhatsApp({ user, showToast, target, onTargetUsed, recarregarSol }) {
   const [novoLead, setNovoLead] = useState(null);
   const [enviando, setEnviando] = useState(false);
   const [pedindoSuporte, setPedindoSuporte] = useState(false);
+  const [regVenda, setRegVenda] = useState(false);
   const [cadPipeline, setCadPipeline] = useState(false);
   const [showEmoji, setShowEmoji] = useState(false);
   const [verArquivadas, setVerArquivadas] = useState(false);
@@ -6746,6 +6831,7 @@ function WhatsApp({ user, showToast, target, onTargetUsed, recarregarSol }) {
               </div>
               {chat.nota != null && <span className="nota-badge" title="Nota da pesquisa de satisfação">⭐ {chat.nota}/5</span>}
               {isGer && <button type="button" className="btn-pipe" onClick={() => setCadPipeline(true)} title="Cadastrar este lead no Pipeline"><I.pipe style={{ width: 14, height: 14 }} /> Pipeline</button>}
+              <button type="button" className="btn-venda" onClick={() => setRegVenda(true)} title="Registrar uma venda deste cliente"><I.gauge style={{ width: 14, height: 14 }} /> Registrar venda</button>
               {!isGer && <button type="button" className="btn-suporte" onClick={() => setPedindoSuporte(true)} title="Encaminhar este atendimento para a equipe de suporte"><I.suporte style={{ width: 14, height: 14 }} /> Encaminhar pro suporte</button>}
               {chat.encerrado ? (
                 <div className="enc-acao">
@@ -6830,6 +6916,10 @@ function WhatsApp({ user, showToast, target, onTargetUsed, recarregarSol }) {
           onClose={() => setPedindoSuporte(false)}
           onSaved={() => { setPedindoSuporte(false); showToast("✓ Encaminhado para o suporte"); recarregarSol && recarregarSol(); }}
         />
+      )}
+      {regVenda && chat && (
+        <ModalRegistrarVenda prefill={{ nome: chat.nome, telefone: chat.numero }} isGer={isGer}
+          onClose={() => setRegVenda(false)} showToast={showToast} />
       )}
       {cadPipeline && chat && (
         <ModalCadastrarPipeline

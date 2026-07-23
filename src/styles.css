@@ -3855,3 +3855,44 @@ input:focus-visible, textarea:focus-visible, select:focus-visible {
 .vd-pessoa-qtd { font-size: 11px; color: var(--muted); background: var(--card); border-radius: 99px; padding: 2px 8px; text-align: center; }
 .vd-juntar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; background: var(--surface-2); border-radius: 10px; padding: 10px 12px; margin-top: -3px; font-size: 12.5px; color: var(--muted); }
 .vd-juntar select { flex: 1; min-width: 160px; }
+
+/* ============ VENDAS: painel moderno ============ */
+.vd-hero { display: grid; grid-template-columns: minmax(320px, 1fr) minmax(340px, 1.35fr); gap: 14px; margin-bottom: 22px; }
+@media (max-width: 900px) { .vd-hero { grid-template-columns: 1fr; } }
+.vd-hero-esq, .vd-hero-dir { background: var(--card); border: 1px solid var(--line); border-radius: 18px; padding: 22px 24px; }
+.vd-hero-esq { display: flex; align-items: center; gap: 22px; background: linear-gradient(135deg, rgba(242,101,34,.09), rgba(37,160,107,.10)); border-color: transparent; }
+.vd-anel { position: relative; flex: none; width: 128px; height: 128px; }
+.vd-anel-txt { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+.vd-anel-txt b { font-size: 26px; font-weight: 800; color: var(--text); line-height: 1; }
+.vd-anel-txt span { font-size: 10.5px; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; font-weight: 700; margin-top: 2px; }
+.vd-hero-num { min-width: 0; flex: 1; }
+.vd-hero-lb { font-size: 11px; text-transform: uppercase; letter-spacing: .6px; color: var(--muted); font-weight: 800; display: block; }
+.vd-hero-vl { font-size: 34px; font-weight: 800; color: var(--text); line-height: 1.1; display: block; margin: 3px 0 2px; letter-spacing: -.5px; }
+.vd-hero-sub { font-size: 13px; color: var(--muted); display: block; }
+.vd-hero-sub b { color: var(--text); }
+.vd-mini { display: flex; gap: 18px; margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--line); flex-wrap: wrap; }
+.vd-mini div { display: flex; flex-direction: column; }
+.vd-mini span { font-size: 10px; text-transform: uppercase; letter-spacing: .4px; color: var(--muted); font-weight: 700; }
+.vd-mini b { font-size: 16px; color: var(--text); margin-top: 1px; }
+.vd-mini b.verde { color: #059669; }
+
+.vd-graf-cab { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; margin-bottom: 12px; }
+.vd-graf-cab span { font-size: 11px; text-transform: uppercase; letter-spacing: .6px; color: var(--muted); font-weight: 800; }
+.vd-graf-cab small { font-size: 11.5px; color: var(--muted); }
+.vd-graf-cab small b { color: var(--text); }
+.vd-graf { display: flex; align-items: flex-end; gap: 3px; height: 104px; padding-bottom: 16px; position: relative; }
+.vd-graf-col { flex: 1; height: 100%; display: flex; align-items: flex-end; justify-content: center; position: relative; cursor: default; }
+.vd-graf-barra { width: 100%; max-width: 16px; border-radius: 4px 4px 2px 2px; background: linear-gradient(180deg, #25A06B, rgba(37,160,107,.45)); transition: filter .12s; }
+.vd-graf-col:hover .vd-graf-barra { filter: brightness(1.15); }
+.vd-graf-col.hoje .vd-graf-barra { background: linear-gradient(180deg, #F26522, rgba(242,101,34,.5)); }
+.vd-graf-dia { position: absolute; bottom: -16px; font-size: 9.5px; color: var(--muted); }
+.vd-proj { display: flex; gap: 20px; flex-wrap: wrap; margin-top: 14px; padding-top: 13px; border-top: 1px solid var(--line); }
+.vd-proj div { display: flex; flex-direction: column; }
+.vd-proj span { font-size: 10.5px; color: var(--muted); }
+.vd-proj b { font-size: 17px; color: var(--text); margin-top: 1px; }
+
+/* botão de registrar venda na conversa */
+.of-acao-btn.venda { color: #059669; border-color: rgba(5,150,105,.35); }
+.of-acao-btn.venda:hover { background: rgba(5,150,105,.08); }
+.btn-venda { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; font-weight: 600; color: #059669; background: transparent; border: 1px solid rgba(5,150,105,.35); border-radius: 8px; padding: 6px 11px; cursor: pointer; white-space: nowrap; }
+.btn-venda:hover { background: rgba(5,150,105,.08); }

@@ -412,7 +412,29 @@ export function instalarVendas({ app, getDb, saveDB, proximoId, auth, gerenteOnl
     const meses = Array.from(new Set(db.vendas.lista.map((v) => mesDe(v.data)))).sort().reverse();
     if (!meses.includes(mes)) meses.unshift(mes);
 
-    const minha = pessoaDoUser(req.user);
-    res.json({ mes, meses, geral, grupos: listaGrupos, linhas, souEu: minha ? minha.id : null, ehVendedor: ehVend(req.user) });
+    // evolução dia a dia do mês (pro gráfico) + projeção de fechamento
+    const [ano, mm] = mes.split("-").map(Number);
+    const diasNoMes = new Date(ano, mm, 0).getDate();
+    const hoje = new Date();
+    const ehMesAtual = hoje.getFullYear() === ano && hoje.getMonth() + 1 === mm;
+    const diaHoje = ehMesAtual ? hoje.getDate() : diasNoMes;
+    const porDia = Array.from({ length: diasNoMes }, (_, i) => ({ dia: i + 1, venda: 0, recebido: 0, qtd: 0 }));
+    doMes.forEach((v) => {
+      const d = new Date(v.data).getDate();
+      if (porDia[d - 1]) { porDia[d - 1].venda += num(v.valor); porDia[d - 1].recebido += num(v.recebido); porDia[d - 1].qtd++; }
+    });
+    const diasCorridos = Math.max(1, diaHoje);
+    const mediaDia = geral.venda / diasCorridos;
+    const projecao = Math.round(mediaDia * diasNoMes);
+    const diasRestantes = Math.max(0, diasNoMes - diaHoje);
+    const precisaPorDia = diasRestantes > 0 ? Math.max(0, geral.falta / diasRestantes) : 0;
+    const melhorDia = porDia.reduce((mx, d) => (d.venda > (mx ? mx.venda : 0) ? d : mx), null);
+
+    res.json({
+      mes, meses, geral, grupos: listaGrupos, linhas,
+      porDia, diasNoMes, diaHoje, diasRestantes, mediaDia, projecao, precisaPorDia,
+      melhorDia: melhorDia && melhorDia.venda > 0 ? melhorDia : null,
+      souEu: (pessoaDoUser(req.user) || {}).id || null, ehVendedor: ehVend(req.user),
+    });
   });
 }
