@@ -146,10 +146,12 @@ display:grid;place-items:center;font-weight:800;font-size:clamp(9px,.9vw,17px);c
 .rp .at{margin-left:auto;font-size:clamp(7px,.58vw,11px);color:var(--mut);white-space:nowrap}
 .nd{flex:1;display:grid;place-items:center;color:var(--mut);font-size:clamp(12px,1.1vw,20px)}
 /* ---- equipes com integrantes ---- */
-.eqs{flex:1;min-height:0;display:grid;gap:clamp(8px,1vh,16px);grid-template-columns:repeat(2,1fr);align-content:stretch}
-.eqs:has(.eq-card:only-child){grid-template-columns:1fr}
-.eq-card{background:var(--card);border:1px solid var(--borda);border-radius:clamp(13px,1.3vw,22px);padding:clamp(10px,1.4vh,20px) clamp(13px,1.4vw,26px);
-display:flex;flex-direction:column;min-height:0;overflow:hidden;position:relative}
+.eqs{flex:1;min-height:0;display:grid;gap:clamp(8px,1vw,18px);grid-template-columns:1fr 1fr}
+.eq-col{display:flex;flex-direction:column;gap:clamp(8px,1vh,16px);min-height:0}
+.eq-col:empty{display:none}
+.eqs:has(.eq-col:only-child){grid-template-columns:1fr}
+.eq-card{background:var(--card);border:1px solid var(--borda);border-radius:clamp(13px,1.3vw,22px);padding:clamp(9px,1.2vh,18px) clamp(13px,1.4vw,26px);
+display:flex;flex-direction:column;flex:1 1 0;min-height:0;overflow:hidden;position:relative}
 .eq-card.eq1{border-color:rgba(242,101,34,.4);background:linear-gradient(180deg,rgba(242,101,34,.06),var(--card))}
 .eq-cab{display:flex;align-items:center;gap:clamp(9px,1vw,18px);flex:none}
 .eq-cab .p{font-family:Sora;font-size:clamp(14px,1.4vw,28px);font-weight:800;color:var(--mut);min-width:clamp(20px,2vw,40px)}
@@ -164,8 +166,12 @@ display:flex;flex-direction:column;min-height:0;overflow:hidden;position:relativ
 .eq-bar i{display:block;height:100%;border-radius:99px;background:linear-gradient(90deg,var(--lar),var(--ver))}
 .eq-mbs{flex:1;min-height:0;display:flex;flex-direction:column;gap:clamp(4px,.6vh,9px);overflow:hidden}
 .eq-mbs.g2{display:grid;grid-template-columns:1fr 1fr;grid-auto-rows:minmax(0,1fr);gap:clamp(4px,.55vh,8px) clamp(6px,.7vw,12px);align-content:stretch}
-.eq-mb{display:flex;align-items:center;gap:clamp(7px,.8vw,14px);padding:clamp(3px,.5vh,8px) clamp(8px,.9vw,16px);
-border-radius:clamp(8px,.8vw,13px);background:rgba(255,255,255,.035);min-height:0}
+.eq-mb{flex:1 1 0;display:flex;align-items:center;gap:clamp(7px,.8vw,14px);padding:clamp(2px,.4vh,7px) clamp(8px,.9vw,16px);
+border-radius:clamp(8px,.8vw,13px);background:rgba(255,255,255,.035);min-height:0;overflow:hidden}
+.eq-card.denso .eq-mb .n b{font-size:clamp(9px,.8vw,15px)}
+.eq-card.denso .eq-mb .n s{font-size:clamp(6px,.5vw,10px)}
+.eq-card.denso .eq-mb .v{font-size:clamp(9px,.85vw,16px)}
+.eq-card.denso .eq-mb .av{width:clamp(17px,1.6vw,30px);height:clamp(17px,1.6vw,30px);font-size:clamp(7px,.62vw,12px)}
 .eq-mb.mb1{background:rgba(242,101,34,.09)}
 .eq-mb .av{width:clamp(20px,1.9vw,36px);height:clamp(20px,1.9vw,36px);border-radius:50%;object-fit:cover;overflow:hidden;flex:none;
 display:grid;place-items:center;font-weight:800;font-size:clamp(8px,.75vw,14px);color:#fff;background:var(--card2);border:1.5px solid var(--borda)}
@@ -291,21 +297,29 @@ return '<div class="cx lg g'+l+'"><div class="md">'+m+'</div>'+av(r,"av")+'<div 
 +'<div class="vl">'+din(r.valor)+'</div><div class="pe">'+r.qtd+' vendas'+(r.meta>0?" · "+r.pct+"% da meta":"")+'</div>'
 +(r.meta>0?'<div class="an"><i style="width:'+Math.min(100,r.pct)+'%"></i></div>':"")+'</div>'}).join("")
 :'<div class="nd" style="grid-column:1/-1">Nenhuma venda neste mês.</div>';
-// equipes — cada time mostra quem está dentro, ranqueado
-var me=(d.equipes||[]).reduce(function(m,x){return Math.max(m,x.valor)},0)||1;
-$("le").innerHTML=(d.equipes||[]).length?d.equipes.map(function(e,i){
-var membros=(e.membros||[]).map(function(mb,j){
+// equipes — cada time mostra quem está dentro, ranqueado.
+// Times vão pra 2 colunas equilibradas pelo tamanho: o time grande ganha
+// uma coluna quase inteira e os pequenos empilham na outra — ninguém corta.
+var eqs=d.equipes||[],me=eqs.reduce(function(m,x){return Math.max(m,x.valor)},0)||1;
+function cardEq(e,i){
+var mbs=e.membros||[];
+var membros=mbs.map(function(mb,j){
   return '<div class="eq-mb'+(j===0?" mb1":"")+'">'+av(mb,"av")
   +'<div class="n"><b>'+esc(mb.nome)+'</b><s>'+mb.qtd+' venda(s)'+(mb.meta>0?" · "+mb.pct+"% da meta":"")+'</s></div>'
   +'<span class="v">'+dk(mb.valor)+'</span></div>'}).join("");
-return '<div class="eq-card'+(i===0?" eq1":"")+'">'
+return '<div class="eq-card'+(i===0?" eq1":"")+(mbs.length>=9?" denso":"")+'" style="flex-grow:'+(mbs.length+2)+'">'
 +'<div class="eq-cab"><span class="p">'+(i+1)+'</span>'
 +'<div class="n"><b>'+esc(e.equipe)+'</b><s>'+e.pessoas+' pessoa(s) · '+e.qtd+' venda(s)</s></div>'
 +'<div class="tot"><b>'+din(e.valor)+'</b><s>'+(e.meta>0?e.pct+"% da meta":"sem meta")+'</s></div></div>'
 +'<div class="eq-bar"><i style="width:'+Math.min(100,e.valor/me*100)+'%"></i></div>'
-+'<div class="eq-mbs'+((e.membros||[]).length>6?" g2":"")+'">'+membros+'</div>'
-+'</div>'}).join("")
-:'<div class="nd">Sem equipes definidas.</div>';
++'<div class="eq-mbs'+(mbs.length>14?" g2":"")+'">'+membros+'</div>'
++'</div>'}
+if(eqs.length){
+var cols=[{h:0,html:""},{h:0,html:""}];
+eqs.forEach(function(e,i){var c=cols[0].h<=cols[1].h?cols[0]:cols[1];
+c.html+=cardEq(e,i);c.h+=(e.membros||[]).length+3});
+$("le").innerHTML='<div class="eq-col">'+cols[0].html+'</div><div class="eq-col">'+cols[1].html+'</div>';
+}else{$("le").innerHTML='<div class="nd">Sem equipes definidas.</div>';}
 // cursos
 var mc=d.cursos.reduce(function(m,x){return Math.max(m,x.valor)},0)||1;
 $("lc").innerHTML=d.cursos.length?d.cursos.slice(0,10).map(function(c,i){
