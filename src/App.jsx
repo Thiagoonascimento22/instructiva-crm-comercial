@@ -4621,19 +4621,21 @@ function janela24h(ultimaEntradaTs) {
   return { aberta: true, urgente: resta < 2 * 3600000, resta, texto: h > 0 ? `${h}h ${m}min` : `${m}min`, fim };
 }
 
-function Ticks({ status }) {
+function Ticks({ status, texto }) {
   if (!status) return null;
-  if (status === "failed") return <span title="Não entregue" style={{ marginLeft: 4, color: "#e0483d", fontWeight: 800, fontSize: 11 }}>!</span>;
+  if (status === "failed") return <span title="A Meta recusou essa mensagem — ela NÃO chegou no celular do lead." style={{ marginLeft: 5, color: "#e0483d", fontWeight: 700, fontSize: 10.5 }}>! não entregue</span>;
   const lida = status === "read";
   const dois = status === "delivered" || lida;
   const cor = lida ? "#53bdeb" : "rgba(0,0,0,.42)";
-  const titulo = lida ? "Lida" : status === "delivered" ? "Entregue" : "Enviada";
+  const titulo = lida ? "O lead abriu e leu" : status === "delivered" ? "Chegou no celular do lead" : "Aceita pelo WhatsApp, ainda não confirmou a entrega";
+  const palavra = lida ? "lida" : status === "delivered" ? "entregue" : "enviada";
   return (
-    <span title={titulo} style={{ display: "inline-flex", alignItems: "center", marginLeft: 4, verticalAlign: "middle", color: cor }}>
+    <span title={titulo} style={{ display: "inline-flex", alignItems: "center", gap: 3, marginLeft: 4, verticalAlign: "middle", color: cor }}>
       <svg width={dois ? 17 : 11} height="11" viewBox={dois ? "0 0 17 11" : "0 0 11 11"} fill="none">
         <path d="M1 6 L4 9 L9.5 2" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
         {dois && <path d="M6.5 6 L9.5 9 L15 2" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />}
       </svg>
+      {texto && <span style={{ fontSize: 10.5, fontWeight: 600 }}>{palavra}</span>}
     </span>
   );
 }
@@ -5198,7 +5200,7 @@ function InboxOficial({ isGer, showToast, onIrParaEvolution, target, onTargetUse
                         <OfMidia chatId={conversa.id} m={item.m} />
                       )}
                       {(!item.m.tipo || item.m.tipo === "text" || !item.m.arquivo) && item.m.content}
-                      <span className="of-msg-hora">{horaCurta(item.m.ts)}{item.m.role === "me" && <Ticks status={item.m.status} />}</span>
+                      <span className="of-msg-hora">{horaCurta(item.m.ts)}{item.m.role === "me" && <Ticks status={item.m.status} texto={!!item.m.template} />}</span>
                     </div>
                   </div>
                 )

@@ -2579,7 +2579,10 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
         chat.iaPausada = false;
         if (chat.respondeu === undefined) chat.respondeu = false;
         const ts = Date.now();
-        chat.mensagens.push({ role: "me", content: `[disparo] ${templateName}`, ts, template: true });
+        // guarda o "comprovante" (wamid) na mensagem E no índice, senão o aviso de
+        // entregue/lida que a Meta manda depois não acha essa mensagem pra atualizar
+        chat.mensagens.push({ role: "me", content: `[disparo] ${templateName}`, ts, template: true, wamid: mid || null, status: mid ? "sent" : null });
+        if (mid) { if (!db.oficial.wamidChat) db.oficial.wamidChat = {}; db.oficial.wamidChat[mid] = chat.id; }
         chat.atualizadoEm = ts;
       } catch (e) {
         campanha.falhas++;
@@ -2632,7 +2635,8 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
       if (!chat.vendedorId) { chat.vendedorId = req.user.id; chat.vendedorNome = req.user.nome; chat.atribuidoEm = Date.now(); }
       chat.iaPausada = true; // conversa iniciada por humano
       const ts = Date.now();
-      chat.mensagens.push({ role: "me", content: `[template] ${template}`, ts, template: true });
+      chat.mensagens.push({ role: "me", content: `[template] ${template}`, ts, template: true, wamid: mid || null, status: mid ? "sent" : null });
+      if (mid) { if (!db.oficial.wamidChat) db.oficial.wamidChat = {}; db.oficial.wamidChat[mid] = chat.id; }
       chat.atualizadoEm = ts;
       salvar();
       res.json({ ok: true, chatId: chat.id });
