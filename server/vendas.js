@@ -18,6 +18,16 @@ export function instalarVendas({ app, getDb, saveDB, proximoId, auth, gerenteOnl
     if (!Array.isArray(db.vendas.pessoas)) db.vendas.pessoas = [];
     if (!Array.isArray(db.vendas.lista)) db.vendas.lista = [];
     if (!db.vendas.metasMes) db.vendas.metasMes = {}; // { "2026-07": { pessoaId: meta } }
+    // quem foi criado antes dessa regra existir ainda não tem o marcador:
+    // define uma vez pelo nome (Escola, Loja, Site... = venda direta, fora do pódio)
+    let mudou = false;
+    db.vendas.pessoas.forEach((p) => {
+      if (p.foraDoPodio === undefined) {
+        p.foraDoPodio = /^(escola|instructiva|loja|site|geral|live)$/i.test(String(p.nome || "").trim());
+        mudou = true;
+      }
+    });
+    if (mudou) salvar();
   }
 
   const mesDe = (ts) => {

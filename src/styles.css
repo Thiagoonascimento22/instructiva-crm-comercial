@@ -3915,3 +3915,4 @@ input:focus-visible, textarea:focus-visible, select:focus-visible {
 .vd-check span { display: flex; flex-direction: column; }
 .vd-check b { font-size: 13px; color: var(--text); }
 .vd-check small { font-size: 11.5px; color: var(--muted); margin-top: 1px; }
+.vd-dia-acoes { display: flex; align-items: center; gap: 6px; flex: none; margin-left: 4px; }

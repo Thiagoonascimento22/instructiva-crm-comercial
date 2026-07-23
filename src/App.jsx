@@ -3926,7 +3926,7 @@ function GraficoDias({ porDia, diaHoje }) {
 }
 
 // Lista de vendas agrupada por dia (usada no "Minhas vendas" e no popup do vendedor)
-function DiaADia({ vendas }) {
+function DiaADia({ vendas, onEditar, onExcluir }) {
   const dias = useMemo(() => {
     const m = {};
     (vendas || []).forEach((v) => {
@@ -3954,6 +3954,12 @@ function DiaADia({ vendas }) {
                 <small>{[v.curso, v.forma, v.parcelas ? v.parcelas + "x" : "", v.plataforma].filter(Boolean).join(" · ")}</small>
               </div>
               <div className="vd-dia-vals">{dinheiro(v.valor)}<small>recebido {dinheiro(v.recebido)}</small></div>
+              {(onEditar || onExcluir) && (
+                <div className="vd-dia-acoes">
+                  {onEditar && <button className="btn btn-sm" onClick={() => onEditar(v)}>Editar</button>}
+                  {onExcluir && <button className="crm-tarefa-del" onClick={() => onExcluir(v)} title="Excluir">✕</button>}
+                </div>
+              )}
             </div>
           ))}
         </div>
@@ -4041,7 +4047,7 @@ function PainelVendas({ showToast, isGer = true }) {
           })}><I.plus className="ico" /> Lançar venda</button>
           {isGer && <button className="onum-btn-ghost" onClick={() => setShowPessoas(true)}><I.users className="ico" /> Equipe & metas</button>}
           {isGer && <button className="onum-btn-ghost" onClick={() => setShowImportarV(true)}><I.clip className="ico" /> Importar planilha</button>}
-          <button className="onum-btn-ghost" onClick={() => setVerLista((v) => !v)}><I.chat className="ico" /> {verLista ? "Ver ranking" : (isGer ? `Vendas do mês (${vendas.length})` : `Minhas vendas (${vendas.length})`)}</button>
+          {isGer && <button className="onum-btn-ghost" onClick={() => setVerLista((v) => !v)}><I.chat className="ico" /> {verLista ? "Ver ranking" : `Vendas do mês (${vendas.length})`}</button>}
         </div>
       </div>
 
@@ -4095,8 +4101,14 @@ function PainelVendas({ showToast, isGer = true }) {
               <button className="btn btn-sm" onClick={() => trocarEscopo("time")}>Ver o ranking do time</button>
             </div>
           )}
-          <div className="vd-sec">Suas vendas, dia a dia</div>
-          <DiaADia vendas={vendas} />
+          <div className="vd-sec">Suas vendas, dia a dia ({vendas.length})</div>
+          <DiaADia vendas={vendas}
+            onEditar={(v) => setForm({ ...v, data: new Date(v.data).toISOString().slice(0, 10),
+              valor: String(v.valor), recebido: String(v.recebido), parcelas: String(v.parcelas || "") })}
+            onExcluir={async (v) => {
+              if (!window.confirm(`Excluir a venda de ${v.cliente || "—"} (${dinheiro(v.valor)})?`)) return;
+              try { await api.vdExcluir(v.id); showToast("✓ Venda excluída"); carregar(); } catch (e) { showToast("✗ " + e.message); }
+            }} />
         </>
       ) : verLista ? (
         <>
