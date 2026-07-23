@@ -4620,21 +4620,43 @@ function ModalPessoas({ pessoas, onClose, onMudou, showToast }) {
                 <button className="btn btn-sm" onClick={() => { setJuntando(juntando === p.id ? null : p.id); setDestino(""); }} title="Juntar com outra pessoa">⇄</button>
                 <button className="crm-tarefa-del" onClick={() => excluir(p)} title="Remover">✕</button>
               </div>
-              {juntando === p.id && (
-                <div className="vd-juntar">
-                  <span>Levar as <b>{p.vendas || 0}</b> venda(s) de <b>{p.nome}</b> para:</span>
-                  <select className="input" value={destino} onChange={(e) => setDestino(e.target.value)}>
-                    <option value="">Escolher pessoa…</option>
-                    {pessoas.filter((x) => x.id !== p.id).map((x) => <option key={x.id} value={x.id}>{x.nome}</option>)}
-                  </select>
-                  <button className="onum-add" disabled={!destino || ocupado} onClick={() => juntar(p.id, destino)}>Juntar</button>
-                  <button className="btn btn-sm" onClick={() => setJuntando(null)}>Cancelar</button>
-                </div>
-              )}
               </React.Fragment>
             ))}
             {pessoas.length === 0 && <div className="crm-col-vazio">Ninguém cadastrado ainda.</div>}
           </div>
+
+          {juntando && (() => {
+            const p = pessoas.find((x) => x.id === juntando);
+            if (!p) return null;
+            return (
+              <Portal>
+                <div className="pop-bg centro" style={{ zIndex: 200 }} onClick={(e) => e.target === e.currentTarget && setJuntando(null)}>
+                  <div className="pop-sheet" style={{ maxWidth: 460 }}>
+                    <div className="pop-head"><b>Juntar {p.nome}</b><button className="crm-x" onClick={() => setJuntando(null)}>✕</button></div>
+                    <div className="pop-body">
+                      <div className="rsv-hint" style={{ marginTop: 0 }}>
+                        As <b>{p.vendas || 0} venda(s)</b> de <b>{p.nome}</b> ({dinheiro(p.total || 0)}) vão pra pessoa que você escolher,
+                        e <b>{p.nome}</b> some da lista. Nada se perde — e o sistema passa a entender que
+                        “{p.nome}” é essa pessoa nas próximas vendas que vierem de fora.
+                      </div>
+                      <label className="lbl-mini" style={{ marginTop: 14, display: "block" }}>Levar as vendas para</label>
+                      <select className="input" value={destino} onChange={(e) => setDestino(e.target.value)}>
+                        <option value="">Escolher pessoa…</option>
+                        {pessoas.filter((x) => x.id !== p.id).sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR"))
+                          .map((x) => <option key={x.id} value={x.id}>{x.nome}{x.vendas ? ` (${x.vendas} venda${x.vendas > 1 ? "s" : ""})` : ""}</option>)}
+                      </select>
+                      <div className="vd-rodape">
+                        <button className="btn" onClick={() => setJuntando(null)}>Cancelar</button>
+                        <button className="onum-add" disabled={!destino || ocupado} onClick={() => juntar(p.id, destino)}>
+                          {ocupado ? "Juntando…" : "Juntar"}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </Portal>
+            );
+          })()}
         </div>
       </div>
     </div>
