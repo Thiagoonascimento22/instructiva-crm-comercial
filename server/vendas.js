@@ -652,6 +652,26 @@ export function instalarVendas({ app, getDb, saveDB, proximoId, auth, gerenteOnl
     res.json({ grupos, quantos: grupos.length, totalRepetido });
   });
 
+  /* O outro sistema apagou a venda lá -> apaga aqui também */
+  app.post("/api/vendas/externa/excluir", (req, res) => {
+    garantir();
+    const enviada = String(req.headers["x-api-key"] || (req.headers.authorization || "").replace(/^Bearer\s+/i, "")).trim();
+    if (!enviada || enviada !== chaveIntegracao()) return res.status(401).json({ error: "Chave inválida" });
+    const ref = String((req.body || {}).refExterna || "").trim();
+    const codigo = String((req.body || {}).codigo || "").trim();
+    if (!ref && !codigo) return res.status(400).json({ error: "Informe a referência da venda" });
+    const antes = db.vendas.lista.length;
+    db.vendas.lista = db.vendas.lista.filter((v) => {
+      if (ref && v.refExterna === ref) return false;
+      // sem referência (venda antiga), cai pro código — mas só se veio de fora
+      if (!ref && codigo && v.origem === "externa" && String(v.codigo || "").trim() === codigo) return false;
+      return true;
+    });
+    const n = antes - db.vendas.lista.length;
+    salvar();
+    res.json({ ok: true, excluidas: n });
+  });
+
   /* ---------------- PAINEL (a planilha) ---------------- */
   app.get("/api/vendas/painel", auth, permiteVend("vendas"), (req, res) => {
     garantir();
