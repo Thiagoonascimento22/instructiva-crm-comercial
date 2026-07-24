@@ -147,52 +147,14 @@ export function instalarAnaliseAtendimento({ app, getDb, saveDB, auth, donoOnly 
     }).join("\n\n");
   }
 
-  async function pedirAnaliseIA(vendedor, numeros, conversas) {
+  async function chamarIA(system, user, maxTokens = 2200) {
     const key = process.env.OPENAI_API_KEY;
     if (!key) throw new Error("Falta a OPENAI_API_KEY no Railway pra IA conseguir ler os atendimentos.");
-
-    const system = `Você é um coach de vendas experiente analisando o atendimento por WhatsApp de uma escola técnica (cursos de eletrônica, energia solar, odontologia técnica).
-Analise as conversas REAIS abaixo e devolva uma avaliação honesta, específica e útil.
-
-REGRAS:
-- Seja concreto: cite exemplos do que a pessoa escreveu, não generalidades.
-- Aponte o que ela faz BEM antes do que precisa melhorar.
-- Nas falhas, explique o impacto na venda e como corrigir na prática.
-- Nada de bajulação nem de dureza gratuita. Fale como um gestor que quer o time crescendo.
-- Português do Brasil, direto, sem jargão corporativo.
-
-Responda SOMENTE com um JSON válido, sem markdown, neste formato:
-{
-  "resumo": "2 a 3 frases sobre o atendimento dessa pessoa",
-  "nota": 7,
-  "fortes": ["ponto forte com exemplo", "..."],
-  "falhas": ["falha com exemplo e impacto", "..."],
-  "melhorias": ["ação prática pra semana que vem", "..."],
-  "frasesBoas": ["trecho real que funcionou bem"],
-  "frasesRuins": ["trecho real que atrapalhou"]
-}`;
-
-    const user = `VENDEDOR: ${vendedor.nome}
-
-NÚMEROS DO PERÍODO:
-- Conversas atendidas: ${vendedor.conversas}
-- Leads que responderam: ${vendedor.leadsQueResponderam}
-- Tempo até a 1ª resposta (mediana): ${vendedor.tempoPrimeiraRespostaTxt || "sem dado"}
-- Tempo médio de resposta: ${vendedor.tempoRespostaMedianaTxt || "sem dado"}
-- Leads que falaram e ficaram SEM resposta: ${vendedor.semResposta} (${vendedor.pctSemResposta}%)
-- Conversas abandonadas no meio: ${vendedor.abandonadas} (${vendedor.pctAbandonadas}%)
-- Mensagens enviadas por conversa: ${vendedor.msgsPorConversa}
-
-CONVERSAS REAIS:
-${conversas}`;
-
     const r = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
       headers: { "Content-Type": "application/json", "Authorization": "Bearer " + key },
       body: JSON.stringify({
-        model: "gpt-4o-mini",
-        max_tokens: 1400,
-        temperature: 0.4,
+        model: "gpt-4o-mini", max_tokens: maxTokens, temperature: 0.35,
         messages: [{ role: "system", content: system }, { role: "user", content: user }],
       }),
     });
@@ -200,8 +162,76 @@ ${conversas}`;
     if (!r.ok) throw new Error((data.error && data.error.message) || "Erro OpenAI " + r.status);
     let txt = ((data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content) || "").trim();
     txt = txt.replace(/^```(json)?/i, "").replace(/```$/, "").trim();
-    try { return JSON.parse(txt); }
-    catch (_) { return { resumo: txt.slice(0, 600), nota: null, fortes: [], falhas: [], melhorias: [], frasesBoas: [], frasesRuins: [] }; }
+    try { return JSON.parse(txt); } catch (_) { return { _cru: txt }; }
+  }
+
+  const TOM = `Você é um gestor comercial experiente avaliando o atendimento por WhatsApp de uma escola técnica
+(cursos de eletrônica, energia solar, odontologia técnica, manutenção).
+
+COMO AVALIAR:
+- Seja franco e direto. Se o atendimento está ruim, diga que está ruim e mostre onde.
+- Não suavize problema real e não invente elogio pra compensar crítica.
+- Toda afirmação precisa de PROVA: cite o trecho real da conversa que sustenta o que você disse.
+- Ligue cada falha ao prejuízo concreto: lead perdido, venda que não fechou, cliente que desistiu.
+- Escreva como gestor falando com gestor: objetivo, sem jargão corporativo, sem enrolação.
+- Português do Brasil. Critique o trabalho e o comportamento, nunca a pessoa.
+- Termine sempre com o que fazer na prática, em ordem de prioridade.`;
+
+  async function analisarVendedor(vendedor, conversas) {
+    const system = TOM + `
+
+Responda SOMENTE com JSON válido, sem markdown:
+{
+  "nota": 6.5,
+  "notaPorque": "por que essa nota, em 1 frase direta",
+  "resumo": "3 a 5 frases descrevendo como essa pessoa atende de verdade",
+  "fortes": ["o que funciona, com o trecho que prova"],
+  "falhas": ["o problema, o trecho que prova e o que isso custou"],
+  "padroes": ["hábitos que se repetem nas conversas dela"],
+  "frasesBoas": ["trecho real bom"],
+  "frasesRuins": ["trecho real ruim"],
+  "sugestoes": ["ação concreta pra semana, começando pela mais urgente"]
+}`;
+    const u = `VENDEDOR: ${vendedor.nome}
+
+NÚMEROS DO PERÍODO:
+- Conversas: ${vendedor.conversas} · leads que responderam: ${vendedor.leadsQueResponderam}
+- Tempo até a 1ª resposta: ${vendedor.tempoPrimeiraRespostaTxt || "sem dado"}
+- Tempo médio de resposta: ${vendedor.tempoRespostaMedianaTxt || "sem dado"}
+- Leads que falaram e ficaram SEM resposta: ${vendedor.semResposta} (${vendedor.pctSemResposta}%)
+- Conversas abandonadas no meio: ${vendedor.abandonadas} (${vendedor.pctAbandonadas}%)
+- Mensagens enviadas por conversa: ${vendedor.msgsPorConversa}
+- Atendimentos fora do horário comercial: ${vendedor.foraDoHorario}
+
+CONVERSAS REAIS:
+${conversas}`;
+    const r = await chamarIA(system, u, 2200);
+    if (r._cru) return { nota: null, resumo: r._cru.slice(0, 1500), fortes: [], falhas: [], padroes: [], sugestoes: [], frasesBoas: [], frasesRuins: [] };
+    return r;
+  }
+
+  async function analisarEquipe(vendedores, amostras) {
+    const system = TOM + `
+
+Você está olhando o time INTEIRO. Compare as pessoas entre si, mostre quem puxa o resultado
+pra cima, quem está travando, e o que é problema de processo (que atinge todo mundo) e não
+de pessoa. Responda SOMENTE com JSON válido, sem markdown:
+{
+  "notaTime": 6.5,
+  "resumo": "5 a 8 frases sobre como o time atende hoje",
+  "oQueVaiBem": ["ponto forte do time, com exemplo de quem faz"],
+  "problemas": ["problema, quem está envolvido e quanto custa"],
+  "porPessoa": [{"nome":"Fulano","nota":7,"leitura":"2 a 3 frases francas sobre ele","prioridade":"a única coisa que ele precisa mudar agora"}],
+  "processo": ["falha que é do processo, não da pessoa"],
+  "sugestoes": ["ação pro gestor, da mais urgente pra menos"]
+}`;
+    const linhas = vendedores.map((v) =>
+      `- ${v.nome}: ${v.conversas} conversas · 1ª resposta ${v.tempoPrimeiraRespostaTxt || "—"} · resposta média ${v.tempoRespostaMedianaTxt || "—"} · sem resposta ${v.semResposta} (${v.pctSemResposta}%) · abandonadas ${v.abandonadas} (${v.pctAbandonadas}%) · ${v.msgsPorConversa} msgs/conversa`
+    ).join("\n");
+    const u = `NÚMEROS DO TIME:\n${linhas}\n\nAMOSTRAS DE CONVERSA DE CADA UM:\n${amostras}`;
+    const r = await chamarIA(system, u, 3000);
+    if (r._cru) return { notaTime: null, resumo: r._cru.slice(0, 2000), oQueVaiBem: [], problemas: [], porPessoa: [], processo: [], sugestoes: [] };
+    return r;
   }
 
   // período: por dias (atalho) ou por datas escolhidas na mão
@@ -268,7 +298,7 @@ ${conversas}`;
     if (!conversas.trim()) return res.status(400).json({ error: "Não há conversas com histórico suficiente pra analisar." });
 
     try {
-      const analise = await pedirAnaliseIA(vend, {}, conversas);
+      const analise = await analisarVendedor(vend, conversas);
       if (!db.analisesAtendimento) db.analisesAtendimento = {};
       db.analisesAtendimento[req.params.vendedorId] = {
         ...analise, numeros: vend, dias: j.dias,
@@ -280,6 +310,29 @@ ${conversas}`;
     } catch (e) {
       res.status(500).json({ error: e.message });
     }
+  });
+
+  /* ---- leitura por IA do TIME inteiro ---- */
+  app.post("/api/atendimento/analisar-equipe", auth, donoOnly, async (req, res) => {
+    const j = janela(req);
+    const vendedores = medir(j);
+    if (!vendedores.length) return res.status(400).json({ error: "Sem conversas no período." });
+    // amostra menor por pessoa pra caber o time todo numa análise só
+    const amostras = vendedores.slice(0, 12).map((v) => {
+      const c = amostrar(v.vendedorId, j, 3);
+      return c ? `===== ${v.nome} =====\n${c}` : "";
+    }).filter(Boolean).join("\n\n");
+    try {
+      const analise = await analisarEquipe(vendedores, amostras);
+      if (!db.analisesAtendimento) db.analisesAtendimento = {};
+      db.analisesAtendimento.__equipe = {
+        ...analise, dias: j.dias,
+        periodo: j.de ? `${j.de.split("-").reverse().join("/")} a ${j.ateTxt.split("-").reverse().join("/")}` : (j.rotulo || `últimos ${j.dias} dias`),
+        em: Date.now(), vendedores,
+      };
+      saveDB();
+      res.json({ ok: true, analise: db.analisesAtendimento.__equipe });
+    } catch (e) { res.status(500).json({ error: e.message }); }
   });
 
   /* ---- análises já feitas ---- */

@@ -3236,13 +3236,14 @@ function RecadoDoDia() {
    Números reais + leitura das conversas pela IA.
    ============================================================ */
 function PainelAtendimento({ showToast }) {
+  const [modo, setModo] = useState("equipe");        // equipe | pessoa
   const [dias, setDias] = useState(15);
   const [de, setDe] = useState("");
   const [ate, setAte] = useState("");
   const [dados, setDados] = useState(null);
   const [analises, setAnalises] = useState({});
   const [rodando, setRodando] = useState("");
-  const [aberto, setAberto] = useState(null);
+  const [sel, setSel] = useState(null);              // vendedor aberto
   const temPeriodo = !!(de && ate);
 
   const PERIODOS = [[0, "Hoje"], [-1, "Ontem"], [7, "7 dias"], [15, "15 dias"], [30, "30 dias"], [90, "90 dias"]];
@@ -3254,39 +3255,65 @@ function PainelAtendimento({ showToast }) {
   };
   useEffect(() => { carregar(); }, [dias, de, ate]);
 
-  function escolherDias(d) { setDe(""); setAte(""); setDias(d); setAberto(null); }
-
-  async function analisar(v) {
+  async function analisarPessoa(v) {
     setRodando(v.vendedorId);
     try {
       const r = await api.atdAnalisar(v.vendedorId, dias, de, ate);
       setAnalises((a) => ({ ...a, [v.vendedorId]: r.analise }));
-      setAberto(v.vendedorId);
       showToast("✓ Análise de " + v.nome.split(" ")[0] + " pronta");
     } catch (e) { showToast("✗ " + e.message); }
     setRodando("");
   }
+  async function analisarEquipe() {
+    setRodando("__equipe");
+    try {
+      const r = await api.atdAnalisarEquipe(dias, de, ate);
+      setAnalises((a) => ({ ...a, __equipe: r.analise }));
+      showToast("✓ Relatório da equipe pronto");
+    } catch (e) { showToast("✗ " + e.message); }
+    setRodando("");
+  }
 
-  // sinal simples de atenção, com base nos números
   const alerta = (v) => {
-    if (v.pctSemResposta >= 25) return { cor: "ruim", txt: `${v.pctSemResposta}% dos leads ficaram sem resposta` };
-    if (v.tempoPrimeiraResposta > 4 * 3600000) return { cor: "ruim", txt: "demora pra dar a 1ª resposta" };
-    if (v.pctAbandonadas >= 30) return { cor: "atencao", txt: `${v.pctAbandonadas}% das conversas param no meio` };
+    if (v.pctSemResposta >= 25) return { cor: "ruim", txt: `${v.pctSemResposta}% sem resposta` };
+    if (v.tempoPrimeiraResposta > 4 * 3600000) return { cor: "ruim", txt: "demora na 1ª resposta" };
+    if (v.pctAbandonadas >= 30) return { cor: "atencao", txt: `${v.pctAbandonadas}% param no meio` };
     if (v.tempoRespostaMediana > 60 * 60000) return { cor: "atencao", txt: "responde devagar" };
     return { cor: "bom", txt: "ritmo saudável" };
   };
+  const corNota = (n) => (n == null ? "" : n >= 8 ? " bom" : n >= 6 ? " ok" : " ruim");
+  const Bloco = ({ tit, itens, cls }) => (!itens || !itens.length) ? null : (
+    <div className={"at-bloco " + (cls || "")}>
+      <span className="at-bloco-tit">{tit}</span>
+      <ul>{itens.map((x, i) => <li key={i}>{x}</li>)}</ul>
+    </div>
+  );
+
+  const eq = analises.__equipe;
+  const aSel = sel ? analises[sel.vendedorId] : null;
 
   return (
-    <div className="panel">
-      <div className="panel-h">
-        <I.spark className="ico" /> Análise do atendimento
+    <div className="panel ia">
+      <div className="ia-head">
+        <div className="ia-tit"><I.spark className="ico" /> Análise Inteligente</div>
+        <div className="ia-sub">A IA lê os atendimentos e aponta o que está funcionando e o que não está</div>
+      </div>
+
+      <div className="ia-modos">
+        <button className={modo === "equipe" ? "on" : ""} onClick={() => { setModo("equipe"); setSel(null); }}>
+          <I.users className="ico" /> Equipe inteira
+        </button>
+        <button className={modo === "pessoa" ? "on" : ""} onClick={() => setModo("pessoa")}>
+          <I.medal className="ico" /> Vendedor específico
+        </button>
       </div>
 
       <div className="at-periodo">
         <span className="at-periodo-lb">Período</span>
         <div className="at-dias">
           {PERIODOS.map(([d, lb]) => (
-            <button key={d} className={!temPeriodo && dias === d ? "on" : ""} onClick={() => escolherDias(d)}>{lb}</button>
+            <button key={d} className={!temPeriodo && dias === d ? "on" : ""}
+              onClick={() => { setDe(""); setAte(""); setDias(d); }}>{lb}</button>
           ))}
         </div>
         <div className="at-datas">
@@ -3296,96 +3323,149 @@ function PainelAtendimento({ showToast }) {
           {temPeriodo && <button className="mt-limpar" onClick={() => { setDe(""); setAte(""); }}>✕ limpar</button>}
         </div>
       </div>
-      <div className="panel-sub" style={{ marginBottom: 14 }}>
-        Os números saem direto das conversas. A leitura por IA analisa o que cada um escreveu e aponta
-        pontos fortes, falhas e o que dá pra melhorar. <b>Só você vê essa tela.</b>
-      </div>
 
       {!dados && <div className="panel-sub"><span className="spin" /> Lendo as conversas…</div>}
 
-      {dados && (
+      {dados && !dados.temIA && (
+        <div className="at-aviso">Falta a <b>OPENAI_API_KEY</b> no Railway — os números aparecem, mas a leitura por IA não roda.</div>
+      )}
+
+      {/* ---------- EQUIPE ---------- */}
+      {dados && modo === "equipe" && (
         <>
-          <div className="at-time">
-            <div><span>Conversas</span><b>{dados.time.conversas}</b></div>
-            <div><span>Resposta média do time</span><b>{dados.time.tempoRespostaTxt || "—"}</b></div>
-            <div><span>Leads sem resposta</span><b className={dados.time.pctSemResposta >= 20 ? "ruim" : ""}>{dados.time.semResposta} ({dados.time.pctSemResposta}%)</b></div>
-            <div><span>Paradas no meio</span><b>{dados.time.abandonadas}</b></div>
+          <div className="ia-hero">
+            <span className="ia-chip"><I.spark className="ico" /> Inteligência Artificial</span>
+            <div className="ia-hero-tit">Relatório gerencial da equipe</div>
+            <div className="ia-hero-txt">
+              A IA compara os vendedores, mostra quem puxa o resultado, quem está travando e o que é
+              problema de processo — com trechos reais das conversas.
+            </div>
+            <div className="ia-hero-nums">
+              <b>{dados.time.conversas}</b> conversas <i>·</i>
+              <b>{dados.vendedores.length}</b> vendedores <i>·</i>
+              <b>{dados.time.tempoRespostaTxt || "—"}</b> de resposta <i>·</i>
+              <b className={dados.time.pctSemResposta >= 20 ? "ruim" : ""}>{dados.time.pctSemResposta}%</b> sem resposta
+            </div>
+            <button className="ia-btn" disabled={rodando === "__equipe" || !dados.temIA} onClick={analisarEquipe}>
+              <I.spark className="ico" /> {rodando === "__equipe" ? "Analisando o time…" : eq ? "Gerar de novo" : "Gerar análise da equipe"}
+            </button>
           </div>
 
-          {!dados.temIA && (
-            <div className="at-aviso">
-              Falta a <b>OPENAI_API_KEY</b> no Railway — sem ela os números aparecem, mas a leitura por IA não roda.
+          {eq && (
+            <div className="ia-rel">
+              {eq.notaTime != null && (
+                <div className={"ia-nota" + corNota(eq.notaTime)}>
+                  <b>{eq.notaTime}</b><span>nota do time</span>
+                </div>
+              )}
+              <p className="at-resumo">{eq.resumo}</p>
+              <Bloco tit="O que vai bem" itens={eq.oQueVaiBem} cls="bom" />
+              <Bloco tit="Problemas" itens={eq.problemas} cls="ruim" />
+              <Bloco tit="Falhas de processo" itens={eq.processo} cls="" />
+              {(eq.porPessoa || []).length > 0 && (
+                <div className="ia-pessoas">
+                  <span className="at-bloco-tit">Leitura de cada um</span>
+                  {eq.porPessoa.map((p, i) => (
+                    <div key={i} className="ia-pessoa">
+                      <div className="ia-pessoa-top">
+                        <b>{p.nome}</b>
+                        {p.nota != null && <span className={"ia-mini-nota" + corNota(p.nota)}>{p.nota}</span>}
+                      </div>
+                      <p>{p.leitura}</p>
+                      {p.prioridade && <div className="ia-prio">Prioridade: {p.prioridade}</div>}
+                    </div>
+                  ))}
+                </div>
+              )}
+              <Bloco tit="O que fazer agora" itens={eq.sugestoes} cls="acao" />
+              <div className="at-quando">gerado em {new Date(eq.em).toLocaleString("pt-BR")} · {eq.periodo}</div>
             </div>
           )}
-
-          <div className="at-lista">
-            {dados.vendedores.length === 0 && <div className="crm-col-vazio">Nenhuma conversa no período.</div>}
-            {dados.vendedores.map((v) => {
-              const a = analises[v.vendedorId];
-              const al = alerta(v);
-              const on = aberto === v.vendedorId;
-              return (
-                <div key={v.vendedorId} className={"at-card" + (on ? " on" : "")}>
-                  <div className="at-topo">
-                    <div className="at-id">
-                      <b>{v.nome}</b>
-                      <span className={"at-selo " + al.cor}>{al.txt}</span>
-                    </div>
-                    <div className="at-acoes">
-                      {a && <button className="btn btn-sm" onClick={() => setAberto(on ? null : v.vendedorId)}>{on ? "Fechar" : "Ver análise"}</button>}
-                      <button className="btn btn-sm btn-primary" disabled={rodando === v.vendedorId || !dados.temIA}
-                        onClick={() => analisar(v)}>
-                        {rodando === v.vendedorId ? "Lendo…" : a ? "Analisar de novo" : "Analisar com IA"}
-                      </button>
-                    </div>
-                  </div>
-
-                  <div className="at-nums">
-                    <div><span>Conversas</span><b>{v.conversas}</b></div>
-                    <div><span>1ª resposta</span><b>{v.tempoPrimeiraRespostaTxt || "—"}</b></div>
-                    <div><span>Resposta média</span><b>{v.tempoRespostaMedianaTxt || "—"}</b></div>
-                    <div><span>Sem resposta</span><b className={v.pctSemResposta >= 25 ? "ruim" : ""}>{v.semResposta} ({v.pctSemResposta}%)</b></div>
-                    <div><span>Paradas no meio</span><b>{v.abandonadas}</b></div>
-                    <div><span>Msgs por conversa</span><b>{v.msgsPorConversa}</b></div>
-                  </div>
-
-                  {on && a && (
-                    <div className="at-analise">
-                      {a.nota != null && <div className="at-nota">Nota do atendimento: <b>{a.nota}/10</b></div>}
-                      <p className="at-resumo">{a.resumo}</p>
-                      {[["Pontos fortes", a.fortes, "bom"], ["Onde está pecando", a.falhas, "ruim"], ["O que fazer agora", a.melhorias, "acao"]].map(([tit, arr, cls]) => (
-                        (arr && arr.length > 0) ? (
-                          <div key={tit} className={"at-bloco " + cls}>
-                            <span className="at-bloco-tit">{tit}</span>
-                            <ul>{arr.map((x, i) => <li key={i}>{x}</li>)}</ul>
-                          </div>
-                        ) : null
-                      ))}
-                      {(a.frasesBoas || []).length > 0 && (
-                        <div className="at-frases">
-                          <span className="at-bloco-tit">Trechos que funcionaram</span>
-                          {a.frasesBoas.map((f, i) => <div key={i} className="at-frase bom">“{f}”</div>)}
-                        </div>
-                      )}
-                      {(a.frasesRuins || []).length > 0 && (
-                        <div className="at-frases">
-                          <span className="at-bloco-tit">Trechos que atrapalharam</span>
-                          {a.frasesRuins.map((f, i) => <div key={i} className="at-frase ruim">“{f}”</div>)}
-                        </div>
-                      )}
-                      <div className="at-quando">análise feita em {new Date(a.em).toLocaleString("pt-BR")} · {a.periodo || `últimos ${a.dias} dias`}</div>
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
         </>
       )}
+
+      {/* ---------- VENDEDOR ---------- */}
+      {dados && modo === "pessoa" && !sel && (
+        <div className="ia-grade">
+          {dados.vendedores.length === 0 && <div className="crm-col-vazio">Nenhuma conversa no período.</div>}
+          {dados.vendedores.map((v) => {
+            const al = alerta(v);
+            const a = analises[v.vendedorId];
+            return (
+              <button key={v.vendedorId} className="ia-card" onClick={() => setSel(v)}>
+                <div className="ia-card-top">
+                  <b>{v.nome}</b>
+                  {a && a.nota != null && <span className={"ia-mini-nota" + corNota(a.nota)}>{a.nota}</span>}
+                </div>
+                <span className={"at-selo " + al.cor}>{al.txt}</span>
+                <div className="ia-card-nums">
+                  <span>{v.conversas} conversas</span>
+                  <span>1ª resposta {v.tempoPrimeiraRespostaTxt || "—"}</span>
+                  <span>{v.semResposta} sem resposta</span>
+                </div>
+                <span className="ia-card-ver">{a ? "ver análise →" : "abrir →"}</span>
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      {dados && modo === "pessoa" && sel && (() => {
+        const v = dados.vendedores.find((x) => x.vendedorId === sel.vendedorId) || sel;
+        return (
+          <div className="ia-detalhe">
+            <div className="ia-det-top">
+              <button className="btn btn-sm" onClick={() => setSel(null)}>← Voltar</button>
+              <div className="ia-det-nome">{v.nome}</div>
+              <button className="ia-btn peq" disabled={rodando === v.vendedorId || !dados.temIA} onClick={() => analisarPessoa(v)}>
+                <I.spark className="ico" /> {rodando === v.vendedorId ? "Analisando…" : aSel ? "Analisar de novo" : "Analisar com IA"}
+              </button>
+            </div>
+
+            <div className="at-nums">
+              <div><span>Conversas</span><b>{v.conversas}</b></div>
+              <div><span>1ª resposta</span><b>{v.tempoPrimeiraRespostaTxt || "—"}</b></div>
+              <div><span>Resposta média</span><b>{v.tempoRespostaMedianaTxt || "—"}</b></div>
+              <div><span>Sem resposta</span><b className={v.pctSemResposta >= 25 ? "ruim" : ""}>{v.semResposta} ({v.pctSemResposta}%)</b></div>
+              <div><span>Param no meio</span><b>{v.abandonadas} ({v.pctAbandonadas}%)</b></div>
+              <div><span>Msgs por conversa</span><b>{v.msgsPorConversa}</b></div>
+            </div>
+
+            {!aSel && <div className="ia-vazio">Clique em <b>Analisar com IA</b> pra ela ler as conversas dele e dar o parecer.</div>}
+
+            {aSel && (
+              <div className="ia-rel">
+                {aSel.nota != null && (
+                  <div className={"ia-nota" + corNota(aSel.nota)}>
+                    <b>{aSel.nota}</b><span>{aSel.notaPorque || "nota do atendimento"}</span>
+                  </div>
+                )}
+                <p className="at-resumo">{aSel.resumo}</p>
+                <Bloco tit="O que funciona" itens={aSel.fortes} cls="bom" />
+                <Bloco tit="Onde está pecando" itens={aSel.falhas} cls="ruim" />
+                <Bloco tit="Padrões que se repetem" itens={aSel.padroes} cls="" />
+                {(aSel.frasesBoas || []).length > 0 && (
+                  <div className="at-frases">
+                    <span className="at-bloco-tit">Trechos que funcionaram</span>
+                    {aSel.frasesBoas.map((f, i) => <div key={i} className="at-frase bom">“{f}”</div>)}
+                  </div>
+                )}
+                {(aSel.frasesRuins || []).length > 0 && (
+                  <div className="at-frases">
+                    <span className="at-bloco-tit">Trechos que atrapalharam</span>
+                    {aSel.frasesRuins.map((f, i) => <div key={i} className="at-frase ruim">“{f}”</div>)}
+                  </div>
+                )}
+                <Bloco tit="O que fazer agora" itens={aSel.sugestoes} cls="acao" />
+                <div className="at-quando">gerado em {new Date(aSel.em).toLocaleString("pt-BR")} · {aSel.periodo || `últimos ${aSel.dias} dias`}</div>
+              </div>
+            )}
+          </div>
+        );
+      })()}
     </div>
   );
 }
-
 
 function PainelRecados({ showToast }) {
   const [dados, setDados] = useState(null);

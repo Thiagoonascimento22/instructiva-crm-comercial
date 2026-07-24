@@ -259,6 +259,7 @@ export const api = {
   atdMetricas: (dias, de, ate) => req("GET", "/api/atendimento/metricas?dias=" + dias + (de && ate ? "&de=" + de + "&ate=" + ate : "")),
   atdAnalisar: (id, dias, de, ate) => req("POST", "/api/atendimento/analisar/" + id + "?dias=" + dias + (de && ate ? "&de=" + de + "&ate=" + ate : "")),
   atdAnalises: () => req("GET", "/api/atendimento/analises"),
+  atdAnalisarEquipe: (dias, de, ate) => req("POST", "/api/atendimento/analisar-equipe?dias=" + dias + (de && ate ? "&de=" + de + "&ate=" + ate : "")),
 
   /* Recados do time */
   recadoMeu: () => req("GET", "/api/recados/meu"),
