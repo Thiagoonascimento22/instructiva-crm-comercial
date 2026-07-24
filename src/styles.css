@@ -4164,3 +4164,16 @@ select.input:disabled, .input:disabled { color: var(--muted); opacity: 1; -webki
 .rep-qtd { color: var(--brand); font-weight: 800; }
 .rep-presos { font-size: 11px; color: var(--muted); opacity: .85; }
 .rep-linha .btn-sm { flex: none; }
+
+/* passar leads dentro do modal da campanha */
+.mm-repasse { margin: 6px 0 14px; padding: 13px 14px; border-radius: 14px;
+  background: rgba(242,101,34,.07); border: 1px solid rgba(242,101,34,.28); }
+.mm-repasse.ok { background: rgba(5,150,105,.07); border-color: rgba(5,150,105,.25);
+  color: var(--muted); font-size: 12.5px; text-align: center; }
+.mm-repasse-tit { font-size: 13.5px; color: var(--text); }
+.mm-repasse-tit b { color: #c2410c; }
+.mm-repasse-sub { font-size: 11.5px; color: var(--muted); margin-top: 3px; }
+.mm-repasse-linha { display: flex; gap: 8px; margin-top: 11px; }
+.mm-repasse-linha .select { flex: 1; min-width: 0; }
+.mm-repasse-linha .btn { flex: none; white-space: nowrap; }
+@media (max-width: 520px) { .mm-repasse-linha { flex-direction: column; } .mm-repasse-linha .btn { width: 100%; justify-content: center; } }

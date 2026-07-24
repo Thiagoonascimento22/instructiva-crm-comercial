@@ -2464,7 +2464,7 @@ function OficialDisparo({ isGer = true, showToast }) {
       </div>
 
       {abrir && <ModalDisparo isGer={isGer} numeros={numeros} showToast={showToast} onClose={() => setAbrir(false)} onDone={() => { setAbrir(false); setTimeout(carregarCampanhas, 1500); if (!isGer) setTimeout(() => api.ofMeuLimite().then(setMeuLimite).catch(() => {}), 1500); }} />}
-      {campSel && <ModalMetricas camp={campSel} isGer={isGer} onClose={() => setCampSel(null)} onRetomar={retomarCampanha} onRedisparar={redispararCampanha} onExcluir={excluirCampanha} />}
+      {campSel && <ModalMetricas camp={campSel} isGer={isGer} showToast={showToast} onRepassou={carregarCampanhas} onClose={() => setCampSel(null)} onRetomar={retomarCampanha} onRedisparar={redispararCampanha} onExcluir={excluirCampanha} />}
 
       {showTemplates && (
         <div className="pop-bg" onClick={(e) => e.target === e.currentTarget && setShowTemplates(false)}>
@@ -2814,7 +2814,34 @@ function ModalDisparo({ isGer = true, numeros, showToast, onClose, onDone }) {
   );
 }
 
-function ModalMetricas({ camp, isGer = true, onClose, onRetomar, onRedisparar, onExcluir }) {
+function ModalMetricas({ camp, isGer = true, onClose, onRetomar, onRedisparar, onExcluir, showToast, onRepassou }) {
+  // repasse dos leads dessa campanha direto aqui
+  const [rep, setRep] = useState(null);        // { aRepassar, donoNumeroId, donoNumeroNome, presosCom }
+  const [vendedores, setVendedores] = useState([]);
+  const [destino, setDestino] = useState("");
+  const [passando, setPassando] = useState(false);
+  useEffect(() => {
+    if (!isGer) return;
+    api.ofRepassePrevia().then((d) => {
+      setVendedores(d.vendedores || []);
+      const g = (d.grupos || []).find((x) => x.campanhaId === camp.id || x.chave === camp.id);
+      setRep(g || { aRepassar: 0 });
+      if (g && g.donoNumeroId) setDestino(g.donoNumeroId);
+    }).catch(() => setRep({ aRepassar: 0 }));
+  }, [camp.id]);
+  async function passarLeads() {
+    if (!destino) return showToast && showToast("Escolha o vendedor");
+    const nome = (vendedores.find((v) => v.id === destino) || {}).nome || "";
+    if (!window.confirm(`Passar ${rep.aRepassar} conversa(s) dessa campanha para ${nome}?`)) return;
+    setPassando(true);
+    try {
+      const r = await api.ofRepasse({ porCampanha: { [rep.chave || camp.id]: destino } });
+      showToast && showToast(`✓ ${r.movidas} conversa(s) para ${nome}`);
+      setRep({ ...rep, aRepassar: 0 });
+      onRepassou && onRepassou();
+    } catch (e) { showToast && showToast("✗ " + e.message); }
+    setPassando(false);
+  }
   const enviados = camp.enviados || 0;
   const linha = (lab, val, cor) => {
     const pct = enviados ? Math.round((val / enviados) * 100) : 0;
@@ -2867,6 +2894,31 @@ function ModalMetricas({ camp, isGer = true, onClose, onRetomar, onRedisparar, o
                 Entregues e lidos são atualizados pela Meta em tempo real conforme as mensagens chegam.
               </div>
             </>
+          )}
+
+          {isGer && rep && rep.aRepassar > 0 && (
+            <div className="mm-repasse">
+              <div className="mm-repasse-tit">
+                <b>{rep.aRepassar} conversa(s)</b> dessa campanha estão com gerente/sem dono
+              </div>
+              {rep.presosCom && Object.keys(rep.presosCom).length > 0 && (
+                <div className="mm-repasse-sub">
+                  hoje com {Object.entries(rep.presosCom).map(([n, q]) => `${n}: ${q}`).join(" · ")}
+                </div>
+              )}
+              <div className="mm-repasse-linha">
+                <select className="select" value={destino} onChange={(e) => setDestino(e.target.value)}>
+                  <option value="">— escolher vendedor —</option>
+                  {vendedores.map((v) => <option key={v.id} value={v.id}>{v.nome}</option>)}
+                </select>
+                <button className="btn btn-primary" disabled={!destino || passando} onClick={passarLeads}>
+                  {passando ? "Passando…" : `Passar ${rep.aRepassar} pro vendedor`}
+                </button>
+              </div>
+            </div>
+          )}
+          {isGer && rep && rep.aRepassar === 0 && (
+            <div className="mm-repasse ok">✓ Os leads dessa campanha já estão com os vendedores</div>
           )}
 
           <div className="mm-acoes">
