@@ -249,6 +249,8 @@ export const api = {
   /* Repasse de leads em massa */
   ofRepassePrevia: (todos) => req("GET", "/api/oficial/repasse/previa" + (todos ? "?todos=1" : "")),
   ofRepasse: (dados) => req("POST", "/api/oficial/repasse", dados),
+  ofCampDonos: (id) => req("GET", "/api/oficial/campanhas/" + id + "/donos"),
+  ofCampTransferir: (id, vendedorId, soSemDono) => req("POST", "/api/oficial/campanhas/" + id + "/transferir", { vendedorId, soSemDono }),
 
   /* Recados do time */
   recadoMeu: () => req("GET", "/api/recados/meu"),

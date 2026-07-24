@@ -2842,101 +2842,111 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
   }
 
   /* ------------------------------------------------------------
-     REPASSE DE LEADS
-     Agrupa por NÚMERO de origem, não por campanha. Motivo: a
-     conversa é identificada por (número + telefone), então quando
-     o mesmo contato recebe vários disparos pelo mesmo número, a
-     conversa é a MESMA e guarda só a última campanha. Por número
-     nada se perde — e é o modelo real: 1 número = 1 vendedor.
+     TRANSFERIR CAMPANHA PRO VENDEDOR
+     Pega TODAS as conversas daquela campanha e passa pro vendedor
+     escolhido. Simples assim. As conversas ficam em db.waChats.
      ------------------------------------------------------------ */
-  const ehDeDisparo = (c) => !!(c.origemDisparo || c.campanhaId || c.campanha);
-  // dono "provisório": gerente, inativo ou ninguém
-  function precisaRepassar(c) {
-    if (!c.vendedorId) return true;
-    const u = (db.users || []).find((x) => x.id === c.vendedorId);
-    return !u || u.role !== "vendedor" || !u.ativo;
+  const chatsOficiais = () => Object.values(db.waChats || {}).filter((c) => c && c.canal === "oficial");
+  // conversa pertence à campanha? (por id ou, se faltar, pelo nome + número)
+  function daCampanha(c, camp) {
+    if (!c || !camp) return false;
+    if (c.campanhaId && c.campanhaId === camp.id) return true;
+    if (!c.campanhaId && camp.nome && c.campanha === camp.nome && c.numeroOficialId === camp.numeroId) return true;
+    return false;
+  }
+  function ehVendedorAtivo(id) {
+    const u = (db.users || []).find((x) => x.id === id);
+    return !!(u && u.role === "vendedor" && u.ativo);
   }
 
-  function gruposRepasse() {
+  // resumo de UMA campanha: quantas conversas tem e com quem estão
+  app.get("/api/oficial/campanhas/:id/donos", auth, gerenteOnly, (req, res) => {
     garantirEstrutura();
-    const grupos = {};
-    (db.oficial.chats || []).forEach((c) => {
-      if (!ehDeDisparo(c)) return;
-      const nid = c.numeroOficialId || "sem_numero";
-      if (!grupos[nid]) {
-        const n = acharNumero(c.numeroOficialId);
-        const dono = n && n.vendedorId ? (db.users || []).find((u) => u.id === n.vendedorId) : null;
-        grupos[nid] = {
-          numeroId: c.numeroOficialId || null,
-          chave: nid,
-          numeroApelido: n ? (n.apelido || n.numero) : "Número removido",
-          numero: n ? n.numero : "",
-          donoNumeroId: dono ? dono.id : null,
-          donoNumeroNome: dono ? dono.nome : "",
-          total: 0, aRepassar: 0, jaOk: 0, responderam: 0,
-          presosCom: {}, donosAtuais: {}, campanhas: {},
-        };
-      }
-      const g = grupos[nid];
-      g.total++;
-      if (c.respondeu) g.responderam++;
-      const donoNome = c.vendedorNome || "sem dono";
-      g.donosAtuais[donoNome] = (g.donosAtuais[donoNome] || 0) + 1;
-      if (c.campanha) g.campanhas[c.campanha] = (g.campanhas[c.campanha] || 0) + 1;
-      if (precisaRepassar(c)) {
-        g.aRepassar++;
-        const nome = c.vendedorNome || "sem dono";
-        g.presosCom[nome] = (g.presosCom[nome] || 0) + 1;
-      } else g.jaOk++;
+    const camp = (db.oficial.campanhas || []).find((c) => c.id === req.params.id);
+    if (!camp) return res.status(404).json({ error: "Campanha não encontrada" });
+    const n = acharNumero(camp.numeroId);
+    const dono = n && n.vendedorId ? (db.users || []).find((u) => u.id === n.vendedorId) : null;
+    const donos = {};
+    let total = 0, semVendedor = 0, responderam = 0;
+    chatsOficiais().forEach((c) => {
+      if (!daCampanha(c, camp)) return;
+      total++;
+      if (c.respondeu) responderam++;
+      if (!ehVendedorAtivo(c.vendedorId)) semVendedor++;
+      const nome = c.vendedorNome || "sem dono";
+      donos[nome] = (donos[nome] || 0) + 1;
     });
-    return grupos;
-  }
-
-  app.get("/api/oficial/repasse/previa", auth, gerenteOnly, (req, res) => {
-    // devolve TODOS os números com conversas de disparo — mesmo os já resolvidos.
-    // A tela precisa mostrar a verdade (quem tem o quê), não só o que falta.
-    const todos = Object.values(gruposRepasse())
-      .map((g) => ({
-        ...g,
-        campanhas: Object.keys(g.campanhas).slice(0, 4),
-        donos: Object.entries(g.donosAtuais || {}).map(([nome, qtd]) => ({ nome, qtd })).sort((a, b) => b.qtd - a.qtd),
-      }))
-      .sort((a, b) => (b.aRepassar - a.aRepassar) || (b.total - a.total));
-    const grupos = todos;
-    const vendedores = (db.users || []).filter((u) => u.role === "vendedor" && u.ativo)
-      .map((u) => ({ id: u.id, nome: u.nome, foto: u.foto || "" }));
-    res.json({ grupos, vendedores, totalARepassar: grupos.reduce((s2, g) => s2 + g.aRepassar, 0) });
+    res.json({
+      total, semVendedor, responderam,
+      numeroApelido: n ? (n.apelido || n.numero) : "—",
+      sugeridoId: dono ? dono.id : null,
+      sugeridoNome: dono ? dono.nome : "",
+      donos: Object.entries(donos).map(([nome, qtd]) => ({ nome, qtd })).sort((a, b) => b.qtd - a.qtd),
+      vendedores: (db.users || []).filter((u) => u.role === "vendedor" && u.ativo)
+        .map((u) => ({ id: u.id, nome: u.nome })),
+    });
   });
 
-  /* body: { porNumero: { numeroId: vendedorId }, tudo?: true }
-     tudo=true move TODAS as conversas do número, mesmo as que já
-     estão com outro vendedor (usar só quando quiser forçar). */
-  app.post("/api/oficial/repasse", auth, gerenteOnly, (req, res) => {
+  // transfere a campanha inteira pro vendedor escolhido
+  app.post("/api/oficial/campanhas/:id/transferir", auth, gerenteOnly, (req, res) => {
     garantirEstrutura();
-    const b = req.body || {};
-    const mapa = (b.porNumero && typeof b.porNumero === "object") ? b.porNumero
-               : (b.porCampanha && typeof b.porCampanha === "object") ? b.porCampanha : {};
-    if (!Object.keys(mapa).length) return res.status(400).json({ error: "Escolha ao menos um número" });
-    const forcar = b.tudo === true;
+    const camp = (db.oficial.campanhas || []).find((c) => c.id === req.params.id);
+    if (!camp) return res.status(404).json({ error: "Campanha não encontrada" });
+    const vendedorId = (req.body || {}).vendedorId;
+    const v = (db.users || []).find((u) => u.id === vendedorId && u.role === "vendedor" && u.ativo);
+    if (!v) return res.status(400).json({ error: "Escolha um vendedor ativo" });
+    // por padrão move TODAS as conversas da campanha (é o que o gerente espera)
+    const soSemDono = (req.body || {}).soSemDono === true;
 
     let movidas = 0;
-    const porVendedor = {};
-    (db.oficial.chats || []).forEach((c) => {
-      if (!ehDeDisparo(c)) return;
-      const nid = c.numeroOficialId || "sem_numero";
-      const destinoId = mapa[nid];
-      if (!destinoId) return;
-      if (!forcar && !precisaRepassar(c)) return;   // já está com vendedor: não mexe
-      const v = (db.users || []).find((u) => u.id === destinoId && u.role === "vendedor" && u.ativo);
-      if (!v || c.vendedorId === v.id) return;
+    chatsOficiais().forEach((c) => {
+      if (!daCampanha(c, camp)) return;
+      if (soSemDono && ehVendedorAtivo(c.vendedorId)) return;
+      if (c.vendedorId === v.id) return;
       c.vendedorId = v.id;
       c.vendedorNome = v.nome;
       c.atribuidoEm = Date.now();
       movidas++;
-      porVendedor[v.nome] = (porVendedor[v.nome] || 0) + 1;
     });
+    // as próximas respostas dessa campanha também vão pra ele
+    camp.destinoVendedorId = v.id;
     salvar();
-    res.json({ ok: true, movidas, porVendedor });
+    res.json({ ok: true, movidas, vendedor: v.nome });
+  });
+
+  /* ---- visão geral (todas as campanhas de uma vez) ---- */
+  app.get("/api/oficial/repasse/previa", auth, gerenteOnly, (req, res) => {
+    garantirEstrutura();
+    const porCamp = {};
+    chatsOficiais().forEach((c) => {
+      const cid = c.campanhaId || (c.campanha ? "nome:" + c.campanha : null);
+      if (!cid) return;
+      if (!porCamp[cid]) porCamp[cid] = { total: 0, semVendedor: 0, donos: {} };
+      const g = porCamp[cid];
+      g.total++;
+      if (!ehVendedorAtivo(c.vendedorId)) g.semVendedor++;
+      const nome = c.vendedorNome || "sem dono";
+      g.donos[nome] = (g.donos[nome] || 0) + 1;
+    });
+    const grupos = (db.oficial.campanhas || []).map((camp) => {
+      const g = porCamp[camp.id] || porCamp["nome:" + camp.nome] || { total: 0, semVendedor: 0, donos: {} };
+      const n = acharNumero(camp.numeroId);
+      const dono = n && n.vendedorId ? (db.users || []).find((u) => u.id === n.vendedorId) : null;
+      return {
+        campanhaId: camp.id, chave: camp.id,
+        campanha: camp.nome, template: camp.template || "",
+        numeroApelido: n ? (n.apelido || n.numero) : "—",
+        total: g.total, semVendedor: g.semVendedor,
+        donos: Object.entries(g.donos).map(([nome, qtd]) => ({ nome, qtd })).sort((a, b) => b.qtd - a.qtd),
+        sugeridoId: dono ? dono.id : null, sugeridoNome: dono ? dono.nome : "",
+        criadoEm: camp.criadoEm || 0,
+      };
+    }).filter((g) => g.total > 0).sort((a, b) => b.criadoEm - a.criadoEm);
+    res.json({
+      grupos,
+      vendedores: (db.users || []).filter((u) => u.role === "vendedor" && u.ativo).map((u) => ({ id: u.id, nome: u.nome })),
+      totalARepassar: grupos.reduce((s2, g) => s2 + g.semVendedor, 0),
+    });
   });
 
   app.get("/api/oficial/campanhas", auth, (req, res) => {
