@@ -2108,6 +2108,11 @@ const canalOficial = instalarCanalOficial({
    FRONTEND (build do Vite)
    ============================================================ */
 const dist = path.join(__dirname, "..", "dist");
+// atalho curto pro painel da TV: /tv?k=CHAVE
+app.get("/tv", (req, res) => {
+  res.sendFile(path.join(dist, "tv.html"));
+});
+
 app.use(express.static(dist, {
   setHeaders: (res, filePath) => {
     if (filePath.endsWith(".html")) {
