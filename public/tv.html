@@ -290,7 +290,7 @@ var chave=new URLSearchParams(location.search).get("k")||"";
 var telas=[].slice.call(document.querySelectorAll(".tela")),atual=0;
 var $=function(i){return document.getElementById(i)};
 var din=function(n){return "R$ "+Number(n||0).toLocaleString("pt-BR",{minimumFractionDigits:2,maximumFractionDigits:2})};
-var dk=function(n){n=Number(n||0);if(n>=1e6)return "R$ "+(n/1e6).toFixed(1).replace(".",",")+"M";if(n>=1e3)return "R$ "+(n/1e3).toFixed(1).replace(".",",")+"k";return din(n)};
+var dk=din; // valor sempre completo (R$ 35.000,00), pedido do Celso
 var esc=function(t){return String(t==null?"":t).replace(/[&<>"]/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]})};
 var ini=function(n){var p=String(n||"?").trim().split(/\s+/);return (((p[0]||"")[0]||"")+((p[1]||"")[0]||"")).toUpperCase()};
 var av=function(r,cl){return r.foto?'<img class="'+cl+'" src="'+esc(r.foto)+'">':'<div class="'+cl+'">'+esc(ini(r.nome))+'</div>'};
@@ -366,7 +366,7 @@ var dS=g.mediaDia>0?Math.round((g.semana/(g.mediaDia*7)-1)*100):0;
 $("cSemD").textContent=(dS>=0?"+":"")+dS+"%";$("cSemD").className="pill "+(dS>=0?"up":"dw");
 gauge($("gd"),g.pctDia,"#F26522","#F26522");gauge($("gm"),g.pct,"#25A06B","#25A06B");
 $("pd2").textContent=(g.pctDia||0)+"%";$("pm2").textContent=(g.pct||0)+"%";
-$("kProj").textContent=dk(g.projecao);$("kProjS").textContent="projeção · faltam "+g.diasRestantes+"d";
+$("kProj").textContent=dk(g.projecao);$("kProjS").textContent="projeção · faltam "+g.diasRestantes+(g.diasRestantes===1?" dia":" dias");
 grafico(d.porDia||[],d.diaHoje);
 
 /* pódio */
