@@ -951,7 +951,7 @@ export function instalarVendas({ app, getDb, saveDB, proximoId, auth, gerenteOnl
     garantir();
     const mes = String(req.query.mes || "").slice(0, 7) || mesDe(Date.now());
     const ehGer = req.user.role === "gerente";
-    let lista = (db.vendas.vendas || []).filter((v) => mesDe(v.data) === mes);
+    let lista = (db.vendas.lista || []).filter((v) => mesDe(v.data) === mes);
     if (!ehGer) {
       const minha = (db.vendas.pessoas || []).find((p) => p.userId === req.user.id);
       lista = minha ? lista.filter((v) => v.pessoaId === minha.id) : [];
@@ -971,7 +971,28 @@ export function instalarVendas({ app, getDb, saveDB, proximoId, auth, gerenteOnl
       mes, total, qtd: lista.length,
       recebido: lista.reduce((s2, v) => s2 + num(v.recebido), 0),
       ticket: lista.length ? total / lista.length : 0,
-      cursos: soma((v) => cursoCanonico(v.curso), "curso"),
+      cursos: soma((v) => cursoCanonico(v.curso), "curso").map((c) => {
+        const doCurso = lista.filter((v) => cursoCanonico(v.curso) === c.nome);
+        const agrupa = (fn) => {
+          const m = {};
+          doCurso.forEach((v) => {
+            const k = fn(v) || "—";
+            if (!m[k]) m[k] = { nome: k, qtd: 0, valor: 0 };
+            m[k].qtd++; m[k].valor += num(v.valor);
+          });
+          return Object.values(m).sort((a, b) => b.valor - a.valor);
+        };
+        const nomePessoa = (v) => {
+          const p = (db.vendas.pessoas || []).find((x) => x.id === v.pessoaId);
+          return p ? p.nome : "—";
+        };
+        return {
+          ...c,
+          formas: agrupa((v) => formaCanonica(v)),
+          plataformas: agrupa((v) => String(v.plataforma || "").trim() || "Direto"),
+          vendedores: agrupa(nomePessoa).slice(0, 8),
+        };
+      }),
       formas: soma((v) => formaCanonica(v), "forma"),
       plataformas: soma((v) => String(v.plataforma || "").trim() || "Direto", "plataforma"),
       parcelas: soma((v) => (Number(v.parcelas) > 1 ? Number(v.parcelas) + "x" : "À vista"), "parcelas"),

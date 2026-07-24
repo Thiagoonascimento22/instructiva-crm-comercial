@@ -4194,73 +4194,109 @@ function casaBusca(v, termo) {
 
 
 /* ============================================================
-   ANÁLISE DO MÊS — cursos, formas de pagamento, plataformas
+   MÉTRICAS — tela cheia, dentro de Vendas
+   Busca curso por curso e abre o detalhe: quantas vendas, quanto
+   faturou, como o cliente pagou e em qual plataforma.
    ============================================================ */
-function ModalAnalise({ mes, onClose, showToast }) {
+function TelaMetricas({ mes, onVoltar, showToast }) {
   const [d, setD] = useState(null);
   const [aba, setAba] = useState("cursos");
-  useEffect(() => { api.vdAnalise(mes).then(setD).catch((e) => showToast(e.message)); }, [mes]);
+  const [busca, setBusca] = useState("");
+  const [aberto, setAberto] = useState(null);
 
-  const ABAS = [["cursos", "Cursos"], ["formas", "Como pagou"], ["plataformas", "Plataforma"], ["parcelas", "Parcelamento"]];
-  const lista = d ? (d[aba] || []) : [];
+  useEffect(() => { setD(null); api.vdAnalise(mes).then(setD).catch((e) => showToast(e.message)); }, [mes]);
+
+  const ABAS = [["cursos", "Por curso"], ["formas", "Como pagou"], ["plataformas", "Plataforma"], ["parcelas", "Parcelamento"]];
+  const nrm = (t) => String(t || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+  const lista = (d ? (d[aba] || []) : []).filter((x) => !busca.trim() || nrm(x.nome).includes(nrm(busca)));
   const maior = lista.reduce((m, x) => Math.max(m, x.valor), 0) || 1;
+  const pct = (v) => (d && d.total > 0 ? Math.round((v / d.total) * 100) : 0);
 
   return (
-    <Portal>
-      <div className="modal" onClick={(e) => e.target === e.currentTarget && onClose()}>
-        <div className="modal-box grande">
-          <div className="modal-head">
-            <b>Análise de {mesLegivel(mes)}</b>
-            <button className="crm-x" onClick={onClose}>✕</button>
+    <div className="mt-tela">
+      <div className="mt-topo">
+        <button className="btn btn-sm" onClick={onVoltar}>← Voltar</button>
+        <div className="mt-tit">Métricas de {mesLegivel(mes)}</div>
+      </div>
+
+      {!d ? (
+        <div className="panel-sub" style={{ padding: 30 }}><span className="spin" /> Somando as vendas…</div>
+      ) : (
+        <>
+          <div className="mt-cards">
+            <div><span>Vendido</span><b>{dinheiro(d.total)}</b></div>
+            <div><span>Recebido</span><b className="verde">{dinheiro(d.recebido)}</b></div>
+            <div><span>Vendas</span><b>{d.qtd}</b></div>
+            <div><span>Ticket médio</span><b>{dinheiro(d.ticket)}</b></div>
+            <div><span>Cursos vendidos</span><b>{(d.cursos || []).length}</b></div>
           </div>
 
-          {!d && <div className="panel-sub" style={{ padding: 24 }}><span className="spin" /> Somando…</div>}
+          <div className="mt-barra">
+            <div className="of-tabs">
+              {ABAS.map(([k, lb]) => (
+                <button key={k} className={aba === k ? "of-tab on" : "of-tab"}
+                  onClick={() => { setAba(k); setAberto(null); }}>{lb}</button>
+              ))}
+            </div>
+            <div className="vd-busca" style={{ margin: 0, flex: 1, maxWidth: 380 }}>
+              <I.search className="ico" />
+              <input value={busca} onChange={(e) => setBusca(e.target.value)}
+                placeholder={aba === "cursos" ? "Buscar curso…" : "Buscar…"} />
+              {busca && <button className="vd-busca-x" onClick={() => setBusca("")}>✕</button>}
+            </div>
+          </div>
 
-          {d && (
-            <>
-              <div className="an-topo">
-                <div><span>Vendido</span><b>{dinheiro(d.total)}</b></div>
-                <div><span>Recebido</span><b className="verde">{dinheiro(d.recebido)}</b></div>
-                <div><span>Vendas</span><b>{d.qtd}</b></div>
-                <div><span>Ticket médio</span><b>{dinheiro(d.ticket)}</b></div>
-              </div>
-
-              <div className="of-tabs" style={{ margin: "14px 0 12px" }}>
-                {ABAS.map(([k, lb]) => (
-                  <button key={k} className={aba === k ? "of-tab on" : "of-tab"} onClick={() => setAba(k)}>{lb}</button>
-                ))}
-              </div>
-
-              {lista.length === 0 ? (
-                <div className="crm-col-vazio">Nenhuma venda neste mês.</div>
-              ) : (
-                <div className="an-lista">
-                  {lista.map((x, i) => (
-                    <div key={x.nome} className={"an-item" + (i === 0 ? " top" : "")}>
-                      <span className="an-pos">{i + 1}</span>
-                      <div className="an-info">
-                        <div className="an-nome">{x.nome}</div>
-                        <div className="an-barra"><i style={{ width: Math.max(2, (x.valor / maior) * 100) + "%" }} /></div>
-                        <div className="an-sub">
-                          {x.qtd} venda(s) · ticket {dinheiroCurto(x.ticket)} · recebido {dinheiroCurto(x.recebido)}
+          {lista.length === 0 ? (
+            <div className="crm-col-vazio">
+              {busca ? `Nada encontrado para "${busca}".` : "Nenhuma venda neste mês."}
+            </div>
+          ) : (
+            <div className="mt-lista">
+              {lista.map((x, i) => {
+                const abre = aba === "cursos";
+                const on = aberto === x.nome;
+                return (
+                  <div key={x.nome} className={"mt-card" + (on ? " on" : "")}>
+                    <div className={"mt-linha" + (abre ? " clicavel" : "")}
+                      onClick={() => abre && setAberto(on ? null : x.nome)}>
+                      <span className="mt-pos">{i + 1}</span>
+                      <div className="mt-info">
+                        <div className="mt-nome">
+                          {x.nome}
+                          {abre && <span className="mt-abrir">{on ? "▲ fechar" : "▼ ver detalhe"}</span>}
                         </div>
+                        <div className="mt-barra-prog"><i style={{ width: Math.max(2, (x.valor / maior) * 100) + "%" }} /></div>
+                        <div className="mt-sub">{x.qtd} venda(s) · ticket {dinheiroCurto(x.ticket)} · recebido {dinheiroCurto(x.recebido)}</div>
                       </div>
-                      <div className="an-vl">
-                        <b>{dinheiro(x.valor)}</b>
-                        <span>{d.total > 0 ? Math.round((x.valor / d.total) * 100) : 0}% do mês</span>
-                      </div>
+                      <div className="mt-vl"><b>{dinheiro(x.valor)}</b><span>{pct(x.valor)}% do mês</span></div>
                     </div>
-                  ))}
-                </div>
-              )}
-            </>
+
+                    {on && (
+                      <div className="mt-detalhe">
+                        {[["Como o cliente pagou", x.formas], ["Plataforma", x.plataformas], ["Quem vendeu", x.vendedores]].map(([tit, arr]) => (
+                          <div key={tit} className="mt-bloco">
+                            <span className="mt-bloco-tit">{tit}</span>
+                            {(arr || []).length === 0 ? <span className="mt-vazio">—</span> : (arr || []).map((y) => (
+                              <div key={y.nome} className="mt-mini">
+                                <span className="mt-mini-nome">{y.nome}</span>
+                                <span className="mt-mini-qtd">{y.qtd}x</span>
+                                <span className="mt-mini-vl">{dinheiroCurto(y.valor)}</span>
+                              </div>
+                            ))}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
           )}
-        </div>
-      </div>
-    </Portal>
+        </>
+      )}
+    </div>
   );
 }
-
 
 function ModalPessoaRapida({ pessoa, pessoas, mes, isGer = true, onVerPainel, onClose, onSalvo, showToast }) {
   const [grupo, setGrupo] = useState(pessoa.grupo || "");
@@ -4762,6 +4798,14 @@ function PainelVendas({ showToast, isGer = true }) {
   const pctRitmo = dados.diasNoMes ? Math.min(100, Math.round((dados.diaHoje / dados.diasNoMes) * 100)) : 0;
   const noRitmo = pctGeral >= pctRitmo;
 
+  if (showAnalise) {
+    return (
+      <div className="vd">
+        <TelaMetricas mes={mes} onVoltar={() => setShowAnalise(false)} showToast={showToast} />
+      </div>
+    );
+  }
+
   return (
     <div className="vd">
       {/* topo */}
@@ -4789,7 +4833,7 @@ function PainelVendas({ showToast, isGer = true }) {
             forma: "Pix", plataforma: "Hotmart", codigo: "", parcelas: "", valor: "", recebido: "",
             data: new Date().toISOString().slice(0, 10),
           })}><I.plus className="ico" /> Lançar venda</button>
-          <button className="onum-btn-ghost" onClick={() => setShowAnalise(true)}><I.trend className="ico" /> Análise do mês</button>
+          <button className="onum-btn-ghost" onClick={() => setShowAnalise(true)}><I.trend className="ico" /> Métricas</button>
           {isGer && <button className="onum-btn-ghost" onClick={() => setVerLista((v) => !v)}><I.chat className="ico" /> {verLista ? "Ver ranking" : `Vendas do mês (${vendas.length})`}</button>}
           {isGer && (
             <div className="vd-menu-wrap">
@@ -5124,7 +5168,6 @@ function PainelVendas({ showToast, isGer = true }) {
 
       {form && <FormVenda form={form} setForm={setForm} pessoas={pessoas} isGer={isGer} onSalvo={() => { setForm(null); carregar(); }} showToast={showToast} />}
       {pessoaRapida && <ModalPessoaRapida pessoa={pessoaRapida} pessoas={pessoas} mes={mes} isGer={isGer} onVerPainel={(id) => trocarEscopo(id)} onClose={() => setPessoaRapida(null)} onSalvo={carregar} showToast={showToast} />}
-      {showAnalise && <ModalAnalise mes={mes} onClose={() => setShowAnalise(false)} showToast={showToast} />}
       {showDup && <ModalDuplicadas mes={mes} onClose={() => setShowDup(false)} onMudou={carregar} showToast={showToast} />}
       {showInteg && <ModalIntegracao onClose={() => setShowInteg(false)} showToast={showToast} />}
       {showImportarV && <ModalImportarVendas mesAtual={mes} onClose={() => setShowImportarV(false)} onDone={carregar} showToast={showToast} />}
