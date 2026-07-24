@@ -4177,3 +4177,9 @@ select.input:disabled, .input:disabled { color: var(--muted); opacity: 1; -webki
 .mm-repasse-linha .select { flex: 1; min-width: 0; }
 .mm-repasse-linha .btn { flex: none; white-space: nowrap; }
 @media (max-width: 520px) { .mm-repasse-linha { flex-direction: column; } .mm-repasse-linha .btn { width: 100%; justify-content: center; } }
+.mm-repasse-donos { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 9px; }
+.mm-dono { font-size: 11.5px; color: var(--muted); background: var(--card); border: 1px solid var(--line);
+  border-radius: 99px; padding: 3px 10px; }
+.mm-dono b { color: var(--text); }
+.mm-forcar { display: flex; align-items: center; gap: 7px; margin-top: 10px; font-size: 11.5px; color: var(--muted); cursor: pointer; }
+.mm-forcar input { flex: none; }

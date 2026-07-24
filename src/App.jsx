@@ -2816,29 +2816,34 @@ function ModalDisparo({ isGer = true, numeros, showToast, onClose, onDone }) {
 }
 
 function ModalMetricas({ camp, isGer = true, onClose, onRetomar, onRedisparar, onExcluir, showToast, onRepassou }) {
-  // repasse dos leads dessa campanha direto aqui
-  const [rep, setRep] = useState(null);        // { aRepassar, donoNumeroId, donoNumeroNome, presosCom }
+  // repasse dos leads: mostra a verdade sobre o número dessa campanha
+  const [rep, setRep] = useState(null);
   const [vendedores, setVendedores] = useState([]);
   const [destino, setDestino] = useState("");
   const [passando, setPassando] = useState(false);
-  useEffect(() => {
+  const [forcar, setForcar] = useState(false);
+  const carregarRep = () => {
     if (!isGer) return;
     api.ofRepassePrevia().then((d) => {
       setVendedores(d.vendedores || []);
       const g = (d.grupos || []).find((x) => x.numeroId === camp.numeroId);
-      setRep(g || { aRepassar: 0 });
-      if (g && g.donoNumeroId) setDestino(g.donoNumeroId);
-    }).catch(() => setRep({ aRepassar: 0 }));
-  }, [camp.id]);
+      setRep(g || { vazio: true, total: 0, aRepassar: 0, donos: [] });
+      if (g && g.donoNumeroId) setDestino((a) => a || g.donoNumeroId);
+    }).catch(() => setRep({ vazio: true, total: 0, aRepassar: 0, donos: [] }));
+  };
+  useEffect(() => { carregarRep(); }, [camp.id]);
   async function passarLeads() {
     if (!destino) return showToast && showToast("Escolha o vendedor");
     const nome = (vendedores.find((v) => v.id === destino) || {}).nome || "";
-    if (!window.confirm(`Passar ${rep.aRepassar} conversa(s) do número ${rep.numeroApelido} para ${nome}?\n\nInclui todos os disparos feitos por esse número.`)) return;
+    const qtd = forcar ? rep.total : rep.aRepassar;
+    if (!qtd) return showToast && showToast("Nada pra passar");
+    if (!window.confirm(`Passar ${qtd} conversa(s) do número ${rep.numeroApelido} para ${nome}?` +
+      (forcar ? "\n\nATENÇÃO: move TODAS, inclusive as que já estão com outros vendedores." : ""))) return;
     setPassando(true);
     try {
-      const r = await api.ofRepasse({ porNumero: { [rep.chave]: destino } });
+      const r = await api.ofRepasse({ porNumero: { [rep.chave]: destino }, tudo: forcar });
       showToast && showToast(`✓ ${r.movidas} conversa(s) para ${nome}`);
-      setRep({ ...rep, aRepassar: 0 });
+      carregarRep();
       onRepassou && onRepassou();
     } catch (e) { showToast && showToast("✗ " + e.message); }
     setPassando(false);
@@ -2897,17 +2902,15 @@ function ModalMetricas({ camp, isGer = true, onClose, onRetomar, onRedisparar, o
             </>
           )}
 
-          {isGer && rep && rep.aRepassar > 0 && (
-            <div className="mm-repasse">
+          {isGer && rep && !rep.vazio && (
+            <div className={"mm-repasse" + (rep.aRepassar > 0 ? "" : " ok")}>
               <div className="mm-repasse-tit">
-                <b>{rep.aRepassar} conversa(s)</b> do número <b>{rep.numeroApelido}</b> estão sem vendedor
+                Número <b>{rep.numeroApelido}</b> · {rep.total} conversa(s) no total
+                {rep.aRepassar > 0 ? <> · <b>{rep.aRepassar} sem vendedor</b></> : " · todas já têm dono"}
               </div>
-              <div className="mm-repasse-sub">
-                inclui todos os disparos feitos por esse número{rep.campanhas && rep.campanhas.length ? ` (${rep.campanhas.join(", ")}${rep.campanhas.length >= 4 ? "…" : ""})` : ""}
-              </div>
-              {rep.presosCom && Object.keys(rep.presosCom).length > 0 && (
-                <div className="mm-repasse-sub">
-                  hoje com {Object.entries(rep.presosCom).map(([n, q]) => `${n}: ${q}`).join(" · ")}
+              {(rep.donos || []).length > 0 && (
+                <div className="mm-repasse-donos">
+                  {rep.donos.map((d) => <span key={d.nome} className="mm-dono"><b>{d.qtd}</b> {d.nome}</span>)}
                 </div>
               )}
               <div className="mm-repasse-linha">
@@ -2916,13 +2919,17 @@ function ModalMetricas({ camp, isGer = true, onClose, onRetomar, onRedisparar, o
                   {vendedores.map((v) => <option key={v.id} value={v.id}>{v.nome}</option>)}
                 </select>
                 <button className="btn btn-primary" disabled={!destino || passando} onClick={passarLeads}>
-                  {passando ? "Passando…" : `Passar ${rep.aRepassar} pro vendedor`}
+                  {passando ? "Passando…" : `Passar ${forcar ? rep.total : rep.aRepassar} pro vendedor`}
                 </button>
               </div>
+              <label className="mm-forcar">
+                <input type="checkbox" checked={forcar} onChange={(e) => setForcar(e.target.checked)} />
+                Passar <b>todas as {rep.total}</b>, inclusive as que já estão com outro vendedor
+              </label>
             </div>
           )}
-          {isGer && rep && rep.aRepassar === 0 && (
-            <div className="mm-repasse ok">✓ Os leads desse número já estão com os vendedores</div>
+          {isGer && rep && rep.vazio && (
+            <div className="mm-repasse ok">Nenhuma conversa registrada para o número dessa campanha.</div>
           )}
 
           <div className="mm-acoes">

@@ -2874,12 +2874,14 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
           donoNumeroId: dono ? dono.id : null,
           donoNumeroNome: dono ? dono.nome : "",
           total: 0, aRepassar: 0, jaOk: 0, responderam: 0,
-          presosCom: {}, campanhas: {},
+          presosCom: {}, donosAtuais: {}, campanhas: {},
         };
       }
       const g = grupos[nid];
       g.total++;
       if (c.respondeu) g.responderam++;
+      const donoNome = c.vendedorNome || "sem dono";
+      g.donosAtuais[donoNome] = (g.donosAtuais[donoNome] || 0) + 1;
       if (c.campanha) g.campanhas[c.campanha] = (g.campanhas[c.campanha] || 0) + 1;
       if (precisaRepassar(c)) {
         g.aRepassar++;
@@ -2891,10 +2893,16 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
   }
 
   app.get("/api/oficial/repasse/previa", auth, gerenteOnly, (req, res) => {
-    const grupos = Object.values(gruposRepasse())
-      .map((g) => ({ ...g, campanhas: Object.keys(g.campanhas).slice(0, 4) }))
-      .filter((g) => g.aRepassar > 0)
-      .sort((a, b) => b.aRepassar - a.aRepassar);
+    // devolve TODOS os números com conversas de disparo — mesmo os já resolvidos.
+    // A tela precisa mostrar a verdade (quem tem o quê), não só o que falta.
+    const todos = Object.values(gruposRepasse())
+      .map((g) => ({
+        ...g,
+        campanhas: Object.keys(g.campanhas).slice(0, 4),
+        donos: Object.entries(g.donosAtuais || {}).map(([nome, qtd]) => ({ nome, qtd })).sort((a, b) => b.qtd - a.qtd),
+      }))
+      .sort((a, b) => (b.aRepassar - a.aRepassar) || (b.total - a.total));
+    const grupos = todos;
     const vendedores = (db.users || []).filter((u) => u.role === "vendedor" && u.ativo)
       .map((u) => ({ id: u.id, nome: u.nome, foto: u.foto || "" }));
     res.json({ grupos, vendedores, totalARepassar: grupos.reduce((s2, g) => s2 + g.aRepassar, 0) });
