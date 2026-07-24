@@ -3022,8 +3022,11 @@ function RecadoDoDia() {
       <div className={"rec-bg" + (saindo ? " saindo" : "")} onClick={(e) => e.target === e.currentTarget && fechar()}>
         <div className="rec-pop">
           <div className="rec-pop-luz" />
-          <div className="rec-pop-tit">{recado.titulo}</div>
-          <p className="rec-pop-txt">{recado.corpo}</p>
+          <div className="rec-pop-foto">
+            <Avatar nome={recado.nome || "?"} foto={recado.foto} size={96} />
+          </div>
+          {recado.titulo && <div className="rec-pop-tit">{recado.titulo}</div>}
+          <p className={"rec-pop-txt" + (recado.titulo ? "" : " solo")}>{recado.corpo}</p>
           {recado.assinatura && <div className="rec-pop-ass">— {recado.assinatura}</div>}
           <button className="btn btn-primary rec-pop-btn" onClick={fechar}>Bora! 🚀</button>
         </div>

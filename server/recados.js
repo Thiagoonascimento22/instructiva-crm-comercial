@@ -34,7 +34,7 @@ export function instalarRecados({ app, getDb, saveDB, auth, donoOnly }) {
     const d = db();
     const v = d.vendas || {};
     const pessoa = (v.pessoas || []).find((p) => p.userId === userId);
-    const vazio = { temDados: false, nome: "", venda: 0, qtd: 0, meta: 0, pct: 0, posicao: 0, total: 0, ontem: 0, qtdOntem: 0 };
+    const vazio = { temDados: false, nome: "", foto: "", venda: 0, qtd: 0, meta: 0, pct: 0, posicao: 0, total: 0, ontem: 0, qtdOntem: 0 };
     if (!pessoa) return vazio;
 
     const mes = mesAtual();
@@ -74,6 +74,7 @@ export function instalarRecados({ app, getDb, saveDB, auth, donoOnly }) {
     return {
       temDados: true,
       nome: pessoa.nome,
+      foto: pessoa.foto || "",
       venda: meu.valor, qtd: meu.qtd, meta,
       pct: meta > 0 ? Math.round((meu.valor / meta) * 100) : 0,
       posicao, total: rank.length,
@@ -169,14 +170,12 @@ export function instalarRecados({ app, getDb, saveDB, auth, donoOnly }) {
     const nome = primeiroNome(m.nome || user.nome);
     const s = semente(user.id + "|" + hoje());
 
+    const foto = m.foto || user.foto || "";
     if (tom === "custom") {
       const txt = String((cfg && cfg.texto) || "").trim();
       if (!txt) return null;
-      return {
-        titulo: `Recado pra você, ${nome}`,
-        corpo: txt.replace(/\{nome\}/gi, nome),
-        tom, assinatura: (cfg && cfg.assinatura) || "",
-      };
+      // texto seu: vai direto embaixo da foto, sem título genérico
+      return { titulo: "", corpo: txt.replace(/\{nome\}/gi, nome), foto, nome, tom, assinatura: (cfg && cfg.assinatura) || "" };
     }
 
     const banco = ABERTURAS[tom] ? tom : "incentivo";
@@ -188,7 +187,7 @@ export function instalarRecados({ app, getDb, saveDB, auth, donoOnly }) {
     return {
       titulo: abertura,
       corpo: [corpo, dado].filter(Boolean).join(" ") + "\n\n" + fecho,
-      tom, assinatura: (cfg && cfg.assinatura) || "",
+      foto, nome, tom, assinatura: (cfg && cfg.assinatura) || "",
     };
   }
 

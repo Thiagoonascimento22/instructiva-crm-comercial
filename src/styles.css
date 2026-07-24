@@ -4126,8 +4126,14 @@ select.input:disabled, .input:disabled { color: var(--muted); opacity: 1; -webki
   box-shadow: 0 30px 70px -30px rgba(0,0,0,.55); animation: recSobe .42s cubic-bezier(.2,.9,.25,1); }
 @keyframes recSobe { from { opacity: 0; transform: translateY(18px) scale(.97) } to { opacity: 1; transform: none } }
 .rec-pop-luz { position: absolute; top: 0; left: 0; right: 0; height: 4px; background: linear-gradient(90deg, #F26522, #25A06B); }
-.rec-pop-tit { font-size: 22px; font-weight: 800; letter-spacing: -.4px; color: var(--text); line-height: 1.25; }
-.rec-pop-txt { margin: 12px 0 0; font-size: 14.5px; line-height: 1.65; color: var(--muted); white-space: pre-line; }
+.rec-pop-foto { display: flex; justify-content: center; margin-bottom: 16px; }
+.rec-pop-foto .uav { border: 3px solid transparent; background:
+  linear-gradient(var(--card), var(--card)) padding-box,
+  linear-gradient(135deg, #F26522, #25A06B) border-box;
+  box-shadow: 0 12px 30px -12px rgba(242,101,34,.45); }
+.rec-pop-tit { font-size: 21px; font-weight: 800; letter-spacing: -.4px; color: var(--text); line-height: 1.25; }
+.rec-pop-txt { margin: 11px 0 0; font-size: 14.5px; line-height: 1.65; color: var(--muted); white-space: pre-line; }
+.rec-pop-txt.solo { margin-top: 0; font-size: 17px; font-weight: 600; color: var(--text); line-height: 1.55; }
 .rec-pop-ass { margin-top: 12px; font-size: 12.5px; font-weight: 700; color: var(--text); }
 .rec-pop-btn { margin-top: 22px; width: 100%; justify-content: center; font-size: 14.5px; padding: 12px; }
 
