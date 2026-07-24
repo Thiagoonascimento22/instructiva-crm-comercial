@@ -4178,6 +4178,17 @@ function acharDuplicadas(pessoas) {
 }
 
 // Clicou no nome no ranking: define a equipe e a meta dessa pessoa
+/* busca simples em vendas: nome do cliente, curso, plataforma, código */
+function casaBusca(v, termo) {
+  const t = String(termo || "").trim().toLowerCase();
+  if (!t) return true;
+  const alvo = [v.cliente, v.curso, v.plataforma, v.codigo, v.formaLabel || v.forma, v.pessoaNome]
+    .filter(Boolean).join(" ")
+    .normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+  return t.normalize("NFD").replace(/[\u0300-\u036f]/g, "").split(/\s+/).every((p) => alvo.includes(p));
+}
+
+
 function ModalPessoaRapida({ pessoa, pessoas, mes, isGer = true, onVerPainel, onClose, onSalvo, showToast }) {
   const [grupo, setGrupo] = useState(pessoa.grupo || "");
   const [meta, setMeta] = useState(String(pessoa.meta || ""));
@@ -4204,17 +4215,18 @@ function ModalPessoaRapida({ pessoa, pessoas, mes, isGer = true, onVerPainel, on
     api.vdLista(mes, pessoa.pessoaId).then((d) => setMinhas(d.vendas || [])).catch(() => setMinhas([]));
     // eslint-disable-next-line
   }, []);
+  const [buscaV, setBuscaV] = useState("");
   // agrupa as vendas por dia, do mais recente pro mais antigo
   const dias = useMemo(() => {
     const m = {};
-    (minhas || []).forEach((v) => {
+    (minhas || []).filter((v) => casaBusca(v, buscaV)).forEach((v) => {
       const d = new Date(v.data);
       const k = d.toISOString().slice(0, 10);
       if (!m[k]) m[k] = { k, data: d, vendas: [], total: 0, recebido: 0 };
       m[k].vendas.push(v); m[k].total += Number(v.valor) || 0; m[k].recebido += Number(v.recebido) || 0;
     });
     return Object.values(m).sort((a, b) => b.k.localeCompare(a.k));
-  }, [minhas]);
+  }, [minhas, buscaV]);
   const maxDia = dias.reduce((mx, d) => Math.max(mx, d.total), 0);
   async function salvar() {
     setSalvando(true);
@@ -4258,10 +4270,18 @@ function ModalPessoaRapida({ pessoa, pessoas, mes, isGer = true, onVerPainel, on
                 <div><span>Vendas</span><b>{minhas ? minhas.length : "…"}</b></div>
                 <div><span>Dias com venda</span><b>{dias.length}</b></div>
               </div>
+              {minhas && minhas.length > 0 && (
+                <div className="vd-busca">
+                  <I.search className="ico" />
+                  <input value={buscaV} onChange={(e) => setBuscaV(e.target.value)}
+                    placeholder="Buscar por nome do cliente, curso ou código…" />
+                  {buscaV && <button className="vd-busca-x" onClick={() => setBuscaV("")}>✕</button>}
+                </div>
+              )}
               {minhas === null ? (
                 <div className="dash-empty"><span className="spin" /> Carregando…</div>
               ) : dias.length === 0 ? (
-                <div className="crm-col-vazio">Nenhuma venda neste mês.</div>
+                <div className="crm-col-vazio">{buscaV ? `Nenhuma venda encontrada para "${buscaV}".` : "Nenhuma venda neste mês."}</div>
               ) : (
                 <div className="vd-dias">
                   {dias.map((d) => (
@@ -4611,6 +4631,7 @@ function PainelVendas({ showToast, isGer = true }) {
   const [showDup, setShowDup] = useState(false);
   const [pessoaRapida, setPessoaRapida] = useState(null);
   const [porEquipe, setPorEquipe] = useState(true);   // ranking separado por time
+  const [buscaVenda, setBuscaVenda] = useState("");
 
   const carregar = (m, esc) => {
     const e = esc || escopo;
@@ -4816,15 +4837,23 @@ function PainelVendas({ showToast, isGer = true }) {
         </>
       ) : verLista ? (
         <>
+        <div className="vd-busca">
+          <I.search className="ico" />
+          <input value={buscaVenda} onChange={(e) => setBuscaVenda(e.target.value)}
+            placeholder="Buscar por nome do cliente, curso, plataforma ou código…" />
+          {buscaVenda && <button className="vd-busca-x" onClick={() => setBuscaVenda("")}>✕</button>}
+        </div>
         <div className="vd-lista-top">
-          <span><b>{vendas.length}</b> {isGer ? "venda(s) lançada(s)" : "venda(s) sua(s)"} em {mesLegivel(mes)}</span>
+          <span>
+            <b>{vendasFiltradas.length}</b>{buscaVenda ? ` de ${vendas.length}` : ""} {isGer ? "venda(s) lançada(s)" : "venda(s) sua(s)"} em {mesLegivel(mes)}
+          </span>
           {isGer && <button className="crm-lote-del" onClick={async () => {
             if (!window.confirm(`Apagar TODAS as ${vendas.length} vendas de ${mesLegivel(mes)}? Isso não dá pra desfazer.`)) return;
             try { const r = await api.vdLimparMes(mes); showToast(`✓ ${r.excluidas} venda(s) apagada(s)`); carregar(); }
             catch (e) { showToast("✗ " + e.message); }
           }}><I.trash className="ico" /> Limpar o mês</button>}
         </div>
-        <ListaVendas vendas={vendas} onEditar={(v) => setForm({
+        <ListaVendas vendas={vendasFiltradas} onEditar={(v) => setForm({
           ...v, data: new Date(v.data).toISOString().slice(0, 10),
           valor: String(v.valor), recebido: String(v.recebido), parcelas: String(v.parcelas || ""),
         })} onExcluir={async (v) => {
@@ -5231,7 +5260,13 @@ function ModalPessoas({ pessoas, onClose, onMudou, showToast }) {
   }
   const gruposExistentes = Array.from(new Set(pessoas.map((p) => p.grupo).filter(Boolean)));
   useEffect(() => { api.listUsers().then(setUsers).catch(() => {}); }, []);
-  const faltando = users.filter((u) => u.ativo && !pessoas.some((p) => p.nome.toLowerCase() === (u.nome || "").toLowerCase()));
+  const norm = (t) => String(t || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim().replace(/\s+/g, " ").toLowerCase();
+  const jaNoPainel = (u) => pessoas.some((p) => norm(p.nome) === norm(u.nome) || (p.userId && p.userId === u.id));
+  const faltando = users.filter((u) => u.ativo && !jaNoPainel(u));
+  // gente do sistema que está DESATIVADA e por isso não aparece pra trazer
+  const inativosFora = users.filter((u) => !u.ativo && !jaNoPainel(u));
+  const [buscaP, setBuscaP] = useState("");
+  const pessoasFiltradas = pessoas.filter((p) => !buscaP.trim() || norm(p.nome).includes(norm(buscaP)) || norm(p.grupo).includes(norm(buscaP)));
 
   async function puxarDoSistema() {
     if (!faltando.length) return;
@@ -5297,9 +5332,26 @@ function ModalPessoas({ pessoas, onClose, onMudou, showToast }) {
             </div>
           )}
           {faltando.length > 0 && (
-            <button className="btn btn-on" style={{ marginTop: 12 }} disabled={puxando} onClick={puxarDoSistema}>
-              <I.users className="ico" /> {puxando ? "Trazendo…" : `Trazer os ${faltando.length} do sistema`}
-            </button>
+            <div className="vd-trazer">
+              <button className="btn btn-on" disabled={puxando} onClick={puxarDoSistema}>
+                <I.users className="ico" /> {puxando ? "Trazendo…" : `Trazer os ${faltando.length} do sistema`}
+              </button>
+              <span className="vd-trazer-nomes">{faltando.map((u) => u.nome).join(", ")}</span>
+            </div>
+          )}
+          {inativosFora.length > 0 && (
+            <div className="vd-inativos">
+              <b>{inativosFora.length} pessoa(s) desativada(s) no sistema</b> não entram no painel:
+              {" "}{inativosFora.map((u) => u.nome).join(", ")}.
+              <br />Ative em <b>Configurações → Equipe &amp; Acessos</b> e volte aqui, ou cadastre pelo campo abaixo.
+            </div>
+          )}
+          {pessoas.length > 6 && (
+            <div className="vd-busca" style={{ marginTop: 12 }}>
+              <I.search className="ico" />
+              <input value={buscaP} onChange={(e) => setBuscaP(e.target.value)} placeholder="Buscar pessoa ou equipe…" />
+              {buscaP && <button className="vd-busca-x" onClick={() => setBuscaP("")}>✕</button>}
+            </div>
           )}
           <div className="vd-nova-pessoa">
             <input className="input" placeholder="Nome" value={nome} onChange={(e) => setNome(e.target.value)} />
@@ -5309,7 +5361,7 @@ function ModalPessoas({ pessoas, onClose, onMudou, showToast }) {
             <button className="onum-add" onClick={criar}><I.plus className="ico" /></button>
           </div>
           <div className="vd-pessoas">
-            {pessoas.map((p) => (
+            {pessoasFiltradas.map((p) => (
               <LinhaPessoa key={p.id} p={p}
                 onSalvar={editar}
                 onFoto={trocarFoto}
