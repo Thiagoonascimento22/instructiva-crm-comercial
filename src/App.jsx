@@ -7341,9 +7341,10 @@ function InboxOficial({ isGer, showToast, onIrParaEvolution, target, onTargetUse
   // monta uma timeline juntando mensagens + notas, ordenada por tempo
   const timeline = [];
   if (conversa) {
-    (conversa.mensagens || []).forEach((m) => timeline.push({ tipo: "msg", ts: m.ts, m }));
-    (conversa.notas || []).forEach((n) => timeline.push({ tipo: "nota", ts: n.ts, n }));
-    timeline.sort((a, b) => (a.ts || 0) - (b.ts || 0));
+    (conversa.mensagens || []).forEach((m, i) => timeline.push({ tipo: "msg", ts: m.ts, ordem: i, m }));
+    (conversa.notas || []).forEach((n, i) => timeline.push({ tipo: "nota", ts: n.ts, ordem: 100000 + i, n }));
+    // mesmo segundo? mantém a ordem em que chegou (o horário da Meta só tem segundos)
+    timeline.sort((a, b) => ((a.ts || 0) - (b.ts || 0)) || (a.ordem - b.ordem));
   }
 
   return (

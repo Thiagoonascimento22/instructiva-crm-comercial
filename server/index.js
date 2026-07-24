@@ -233,48 +233,102 @@ function loadDB() {
   }
 }
 
+/* ============================================================
+   GRAVAÇÃO DO BANCO — rápida e sem travar o servidor
+   ------------------------------------------------------------
+   Antes: a cada mensagem o servidor LIA o arquivo inteiro do
+   disco, parseava, serializava com indentação e gravava — tudo
+   síncrono. Com o banco grande isso bloqueava o Node por
+   centenas de ms, deixando o sistema lento e as mensagens
+   chegando fora de ordem.
+
+   Agora:
+   - a checagem de blocos do disco (proteção de deploy) roda só
+     nas primeiras gravações, não em todas;
+   - JSON sem indentação (arquivo bem menor e stringify rápido);
+   - gravação agrupada (debounce) e assíncrona;
+   - gravação síncrona garantida no encerramento.
+   ============================================================ */
+let _savesFeitos = 0;
+let _timerSave = null;
+let _gravando = false;
+let _sujo = false;
+
+// junta blocos que existem no disco e não existem na memória (proteção de deploy)
+function _mesclarComDisco() {
+  try {
+    if (!fs.existsSync(DB_PATH)) return db;
+    const noDisco = JSON.parse(fs.readFileSync(DB_PATH, "utf8"));
+    const faltando = {};
+    let achou = false;
+    for (const chave of Object.keys(noDisco)) {
+      if (db[chave] === undefined) { faltando[chave] = noDisco[chave]; achou = true; }
+    }
+    if (achou) {
+      console.warn("[banco] preservando blocos que só existem no disco:", Object.keys(faltando).join(", "));
+      return { ...faltando, ...db };
+    }
+  } catch (_) {}
+  return db;
+}
+
+function _gravarNoDisco(paraGravar) {
+  const json = JSON.stringify(paraGravar);
+  const tmp = DB_PATH + ".tmp";
+  fs.writeFileSync(tmp, json);
+  fs.renameSync(tmp, DB_PATH);   // rename é atômico: nunca fica pela metade
+}
+
+// gravação imediata (usada no encerramento e em pontos críticos)
 function saveDB() {
   try {
-    // PROTEÇÃO CONTRA PERDA DE DADOS EM DEPLOY
-    // ------------------------------------------------------------------
-    // No Railway, durante um deploy, o container ANTIGO e o NOVO rodam
-    // juntos por alguns segundos, os dois com o mesmo arquivo de banco.
-    // Se o container antigo (rodando uma versão que ainda não conhece um
-    // módulo, ex.: "vendas") gravar a memória dele por cima, a parte que
-    // ele não conhece é APAGADA do arquivo.
-    // Por isso: antes de gravar, olhamos o que já está no disco e
-    // preservamos qualquer bloco que exista lá e que não exista aqui.
-    let paraGravar = db;
-    try {
-      if (fs.existsSync(DB_PATH)) {
-        const noDisco = JSON.parse(fs.readFileSync(DB_PATH, "utf8"));
-        const faltando = {};
-        let achouAlgo = false;
-        for (const chave of Object.keys(noDisco)) {
-          if (db[chave] === undefined) { faltando[chave] = noDisco[chave]; achouAlgo = true; }
-        }
-        if (achouAlgo) {
-          console.warn("[banco] preservando blocos que só existem no disco:", Object.keys(faltando).join(", "));
-          paraGravar = { ...faltando, ...db };
-        }
-      }
-    } catch (_) { /* se não der pra ler, grava do jeito normal */ }
-
-    const json = JSON.stringify(paraGravar, null, 2);
-    // SALVAMENTO SEGURO: grava primeiro num arquivo temporário e só depois
-    // renomeia por cima do real. rename é atômico — se o servidor reiniciar no
-    // meio, o arquivo real continua intacto (nunca fica pela metade/corrompido).
-    const tmp = DB_PATH + ".tmp";
-    fs.writeFileSync(tmp, json);
-    fs.renameSync(tmp, DB_PATH);
+    // a proteção de deploy só faz sentido nos primeiros minutos de vida do processo
+    const paraGravar = _savesFeitos < 3 ? _mesclarComDisco() : db;
+    _savesFeitos++;
+    _gravarNoDisco(paraGravar);
+    _sujo = false;
   } catch (e) {
     console.error("Erro ao salvar banco:", e.message);
   }
 }
-// grava na hora a cada mudança (garante que nada se perde em restart/deploy)
+
+// gravação agrupada: várias mudanças seguidas viram UMA gravação
+const SAVE_DEBOUNCE = 700;
 function saveSoon() {
-  saveDB();
+  _sujo = true;
+  if (_timerSave) return;
+  _timerSave = setTimeout(async () => {
+    _timerSave = null;
+    if (_gravando) { saveSoon(); return; }   // já tem gravação rolando: tenta de novo depois
+    _gravando = true;
+    try {
+      const paraGravar = _savesFeitos < 3 ? _mesclarComDisco() : db;
+      _savesFeitos++;
+      const json = JSON.stringify(paraGravar);
+      const tmp = DB_PATH + ".tmp";
+      await fs.promises.writeFile(tmp, json);   // assíncrono: não trava o servidor
+      await fs.promises.rename(tmp, DB_PATH);
+      _sujo = false;
+    } catch (e) {
+      console.error("Erro ao salvar banco:", e.message);
+      try { saveDB(); } catch (_) {}          // se falhar, tenta do jeito antigo
+    } finally {
+      _gravando = false;
+      if (_sujo) saveSoon();                  // mudou de novo durante a gravação
+    }
+  }, SAVE_DEBOUNCE);
 }
+
+// nada se perde ao reiniciar/derrubar o container
+function _salvarAoSair(sinal) {
+  try { if (_timerSave) { clearTimeout(_timerSave); _timerSave = null; } if (_sujo) saveDB(); } catch (_) {}
+  if (sinal) process.exit(0);
+}
+process.on("SIGTERM", () => _salvarAoSair("SIGTERM"));
+process.on("SIGINT", () => _salvarAoSair("SIGINT"));
+process.on("exit", () => _salvarAoSair(null));
+// rede de segurança: se algo ficou sujo por muito tempo, grava
+setInterval(() => { if (_sujo && !_timerSave && !_gravando) saveDB(); }, 5000);
 
 // BACKUP DIÁRIO do banco: copia o crm.json pra pasta backups/ com a data, e mantém
 // os últimos 14 dias (apaga os mais antigos). Roda ao subir e a cada 24h.
