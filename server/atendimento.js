@@ -147,6 +147,26 @@ export function instalarAnaliseAtendimento({ app, getDb, saveDB, auth, donoOnly 
     }).join("\n\n");
   }
 
+  // A IA às vezes devolve objeto dentro das listas. Isso quebrava a tela.
+  // Aqui tudo vira texto puro antes de sair do servidor.
+  function texto(v) {
+    if (v == null) return "";
+    if (typeof v === "string") return v.trim();
+    if (typeof v === "number" || typeof v === "boolean") return String(v);
+    if (Array.isArray(v)) return v.map(texto).filter(Boolean).join(" · ");
+    if (typeof v === "object") {
+      const campos = ["texto", "item", "ponto", "descricao", "descrição", "titulo", "título",
+                      "acao", "ação", "sugestao", "sugestão", "problema", "falha", "detalhe", "trecho", "exemplo", "impacto"];
+      const partes = [];
+      for (const c of campos) if (v[c]) partes.push(texto(v[c]));
+      if (partes.length) return partes.join(" — ");
+      return Object.values(v).map(texto).filter(Boolean).join(" — ");
+    }
+    return String(v);
+  }
+  const listaTexto = (v) => (Array.isArray(v) ? v : v ? [v] : []).map(texto).filter(Boolean);
+  const numero = (v) => { const n = Number(String(v).replace(",", ".")); return isFinite(n) ? Math.max(0, Math.min(10, n)) : null; };
+
   async function chamarIA(system, user, maxTokens = 2200) {
     const key = process.env.OPENAI_API_KEY;
     if (!key) throw new Error("Falta a OPENAI_API_KEY no Railway pra IA conseguir ler os atendimentos.");
@@ -169,10 +189,13 @@ export function instalarAnaliseAtendimento({ app, getDb, saveDB, auth, donoOnly 
 (cursos de eletrônica, energia solar, odontologia técnica, manutenção).
 
 COMO AVALIAR:
-- Seja franco e direto. Se o atendimento está ruim, diga que está ruim e mostre onde.
-- Não suavize problema real e não invente elogio pra compensar crítica.
-- Toda afirmação precisa de PROVA: cite o trecho real da conversa que sustenta o que você disse.
+- Seja franco e direto. Se o atendimento está ruim, diga que está ruim, sem rodeio e sem amenizar.
+- NÃO passe a mão na cabeça: não invente elogio pra compensar crítica, não use "mas no geral está bom"
+  quando não está. Se a pessoa está deixando dinheiro na mesa, escreva isso com todas as letras.
+- Toda afirmação precisa de PROVA: cite o trecho REAL da conversa (entre aspas) que sustenta o que disse.
 - Ligue cada falha ao prejuízo concreto: lead perdido, venda que não fechou, cliente que desistiu.
+- Seja DETALHADO. Cada item da análise deve ter 2 a 4 frases explicando o quê, por quê e o custo disso.
+  Análise curta e genérica não serve pra nada — quem lê precisa saber exatamente o que aconteceu.
 - Escreva como gestor falando com gestor: objetivo, sem jargão corporativo, sem enrolação.
 - Português do Brasil. Critique o trabalho e o comportamento, nunca a pessoa.
 - Termine sempre com o que fazer na prática, em ordem de prioridade.`;
@@ -183,15 +206,18 @@ COMO AVALIAR:
 Responda SOMENTE com JSON válido, sem markdown:
 {
   "nota": 6.5,
-  "notaPorque": "por que essa nota, em 1 frase direta",
-  "resumo": "3 a 5 frases descrevendo como essa pessoa atende de verdade",
-  "fortes": ["o que funciona, com o trecho que prova"],
-  "falhas": ["o problema, o trecho que prova e o que isso custou"],
-  "padroes": ["hábitos que se repetem nas conversas dela"],
-  "frasesBoas": ["trecho real bom"],
-  "frasesRuins": ["trecho real ruim"],
-  "sugestoes": ["ação concreta pra semana, começando pela mais urgente"]
-}`;
+  "notaPorque": "1 ou 2 frases diretas explicando a nota",
+  "resumo": "6 a 10 frases descrevendo como essa pessoa atende de verdade: ritmo, tom, condução da venda, onde ela ganha e onde ela perde o cliente",
+  "fortes": ["texto de 2 a 4 frases: o que funciona, o trecho que prova e por que isso ajuda a vender"],
+  "falhas": ["texto de 2 a 4 frases: o problema, o trecho que prova, e quanto isso custou em venda perdida"],
+  "padroes": ["texto de 2 a 3 frases sobre um hábito que se repete nas conversas"],
+  "oportunidades": ["venda que dava pra ter fechado e não fechou, com o trecho e o que faltou fazer"],
+  "frasesBoas": ["trecho real da conversa que funcionou"],
+  "frasesRuins": ["trecho real da conversa que atrapalhou"],
+  "sugestoes": ["ação concreta pra semana, 2 a 3 frases, começando pela mais urgente"]
+}
+
+Cada lista deve ter de 3 a 6 itens. Itens sempre em TEXTO CORRIDO, nunca objeto.`;
     const u = `VENDEDOR: ${vendedor.nome}
 
 NÚMEROS DO PERÍODO:
@@ -205,9 +231,14 @@ NÚMEROS DO PERÍODO:
 
 CONVERSAS REAIS:
 ${conversas}`;
-    const r = await chamarIA(system, u, 2200);
-    if (r._cru) return { nota: null, resumo: r._cru.slice(0, 1500), fortes: [], falhas: [], padroes: [], sugestoes: [], frasesBoas: [], frasesRuins: [] };
-    return r;
+    const r = await chamarIA(system, u, 3000);
+    if (r._cru) return { nota: null, resumo: r._cru.slice(0, 2500), fortes: [], falhas: [], padroes: [], sugestoes: [], frasesBoas: [], frasesRuins: [] };
+    return {
+      nota: numero(r.nota), notaPorque: texto(r.notaPorque), resumo: texto(r.resumo),
+      fortes: listaTexto(r.fortes), falhas: listaTexto(r.falhas), padroes: listaTexto(r.padroes),
+      frasesBoas: listaTexto(r.frasesBoas), frasesRuins: listaTexto(r.frasesRuins),
+      sugestoes: listaTexto(r.sugestoes), oportunidades: listaTexto(r.oportunidades),
+    };
   }
 
   async function analisarEquipe(vendedores, amostras) {
@@ -218,20 +249,30 @@ pra cima, quem está travando, e o que é problema de processo (que atinge todo 
 de pessoa. Responda SOMENTE com JSON válido, sem markdown:
 {
   "notaTime": 6.5,
-  "resumo": "5 a 8 frases sobre como o time atende hoje",
-  "oQueVaiBem": ["ponto forte do time, com exemplo de quem faz"],
-  "problemas": ["problema, quem está envolvido e quanto custa"],
-  "porPessoa": [{"nome":"Fulano","nota":7,"leitura":"2 a 3 frases francas sobre ele","prioridade":"a única coisa que ele precisa mudar agora"}],
-  "processo": ["falha que é do processo, não da pessoa"],
-  "sugestoes": ["ação pro gestor, da mais urgente pra menos"]
-}`;
+  "resumo": "8 a 12 frases sobre como o time atende hoje, com nome de quem puxa pra cima e de quem trava",
+  "oQueVaiBem": ["2 a 4 frases: o ponto forte, quem faz isso bem e o exemplo real"],
+  "problemas": ["2 a 4 frases: o problema, quem está envolvido, o trecho que prova e quanto custa"],
+  "porPessoa": [{"nome":"Fulano","nota":7,"leitura":"4 a 6 frases francas sobre como ele atende, o que acerta e o que perde","prioridade":"a única coisa que ele precisa mudar agora"}],
+  "processo": ["2 a 3 frases: falha que é do processo e atinge todo mundo, não é culpa de uma pessoa"],
+  "sugestoes": ["2 a 3 frases: ação pro gestor, da mais urgente pra menos"]
+}
+
+Inclua TODOS os vendedores em "porPessoa". Itens das listas sempre em TEXTO CORRIDO, nunca objeto.`;
     const linhas = vendedores.map((v) =>
       `- ${v.nome}: ${v.conversas} conversas · 1ª resposta ${v.tempoPrimeiraRespostaTxt || "—"} · resposta média ${v.tempoRespostaMedianaTxt || "—"} · sem resposta ${v.semResposta} (${v.pctSemResposta}%) · abandonadas ${v.abandonadas} (${v.pctAbandonadas}%) · ${v.msgsPorConversa} msgs/conversa`
     ).join("\n");
     const u = `NÚMEROS DO TIME:\n${linhas}\n\nAMOSTRAS DE CONVERSA DE CADA UM:\n${amostras}`;
-    const r = await chamarIA(system, u, 3000);
-    if (r._cru) return { notaTime: null, resumo: r._cru.slice(0, 2000), oQueVaiBem: [], problemas: [], porPessoa: [], processo: [], sugestoes: [] };
-    return r;
+    const r = await chamarIA(system, u, 4000);
+    if (r._cru) return { notaTime: null, resumo: r._cru.slice(0, 3000), oQueVaiBem: [], problemas: [], porPessoa: [], processo: [], sugestoes: [] };
+    return {
+      notaTime: numero(r.notaTime), resumo: texto(r.resumo),
+      oQueVaiBem: listaTexto(r.oQueVaiBem), problemas: listaTexto(r.problemas),
+      processo: listaTexto(r.processo), sugestoes: listaTexto(r.sugestoes),
+      porPessoa: (Array.isArray(r.porPessoa) ? r.porPessoa : []).map((p) => ({
+        nome: texto(p && p.nome), nota: numero(p && p.nota),
+        leitura: texto(p && p.leitura), prioridade: texto(p && p.prioridade),
+      })).filter((p) => p.nome),
+    };
   }
 
   // período: por dias (atalho) ou por datas escolhidas na mão

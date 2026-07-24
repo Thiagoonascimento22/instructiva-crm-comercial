@@ -3282,12 +3282,25 @@ function PainelAtendimento({ showToast }) {
     return { cor: "bom", txt: "ritmo saudável" };
   };
   const corNota = (n) => (n == null ? "" : n >= 8 ? " bom" : n >= 6 ? " ok" : " ruim");
-  const Bloco = ({ tit, itens, cls }) => (!itens || !itens.length) ? null : (
-    <div className={"at-bloco " + (cls || "")}>
-      <span className="at-bloco-tit">{tit}</span>
-      <ul>{itens.map((x, i) => <li key={i}>{x}</li>)}</ul>
-    </div>
-  );
+  // blindagem: se vier objeto da IA, vira texto em vez de quebrar a tela
+  const txt = (v) => {
+    if (v == null) return "";
+    if (typeof v === "string") return v;
+    if (typeof v === "number" || typeof v === "boolean") return String(v);
+    if (Array.isArray(v)) return v.map(txt).filter(Boolean).join(" · ");
+    try { return Object.values(v).map(txt).filter(Boolean).join(" — "); } catch (_) { return ""; }
+  };
+  const lista = (v) => (Array.isArray(v) ? v : v ? [v] : []).map(txt).filter(Boolean);
+  const Bloco = ({ tit, itens, cls }) => {
+    const arr = lista(itens);
+    if (!arr.length) return null;
+    return (
+      <div className={"at-bloco " + (cls || "")}>
+        <span className="at-bloco-tit">{tit}</span>
+        <ul>{arr.map((x, i) => <li key={i}>{x}</li>)}</ul>
+      </div>
+    );
+  };
 
   const eq = analises.__equipe;
   const aSel = sel ? analises[sel.vendedorId] : null;
@@ -3358,21 +3371,21 @@ function PainelAtendimento({ showToast }) {
                   <b>{eq.notaTime}</b><span>nota do time</span>
                 </div>
               )}
-              <p className="at-resumo">{eq.resumo}</p>
+              <p className="at-resumo">{txt(eq.resumo)}</p>
               <Bloco tit="O que vai bem" itens={eq.oQueVaiBem} cls="bom" />
               <Bloco tit="Problemas" itens={eq.problemas} cls="ruim" />
               <Bloco tit="Falhas de processo" itens={eq.processo} cls="" />
-              {(eq.porPessoa || []).length > 0 && (
+              {Array.isArray(eq.porPessoa) && eq.porPessoa.length > 0 && (
                 <div className="ia-pessoas">
                   <span className="at-bloco-tit">Leitura de cada um</span>
                   {eq.porPessoa.map((p, i) => (
                     <div key={i} className="ia-pessoa">
                       <div className="ia-pessoa-top">
-                        <b>{p.nome}</b>
+                        <b>{txt(p.nome)}</b>
                         {p.nota != null && <span className={"ia-mini-nota" + corNota(p.nota)}>{p.nota}</span>}
                       </div>
-                      <p>{p.leitura}</p>
-                      {p.prioridade && <div className="ia-prio">Prioridade: {p.prioridade}</div>}
+                      <p>{txt(p.leitura)}</p>
+                      {p.prioridade && <div className="ia-prio">Prioridade: {txt(p.prioridade)}</div>}
                     </div>
                   ))}
                 </div>
@@ -3437,23 +3450,24 @@ function PainelAtendimento({ showToast }) {
               <div className="ia-rel">
                 {aSel.nota != null && (
                   <div className={"ia-nota" + corNota(aSel.nota)}>
-                    <b>{aSel.nota}</b><span>{aSel.notaPorque || "nota do atendimento"}</span>
+                    <b>{aSel.nota}</b><span>{txt(aSel.notaPorque) || "nota do atendimento"}</span>
                   </div>
                 )}
-                <p className="at-resumo">{aSel.resumo}</p>
+                <p className="at-resumo">{txt(aSel.resumo)}</p>
                 <Bloco tit="O que funciona" itens={aSel.fortes} cls="bom" />
                 <Bloco tit="Onde está pecando" itens={aSel.falhas} cls="ruim" />
                 <Bloco tit="Padrões que se repetem" itens={aSel.padroes} cls="" />
-                {(aSel.frasesBoas || []).length > 0 && (
+                <Bloco tit="Vendas que dava pra ter fechado" itens={aSel.oportunidades} cls="ruim" />
+                {lista(aSel.frasesBoas).length > 0 && (
                   <div className="at-frases">
                     <span className="at-bloco-tit">Trechos que funcionaram</span>
-                    {aSel.frasesBoas.map((f, i) => <div key={i} className="at-frase bom">“{f}”</div>)}
+                    {lista(aSel.frasesBoas).map((f, i) => <div key={i} className="at-frase bom">“{f}”</div>)}
                   </div>
                 )}
-                {(aSel.frasesRuins || []).length > 0 && (
+                {lista(aSel.frasesRuins).length > 0 && (
                   <div className="at-frases">
                     <span className="at-bloco-tit">Trechos que atrapalharam</span>
-                    {aSel.frasesRuins.map((f, i) => <div key={i} className="at-frase ruim">“{f}”</div>)}
+                    {lista(aSel.frasesRuins).map((f, i) => <div key={i} className="at-frase ruim">“{f}”</div>)}
                   </div>
                 )}
                 <Bloco tit="O que fazer agora" itens={aSel.sugestoes} cls="acao" />
