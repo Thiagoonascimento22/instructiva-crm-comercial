@@ -2171,10 +2171,10 @@ function ModalRepasse({ onClose, showToast, onFeito }) {
   async function passarUma(g) {
     const dest = escolhas[g.chave];
     if (!dest) return showToast("Escolha o vendedor dessa campanha");
-    if (!window.confirm(`Passar ${g.aRepassar} conversa(s) de "${g.campanha}" para ${nomeDe(dest)}?`)) return;
+    if (!window.confirm(`Passar ${g.aRepassar} conversa(s) do número ${g.numeroApelido} para ${nomeDe(dest)}?`)) return;
     setRodando(g.chave);
     try {
-      const r = await api.ofRepasse({ porCampanha: { [g.chave]: dest } });
+      const r = await api.ofRepasse({ porNumero: { [g.chave]: dest } });
       showToast(`✓ ${r.movidas} conversa(s) para ${nomeDe(dest)}`);
       await carregar();
       onFeito && onFeito();
@@ -2191,7 +2191,7 @@ function ModalRepasse({ onClose, showToast, onFeito }) {
     if (!window.confirm(`Passar ${total} conversa(s) para os vendedores?`)) return;
     setRodando("tudo");
     try {
-      const r = await api.ofRepasse({ porCampanha: mapa });
+      const r = await api.ofRepasse({ porNumero: mapa });
       setFeito(r);
       showToast(`✓ ${r.movidas} conversa(s) repassadas`);
       onFeito && onFeito();
@@ -2216,8 +2216,8 @@ function ModalRepasse({ onClose, showToast, onFeito }) {
             <>
               <div className="panel-sub" style={{ padding: "0 4px 12px" }}>
                 {dados.totalARepassar > 0
-                  ? <><b>{dados.totalARepassar} conversa(s)</b> de disparo estão presas com gerente/sem dono. Confira o vendedor de cada campanha e clique em <b>Passar</b>.</>
-                  : "Tudo certo — nenhuma conversa de disparo presa com gerente."}
+                  ? <><b>{dados.totalARepassar} conversa(s)</b> de disparo estão sem vendedor. Cada linha é um <b>número</b> — passe todos os leads dele pro dono num clique.</>
+                  : "Tudo certo — todas as conversas de disparo já estão com vendedores."}
               </div>
 
               {dados.grupos.length === 0 && <div className="crm-col-vazio">Nada pra repassar.</div>}
@@ -2229,11 +2229,12 @@ function ModalRepasse({ onClose, showToast, onFeito }) {
                   return (
                     <div key={g.chave} className={"rep-linha" + (dest ? "" : " sem")}>
                       <div className="rep-id">
-                        <b>{g.campanha}</b>
+                        <b>{g.numeroApelido}</b>
                         <span>
-                          {g.numeroApelido} · <b className="rep-qtd">{g.aRepassar}</b> pra passar
+                          <b className="rep-qtd">{g.aRepassar}</b> pra passar
                           {g.jaOk > 0 ? ` · ${g.jaOk} já com vendedor` : ""}
                           {g.responderam > 0 ? ` · ${g.responderam} responderam` : ""}
+                          {g.campanhas && g.campanhas.length ? ` · ${g.campanhas.length} campanha(s)` : ""}
                         </span>
                         {presos && <span className="rep-presos">hoje com {presos}</span>}
                       </div>
@@ -2824,7 +2825,7 @@ function ModalMetricas({ camp, isGer = true, onClose, onRetomar, onRedisparar, o
     if (!isGer) return;
     api.ofRepassePrevia().then((d) => {
       setVendedores(d.vendedores || []);
-      const g = (d.grupos || []).find((x) => x.campanhaId === camp.id || x.chave === camp.id);
+      const g = (d.grupos || []).find((x) => x.numeroId === camp.numeroId);
       setRep(g || { aRepassar: 0 });
       if (g && g.donoNumeroId) setDestino(g.donoNumeroId);
     }).catch(() => setRep({ aRepassar: 0 }));
@@ -2832,10 +2833,10 @@ function ModalMetricas({ camp, isGer = true, onClose, onRetomar, onRedisparar, o
   async function passarLeads() {
     if (!destino) return showToast && showToast("Escolha o vendedor");
     const nome = (vendedores.find((v) => v.id === destino) || {}).nome || "";
-    if (!window.confirm(`Passar ${rep.aRepassar} conversa(s) dessa campanha para ${nome}?`)) return;
+    if (!window.confirm(`Passar ${rep.aRepassar} conversa(s) do número ${rep.numeroApelido} para ${nome}?\n\nInclui todos os disparos feitos por esse número.`)) return;
     setPassando(true);
     try {
-      const r = await api.ofRepasse({ porCampanha: { [rep.chave || camp.id]: destino } });
+      const r = await api.ofRepasse({ porNumero: { [rep.chave]: destino } });
       showToast && showToast(`✓ ${r.movidas} conversa(s) para ${nome}`);
       setRep({ ...rep, aRepassar: 0 });
       onRepassou && onRepassou();
@@ -2899,7 +2900,10 @@ function ModalMetricas({ camp, isGer = true, onClose, onRetomar, onRedisparar, o
           {isGer && rep && rep.aRepassar > 0 && (
             <div className="mm-repasse">
               <div className="mm-repasse-tit">
-                <b>{rep.aRepassar} conversa(s)</b> dessa campanha estão com gerente/sem dono
+                <b>{rep.aRepassar} conversa(s)</b> do número <b>{rep.numeroApelido}</b> estão sem vendedor
+              </div>
+              <div className="mm-repasse-sub">
+                inclui todos os disparos feitos por esse número{rep.campanhas && rep.campanhas.length ? ` (${rep.campanhas.join(", ")}${rep.campanhas.length >= 4 ? "…" : ""})` : ""}
               </div>
               {rep.presosCom && Object.keys(rep.presosCom).length > 0 && (
                 <div className="mm-repasse-sub">
@@ -2918,7 +2922,7 @@ function ModalMetricas({ camp, isGer = true, onClose, onRetomar, onRedisparar, o
             </div>
           )}
           {isGer && rep && rep.aRepassar === 0 && (
-            <div className="mm-repasse ok">✓ Os leads dessa campanha já estão com os vendedores</div>
+            <div className="mm-repasse ok">✓ Os leads desse número já estão com os vendedores</div>
           )}
 
           <div className="mm-acoes">

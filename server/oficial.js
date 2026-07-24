@@ -2841,73 +2841,86 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
     return null;
   }
 
-  // conversa que veio de disparo (campanhas antigas nem sempre têm a marca)
+  /* ------------------------------------------------------------
+     REPASSE DE LEADS
+     Agrupa por NÚMERO de origem, não por campanha. Motivo: a
+     conversa é identificada por (número + telefone), então quando
+     o mesmo contato recebe vários disparos pelo mesmo número, a
+     conversa é a MESMA e guarda só a última campanha. Por número
+     nada se perde — e é o modelo real: 1 número = 1 vendedor.
+     ------------------------------------------------------------ */
   const ehDeDisparo = (c) => !!(c.origemDisparo || c.campanhaId || c.campanha);
-  // quem NÃO deveria ser dono final: gerente/admin ou ninguém
+  // dono "provisório": gerente, inativo ou ninguém
   function precisaRepassar(c) {
     if (!c.vendedorId) return true;
     const u = (db.users || []).find((x) => x.id === c.vendedorId);
-    return !u || u.role !== "vendedor";
+    return !u || u.role !== "vendedor" || !u.ativo;
   }
 
-  // prévia: TODAS as campanhas com conversas presas em gerente/sem dono
-  app.get("/api/oficial/repasse/previa", auth, gerenteOnly, (req, res) => {
+  function gruposRepasse() {
     garantirEstrutura();
     const grupos = {};
     (db.oficial.chats || []).forEach((c) => {
       if (!ehDeDisparo(c)) return;
-      const cid = c.campanhaId || ("nome:" + (c.campanha || "sem"));
-      if (!grupos[cid]) {
-        const camp = (db.oficial.campanhas || []).find((x) => x.id === c.campanhaId);
+      const nid = c.numeroOficialId || "sem_numero";
+      if (!grupos[nid]) {
         const n = acharNumero(c.numeroOficialId);
         const dono = n && n.vendedorId ? (db.users || []).find((u) => u.id === n.vendedorId) : null;
-        grupos[cid] = {
-          campanhaId: c.campanhaId || null,
-          chave: cid,
-          campanha: c.campanha || (camp && camp.nome) || "Sem campanha",
+        grupos[nid] = {
           numeroId: c.numeroOficialId || null,
-          numeroApelido: n ? (n.apelido || n.numero) : "—",
+          chave: nid,
+          numeroApelido: n ? (n.apelido || n.numero) : "Número removido",
+          numero: n ? n.numero : "",
           donoNumeroId: dono ? dono.id : null,
           donoNumeroNome: dono ? dono.nome : "",
           total: 0, aRepassar: 0, jaOk: 0, responderam: 0,
-          presosCom: {},
+          presosCom: {}, campanhas: {},
         };
       }
-      const g = grupos[cid];
+      const g = grupos[nid];
       g.total++;
       if (c.respondeu) g.responderam++;
+      if (c.campanha) g.campanhas[c.campanha] = (g.campanhas[c.campanha] || 0) + 1;
       if (precisaRepassar(c)) {
         g.aRepassar++;
         const nome = c.vendedorNome || "sem dono";
         g.presosCom[nome] = (g.presosCom[nome] || 0) + 1;
       } else g.jaOk++;
     });
-    const vendedores = (db.users || []).filter((u) => u.role === "vendedor" && u.ativo)
-      .map((u) => ({ id: u.id, nome: u.nome, foto: u.foto || "" }));
-    const lista = Object.values(grupos)
+    return grupos;
+  }
+
+  app.get("/api/oficial/repasse/previa", auth, gerenteOnly, (req, res) => {
+    const grupos = Object.values(gruposRepasse())
+      .map((g) => ({ ...g, campanhas: Object.keys(g.campanhas).slice(0, 4) }))
       .filter((g) => g.aRepassar > 0)
       .sort((a, b) => b.aRepassar - a.aRepassar);
-    res.json({ grupos: lista, vendedores, totalARepassar: lista.reduce((s2, g) => s2 + g.aRepassar, 0) });
+    const vendedores = (db.users || []).filter((u) => u.role === "vendedor" && u.ativo)
+      .map((u) => ({ id: u.id, nome: u.nome, foto: u.foto || "" }));
+    res.json({ grupos, vendedores, totalARepassar: grupos.reduce((s2, g) => s2 + g.aRepassar, 0) });
   });
 
-  // executa: move só o que está com gerente/sem dono (não mexe no que já está certo)
+  /* body: { porNumero: { numeroId: vendedorId }, tudo?: true }
+     tudo=true move TODAS as conversas do número, mesmo as que já
+     estão com outro vendedor (usar só quando quiser forçar). */
   app.post("/api/oficial/repasse", auth, gerenteOnly, (req, res) => {
     garantirEstrutura();
     const b = req.body || {};
-    const mapa = (b.porCampanha && typeof b.porCampanha === "object") ? b.porCampanha : {};
-    const chaves = Object.keys(mapa);
-    if (!chaves.length) return res.status(400).json({ error: "Escolha ao menos uma campanha" });
+    const mapa = (b.porNumero && typeof b.porNumero === "object") ? b.porNumero
+               : (b.porCampanha && typeof b.porCampanha === "object") ? b.porCampanha : {};
+    if (!Object.keys(mapa).length) return res.status(400).json({ error: "Escolha ao menos um número" });
+    const forcar = b.tudo === true;
 
-    let movidas = 0, semDestino = 0;
+    let movidas = 0;
     const porVendedor = {};
     (db.oficial.chats || []).forEach((c) => {
       if (!ehDeDisparo(c)) return;
-      if (!precisaRepassar(c)) return;              // já está com um vendedor: não mexe
-      const cid = c.campanhaId || ("nome:" + (c.campanha || "sem"));
-      const destinoId = mapa[cid];
-      if (!destinoId) return;                       // campanha não selecionada
+      const nid = c.numeroOficialId || "sem_numero";
+      const destinoId = mapa[nid];
+      if (!destinoId) return;
+      if (!forcar && !precisaRepassar(c)) return;   // já está com vendedor: não mexe
       const v = (db.users || []).find((u) => u.id === destinoId && u.role === "vendedor" && u.ativo);
-      if (!v) { semDestino++; return; }
+      if (!v || c.vendedorId === v.id) return;
       c.vendedorId = v.id;
       c.vendedorNome = v.nome;
       c.atribuidoEm = Date.now();
@@ -2915,7 +2928,7 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
       porVendedor[v.nome] = (porVendedor[v.nome] || 0) + 1;
     });
     salvar();
-    res.json({ ok: true, movidas, semDestino, porVendedor });
+    res.json({ ok: true, movidas, porVendedor });
   });
 
   app.get("/api/oficial/campanhas", auth, (req, res) => {
