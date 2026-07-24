@@ -407,10 +407,10 @@ export default function App() {
   const saud = hora < 12 ? "Bom dia" : hora < 18 ? "Boa tarde" : "Boa noite";
 
   return (
-    <div className={"shell" + (isVend ? " tema-v" : "")}>
+    <div className="shell">
       <aside className="sidebar">
         <div className="brand">
-          <img src={(theme === "dark" || isVend) ? LOGO_LIGHT : LOGO_FULL} alt="Instructiva" />
+          <img src={theme === "dark" ? LOGO_LIGHT : LOGO_FULL} alt="Instructiva" />
           <div className="tag">Sistema Comercial</div>
         </div>
         <nav className="nav">
