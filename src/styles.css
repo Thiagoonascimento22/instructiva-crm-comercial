@@ -4144,3 +4144,20 @@ select.input:disabled, .input:disabled { color: var(--muted); opacity: 1; -webki
 .crm-card-idade.novo { color: #059669; background: rgba(5,150,105,.10); }
 .crm-card-idade.morno { color: #c2780a; background: rgba(224,138,0,.12); }
 .crm-card-idade.frio { color: #dc2626; background: rgba(220,38,38,.10); }
+
+/* passar leads pros vendedores */
+.rep-lista { display: flex; flex-direction: column; gap: 8px; max-height: 46vh; overflow-y: auto; padding: 2px; }
+.rep-linha { display: flex; align-items: center; gap: 12px; padding: 11px 13px; border-radius: 12px;
+  background: var(--surface-2); border: 1px solid transparent; }
+.rep-linha.sem { border-color: rgba(224,138,0,.4); }
+.rep-id { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.rep-id b { font-size: 13.5px; color: var(--text); }
+.rep-id span { font-size: 11.5px; color: var(--muted); }
+.rep-linha .select { flex: none; width: 190px; }
+.rep-ok { flex: none; font-size: 12px; font-weight: 700; color: #059669; white-space: nowrap; }
+.rep-final { padding: 8px 4px; text-align: center; }
+.rep-final-tit { font-size: 18px; font-weight: 800; color: var(--text); margin-bottom: 14px; }
+.rep-final-lista { display: flex; flex-direction: column; gap: 6px; max-height: 40vh; overflow-y: auto; }
+.rep-final-item { display: flex; justify-content: space-between; padding: 9px 13px; border-radius: 10px; background: var(--surface-2); }
+.rep-final-item b { font-size: 13px; color: var(--text); }
+.rep-final-item span { font-size: 12.5px; color: var(--muted); }

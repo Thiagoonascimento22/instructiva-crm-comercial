@@ -246,6 +246,10 @@ export const api = {
   solicitacoesRelatorio: (desde, ate) => req("GET", `/api/solicitacoes/relatorio?desde=${desde || 0}&ate=${ate || Date.now()}`),
   solicitacoesIA: (desde, ate) => req("GET", `/api/solicitacoes/ia?desde=${desde || 0}&ate=${ate || Date.now()}`),
 
+  /* Repasse de leads em massa */
+  ofRepassePrevia: (todos) => req("GET", "/api/oficial/repasse/previa" + (todos ? "?todos=1" : "")),
+  ofRepasse: (dados) => req("POST", "/api/oficial/repasse", dados),
+
   /* Recados do time */
   recadoMeu: () => req("GET", "/api/recados/meu"),
   recadoVisto: () => req("POST", "/api/recados/visto"),

@@ -2144,7 +2144,119 @@ function explicaErroMeta(msg) {
   return "A Meta recusou o envio. Erro: " + m;
 }
 
+/* ============================================================
+   PASSAR LEADS PROS VENDEDORES
+   Conserta disparos feitos pela conta do gerente: devolve cada
+   conversa pro vendedor dono do número que enviou (ou pro que
+   você escolher na mão, campanha por campanha).
+   ============================================================ */
+function ModalRepasse({ onClose, showToast, onFeito }) {
+  const [dados, setDados] = useState(null);
+  const [escolhas, setEscolhas] = useState({});
+  const [rodando, setRodando] = useState(false);
+  const [feito, setFeito] = useState(null);
+
+  useEffect(() => { api.ofRepassePrevia().then(setDados).catch((e) => showToast(e.message)); }, []);
+
+  const destinoDe = (g) => escolhas[g.campanhaId || "sem_campanha"] || g.donoNumeroId || "";
+  const nomeDestino = (g) => {
+    const id = destinoDe(g);
+    const v = (dados.vendedores || []).find((x) => x.id === id);
+    return v ? v.nome : "";
+  };
+  const prontos = dados ? dados.grupos.filter((g) => destinoDe(g)) : [];
+  const totalMover = prontos.reduce((s, g) => s + g.conversas, 0);
+
+  async function executar() {
+    if (!totalMover) return;
+    if (!window.confirm(`Passar ${totalMover} conversa(s) para os vendedores? Isso muda o dono das conversas.`)) return;
+    setRodando(true);
+    try {
+      const porCampanha = {};
+      prontos.forEach((g) => { porCampanha[g.campanhaId || "sem_campanha"] = destinoDe(g); });
+      const r = await api.ofRepasse({ porCampanha, campanhas: prontos.map((g) => g.campanhaId || "sem_campanha") });
+      setFeito(r);
+      showToast(`✓ ${r.movidas} conversa(s) repassadas`);
+      onFeito && onFeito();
+    } catch (e) { showToast("✗ " + e.message); }
+    setRodando(false);
+  }
+
+  return (
+    <Portal>
+      <div className="modal" onClick={(e) => e.target === e.currentTarget && onClose()}>
+        <div className="modal-box grande">
+          <div className="modal-head">
+            <b>Passar leads pros vendedores</b>
+            <button className="crm-x" onClick={onClose}>✕</button>
+          </div>
+
+          {!dados && <div className="panel-sub" style={{ padding: 20 }}><span className="spin" /> Lendo as conversas…</div>}
+
+          {dados && !feito && (
+            <>
+              <div className="panel-sub" style={{ padding: "0 4px 12px" }}>
+                Essas conversas de disparo estão hoje com <b>você</b>. O sistema já sugere o vendedor
+                <b> dono do número</b> que enviou cada campanha — confira e ajuste se precisar.
+              </div>
+
+              {dados.grupos.length === 0 && <div className="crm-col-vazio">Nenhuma conversa de disparo sua pra repassar.</div>}
+
+              <div className="rep-lista">
+                {dados.grupos.map((g) => {
+                  const chave = g.campanhaId || "sem_campanha";
+                  const dest = destinoDe(g);
+                  return (
+                    <div key={chave} className={"rep-linha" + (dest ? "" : " sem")}>
+                      <div className="rep-id">
+                        <b>{g.campanha}</b>
+                        <span>{g.numeroApelido} · {g.conversas} conversa(s) · {g.responderam} responderam</span>
+                      </div>
+                      <select className="select" value={dest} onChange={(e) => setEscolhas({ ...escolhas, [chave]: e.target.value })}>
+                        <option value="">— escolher vendedor —</option>
+                        {(dados.vendedores || []).map((v) => <option key={v.id} value={v.id}>{v.nome}</option>)}
+                      </select>
+                      {dest && <span className="rep-ok">→ {nomeDestino(g)}</span>}
+                    </div>
+                  );
+                })}
+              </div>
+
+              <div className="modal-foot">
+                <span className="panel-sub">{totalMover} conversa(s) prontas pra passar</span>
+                <button className="btn" onClick={onClose}>Cancelar</button>
+                <button className="btn btn-primary" disabled={!totalMover || rodando} onClick={executar}>
+                  {rodando ? "Passando…" : `Passar ${totalMover} conversa(s)`}
+                </button>
+              </div>
+            </>
+          )}
+
+          {feito && (
+            <div className="rep-final">
+              <div className="rep-final-tit">✓ {feito.movidas} conversa(s) repassadas</div>
+              <div className="rep-final-lista">
+                {Object.entries(feito.porVendedor || {}).map(([nome, qtd]) => (
+                  <div key={nome} className="rep-final-item"><b>{nome}</b><span>{qtd} conversa(s)</span></div>
+                ))}
+              </div>
+              {feito.semDestino > 0 && (
+                <div className="panel-sub" style={{ marginTop: 10 }}>
+                  {feito.semDestino} conversa(s) ficaram com você por não ter vendedor definido.
+                </div>
+              )}
+              <button className="btn btn-primary" style={{ marginTop: 16, width: "100%", justifyContent: "center" }} onClick={onClose}>Fechar</button>
+            </div>
+          )}
+        </div>
+      </div>
+    </Portal>
+  );
+}
+
+
 function OficialDisparo({ isGer = true, showToast }) {
+  const [repasse, setRepasse] = useState(false);
   const [campanhas, setCampanhas] = useState([]);
   const [campSel, setCampSel] = useState(null);
   const [abrir, setAbrir] = useState(false);
@@ -2289,6 +2401,9 @@ function OficialDisparo({ isGer = true, showToast }) {
           <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
             <button className="btn btn-sm" title="Baixa uma planilha (CSV) com os leads dos seus disparos: telefone, nome, se respondeu e a campanha" onClick={() => { window.open("/api/oficial/meus-leads?token=" + encodeURIComponent(getToken()), "_blank"); }}><I.download className="ico-inline" /> Exportar leads</button>
             {isGer && <button className="btn btn-sm" title="Baixa um arquivo só com os números que já receberam disparo" onClick={() => { window.open("/api/oficial/export-recebidos?token=" + encodeURIComponent(getToken()), "_blank"); }}>Números que receberam</button>}
+            {isGer && <button className="btn btn-sm" title="Passa as conversas dos disparos para o vendedor dono de cada número" onClick={() => setRepasse(true)}><I.users className="ico-inline" /> Passar leads pros vendedores</button>}
+            {repasse && <ModalRepasse onClose={() => setRepasse(false)} showToast={showToast} onFeito={carregarCampanhas} />}
+            {repasse && <ModalRepasse onClose={() => setRepasse(false)} showToast={showToast} />}
           </div>
         </div>
         {campanhas.length === 0 ? (
