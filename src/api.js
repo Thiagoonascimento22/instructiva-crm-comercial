@@ -245,4 +245,12 @@ export const api = {
   marcarSolicitacoesVistas: () => req("POST", "/api/solicitacoes/marcar-vistas"),
   solicitacoesRelatorio: (desde, ate) => req("GET", `/api/solicitacoes/relatorio?desde=${desde || 0}&ate=${ate || Date.now()}`),
   solicitacoesIA: (desde, ate) => req("GET", `/api/solicitacoes/ia?desde=${desde || 0}&ate=${ate || Date.now()}`),
+
+  /* Recados do time */
+  recadoMeu: () => req("GET", "/api/recados/meu"),
+  recadoVisto: () => req("POST", "/api/recados/visto"),
+  recadosConfig: () => req("GET", "/api/recados/config"),
+  recadoSalvar: (userId, dados) => req("PUT", "/api/recados/config/" + userId, dados),
+  recadosAtivo: (ativo) => req("PUT", "/api/recados/ativo", { ativo }),
+  recadoReenviar: (userId) => req("POST", "/api/recados/reenviar", { userId }),
 };

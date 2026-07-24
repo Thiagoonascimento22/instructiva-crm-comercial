@@ -408,6 +408,7 @@ export default function App() {
 
   return (
     <div className="shell">
+      <RecadoDoDia />
       <aside className="sidebar">
         <div className="brand">
           <img src={theme === "dark" ? LOGO_LIGHT : LOGO_FULL} alt="Instructiva" />
@@ -1332,6 +1333,7 @@ function ConfigDados({ user, setUser, showToast }) {
 function Config({ user, setUser, showToast, isGer, ehDono, modulos, onModulosSalvo }) {
   const abas = [["dados", "Meus dados"]];
   if (isGer) abas.push(["equipe", "Equipe & Acessos"]);
+  if (ehDono) abas.push(["recados", "Recados do time"]);
   if (ehDono) abas.push(["sistema", "Sistema"]);
   const [aba, setAba] = useState("dados");
   return (
@@ -1345,6 +1347,7 @@ function Config({ user, setUser, showToast, isGer, ehDono, modulos, onModulosSal
       )}
       {aba === "dados" && <ConfigDados user={user} setUser={setUser} showToast={showToast} />}
       {aba === "equipe" && isGer && <Equipe showToast={showToast} meId={user.id} />}
+      {aba === "recados" && ehDono && <PainelRecados showToast={showToast} />}
       {aba === "sistema" && ehDono && <PainelSistema modulos={modulos} onSalvo={onModulosSalvo} showToast={showToast} />}
     </div>
   );
@@ -2978,6 +2981,150 @@ function OficialTemplates({ isGer = true, showToast }) {
         </div>
         </Portal>
       )}
+    </div>
+  );
+}
+
+
+/* ============================================================
+   RECADOS DO TIME (só o dono enxerga)
+   Escolhe quem recebe e em que tom. O texto muda todo dia
+   e usa os números reais da pessoa.
+   ============================================================ */
+const TONS_RECADO = [
+  ["nenhum", "Não recebe", "A pessoa não vê nada ao entrar."],
+  ["elogio", "Parabéns", "Pra quem está indo bem — reconhecimento pelo resultado."],
+  ["crescimento", "Crescente", "Pra quem vem melhorando mês a mês."],
+  ["incentivo", "Bom dia", "Motivação leve pro começo do dia."],
+  ["virada", "Virada", "Pra quem está atrás — encorajar sem cobrar."],
+  ["custom", "Escrever eu mesmo", "Você escreve o texto. Use {nome} pro primeiro nome."],
+];
+
+/* Recado do dia: aparece na primeira entrada de cada dia */
+function RecadoDoDia() {
+  const [recado, setRecado] = useState(null);
+  const [saindo, setSaindo] = useState(false);
+  useEffect(() => {
+    let vivo = true;
+    api.recadoMeu()
+      .then((r) => { if (vivo && r && r.recado) setTimeout(() => setRecado(r.recado), 700); })
+      .catch(() => {});
+    return () => { vivo = false; };
+  }, []);
+  if (!recado) return null;
+  function fechar() {
+    setSaindo(true);
+    api.recadoVisto().catch(() => {});
+    setTimeout(() => setRecado(null), 220);
+  }
+  return (
+    <Portal>
+      <div className={"rec-bg" + (saindo ? " saindo" : "")} onClick={(e) => e.target === e.currentTarget && fechar()}>
+        <div className="rec-pop">
+          <div className="rec-pop-luz" />
+          <div className="rec-pop-tit">{recado.titulo}</div>
+          <p className="rec-pop-txt">{recado.corpo}</p>
+          {recado.assinatura && <div className="rec-pop-ass">— {recado.assinatura}</div>}
+          <button className="btn btn-primary rec-pop-btn" onClick={fechar}>Bora! 🚀</button>
+        </div>
+      </div>
+    </Portal>
+  );
+}
+
+
+function PainelRecados({ showToast }) {
+  const [dados, setDados] = useState(null);
+  const [salvando, setSalvando] = useState("");
+  const [editando, setEditando] = useState(null);
+
+  const carregar = () => api.recadosConfig().then(setDados).catch((e) => showToast(e.message));
+  useEffect(() => { carregar(); }, []);
+
+  async function salvar(userId, campos) {
+    setSalvando(userId);
+    try { await api.recadoSalvar(userId, campos); await carregar(); }
+    catch (e) { showToast(e.message); }
+    finally { setSalvando(""); }
+  }
+  async function alternarMural(v) {
+    try { await api.recadosAtivo(v); await carregar(); showToast(v ? "✓ Mural ligado" : "Mural desligado"); }
+    catch (e) { showToast(e.message); }
+  }
+  async function reenviar(userId, nome) {
+    try {
+      await api.recadoReenviar(userId);
+      await carregar();
+      showToast(userId ? `✓ ${nome.split(" ")[0]} vai ver de novo hoje` : "✓ Todos vão ver de novo hoje");
+    } catch (e) { showToast(e.message); }
+  }
+
+  if (!dados) return <div className="panel-sub"><span className="spin" /> Carregando…</div>;
+  const recebendo = dados.pessoas.filter((p) => p.tom !== "nenhum").length;
+
+  return (
+    <div className="panel">
+      <div className="panel-h">
+        <I.spark className="ico" /> Recados do time
+        <div style={{ marginLeft: "auto", display: "flex", gap: 8, alignItems: "center" }}>
+          <button className="btn btn-sm" onClick={() => reenviar(null)}>Reenviar pra todos hoje</button>
+          <button className={dados.ativo ? "of-switch on" : "of-switch"} onClick={() => alternarMural(!dados.ativo)} title={dados.ativo ? "Mural ligado" : "Mural desligado"}><span className="of-switch-dot" /></button>
+        </div>
+      </div>
+      <div className="panel-sub" style={{ marginBottom: 14 }}>
+        Na primeira vez que a pessoa entrar no sistema a cada dia, aparece um recado com o nome dela e os números reais do mês.
+        O texto muda sozinho todo dia. <b>{recebendo} de {dados.pessoas.length}</b> recebendo.
+        {!dados.ativo && <> · <b style={{ color: "var(--brand)" }}>Mural desligado no momento.</b></>}
+      </div>
+
+      <div className="rec-lista">
+        {dados.pessoas.map((p) => (
+          <div key={p.userId} className={"rec-card" + (p.tom === "nenhum" ? " off" : "")}>
+            <div className="rec-topo">
+              <Avatar nome={p.nome} foto={p.foto} size={38} />
+              <div className="rec-id">
+                <b>{p.nome}</b>
+                <span>
+                  {p.role === "vendedor" ? "Vendedor" : p.role === "suporte" ? "Suporte" : "Gerente"}
+                  {p.resumo ? ` · ${dinheiroCurto(p.resumo.venda)} no mês${p.resumo.pct ? ` · ${p.resumo.pct}% da meta` : ""}` : ""}
+                  {p.vistoHoje && p.tom !== "nenhum" ? " · já viu hoje" : ""}
+                </span>
+              </div>
+              {p.vistoHoje && p.tom !== "nenhum" && (
+                <button className="btn btn-sm" onClick={() => reenviar(p.userId, p.nome)}>Mostrar de novo</button>
+              )}
+            </div>
+
+            <div className="rec-tons">
+              {TONS_RECADO.map(([k, lb, dica]) => (
+                <button key={k} title={dica} disabled={salvando === p.userId}
+                  className={p.tom === k ? "rec-tom on" : "rec-tom"}
+                  onClick={() => { salvar(p.userId, { tom: k }); if (k === "custom") setEditando(p.userId); }}>
+                  {lb}
+                </button>
+              ))}
+            </div>
+
+            {p.tom === "custom" && (
+              <div className="rec-custom">
+                <textarea className="textarea" rows={3} defaultValue={p.texto}
+                  placeholder="Ex: Parabéns {nome} pelo seu desempenho até aqui! Você vem demonstrando uma crescente muito bacana. Boas vendas hoje e vamos pra cima!"
+                  onBlur={(e) => e.target.value !== p.texto && salvar(p.userId, { texto: e.target.value })} />
+                <span className="panel-sub" style={{ fontSize: 11.5 }}>Use <code>{"{nome}"}</code> pro primeiro nome. Salva ao clicar fora.</span>
+              </div>
+            )}
+
+            {p.previa && (
+              <div className="rec-previa">
+                <span className="rec-previa-lb">Como ela vai ver hoje</span>
+                <b>{p.previa.titulo}</b>
+                <p>{p.previa.corpo}</p>
+              </div>
+            )}
+          </div>
+        ))}
+        {dados.pessoas.length === 0 && <div className="panel-sub">Nenhuma pessoa cadastrada ainda.</div>}
+      </div>
     </div>
   );
 }
@@ -5020,7 +5167,37 @@ function ModalPessoas({ pessoas, onClose, onMudou, showToast }) {
   );
 }
 
+/* Há quanto tempo o lead entrou — usado nos cards do Pipeline */
+function tempoDesde(ts) {
+  if (!ts) return "";
+  const min = Math.floor((Date.now() - ts) / 60000);
+  if (min < 1) return "agora há pouco";
+  if (min < 60) return `há ${min} min`;
+  const h = Math.floor(min / 60);
+  if (h < 24) return h === 1 ? "há 1 hora" : `há ${h} horas`;
+  const d = Math.floor(h / 24);
+  if (d < 30) return d === 1 ? "há 1 dia" : `há ${d} dias`;
+  const me = Math.floor(d / 30);
+  return me === 1 ? "há 1 mês" : `há ${me} meses`;
+}
+/* cor do selo: quanto mais parado, mais chama atenção */
+function idadeClasse(ts) {
+  if (!ts) return "";
+  const h = (Date.now() - ts) / 3600000;
+  if (h < 1) return " novo";
+  if (h < 24) return "";
+  if (h < 72) return " morno";
+  return " frio";
+}
+
+
 function OficialCRM({ showToast, isGer = true, onAbrirWhats }) {
+  // relógio vivo: o "entrou há X min" dos cards se atualiza sozinho
+  const [, setTique] = useState(0);
+  useEffect(() => {
+    const t = setInterval(() => setTique((n) => n + 1), 60000);
+    return () => clearInterval(t);
+  }, []);
   const [etapas, setEtapas] = useState([]);
   const [leads, setLeads] = useState([]);
   const [vendedores, setVendedores] = useState([]);
@@ -5265,6 +5442,12 @@ function OficialCRM({ showToast, isGer = true, onAbrirWhats }) {
                       </div>
                     )}
                     <div className="crm-card-foot">
+                      {l.criadoEm && (
+                        <span className={"crm-card-idade" + idadeClasse(l.criadoEm)}
+                          title={"Lead entrou em " + new Date(l.criadoEm).toLocaleString("pt-BR")}>
+                          <I.clock className="ico-inline" /> entrou {tempoDesde(l.criadoEm)}
+                        </span>
+                      )}
                       {l.origem === "ligacao" && <span className="crm-tag-lig"><I.suporte className="ico-inline" /> Ligação</span>}
                       <div className="crm-card-vend">
                         {l.vendedorNome

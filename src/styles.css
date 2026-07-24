@@ -4094,3 +4094,47 @@ select.input:disabled, .input:disabled { color: var(--muted); opacity: 1; -webki
 /* cabeçalho do modal rápido da pessoa (com foto) */
 .vd-mp-cab { display: flex; align-items: center; gap: 11px; min-width: 0; }
 .vd-mp-cab b { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* ============================================================
+   RECADOS DO TIME
+   ============================================================ */
+.rec-lista { display: flex; flex-direction: column; gap: 12px; }
+.rec-card { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 14px 16px; transition: border-color .15s; }
+.rec-card.off { opacity: .62; }
+.rec-topo { display: flex; align-items: center; gap: 11px; }
+.rec-id { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.rec-id b { font-size: 14px; color: var(--text); }
+.rec-id span { font-size: 11.5px; color: var(--muted); }
+.rec-tons { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 11px; }
+.rec-tom { border: 1px solid var(--line); background: var(--surface-2); color: var(--muted); font-size: 12px; font-weight: 700;
+  padding: 6px 12px; border-radius: 99px; cursor: pointer; transition: .14s; }
+.rec-tom:hover:not(.on) { border-color: var(--brand); color: var(--brand); }
+.rec-tom.on { background: var(--brand); border-color: var(--brand); color: #fff; }
+.rec-custom { margin-top: 10px; display: flex; flex-direction: column; gap: 5px; }
+.rec-previa { margin-top: 11px; padding: 11px 13px; border-radius: 12px; background: var(--surface-2); border-left: 3px solid var(--brand); }
+.rec-previa-lb { display: block; font-size: 9.5px; font-weight: 800; letter-spacing: 1.4px; text-transform: uppercase; color: var(--muted); margin-bottom: 5px; }
+.rec-previa b { font-size: 13.5px; color: var(--text); display: block; margin-bottom: 3px; }
+.rec-previa p { font-size: 12.5px; color: var(--muted); line-height: 1.55; white-space: pre-line; margin: 0; }
+
+/* popup do recado */
+.rec-bg { position: fixed; inset: 0; z-index: 350; display: grid; place-items: center; padding: 24px;
+  background: rgba(10,12,20,.55); backdrop-filter: blur(5px); animation: recFade .25s ease; }
+.rec-bg.saindo { animation: recFade .2s ease reverse forwards; }
+@keyframes recFade { from { opacity: 0 } to { opacity: 1 } }
+.rec-pop { position: relative; overflow: hidden; width: 100%; max-width: 460px; text-align: center;
+  background: var(--card); border: 1px solid var(--line); border-radius: 22px; padding: 34px 30px 28px;
+  box-shadow: 0 30px 70px -30px rgba(0,0,0,.55); animation: recSobe .42s cubic-bezier(.2,.9,.25,1); }
+@keyframes recSobe { from { opacity: 0; transform: translateY(18px) scale(.97) } to { opacity: 1; transform: none } }
+.rec-pop-luz { position: absolute; top: 0; left: 0; right: 0; height: 4px; background: linear-gradient(90deg, #F26522, #25A06B); }
+.rec-pop-tit { font-size: 22px; font-weight: 800; letter-spacing: -.4px; color: var(--text); line-height: 1.25; }
+.rec-pop-txt { margin: 12px 0 0; font-size: 14.5px; line-height: 1.65; color: var(--muted); white-space: pre-line; }
+.rec-pop-ass { margin-top: 12px; font-size: 12.5px; font-weight: 700; color: var(--text); }
+.rec-pop-btn { margin-top: 22px; width: 100%; justify-content: center; font-size: 14.5px; padding: 12px; }
+
+/* selo "entrou há X" nos cards do pipeline */
+.crm-card-idade { display: inline-flex; align-items: center; gap: 4px; font-size: 10.5px; font-weight: 600;
+  color: var(--muted); background: var(--surface-2); border-radius: 99px; padding: 3px 8px; white-space: nowrap; }
+.crm-card-idade .ico-inline { width: 11px; height: 11px; }
+.crm-card-idade.novo { color: #059669; background: rgba(5,150,105,.10); }
+.crm-card-idade.morno { color: #c2780a; background: rgba(224,138,0,.12); }
+.crm-card-idade.frio { color: #dc2626; background: rgba(220,38,38,.10); }
