@@ -4203,8 +4203,28 @@ function TelaMetricas({ mes, onVoltar, showToast }) {
   const [aba, setAba] = useState("cursos");
   const [busca, setBusca] = useState("");
   const [aberto, setAberto] = useState(null);
+  const [de, setDe] = useState("");
+  const [ate, setAte] = useState("");
+  const temPeriodo = !!(de && ate);
 
-  useEffect(() => { setD(null); api.vdAnalise(mes).then(setD).catch((e) => showToast(e.message)); }, [mes]);
+  useEffect(() => {
+    setD(null);
+    api.vdAnalise(mes, de, ate).then(setD).catch((e) => showToast(e.message));
+  }, [mes, de, ate]);
+
+  // atalhos de período
+  const iso = (dt) => dt.getFullYear() + "-" + String(dt.getMonth() + 1).padStart(2, "0") + "-" + String(dt.getDate()).padStart(2, "0");
+  function atalho(dias) {
+    const fim = new Date();
+    const ini = new Date(); ini.setDate(ini.getDate() - (dias - 1));
+    setDe(iso(ini)); setAte(iso(fim)); setAberto(null);
+  }
+  function esteMes() {
+    const hj = new Date();
+    setDe(iso(new Date(hj.getFullYear(), hj.getMonth(), 1)));
+    setAte(iso(hj)); setAberto(null);
+  }
+  function limparPeriodo() { setDe(""); setAte(""); setAberto(null); }
 
   const ABAS = [["cursos", "Por curso"], ["formas", "Como pagou"], ["plataformas", "Plataforma"], ["parcelas", "Parcelamento"]];
   const nrm = (t) => String(t || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
@@ -4216,7 +4236,29 @@ function TelaMetricas({ mes, onVoltar, showToast }) {
     <div className="mt-tela">
       <div className="mt-topo">
         <button className="btn btn-sm" onClick={onVoltar}>← Voltar</button>
-        <div className="mt-tit">Métricas de {mesLegivel(mes)}</div>
+        <div className="mt-tit">
+          {temPeriodo
+            ? `Métricas de ${de.split("-").reverse().join("/")} a ${ate.split("-").reverse().join("/")}`
+            : `Métricas de ${mesLegivel(mes)}`}
+        </div>
+      </div>
+
+      <div className="mt-periodo">
+        <span className="mt-periodo-lb">Período</span>
+        <div className="mt-atalhos">
+          <button className={!temPeriodo ? "on" : ""} onClick={limparPeriodo}>Mês todo</button>
+          <button onClick={() => atalho(1)}>Hoje</button>
+          <button onClick={() => atalho(7)}>7 dias</button>
+          <button onClick={() => atalho(15)}>15 dias</button>
+          <button onClick={() => atalho(30)}>30 dias</button>
+          <button onClick={esteMes}>Do dia 1 até hoje</button>
+        </div>
+        <div className="mt-datas">
+          <input type="date" className="vd-data" value={de} onChange={(e) => { setDe(e.target.value); if (!ate) setAte(iso(new Date())); }} />
+          <span>até</span>
+          <input type="date" className="vd-data" value={ate} onChange={(e) => setAte(e.target.value)} />
+          {temPeriodo && <button className="mt-limpar" onClick={limparPeriodo}>✕ limpar</button>}
+        </div>
       </div>
 
       {!d ? (

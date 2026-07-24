@@ -951,7 +951,18 @@ export function instalarVendas({ app, getDb, saveDB, proximoId, auth, gerenteOnl
     garantir();
     const mes = String(req.query.mes || "").slice(0, 7) || mesDe(Date.now());
     const ehGer = req.user.role === "gerente";
-    let lista = (db.vendas.lista || []).filter((v) => mesDe(v.data) === mes);
+    // período livre (de/até) tem prioridade sobre o mês
+    const de = String(req.query.de || "").trim();
+    const ate = String(req.query.ate || "").trim();
+    const usaPeriodo = /^\d{4}-\d{2}-\d{2}$/.test(de) && /^\d{4}-\d{2}-\d{2}$/.test(ate);
+    let ini = 0, fim = 0;
+    if (usaPeriodo) {
+      const a = paraData(de), b = paraData(ate);
+      ini = Math.min(a, b) - 12 * 3600 * 1000;   // paraData usa meio-dia: volta pro começo do dia
+      fim = Math.max(a, b) + 12 * 3600 * 1000;   // e avança pro fim do dia
+    }
+    let lista = (db.vendas.lista || []).filter((v) =>
+      usaPeriodo ? (v.data >= ini && v.data <= fim) : mesDe(v.data) === mes);
     if (!ehGer) {
       const minha = (db.vendas.pessoas || []).find((p) => p.userId === req.user.id);
       lista = minha ? lista.filter((v) => v.pessoaId === minha.id) : [];
@@ -968,7 +979,8 @@ export function instalarVendas({ app, getDb, saveDB, proximoId, auth, gerenteOnl
     };
     const total = lista.reduce((s2, v) => s2 + num(v.valor), 0);
     res.json({
-      mes, total, qtd: lista.length,
+      mes, periodo: usaPeriodo ? { de, ate } : null,
+      total, qtd: lista.length,
       recebido: lista.reduce((s2, v) => s2 + num(v.recebido), 0),
       ticket: lista.length ? total / lista.length : 0,
       cursos: soma((v) => cursoCanonico(v.curso), "curso").map((c) => {
