@@ -766,7 +766,7 @@ textarea {
   justify-content: center;
   background: rgba(20, 18, 42, 0.45);
   backdrop-filter: blur(2px);
-  z-index: 50;
+  z-index: 300; /* acima de .pop-bg (120): modal por Portal nunca fica atrás de popup */
   padding: 20px;
   animation: fade 0.2s ease;
 }
@@ -879,7 +879,7 @@ textarea {
   border-radius: 12px;
   font-size: 13.5px;
   font-weight: 600;
-  z-index: 60;
+  z-index: 400;
   box-shadow: var(--shadow-lg);
   animation: pop 0.2s ease;
 }
