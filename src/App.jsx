@@ -5271,13 +5271,22 @@ function ModalPessoas({ pessoas, onClose, onMudou, showToast }) {
   async function puxarDoSistema() {
     if (!faltando.length) return;
     setPuxando(true);
-    try {
-      for (const u of faltando) {
-        await api.vdPessoaCriar({ nome: u.nome, grupo: u.role === "vendedor" ? "Time de vendas" : "", metaMensal: 0, userId: u.id });
-      }
-      showToast(`✓ ${faltando.length} pessoa(s) adicionada(s) — agora é só pôr a meta de cada um`);
-      onMudou();
-    } catch (e) { showToast("✗ " + e.message); } finally { setPuxando(false); }
+    // um erro numa pessoa NÃO pode impedir as outras de entrar
+    let ok = 0;
+    const falhas = [];
+    for (const u of faltando) {
+      const nomeU = String(u.nome || "").trim();
+      if (!nomeU) { falhas.push("(usuário sem nome)"); continue; }
+      try {
+        await api.vdPessoaCriar({ nome: nomeU, grupo: u.role === "vendedor" ? "Time de vendas" : "", metaMensal: 0, userId: u.id });
+        ok++;
+      } catch (e) { falhas.push(`${nomeU}: ${e.message}`); }
+    }
+    onMudou();
+    setPuxando(false);
+    if (ok && !falhas.length) showToast(`✓ ${ok} pessoa(s) adicionada(s) — agora é só pôr a meta`);
+    else if (ok) showToast(`✓ ${ok} adicionada(s) · ${falhas.length} não deu: ${falhas[0]}`);
+    else showToast(`✗ Não deu pra adicionar: ${falhas[0] || "erro desconhecido"}`);
   }
 
   async function criar() {
@@ -5336,7 +5345,7 @@ function ModalPessoas({ pessoas, onClose, onMudou, showToast }) {
               <button className="btn btn-on" disabled={puxando} onClick={puxarDoSistema}>
                 <I.users className="ico" /> {puxando ? "Trazendo…" : `Trazer os ${faltando.length} do sistema`}
               </button>
-              <span className="vd-trazer-nomes">{faltando.map((u) => u.nome).join(", ")}</span>
+              <span className="vd-trazer-nomes">{faltando.map((u) => String(u.nome || "").trim() || `(sem nome · ${u.login || u.id})`).join(", ")}</span>
             </div>
           )}
           {inativosFora.length > 0 && (
