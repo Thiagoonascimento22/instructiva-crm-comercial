@@ -4955,7 +4955,11 @@ function DiaADia({ vendas, onEditar, onExcluir }) {
   const dias = useMemo(() => {
     const m = {};
     (vendas || []).forEach((v) => {
-      const d = new Date(v.data), k = d.toISOString().slice(0, 10);
+      // data inválida não pode derrubar a tela (toISOString estoura): cai no criadoEm ou hoje
+      let d = new Date(v.data);
+      if (isNaN(d.getTime())) d = new Date(v.criadoEm || Date.now());
+      if (isNaN(d.getTime())) d = new Date();
+      const k = d.toISOString().slice(0, 10);
       if (!m[k]) m[k] = { k, data: d, vendas: [], total: 0, recebido: 0 };
       m[k].vendas.push(v); m[k].total += Number(v.valor) || 0; m[k].recebido += Number(v.recebido) || 0;
     });
@@ -5047,6 +5051,16 @@ function PainelVendas({ showToast, isGer = true }) {
   useEffect(() => { carregar(); /* eslint-disable-next-line */ }, []);
   function trocarMes(m) { setMes(m); carregar(m); }
   function trocarEscopo(e) { setEscopo(e); setVerLista(false); carregar(mes, e); }
+
+  // lista de vendas filtrada pela busca (cliente, curso, plataforma, código, vendedor)
+  const vendasFiltradas = useMemo(() => {
+    const q = (buscaVenda || "").trim().toLowerCase();
+    if (!q) return vendas;
+    return (vendas || []).filter((v) =>
+      [v.cliente, v.curso, v.plataforma, v.codigo, v.pessoaNome, v.email, v.telefone]
+        .some((c) => String(c || "").toLowerCase().includes(q))
+    );
+  }, [vendas, buscaVenda]);
 
   if (carregando && !dados) return <div className="dash-empty"><span className="spin" /> Carregando…</div>;
   if (!dados) return null;

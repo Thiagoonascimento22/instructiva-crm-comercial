@@ -1,0 +1,335 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Painel de Candidaturas — Escola Instructiva</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Anton&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ink:#141210; --orange:#F26522; --orange-2:#FF8F45; --orange-deep:#E13D0C;
+    --emerald:#25A06B; --paper:#FAF6F0; --card:#FFFFFF; --line:#EDE5D9; --muted:#6B6560;
+    --grad:linear-gradient(100deg,var(--orange-2),var(--orange) 42%,var(--orange-deep));
+    --brand:linear-gradient(90deg,var(--orange),var(--emerald));
+    --sh:0 1px 2px rgba(20,18,16,.05),0 10px 30px rgba(20,18,16,.07);
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:'Manrope',system-ui,sans-serif;color:var(--ink);line-height:1.5;-webkit-font-smoothing:antialiased;
+    background:radial-gradient(1000px 400px at 100% -6%,rgba(255,143,69,.1),transparent 60%),linear-gradient(180deg,#FDFBF7,#F6F0E7)}
+  .wrap{width:100%;max-width:1060px;margin:0 auto;padding:0 18px}
+
+  .top{background:rgba(250,246,240,.92);backdrop-filter:blur(10px);border-bottom:1px solid var(--line);position:sticky;top:0;z-index:20}
+  .top::before{content:"";position:absolute;top:0;left:0;right:0;height:3px;background:var(--brand)}
+  .top .bar{display:flex;align-items:center;justify-content:space-between;height:62px;gap:12px}
+  .brandmark{display:flex;align-items:center;gap:9px;font-weight:800}
+  .brandmark .dot{width:30px;height:30px;border-radius:9px;background:var(--grad);display:grid;place-items:center;color:#fff;font-family:'Anton';font-size:19px}
+  .brandmark small{display:block;font-size:11px;font-weight:700;color:var(--muted);letter-spacing:.02em}
+  .brandmark b{font-size:15px}
+  .logout{background:none;border:1px solid var(--line);color:var(--muted);font-family:'Manrope';font-weight:700;font-size:13px;padding:8px 14px;border-radius:100px;cursor:pointer}
+  .logout:hover{background:#fff;color:var(--ink)}
+
+  /* login */
+  .login{min-height:100vh;display:grid;place-items:center;padding:24px}
+  .login-card{width:100%;max-width:380px;background:var(--card);border-radius:22px;padding:32px 28px;box-shadow:var(--sh);position:relative;overflow:hidden}
+  .login-card::before{content:"";position:absolute;top:0;left:0;right:0;height:4px;background:var(--brand)}
+  .login-card .dot{width:46px;height:46px;border-radius:13px;background:var(--grad);display:grid;place-items:center;color:#fff;font-family:'Anton';font-size:28px;margin-bottom:16px}
+  .login-card h1{font-size:21px;font-weight:800;margin-bottom:4px}
+  .login-card p{color:var(--muted);font-size:14px;margin-bottom:20px}
+  .field{width:100%;font-family:'Manrope';font-size:16px;background:#faf8f5;border:1.6px solid var(--line);border-radius:12px;padding:13px 15px;min-height:50px;transition:border-color .15s,box-shadow .15s}
+  .field:focus{outline:none;border-color:var(--orange);box-shadow:0 0 0 4px rgba(242,101,34,.14);background:#fff}
+  .btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;width:100%;margin-top:14px;cursor:pointer;border:none;background:var(--grad);color:#fff;font-family:'Manrope';font-weight:800;font-size:16px;padding:14px;border-radius:100px;min-height:52px;box-shadow:0 12px 26px rgba(220,58,12,.32);transition:transform .15s}
+  .btn:hover{transform:translateY(-2px)}
+  .msg{color:var(--orange-deep);font-size:13px;font-weight:600;margin-top:12px;text-align:center;display:none}
+
+  /* dashboard */
+  .dash{display:none;padding:26px 0 70px}
+  .head{margin-bottom:20px}
+  .head h2{font-family:'Anton';font-weight:400;text-transform:uppercase;font-size:clamp(23px,5vw,32px);letter-spacing:.01em;line-height:1}
+  .head p{color:var(--muted);font-size:14px;margin-top:6px}
+
+  /* metrics */
+  .stats{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:14px}
+  @media(max-width:640px){.stats{grid-template-columns:repeat(2,1fr)}}
+  .stat{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:16px 18px;box-shadow:var(--sh);display:flex;align-items:center;gap:13px}
+  .stat .ic{width:46px;height:46px;flex:none;border-radius:13px;display:grid;place-items:center;color:#fff;box-shadow:0 8px 18px rgba(20,18,16,.14)}
+  .stat .ic.ink{background:linear-gradient(140deg,#3a332e,#141210)}
+  .stat .ic.or{background:var(--grad)}
+  .stat .ic.em{background:linear-gradient(140deg,#3FC088,#1c8a59)}
+  .stat .ic.or2{background:linear-gradient(140deg,#FFB07A,#F26522)}
+  .stat .sn{font-family:'Anton';font-size:32px;line-height:1;color:var(--ink)}
+  .stat .sl{font-size:12.5px;font-weight:700;color:var(--muted);margin-top:2px}
+
+  .prog{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:16px 18px;box-shadow:var(--sh);margin-bottom:14px}
+  .prog .h{display:flex;justify-content:space-between;align-items:center;font-weight:800;font-size:14px;margin-bottom:10px}
+  .prog .h .pct{font-family:'Anton';font-size:20px;color:var(--emerald)}
+  .bar{height:11px;background:#f1eae0;border-radius:100px;overflow:hidden}
+  .fill{height:100%;background:linear-gradient(90deg,var(--orange),var(--emerald));border-radius:100px;width:0;transition:width .5s ease}
+  .prog .sub{font-size:12.5px;color:var(--muted);margin-top:9px}
+
+  .expchips{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:22px}
+  .expchip{display:inline-flex;align-items:center;gap:8px;background:var(--card);border:1px solid var(--line);border-radius:100px;padding:8px 15px;font-weight:700;font-size:13px;box-shadow:var(--sh)}
+  .expchip .n{display:inline-grid;place-items:center;min-width:22px;height:22px;padding:0 6px;border-radius:100px;background:rgba(242,101,34,.14);color:var(--orange-deep);font-weight:800;font-size:12px}
+
+  /* tabs */
+  .tabs{display:inline-flex;gap:5px;background:#f1eae0;border:1px solid var(--line);border-radius:100px;padding:5px;margin-bottom:18px}
+  .tab{display:inline-flex;align-items:center;gap:9px;border:none;background:none;cursor:pointer;font-family:'Manrope';font-weight:800;font-size:14px;color:var(--muted);padding:9px 18px;border-radius:100px;transition:all .15s}
+  .tab.active{background:var(--card);color:var(--ink);box-shadow:0 2px 8px rgba(20,18,16,.08)}
+  .tab .tc{display:inline-grid;place-items:center;min-width:22px;height:22px;padding:0 6px;border-radius:100px;font-size:12px;font-weight:800;background:#e6ddd1;color:var(--muted)}
+  .tab.active[data-tab="novos"] .tc{background:rgba(242,101,34,.14);color:var(--orange-deep)}
+  .tab.active[data-tab="vistos"] .tc{background:rgba(37,160,107,.16);color:var(--emerald)}
+
+  .tools{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:18px}
+  .search{flex:1;min-width:200px;position:relative}
+  .search input{width:100%;font-family:'Manrope';font-size:15px;background:var(--card);border:1.6px solid var(--line);border-radius:12px;padding:11px 14px 11px 40px;min-height:46px}
+  .search input:focus{outline:none;border-color:var(--orange);box-shadow:0 0 0 4px rgba(242,101,34,.12)}
+  .search svg{position:absolute;left:14px;top:50%;transform:translateY(-50%);color:var(--muted)}
+  .tbtn{display:inline-flex;align-items:center;gap:8px;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:11px 16px;font-weight:700;font-size:14px;cursor:pointer;box-shadow:var(--sh);white-space:nowrap}
+  .tbtn:hover{border-color:var(--orange);color:var(--orange-deep)}
+  .tbtn svg{color:var(--orange)}
+
+  /* list */
+  .list{display:grid;gap:12px}
+  .cand{background:var(--card);border:1px solid var(--line);border-left:5px solid var(--orange);border-radius:16px;padding:15px 18px;box-shadow:var(--sh);display:grid;grid-template-columns:auto 1fr auto;gap:14px;align-items:center}
+  .cand.seen{border-left-color:var(--emerald)}
+  @media(max-width:640px){.cand{grid-template-columns:auto 1fr;row-gap:10px}}
+
+  .chk{flex:none;display:flex;flex-direction:column;align-items:center;gap:5px;background:none;border:none;cursor:pointer;padding:2px;width:54px}
+  .chk .box{width:32px;height:32px;border-radius:10px;border:2px solid #d8cfc2;display:grid;place-items:center;background:#fff;color:#fff;transition:all .15s}
+  .chk .box svg{opacity:0;transition:opacity .15s}
+  .chk .lbl{font-size:10px;font-weight:800;color:var(--muted);letter-spacing:.03em;text-transform:uppercase}
+  .chk:hover .box{border-color:var(--emerald)}
+  .chk.on .box{background:var(--emerald);border-color:var(--emerald)}
+  .chk.on .box svg{opacity:1}
+  .chk.on .lbl{color:var(--emerald)}
+  .chk[disabled]{opacity:.5;pointer-events:none}
+
+  .cinfo .name{font-weight:800;font-size:16px;display:flex;align-items:center;gap:9px;flex-wrap:wrap}
+  .del{flex:none;display:grid;place-items:center;width:28px;height:28px;border-radius:8px;border:none;background:#f4ede3;color:var(--muted);cursor:pointer;transition:all .15s}
+  .del:hover{background:#fdecec;color:#d64545}
+  .del[disabled]{opacity:.5;pointer-events:none}
+  .badge{font-size:11px;font-weight:800;letter-spacing:.02em;padding:3px 9px;border-radius:100px;background:rgba(37,160,107,.12);color:var(--emerald)}
+  .badge.no{background:rgba(107,101,96,.12);color:var(--muted)}
+  .cmeta{color:var(--muted);font-size:13.5px;margin-top:5px;display:flex;flex-wrap:wrap;gap:12px}
+  .cmeta span{display:inline-flex;align-items:center;gap:5px}
+  .cmeta svg{color:var(--orange);flex:none}
+  .seenat{color:var(--emerald);font-weight:700}
+  .cactions{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end}
+  @media(max-width:640px){.cactions{grid-column:1/-1;justify-content:flex-start}}
+  .act{display:inline-flex;align-items:center;gap:6px;text-decoration:none;cursor:pointer;border:none;font-family:'Manrope';font-weight:700;font-size:13px;padding:9px 14px;border-radius:100px;transition:transform .15s}
+  .act:hover{transform:translateY(-1px)}
+  .act.wa{background:var(--emerald);color:#fff}
+  .act.cv{background:var(--ink);color:#fff}
+
+  .empty{text-align:center;color:var(--muted);padding:56px 20px;background:var(--card);border:1px dashed var(--line);border-radius:18px}
+  .empty .dot{width:52px;height:52px;border-radius:15px;background:rgba(242,101,34,.1);color:var(--orange);display:grid;place-items:center;margin:0 auto 14px}
+  .empty b{display:block;color:var(--ink);font-size:16px;margin-bottom:4px}
+</style>
+</head>
+<body>
+
+<!-- LOGIN -->
+<div class="login" id="login">
+  <div class="login-card">
+    <div class="dot">i</div>
+    <h1>Painel de candidaturas</h1>
+    <p>Escola Instructiva — acesso restrito</p>
+    <input class="field" id="pass" type="password" placeholder="Senha do painel" autocomplete="current-password">
+    <button class="btn" id="loginBtn">Entrar</button>
+    <div class="msg" id="loginMsg"></div>
+  </div>
+</div>
+
+<!-- DASHBOARD -->
+<div class="dash" id="dash">
+  <div class="top">
+    <div class="wrap bar">
+      <div class="brandmark">
+        <span class="dot">i</span>
+        <span><small>ESCOLA INSTRUCTIVA</small><b>Candidaturas</b></span>
+      </div>
+      <button class="logout" id="logoutBtn">Sair</button>
+    </div>
+  </div>
+
+  <div class="wrap" style="margin-top:26px">
+    <div class="head">
+      <h2>Vaga de Vendedor(a) — Toledo-PR</h2>
+      <p>Marque a <b>caixinha</b> de cada candidato quando terminar de analisar — ele vai pra aba "Lidos".</p>
+    </div>
+
+    <!-- MÉTRICAS -->
+    <div class="stats">
+      <div class="stat"><div class="ic ink"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13A4 4 0 0 1 16 11"/></svg></div><div><div class="sn" id="mTotal">0</div><div class="sl">Total</div></div></div>
+      <div class="stat"><div class="ic or"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg></div><div><div class="sn" id="mNao">0</div><div class="sl">Não lidos</div></div></div>
+      <div class="stat"><div class="ic em"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M20 6L9 17l-5-5"/></svg></div><div><div class="sn" id="mLidos">0</div><div class="sl">Lidos</div></div></div>
+      <div class="stat"><div class="ic or2"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg></div><div><div class="sn" id="mHoje">0</div><div class="sl">Novos hoje</div></div></div>
+    </div>
+
+    <div class="prog">
+      <div class="h"><span>Análise dos currículos</span><span class="pct" id="pPct">0%</span></div>
+      <div class="bar"><div class="fill" id="pFill"></div></div>
+      <div class="sub" id="pSub">0 de 0 analisados</div>
+    </div>
+
+    <div class="expchips" id="expChips"></div>
+
+    <!-- ABAS -->
+    <div class="tabs">
+      <button class="tab active" data-tab="novos">Não lidos <span class="tc" id="cNovos">0</span></button>
+      <button class="tab" data-tab="vistos">Lidos <span class="tc" id="cVistos">0</span></button>
+    </div>
+
+    <div class="tools">
+      <div class="search">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+        <input id="search" type="text" placeholder="Buscar por nome ou cidade...">
+      </div>
+      <button class="tbtn" id="refreshBtn"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M23 4v6h-6M1 20v-6h6"/><path d="M3.5 9a9 9 0 0 1 14.9-3.4L23 10M1 14l4.6 4.4A9 9 0 0 0 20.5 15"/></svg>Atualizar</button>
+      <button class="tbtn" id="csvBtn"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5M12 15V3"/></svg>Exportar CSV</button>
+    </div>
+
+    <div class="list" id="list"></div>
+  </div>
+</div>
+
+<script>
+(function(){
+  var token = localStorage.getItem('instructiva_admin');
+  var all = [];
+  var tab = 'novos';
+
+  var $ = function(id){ return document.getElementById(id); };
+  function authFetch(url, opts){ opts=opts||{}; opts.headers=Object.assign({}, opts.headers, {Authorization:'Bearer '+token}); return fetch(url,opts); }
+  function showLogin(){ $('login').style.display='grid'; $('dash').style.display='none'; }
+  function showDash(){ $('login').style.display='none'; $('dash').style.display='block'; }
+
+  function login(){
+    var pass=$('pass').value; $('loginMsg').style.display='none';
+    fetch('/api/admin/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({password:pass})})
+      .then(function(r){ return r.json().then(function(d){ return {ok:r.ok,d:d}; }); })
+      .then(function(res){ if(!res.ok||!res.d.ok){ throw new Error(res.d.error||'Senha incorreta.'); }
+        token=res.d.token; localStorage.setItem('instructiva_admin',token); showDash(); load(); })
+      .catch(function(e){ var m=$('loginMsg'); m.textContent=e.message; m.style.display='block'; });
+  }
+  function logout(){ localStorage.removeItem('instructiva_admin'); token=null; $('pass').value=''; showLogin(); }
+
+  function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g,function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
+  function fmtDate(iso){ try{ return new Date(iso).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'}); }catch(e){ return ''; } }
+  function fmtDay(iso){ try{ return new Date(iso).toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit'}); }catch(e){ return ''; } }
+  function waLink(num){ var d=(num||'').replace(/\D/g,''); if(d.length<=11){ d='55'+d; } return 'https://wa.me/'+d; }
+
+  function renderMetrics(){
+    var total=all.length, lidos=0, hoje=0, exp={};
+    var t0=new Date(); t0.setHours(0,0,0,0);
+    all.forEach(function(c){
+      if(c.visto) lidos++;
+      if(new Date(c.createdAt)>=t0) hoje++;
+      var e=c.experiencia||'—'; exp[e]=(exp[e]||0)+1;
+    });
+    $('mTotal').textContent=total; $('mNao').textContent=total-lidos; $('mLidos').textContent=lidos; $('mHoje').textContent=hoje;
+    var pct= total? Math.round(lidos/total*100):0;
+    $('pPct').textContent=pct+'%'; $('pFill').style.width=pct+'%'; $('pSub').textContent=lidos+' de '+total+' analisados';
+    $('cNovos').textContent=total-lidos; $('cVistos').textContent=lidos;
+    var order=['Sim, tenho experiência','Um pouco','Ainda não'];
+    var keys=Object.keys(exp).sort(function(a,b){ var ia=order.indexOf(a),ib=order.indexOf(b); return (ia<0?99:ia)-(ib<0?99:ib); });
+    $('expChips').innerHTML = keys.map(function(k){ return '<span class="expchip">'+esc(k)+'<span class="n">'+exp[k]+'</span></span>'; }).join('');
+  }
+
+  function currentItems(){
+    var q=$('search').value.trim().toLowerCase();
+    return all.filter(function(c){
+      var okTab = tab==='vistos' ? !!c.visto : !c.visto;
+      if(!okTab) return false;
+      if(!q) return true;
+      return (c.nome||'').toLowerCase().indexOf(q)>=0 || (c.cidade||'').toLowerCase().indexOf(q)>=0;
+    });
+  }
+
+  function render(){
+    renderMetrics();
+    var items=currentItems(); var list=$('list');
+    if(!items.length){
+      var txt = tab==='vistos' ? 'Ninguém marcado como lido ainda.' : 'Nenhuma candidatura nova por aqui.';
+      var sub = tab==='vistos' ? 'Marque a caixinha de alguém na aba "Não lidos".' : 'Boas candidaturas vão aparecer aqui.';
+      list.innerHTML='<div class="empty"><div class="dot"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13A4 4 0 0 1 16 11"/></svg></div><b>'+txt+'</b>'+sub+'</div>';
+      return;
+    }
+    list.innerHTML = items.map(function(c){
+      var expNo=/ainda não/i.test(c.experiencia||''); var seen=!!c.visto;
+      var seenLine = seen&&c.vistoAt ? '<span class="seenat"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M20 6L9 17l-5-5"/></svg>Lido em '+fmtDay(c.vistoAt)+'</span>' : '';
+      return '' +
+      '<div class="cand'+(seen?' seen':'')+'">' +
+        '<button class="chk'+(seen?' on':'')+'" data-id="'+esc(c.id)+'" data-visto="'+(seen?'0':'1')+'" title="Marcar como lido">' +
+          '<span class="box"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6L9 17l-5-5"/></svg></span>' +
+          '<span class="lbl">'+(seen?'Lido':'Ler')+'</span>' +
+        '</button>' +
+        '<div class="cinfo">' +
+          '<div class="name">'+esc(c.nome)+'<button class="del" data-del="'+esc(c.id)+'" data-nome="'+esc(c.nome)+'" title="Excluir candidatura"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6M10 11v6M14 11v6"/></svg></button><span class="badge'+(expNo?' no':'')+'">'+esc(c.experiencia)+'</span></div>' +
+          '<div class="cmeta">' +
+            '<span><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2a10 10 0 0 0-8.5 15.3L2 22l4.8-1.5A10 10 0 1 0 12 2z"/></svg>'+esc(c.whatsapp)+'</span>' +
+            '<span><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M12 2C8.1 2 5 5.1 5 9c0 5.2 7 13 7 13s7-7.8 7-13c0-3.9-3.1-7-7-7z"/><circle cx="12" cy="9" r="2.4"/></svg>'+esc(c.cidade)+'</span>' +
+            '<span><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>'+fmtDate(c.createdAt)+'</span>' +
+            seenLine +
+          '</div>' +
+        '</div>' +
+        '<div class="cactions">' +
+          '<a class="act wa" href="'+waLink(c.whatsapp)+'" target="_blank" rel="noopener"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2a10 10 0 0 0-8.5 15.3L2 22l4.8-1.5A10 10 0 1 0 12 2z"/></svg>WhatsApp</a>' +
+          '<button class="act cv" data-cv="'+esc(c.id)+'" data-name="'+esc(c.curriculo.originalName||'curriculo')+'"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5M12 15V3"/></svg>Currículo</button>' +
+        '</div>' +
+      '</div>';
+    }).join('');
+
+    Array.prototype.forEach.call(list.querySelectorAll('.act.cv'), function(btn){ btn.addEventListener('click', function(){ downloadCV(btn.getAttribute('data-cv'), btn.getAttribute('data-name')); }); });
+    Array.prototype.forEach.call(list.querySelectorAll('.chk'), function(btn){ btn.addEventListener('click', function(){ setVisto(btn, btn.getAttribute('data-id'), btn.getAttribute('data-visto')==='1'); }); });
+    Array.prototype.forEach.call(list.querySelectorAll('.del'), function(btn){ btn.addEventListener('click', function(){ deleteCand(btn, btn.getAttribute('data-del'), btn.getAttribute('data-nome')); }); });
+  }
+
+  function deleteCand(btn, id, nome){
+    if(!confirm('Excluir a candidatura de '+nome+'?\n\nEssa ação não pode ser desfeita — o currículo também será apagado.')) return;
+    btn.setAttribute('disabled','');
+    authFetch('/api/admin/candidaturas/'+id, {method:'DELETE'})
+      .then(function(r){ if(!r.ok) throw new Error(); return r.json(); })
+      .then(function(){ all = all.filter(function(c){ return c.id!==id; }); render(); })
+      .catch(function(){ btn.removeAttribute('disabled'); alert('Não foi possível excluir. Tente de novo.'); });
+  }
+
+  function setVisto(btn, id, visto){
+    btn.setAttribute('disabled','');
+    authFetch('/api/admin/candidaturas/'+id+'/visto',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({visto:visto})})
+      .then(function(r){ if(!r.ok) throw new Error(); return r.json(); })
+      .then(function(){ var rec=all.filter(function(c){return c.id===id;})[0]; if(rec){ rec.visto=visto; rec.vistoAt=visto?new Date().toISOString():null; } render(); })
+      .catch(function(){ btn.removeAttribute('disabled'); alert('Não foi possível atualizar. Tente de novo.'); });
+  }
+
+  function load(){
+    authFetch('/api/admin/candidaturas').then(function(r){ if(r.status===401){ logout(); return null; } return r.json(); })
+      .then(function(data){ if(!data) return; all=data.candidaturas||[]; render(); }).catch(function(){});
+  }
+  function downloadCV(id, name){
+    authFetch('/api/admin/curriculo/'+id).then(function(r){ if(!r.ok) throw new Error(); return r.blob(); })
+      .then(function(blob){ var u=URL.createObjectURL(blob); var a=document.createElement('a'); a.href=u; a.download=name||'curriculo'; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(u); })
+      .catch(function(){ alert('Não foi possível baixar o currículo.'); });
+  }
+  function exportCSV(){
+    authFetch('/api/admin/export.csv').then(function(r){ return r.blob(); })
+      .then(function(blob){ var u=URL.createObjectURL(blob); var a=document.createElement('a'); a.href=u; a.download='candidaturas.csv'; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(u); })
+      .catch(function(){ alert('Não foi possível exportar.'); });
+  }
+
+  Array.prototype.forEach.call(document.querySelectorAll('.tab'), function(t){
+    t.addEventListener('click', function(){ Array.prototype.forEach.call(document.querySelectorAll('.tab'), function(x){ x.classList.remove('active'); }); t.classList.add('active'); tab=t.getAttribute('data-tab'); render(); });
+  });
+  $('loginBtn').addEventListener('click', login);
+  $('pass').addEventListener('keydown', function(e){ if(e.key==='Enter') login(); });
+  $('logoutBtn').addEventListener('click', logout);
+  $('refreshBtn').addEventListener('click', load);
+  $('csvBtn').addEventListener('click', exportCSV);
+  $('search').addEventListener('input', render);
+
+  if(token){ showDash(); load(); } else { showLogin(); }
+})();
+</script>
+</body>
+</html>
