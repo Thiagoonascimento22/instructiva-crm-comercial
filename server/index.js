@@ -6,6 +6,7 @@ import { fileURLToPath } from "url";
 import { instalarCanalOficial } from "./oficial.js";
 import { instalarVendas } from "./vendas.js";
 import { instalarRecados } from "./recados.js";
+import { instalarAnaliseAtendimento } from "./atendimento.js";
 
 // horário comercial / dias da semana são calculados no fuso de Brasília
 process.env.TZ = process.env.TZ || "America/Sao_Paulo";
@@ -2129,6 +2130,9 @@ instalarVendas({ app, getDb: () => db, saveDB, proximoId, auth, gerenteOnly, per
 
 /* Recados do time: mensagem do dono na primeira entrada do dia */
 instalarRecados({ app, getDb: () => db, saveDB, auth, donoOnly });
+
+/* Análise de atendimento por IA (só o dono enxerga) */
+instalarAnaliseAtendimento({ app, getDb: () => db, saveDB, auth, donoOnly });
 
 instalarRotasBackup(app, auth, gerenteOnly);
 

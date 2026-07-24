@@ -255,6 +255,11 @@ export const api = {
   ofCampDonos: (id) => req("GET", "/api/oficial/campanhas/" + id + "/donos"),
   ofCampTransferir: (id, vendedorId, soSemDono) => req("POST", "/api/oficial/campanhas/" + id + "/transferir", { vendedorId, soSemDono }),
 
+  /* Análise de atendimento (só dono) */
+  atdMetricas: (dias, de, ate) => req("GET", "/api/atendimento/metricas?dias=" + dias + (de && ate ? "&de=" + de + "&ate=" + ate : "")),
+  atdAnalisar: (id, dias, de, ate) => req("POST", "/api/atendimento/analisar/" + id + "?dias=" + dias + (de && ate ? "&de=" + de + "&ate=" + ate : "")),
+  atdAnalises: () => req("GET", "/api/atendimento/analises"),
+
   /* Recados do time */
   recadoMeu: () => req("GET", "/api/recados/meu"),
   recadoVisto: () => req("POST", "/api/recados/visto"),

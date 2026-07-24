@@ -1333,6 +1333,7 @@ function ConfigDados({ user, setUser, showToast }) {
 function Config({ user, setUser, showToast, isGer, ehDono, modulos, onModulosSalvo }) {
   const abas = [["dados", "Meus dados"]];
   if (isGer) abas.push(["equipe", "Equipe & Acessos"]);
+  if (ehDono) abas.push(["atendimento", "Análise IA"]);
   if (ehDono) abas.push(["recados", "Recados do time"]);
   if (ehDono) abas.push(["sistema", "Sistema"]);
   const [aba, setAba] = useState("dados");
@@ -1347,6 +1348,7 @@ function Config({ user, setUser, showToast, isGer, ehDono, modulos, onModulosSal
       )}
       {aba === "dados" && <ConfigDados user={user} setUser={setUser} showToast={showToast} />}
       {aba === "equipe" && isGer && <Equipe showToast={showToast} meId={user.id} />}
+      {aba === "atendimento" && ehDono && <PainelAtendimento showToast={showToast} />}
       {aba === "recados" && ehDono && <PainelRecados showToast={showToast} />}
       {aba === "sistema" && ehDono && <PainelSistema modulos={modulos} onSalvo={onModulosSalvo} showToast={showToast} />}
     </div>
@@ -3225,6 +3227,162 @@ function RecadoDoDia() {
         </div>
       </div>
     </Portal>
+  );
+}
+
+
+/* ============================================================
+   ANÁLISE IA DO ATENDIMENTO (só o dono vê)
+   Números reais + leitura das conversas pela IA.
+   ============================================================ */
+function PainelAtendimento({ showToast }) {
+  const [dias, setDias] = useState(15);
+  const [de, setDe] = useState("");
+  const [ate, setAte] = useState("");
+  const [dados, setDados] = useState(null);
+  const [analises, setAnalises] = useState({});
+  const [rodando, setRodando] = useState("");
+  const [aberto, setAberto] = useState(null);
+  const temPeriodo = !!(de && ate);
+
+  const PERIODOS = [[0, "Hoje"], [-1, "Ontem"], [7, "7 dias"], [15, "15 dias"], [30, "30 dias"], [90, "90 dias"]];
+
+  const carregar = () => {
+    setDados(null);
+    api.atdMetricas(dias, de, ate).then(setDados).catch((e) => showToast(e.message));
+    api.atdAnalises().then((r) => setAnalises(r.analises || {})).catch(() => {});
+  };
+  useEffect(() => { carregar(); }, [dias, de, ate]);
+
+  function escolherDias(d) { setDe(""); setAte(""); setDias(d); setAberto(null); }
+
+  async function analisar(v) {
+    setRodando(v.vendedorId);
+    try {
+      const r = await api.atdAnalisar(v.vendedorId, dias, de, ate);
+      setAnalises((a) => ({ ...a, [v.vendedorId]: r.analise }));
+      setAberto(v.vendedorId);
+      showToast("✓ Análise de " + v.nome.split(" ")[0] + " pronta");
+    } catch (e) { showToast("✗ " + e.message); }
+    setRodando("");
+  }
+
+  // sinal simples de atenção, com base nos números
+  const alerta = (v) => {
+    if (v.pctSemResposta >= 25) return { cor: "ruim", txt: `${v.pctSemResposta}% dos leads ficaram sem resposta` };
+    if (v.tempoPrimeiraResposta > 4 * 3600000) return { cor: "ruim", txt: "demora pra dar a 1ª resposta" };
+    if (v.pctAbandonadas >= 30) return { cor: "atencao", txt: `${v.pctAbandonadas}% das conversas param no meio` };
+    if (v.tempoRespostaMediana > 60 * 60000) return { cor: "atencao", txt: "responde devagar" };
+    return { cor: "bom", txt: "ritmo saudável" };
+  };
+
+  return (
+    <div className="panel">
+      <div className="panel-h">
+        <I.spark className="ico" /> Análise do atendimento
+      </div>
+
+      <div className="at-periodo">
+        <span className="at-periodo-lb">Período</span>
+        <div className="at-dias">
+          {PERIODOS.map(([d, lb]) => (
+            <button key={d} className={!temPeriodo && dias === d ? "on" : ""} onClick={() => escolherDias(d)}>{lb}</button>
+          ))}
+        </div>
+        <div className="at-datas">
+          <input type="date" className="vd-data" value={de} onChange={(e) => setDe(e.target.value)} />
+          <span>até</span>
+          <input type="date" className="vd-data" value={ate} onChange={(e) => setAte(e.target.value)} />
+          {temPeriodo && <button className="mt-limpar" onClick={() => { setDe(""); setAte(""); }}>✕ limpar</button>}
+        </div>
+      </div>
+      <div className="panel-sub" style={{ marginBottom: 14 }}>
+        Os números saem direto das conversas. A leitura por IA analisa o que cada um escreveu e aponta
+        pontos fortes, falhas e o que dá pra melhorar. <b>Só você vê essa tela.</b>
+      </div>
+
+      {!dados && <div className="panel-sub"><span className="spin" /> Lendo as conversas…</div>}
+
+      {dados && (
+        <>
+          <div className="at-time">
+            <div><span>Conversas</span><b>{dados.time.conversas}</b></div>
+            <div><span>Resposta média do time</span><b>{dados.time.tempoRespostaTxt || "—"}</b></div>
+            <div><span>Leads sem resposta</span><b className={dados.time.pctSemResposta >= 20 ? "ruim" : ""}>{dados.time.semResposta} ({dados.time.pctSemResposta}%)</b></div>
+            <div><span>Paradas no meio</span><b>{dados.time.abandonadas}</b></div>
+          </div>
+
+          {!dados.temIA && (
+            <div className="at-aviso">
+              Falta a <b>OPENAI_API_KEY</b> no Railway — sem ela os números aparecem, mas a leitura por IA não roda.
+            </div>
+          )}
+
+          <div className="at-lista">
+            {dados.vendedores.length === 0 && <div className="crm-col-vazio">Nenhuma conversa no período.</div>}
+            {dados.vendedores.map((v) => {
+              const a = analises[v.vendedorId];
+              const al = alerta(v);
+              const on = aberto === v.vendedorId;
+              return (
+                <div key={v.vendedorId} className={"at-card" + (on ? " on" : "")}>
+                  <div className="at-topo">
+                    <div className="at-id">
+                      <b>{v.nome}</b>
+                      <span className={"at-selo " + al.cor}>{al.txt}</span>
+                    </div>
+                    <div className="at-acoes">
+                      {a && <button className="btn btn-sm" onClick={() => setAberto(on ? null : v.vendedorId)}>{on ? "Fechar" : "Ver análise"}</button>}
+                      <button className="btn btn-sm btn-primary" disabled={rodando === v.vendedorId || !dados.temIA}
+                        onClick={() => analisar(v)}>
+                        {rodando === v.vendedorId ? "Lendo…" : a ? "Analisar de novo" : "Analisar com IA"}
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="at-nums">
+                    <div><span>Conversas</span><b>{v.conversas}</b></div>
+                    <div><span>1ª resposta</span><b>{v.tempoPrimeiraRespostaTxt || "—"}</b></div>
+                    <div><span>Resposta média</span><b>{v.tempoRespostaMedianaTxt || "—"}</b></div>
+                    <div><span>Sem resposta</span><b className={v.pctSemResposta >= 25 ? "ruim" : ""}>{v.semResposta} ({v.pctSemResposta}%)</b></div>
+                    <div><span>Paradas no meio</span><b>{v.abandonadas}</b></div>
+                    <div><span>Msgs por conversa</span><b>{v.msgsPorConversa}</b></div>
+                  </div>
+
+                  {on && a && (
+                    <div className="at-analise">
+                      {a.nota != null && <div className="at-nota">Nota do atendimento: <b>{a.nota}/10</b></div>}
+                      <p className="at-resumo">{a.resumo}</p>
+                      {[["Pontos fortes", a.fortes, "bom"], ["Onde está pecando", a.falhas, "ruim"], ["O que fazer agora", a.melhorias, "acao"]].map(([tit, arr, cls]) => (
+                        (arr && arr.length > 0) ? (
+                          <div key={tit} className={"at-bloco " + cls}>
+                            <span className="at-bloco-tit">{tit}</span>
+                            <ul>{arr.map((x, i) => <li key={i}>{x}</li>)}</ul>
+                          </div>
+                        ) : null
+                      ))}
+                      {(a.frasesBoas || []).length > 0 && (
+                        <div className="at-frases">
+                          <span className="at-bloco-tit">Trechos que funcionaram</span>
+                          {a.frasesBoas.map((f, i) => <div key={i} className="at-frase bom">“{f}”</div>)}
+                        </div>
+                      )}
+                      {(a.frasesRuins || []).length > 0 && (
+                        <div className="at-frases">
+                          <span className="at-bloco-tit">Trechos que atrapalharam</span>
+                          {a.frasesRuins.map((f, i) => <div key={i} className="at-frase ruim">“{f}”</div>)}
+                        </div>
+                      )}
+                      <div className="at-quando">análise feita em {new Date(a.em).toLocaleString("pt-BR")} · {a.periodo || `últimos ${a.dias} dias`}</div>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </>
+      )}
+    </div>
   );
 }
 
