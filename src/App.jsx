@@ -5582,7 +5582,7 @@ function idadeClasse(ts) {
    Chrome/Android gravam WebM; Safari grava MP4. Antes o código
    dizia "audio/ogg" pra tudo, e a Meta recusava o arquivo. */
 function formatoGravacao() {
-  const opcoes = ["audio/mp4", "audio/ogg;codecs=opus", "audio/webm;codecs=opus", "audio/webm"];
+  const opcoes = ["audio/ogg;codecs=opus", "audio/webm;codecs=opus", "audio/webm", "audio/mp4"];
   for (const t of opcoes) {
     try { if (window.MediaRecorder && MediaRecorder.isTypeSupported(t)) return t; } catch (_) {}
   }

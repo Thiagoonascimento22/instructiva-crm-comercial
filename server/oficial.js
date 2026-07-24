@@ -344,11 +344,18 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
   }
   async function audioParaMeta(buffer, mime) {
     const m = String(mime || "").toLowerCase();
-    if (!m.startsWith("audio/") || !/webm|ogg;?\s*codecs=|x-matroska/.test(m)) {
-      // já é um formato aceito (mp4/m4a, mpeg/mp3, aac, amr, ogg puro)
-      return { buffer, mime: m || "audio/ogg", filename: null };
+    if (!m.startsWith("audio/")) return { buffer, mime: m, filename: null, ok: true };
+
+    // Já é OGG puro? a Meta aceita direto.
+    const jaOgg = /^audio\/ogg/.test(m) && buffer.length > 4 && buffer.slice(0, 4).toString("ascii") === "OggS";
+    if (jaOgg) return { buffer, mime: "audio/ogg", filename: "audio.ogg", ok: true };
+
+    // Qualquer outra coisa (webm do Chrome, mp4 do Safari, m4a, wav...) vira OGG/Opus.
+    // A Meta valida o CONTEÚDO do arquivo, não o rótulo — por isso convertemos sempre.
+    if (!fs || !path || !(await ffmpegOk())) {
+      return { buffer, mime: m, filename: null, ok: false,
+               motivo: "O servidor está sem ffmpeg, então não dá pra converter o áudio pro formato do WhatsApp." };
     }
-    if (!fs || !path || !(await ffmpegOk())) return { buffer, mime: m, filename: null };
     const tmp = os.tmpdir();
     const marca = Date.now() + "_" + Math.random().toString(36).slice(2, 8);
     const entrada = path.join(tmp, "in_" + marca);
@@ -356,21 +363,25 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
     try {
       fs.writeFileSync(entrada, buffer);
       const rodar = (args) => new Promise((resolve) => execFile("ffmpeg", args, (err) => resolve(!err)));
-      // 1ª tentativa: só troca o container (rápido). 2ª: reencoda em opus.
+      // 1) troca só o container (instantâneo, quando já é opus)
       let ok = await rodar(["-y", "-i", entrada, "-vn", "-c:a", "copy", "-f", "ogg", saida]);
-      if (!ok || !fs.existsSync(saida) || fs.statSync(saida).size < 100) {
-        ok = await rodar(["-y", "-i", entrada, "-vn", "-c:a", "libopus", "-b:a", "48k", "-f", "ogg", saida]);
+      let bom = ok && fs.existsSync(saida) && fs.statSync(saida).size > 200
+        && fs.readFileSync(saida).slice(0, 4).toString("ascii") === "OggS";
+      // 2) reencoda em opus mono 48k (padrão de voz do WhatsApp)
+      if (!bom) {
+        ok = await rodar(["-y", "-i", entrada, "-vn", "-ac", "1", "-ar", "48000",
+                          "-c:a", "libopus", "-b:a", "32k", "-f", "ogg", saida]);
+        bom = ok && fs.existsSync(saida) && fs.statSync(saida).size > 200
+          && fs.readFileSync(saida).slice(0, 4).toString("ascii") === "OggS";
       }
-      if (ok && fs.existsSync(saida) && fs.statSync(saida).size > 100) {
-        const convertido = fs.readFileSync(saida);
-        return { buffer: convertido, mime: "audio/ogg", filename: "audio.ogg" };
-      }
-    } catch (_) {}
-    finally {
+      if (bom) return { buffer: fs.readFileSync(saida), mime: "audio/ogg", filename: "audio.ogg", ok: true };
+      return { buffer, mime: m, filename: null, ok: false, motivo: "Não consegui converter esse áudio." };
+    } catch (e) {
+      return { buffer, mime: m, filename: null, ok: false, motivo: "Erro ao converter o áudio." };
+    } finally {
       try { fs.existsSync(entrada) && fs.unlinkSync(entrada); } catch (_) {}
       try { fs.existsSync(saida) && fs.unlinkSync(saida); } catch (_) {}
     }
-    return { buffer, mime: m, filename: null };
   }
 
   async function uploadMidiaMeta(numeroCfg, buffer, mimeType, filename) {
@@ -3216,6 +3227,7 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
     try {
       // áudio gravado no navegador vem em WebM: converte pra OGG/Opus antes de subir
       const conv = await audioParaMeta(buffer, mime);
+      if (conv.ok === false) return res.status(400).json({ error: conv.motivo || "Não consegui preparar o áudio." });
       buffer = conv.buffer;
       const mimeFinal = conv.mime;
       const nomeFinal = conv.filename || filename;
