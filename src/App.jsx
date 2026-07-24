@@ -5194,6 +5194,25 @@ function idadeClasse(ts) {
 }
 
 
+/* Formato de gravação que o navegador realmente suporta.
+   Chrome/Android gravam WebM; Safari grava MP4. Antes o código
+   dizia "audio/ogg" pra tudo, e a Meta recusava o arquivo. */
+function formatoGravacao() {
+  const opcoes = ["audio/mp4", "audio/ogg;codecs=opus", "audio/webm;codecs=opus", "audio/webm"];
+  for (const t of opcoes) {
+    try { if (window.MediaRecorder && MediaRecorder.isTypeSupported(t)) return t; } catch (_) {}
+  }
+  return "";
+}
+function extDeAudio(mime) {
+  const m = String(mime || "").toLowerCase();
+  if (m.includes("mp4")) return "m4a";
+  if (m.includes("ogg")) return "ogg";
+  if (m.includes("mpeg")) return "mp3";
+  return "webm";
+}
+
+
 function OficialCRM({ showToast, isGer = true, onAbrirWhats }) {
   // relógio vivo: o "entrou há X min" dos cards se atualiza sozinho
   const [, setTique] = useState(0);
@@ -6834,13 +6853,15 @@ function InboxOficial({ isGer, showToast, onIrParaEvolution, target, onTargetUse
     if (!navigator.mediaDevices || !window.MediaRecorder) { showToast("✗ Seu navegador não permite gravar áudio aqui"); return; }
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const mr = new MediaRecorder(stream);
+      const fmt = formatoGravacao();
+      const mr = new MediaRecorder(stream, fmt ? { mimeType: fmt } : undefined);
       chunksOf.current = [];
       mr.ondataavailable = (e) => { if (e.data.size > 0) chunksOf.current.push(e.data); };
       mr.onstop = async () => {
         stream.getTracks().forEach((t) => t.stop());
         setGravandoOf(false);
-        const blob = new Blob(chunksOf.current, { type: "audio/ogg" });
+        const tipoReal = (mr.mimeType || "audio/webm").split(";")[0];
+        const blob = new Blob(chunksOf.current, { type: tipoReal });
         if (blob.size < 800) return; // muito curto, ignora
         setEnviandoMidiaOf(true);
         try {
@@ -6850,7 +6871,7 @@ function InboxOficial({ isGer, showToast, onIrParaEvolution, target, onTargetUse
             r.onerror = rej;
             r.readAsDataURL(blob);
           });
-          await api.ofEnviarMidia(sel, { base64, mime: "audio/ogg", filename: "audio.ogg" });
+          await api.ofEnviarMidia(sel, { base64, mime: tipoReal, filename: "audio." + extDeAudio(tipoReal) });
           api.ofChat(sel).then(setConversa).catch(() => {});
         } catch (e) { showToast(e.message || "Não consegui enviar o áudio"); }
         setEnviandoMidiaOf(false);
@@ -7511,7 +7532,8 @@ function WhatsApp({ user, showToast, target, onTargetUsed, recarregarSol }) {
       setEnviandoMidia(true);
       try {
         const dataUrl = await lerBase64(blob);
-        const r = await api.waSendMidia(alvo, { tipo: "audio", base64: dataUrl, mimetype: blob.type || "audio/webm", filename: "audio.ogg" });
+        const tipoReal = (blob.type || "audio/webm").split(";")[0];
+        const r = await api.waSendMidia(alvo, { tipo: "audio", base64: dataUrl, mimetype: tipoReal, filename: "audio." + extDeAudio(tipoReal) });
         if (r && r.msg) setChat((c) => (c ? { ...c, mensagens: [...c.mensagens, r.msg] } : c));
         carregarChats(true);
       } catch (err) { showToast("✗ " + err.message); }

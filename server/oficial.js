@@ -6,6 +6,9 @@
    Não altera nada do fluxo Evolution já existente.
    ============================================================ */
 
+import { execFile } from "child_process";
+import os from "os";
+
 const GRAPH = "https://graph.facebook.com/v21.0";
 
 export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gerenteOnly, MEDIA_DIR, fs, path }) {
@@ -326,6 +329,50 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
   }
 
   // faz upload de um arquivo (Buffer) pro Meta e devolve o media_id
+  /* ------------------------------------------------------------
+     ÁUDIO PRA META
+     O navegador (Chrome/Android) grava em WebM/Opus, e a Cloud API
+     NÃO aceita WebM — ela olha o conteúdo do arquivo, não o rótulo.
+     Aqui trocamos o container pra OGG (mesmo codec Opus, sem
+     reencodar: é instantâneo e não perde qualidade).
+     Safari já grava em MP4, que a Meta aceita: passa direto.
+     ------------------------------------------------------------ */
+  function ffmpegOk() {
+    return new Promise((resolve) => {
+      execFile("ffmpeg", ["-version"], (err) => resolve(!err));
+    });
+  }
+  async function audioParaMeta(buffer, mime) {
+    const m = String(mime || "").toLowerCase();
+    if (!m.startsWith("audio/") || !/webm|ogg;?\s*codecs=|x-matroska/.test(m)) {
+      // já é um formato aceito (mp4/m4a, mpeg/mp3, aac, amr, ogg puro)
+      return { buffer, mime: m || "audio/ogg", filename: null };
+    }
+    if (!fs || !path || !(await ffmpegOk())) return { buffer, mime: m, filename: null };
+    const tmp = os.tmpdir();
+    const marca = Date.now() + "_" + Math.random().toString(36).slice(2, 8);
+    const entrada = path.join(tmp, "in_" + marca);
+    const saida = path.join(tmp, "out_" + marca + ".ogg");
+    try {
+      fs.writeFileSync(entrada, buffer);
+      const rodar = (args) => new Promise((resolve) => execFile("ffmpeg", args, (err) => resolve(!err)));
+      // 1ª tentativa: só troca o container (rápido). 2ª: reencoda em opus.
+      let ok = await rodar(["-y", "-i", entrada, "-vn", "-c:a", "copy", "-f", "ogg", saida]);
+      if (!ok || !fs.existsSync(saida) || fs.statSync(saida).size < 100) {
+        ok = await rodar(["-y", "-i", entrada, "-vn", "-c:a", "libopus", "-b:a", "48k", "-f", "ogg", saida]);
+      }
+      if (ok && fs.existsSync(saida) && fs.statSync(saida).size > 100) {
+        const convertido = fs.readFileSync(saida);
+        return { buffer: convertido, mime: "audio/ogg", filename: "audio.ogg" };
+      }
+    } catch (_) {}
+    finally {
+      try { fs.existsSync(entrada) && fs.unlinkSync(entrada); } catch (_) {}
+      try { fs.existsSync(saida) && fs.unlinkSync(saida); } catch (_) {}
+    }
+    return { buffer, mime: m, filename: null };
+  }
+
   async function uploadMidiaMeta(numeroCfg, buffer, mimeType, filename) {
     const form = new FormData();
     form.append("messaging_product", "whatsapp");
@@ -3031,16 +3078,21 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
     if (!numeroCfg) return res.status(400).json({ error: "Número de origem não encontrado" });
 
     try {
-      const tipo = tipoPorMime(mime);
-      const mediaId = await uploadMidiaMeta(numeroCfg, buffer, mime, filename);
-      const respMidia = await enviarMidiaOficial(numeroCfg, chat.numero, tipo, mediaId, caption, filename);
+      // áudio gravado no navegador vem em WebM: converte pra OGG/Opus antes de subir
+      const conv = await audioParaMeta(buffer, mime);
+      buffer = conv.buffer;
+      const mimeFinal = conv.mime;
+      const nomeFinal = conv.filename || filename;
+      const tipo = tipoPorMime(mimeFinal);
+      const mediaId = await uploadMidiaMeta(numeroCfg, buffer, mimeFinal, nomeFinal);
+      const respMidia = await enviarMidiaOficial(numeroCfg, chat.numero, tipo, mediaId, caption, nomeFinal);
       const wamidMidia = respMidia && respMidia.messages && respMidia.messages[0] && respMidia.messages[0].id;
       const ts = Date.now();
       // salva o arquivo enviado no volume TAMBÉM, pra conseguir EXIBIR de volta na conversa
       let arquivoSalvo = null;
       try {
         if (MEDIA_DIR && fs && path) {
-          const ext = extPorMime(mime);
+          const ext = extPorMime(mimeFinal);
           arquivoSalvo = "of_out_" + ts + "_" + Math.random().toString(36).slice(2, 8) + "." + ext;
           fs.writeFileSync(path.join(MEDIA_DIR, arquivoSalvo), buffer);
         }
@@ -3051,14 +3103,14 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
         // mesmo esquema da mídia recebida -> renderiza igual (imagem/vídeo/áudio/doc)
         msgObj.tipo = tipo;
         msgObj.arquivo = arquivoSalvo;
-        msgObj.mimetype = mime;
-        msgObj.filename = filename;
+        msgObj.mimetype = mimeFinal;
+        msgObj.filename = nomeFinal;
         msgObj.mid = "ofout" + ts + Math.random().toString(36).slice(2, 6);
-        if (tipo === "document") msgObj.content = caption || filename;
+        if (tipo === "document") msgObj.content = caption || nomeFinal;
       } else {
         // não deu pra salvar -> mantém o rótulo de texto (fallback antigo)
         msgObj.content = caption ? rotulo + ": " + caption : rotulo;
-        msgObj.midia = { tipo, mediaId, filename, mime };
+        msgObj.midia = { tipo, mediaId, filename: nomeFinal, mime: mimeFinal };
       }
       chat.mensagens.push(msgObj);
       if (wamidMidia) { if (!db.oficial.wamidChat) db.oficial.wamidChat = {}; db.oficial.wamidChat[wamidMidia] = chat.id; }
