@@ -246,6 +246,8 @@ export const api = {
   solicitacoesRelatorio: (desde, ate) => req("GET", `/api/solicitacoes/relatorio?desde=${desde || 0}&ate=${ate || Date.now()}`),
   solicitacoesIA: (desde, ate) => req("GET", `/api/solicitacoes/ia?desde=${desde || 0}&ate=${ate || Date.now()}`),
 
+  vdAnalise: (mes) => req("GET", "/api/vendas/analise?mes=" + encodeURIComponent(mes || "")),
+
   /* Repasse de leads em massa */
   ofRepassePrevia: (todos) => req("GET", "/api/oficial/repasse/previa" + (todos ? "?todos=1" : "")),
   ofRepasse: (dados) => req("POST", "/api/oficial/repasse", dados),

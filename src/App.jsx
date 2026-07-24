@@ -462,7 +462,7 @@ export default function App() {
             <div className="sub">{titulos[view].s}</div>
           </div>
         </div>
-        <div className="content">
+        <div className={"content" + (view === "whatsapp" ? " cheia" : "")}>
           <LembreteFoto user={user} setUser={setUser} showToast={showToast} />
           {view === "whatsapp" && !isSuporte && mod("caixa") && <WhatsApp user={user} showToast={showToast} target={waTarget} onTargetUsed={() => setWaTarget(null)} recarregarSol={carregarMinhasSol} />}
           {view === "disparo" && (isGer || isVend) && mod("disparo") && <OficialDisparo isGer={isGer} showToast={showToast} />}
@@ -2137,6 +2137,10 @@ function explicaErroMeta(msg) {
     return "Fora da janela de 24h (131047): só template aprovado entrega. Confere o template.";
   if (/131056|pair rate limit|too many messages/i.test(m))
     return "Muitas mensagens pro mesmo número em pouco tempo (131056). Espera um pouco e tenta de novo.";
+  if (/131052|media download error|download.*media/i.test(m))
+    return "A Meta não conseguiu baixar/processar o arquivo (131052). Em áudio isso costuma ser formato: o servidor precisa do ffmpeg pra converter a gravação do navegador em OGG/Opus. Confira o deploy (nixpacks.toml com ffmpeg).";
+  if (/131053|media upload error/i.test(m))
+    return "Falha ao subir a mídia (131053). Tenta gravar de novo; se repetir, o arquivo pode estar num formato que a Meta não aceita.";
   if (/131051|unsupported message type/i.test(m))
     return "Tipo de mensagem não suportado (131051).";
   if (/470|131050|message failed to send because/i.test(m))
@@ -4189,6 +4193,75 @@ function casaBusca(v, termo) {
 }
 
 
+/* ============================================================
+   ANÁLISE DO MÊS — cursos, formas de pagamento, plataformas
+   ============================================================ */
+function ModalAnalise({ mes, onClose, showToast }) {
+  const [d, setD] = useState(null);
+  const [aba, setAba] = useState("cursos");
+  useEffect(() => { api.vdAnalise(mes).then(setD).catch((e) => showToast(e.message)); }, [mes]);
+
+  const ABAS = [["cursos", "Cursos"], ["formas", "Como pagou"], ["plataformas", "Plataforma"], ["parcelas", "Parcelamento"]];
+  const lista = d ? (d[aba] || []) : [];
+  const maior = lista.reduce((m, x) => Math.max(m, x.valor), 0) || 1;
+
+  return (
+    <Portal>
+      <div className="modal" onClick={(e) => e.target === e.currentTarget && onClose()}>
+        <div className="modal-box grande">
+          <div className="modal-head">
+            <b>Análise de {mesLegivel(mes)}</b>
+            <button className="crm-x" onClick={onClose}>✕</button>
+          </div>
+
+          {!d && <div className="panel-sub" style={{ padding: 24 }}><span className="spin" /> Somando…</div>}
+
+          {d && (
+            <>
+              <div className="an-topo">
+                <div><span>Vendido</span><b>{dinheiro(d.total)}</b></div>
+                <div><span>Recebido</span><b className="verde">{dinheiro(d.recebido)}</b></div>
+                <div><span>Vendas</span><b>{d.qtd}</b></div>
+                <div><span>Ticket médio</span><b>{dinheiro(d.ticket)}</b></div>
+              </div>
+
+              <div className="of-tabs" style={{ margin: "14px 0 12px" }}>
+                {ABAS.map(([k, lb]) => (
+                  <button key={k} className={aba === k ? "of-tab on" : "of-tab"} onClick={() => setAba(k)}>{lb}</button>
+                ))}
+              </div>
+
+              {lista.length === 0 ? (
+                <div className="crm-col-vazio">Nenhuma venda neste mês.</div>
+              ) : (
+                <div className="an-lista">
+                  {lista.map((x, i) => (
+                    <div key={x.nome} className={"an-item" + (i === 0 ? " top" : "")}>
+                      <span className="an-pos">{i + 1}</span>
+                      <div className="an-info">
+                        <div className="an-nome">{x.nome}</div>
+                        <div className="an-barra"><i style={{ width: Math.max(2, (x.valor / maior) * 100) + "%" }} /></div>
+                        <div className="an-sub">
+                          {x.qtd} venda(s) · ticket {dinheiroCurto(x.ticket)} · recebido {dinheiroCurto(x.recebido)}
+                        </div>
+                      </div>
+                      <div className="an-vl">
+                        <b>{dinheiro(x.valor)}</b>
+                        <span>{d.total > 0 ? Math.round((x.valor / d.total) * 100) : 0}% do mês</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      </div>
+    </Portal>
+  );
+}
+
+
 function ModalPessoaRapida({ pessoa, pessoas, mes, isGer = true, onVerPainel, onClose, onSalvo, showToast }) {
   const [grupo, setGrupo] = useState(pessoa.grupo || "");
   const [meta, setMeta] = useState(String(pessoa.meta || ""));
@@ -4632,6 +4705,8 @@ function PainelVendas({ showToast, isGer = true }) {
   const [pessoaRapida, setPessoaRapida] = useState(null);
   const [porEquipe, setPorEquipe] = useState(true);   // ranking separado por time
   const [buscaVenda, setBuscaVenda] = useState("");
+  const [menuAberto, setMenuAberto] = useState(false);
+  const [showAnalise, setShowAnalise] = useState(false);
 
   const carregar = (m, esc) => {
     const e = esc || escopo;
@@ -4714,11 +4789,26 @@ function PainelVendas({ showToast, isGer = true }) {
             forma: "Pix", plataforma: "Hotmart", codigo: "", parcelas: "", valor: "", recebido: "",
             data: new Date().toISOString().slice(0, 10),
           })}><I.plus className="ico" /> Lançar venda</button>
-          {isGer && <button className="onum-btn-ghost" onClick={() => setShowPessoas(true)}><I.users className="ico" /> Equipe & metas</button>}
-          {isGer && <button className="onum-btn-ghost" onClick={() => setShowImportarV(true)}><I.clip className="ico" /> Importar planilha</button>}
-          {isGer && <button className="onum-btn-ghost" onClick={() => setShowInteg(true)}><I.link className="ico" /> Integrar sistema</button>}
-          {isGer && <button className="onum-btn-ghost" onClick={() => setShowDup(true)}><I.search className="ico" /> Conferir repetidas</button>}
+          <button className="onum-btn-ghost" onClick={() => setShowAnalise(true)}><I.trend className="ico" /> Análise do mês</button>
           {isGer && <button className="onum-btn-ghost" onClick={() => setVerLista((v) => !v)}><I.chat className="ico" /> {verLista ? "Ver ranking" : `Vendas do mês (${vendas.length})`}</button>}
+          {isGer && (
+            <div className="vd-menu-wrap">
+              <button className="onum-btn-ghost" onClick={() => setMenuAberto((v) => !v)}>
+                <I.cog className="ico" /> Gerenciar <span className="vd-menu-seta">▾</span>
+              </button>
+              {menuAberto && (
+                <>
+                  <div className="vd-menu-fora" onClick={() => setMenuAberto(false)} />
+                  <div className="vd-menu">
+                    <button onClick={() => { setShowPessoas(true); setMenuAberto(false); }}><I.users className="ico" /> Equipe &amp; metas</button>
+                    <button onClick={() => { setShowImportarV(true); setMenuAberto(false); }}><I.clip className="ico" /> Importar planilha</button>
+                    <button onClick={() => { setShowInteg(true); setMenuAberto(false); }}><I.link className="ico" /> Integrar sistema</button>
+                    <button onClick={() => { setShowDup(true); setMenuAberto(false); }}><I.search className="ico" /> Conferir repetidas</button>
+                  </div>
+                </>
+              )}
+            </div>
+          )}
         </div>
       </div>
 
@@ -5034,6 +5124,7 @@ function PainelVendas({ showToast, isGer = true }) {
 
       {form && <FormVenda form={form} setForm={setForm} pessoas={pessoas} isGer={isGer} onSalvo={() => { setForm(null); carregar(); }} showToast={showToast} />}
       {pessoaRapida && <ModalPessoaRapida pessoa={pessoaRapida} pessoas={pessoas} mes={mes} isGer={isGer} onVerPainel={(id) => trocarEscopo(id)} onClose={() => setPessoaRapida(null)} onSalvo={carregar} showToast={showToast} />}
+      {showAnalise && <ModalAnalise mes={mes} onClose={() => setShowAnalise(false)} showToast={showToast} />}
       {showDup && <ModalDuplicadas mes={mes} onClose={() => setShowDup(false)} onMudou={carregar} showToast={showToast} />}
       {showInteg && <ModalIntegracao onClose={() => setShowInteg(false)} showToast={showToast} />}
       {showImportarV && <ModalImportarVendas mesAtual={mes} onClose={() => setShowImportarV(false)} onDone={carregar} showToast={showToast} />}
@@ -6827,9 +6918,18 @@ function janela24h(ultimaEntradaTs) {
   return { aberta: true, urgente: resta < 2 * 3600000, resta, texto: h > 0 ? `${h}h ${m}min` : `${m}min`, fim };
 }
 
-function Ticks({ status, texto }) {
+function Ticks({ status, texto, erro, erroCodigo }) {
   if (!status) return null;
-  if (status === "failed") return <span title="A Meta recusou essa mensagem — ela NÃO chegou no celular do lead." style={{ marginLeft: 5, color: "#e0483d", fontWeight: 700, fontSize: 10.5 }}>! não entregue</span>;
+  if (status === "failed") {
+    const cru = [erroCodigo ? "(#" + erroCodigo + ")" : "", erro || ""].filter(Boolean).join(" ");
+    const explicado = cru ? explicaErroMeta(cru) : "A Meta não entregou essa mensagem.";
+    return (
+      <span className="msg-falhou" title="Clique pra ver o motivo"
+        onClick={(e) => { e.stopPropagation(); window.alert("Por que não entregou:\n\n" + explicado + (cru ? "\n\nErro da Meta: " + cru : "")); }}>
+        ! não entregue · por quê?
+      </span>
+    );
+  }
   const lida = status === "read";
   const dois = status === "delivered" || lida;
   const cor = lida ? "#53bdeb" : "rgba(0,0,0,.42)";
@@ -7415,7 +7515,7 @@ function InboxOficial({ isGer, showToast, onIrParaEvolution, target, onTargetUse
                         <OfMidia chatId={conversa.id} m={item.m} />
                       )}
                       {(!item.m.tipo || item.m.tipo === "text" || !item.m.arquivo) && item.m.content}
-                      <span className="of-msg-hora">{horaCurta(item.m.ts)}{item.m.role === "me" && <Ticks status={item.m.status} texto={!!item.m.template} />}</span>
+                      <span className="of-msg-hora">{horaCurta(item.m.ts)}{item.m.role === "me" && <Ticks status={item.m.status} erro={item.m.erro} erroCodigo={item.m.erroCodigo} texto={!!item.m.template} />}</span>
                     </div>
                   </div>
                 )

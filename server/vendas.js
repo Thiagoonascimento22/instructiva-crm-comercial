@@ -942,6 +942,42 @@ export function instalarVendas({ app, getDb, saveDB, proximoId, auth, gerenteOnl
   });
 
   /* ---------------- PAINEL (a planilha) ---------------- */
+
+  /* ============================================================
+     ANÁLISE DO MÊS — cursos, formas de pagamento e plataformas
+     Vendedor vê só as vendas dele; gerente vê o time todo.
+     ============================================================ */
+  app.get("/api/vendas/analise", auth, (req, res) => {
+    garantir();
+    const mes = String(req.query.mes || "").slice(0, 7) || mesDe(Date.now());
+    const ehGer = req.user.role === "gerente";
+    let lista = (db.vendas.vendas || []).filter((v) => mesDe(v.data) === mes);
+    if (!ehGer) {
+      const minha = (db.vendas.pessoas || []).find((p) => p.userId === req.user.id);
+      lista = minha ? lista.filter((v) => v.pessoaId === minha.id) : [];
+    }
+    const soma = (chave, rotulo) => {
+      const m = {};
+      lista.forEach((v) => {
+        const k = chave(v) || "—";
+        if (!m[k]) m[k] = { nome: k, qtd: 0, valor: 0, recebido: 0 };
+        m[k].qtd++; m[k].valor += num(v.valor); m[k].recebido += num(v.recebido);
+      });
+      return Object.values(m).sort((a, b) => b.valor - a.valor)
+        .map((x) => ({ ...x, ticket: x.qtd ? x.valor / x.qtd : 0, rotulo }));
+    };
+    const total = lista.reduce((s2, v) => s2 + num(v.valor), 0);
+    res.json({
+      mes, total, qtd: lista.length,
+      recebido: lista.reduce((s2, v) => s2 + num(v.recebido), 0),
+      ticket: lista.length ? total / lista.length : 0,
+      cursos: soma((v) => cursoCanonico(v.curso), "curso"),
+      formas: soma((v) => formaCanonica(v), "forma"),
+      plataformas: soma((v) => String(v.plataforma || "").trim() || "Direto", "plataforma"),
+      parcelas: soma((v) => (Number(v.parcelas) > 1 ? Number(v.parcelas) + "x" : "À vista"), "parcelas"),
+    });
+  });
+
   app.get("/api/vendas/painel", auth, permiteVend("vendas"), (req, res) => {
     garantir();
     const mes = mesValido(req.query.mes) ? req.query.mes : mesDe(Date.now());

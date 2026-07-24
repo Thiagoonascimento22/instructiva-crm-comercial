@@ -2915,6 +2915,16 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
   });
 
   /* ---- visão geral (todas as campanhas de uma vez) ---- */
+  app.get("/api/oficial/diagnostico", auth, gerenteOnly, async (req, res) => {
+    const temFfmpeg = await ffmpegOk();
+    res.json({
+      ffmpeg: temFfmpeg,
+      audio: temFfmpeg
+        ? "OK — áudio gravado no navegador é convertido pra OGG/Opus antes de ir pra Meta."
+        : "ATENÇÃO — o servidor está sem ffmpeg. Áudio gravado no Chrome/Android pode não ser entregue. Confira se o deploy usou o nixpacks.toml com ffmpeg.",
+    });
+  });
+
   app.get("/api/oficial/repasse/previa", auth, gerenteOnly, (req, res) => {
     garantirEstrutura();
     const porCamp = {};
@@ -3524,8 +3534,14 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
               const msg = (db.waChats[chatIdMsg].mensagens || []).find((x) => x.wamid === mid);
               if (msg) {
                 const ordem = { sent: 1, delivered: 2, read: 3 };
-                if (st.status === "failed") msg.status = "failed";
-                else if ((ordem[st.status] || 0) > (ordem[msg.status] || 0)) msg.status = st.status;
+                if (st.status === "failed") {
+                  msg.status = "failed";
+                  // guarda o PORQUÊ, pra tela poder explicar em vez de só "não entregue"
+                  const e0 = (st.errors && st.errors[0]) || {};
+                  const det = (e0.error_data && e0.error_data.details) || "";
+                  msg.erroCodigo = e0.code || null;
+                  msg.erro = [e0.title || e0.message, det].filter(Boolean).join(" — ") || ("erro " + (e0.code || "?"));
+                } else if ((ordem[st.status] || 0) > (ordem[msg.status] || 0)) msg.status = st.status;
               }
             }
             const campId = db.oficial.msgCampanha && db.oficial.msgCampanha[mid];
