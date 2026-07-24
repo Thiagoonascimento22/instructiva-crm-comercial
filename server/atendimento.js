@@ -235,7 +235,7 @@ Responda SOMENTE com JSON válido, sem markdown:
 Cada lista deve ter de 3 a 6 itens. Itens sempre em TEXTO CORRIDO, nunca objeto.`;
     const u = `VENDEDOR: ${vendedor.nome}
 
-VOLUME DO PERÍODO (sem dados de tempo — não avalie velocidade):
+VOLUME DO PERÍODO:
 - Conversas: ${vendedor.conversas} · leads que responderam: ${vendedor.leadsQueResponderam}
 - Leads que falaram e ficaram sem retorno nenhum: ${vendedor.semResposta}
 - Conversas que pararam no meio: ${vendedor.abandonadas}
@@ -264,16 +264,17 @@ de pessoa. Responda SOMENTE com JSON válido, sem markdown:
   "resumo": "8 a 12 frases sobre como o time atende hoje, com nome de quem puxa pra cima e de quem trava",
   "oQueVaiBem": ["2 a 4 frases: o ponto forte, quem faz isso bem e o exemplo real"],
   "problemas": ["2 a 4 frases: o problema, quem está envolvido, o trecho que prova e quanto custa"],
-  "porPessoa": [{"nome":"Fulano","nota":7,"leitura":"4 a 6 frases francas sobre como ele atende, o que acerta e o que perde","prioridade":"a única coisa que ele precisa mudar agora"}],
+  "porPessoa": [{"nome":"Fulano","leitura":"4 a 6 frases francas sobre como ele atende, o que acerta e o que perde","prioridade":"a única coisa que ele precisa mudar agora"}],
   "processo": ["2 a 3 frases: falha que é do processo e atinge todo mundo, não é culpa de uma pessoa"],
   "sugestoes": ["2 a 3 frases: ação pro gestor, da mais urgente pra menos"]
 }
 
-Inclua TODOS os vendedores em "porPessoa". Itens das listas sempre em TEXTO CORRIDO, nunca objeto.`;
+Inclua TODOS os vendedores em "porPessoa", mas NÃO dê nota individual aqui — a nota de cada
+pessoa é gerada separadamente, numa análise só dela. Itens das listas sempre em TEXTO CORRIDO, nunca objeto.`;
     const linhas = vendedores.map((v) =>
       `- ${v.nome}: ${v.conversas} conversas · ${v.leadsQueResponderam} leads responderam · ${v.semResposta} sem retorno · ${v.abandonadas} pararam no meio · ${v.msgsPorConversa} msgs/conversa`
     ).join("\n");
-    const u = `VOLUME DO TIME (sem dados de tempo — não avalie velocidade):\n${linhas}\n\nAMOSTRAS DE CONVERSA DE CADA UM (é aqui que está a avaliação):\n${amostras}`;
+    const u = `VOLUME DO TIME:\n${linhas}\n\nAMOSTRAS DE CONVERSA DE CADA UM (é aqui que está a avaliação):\n${amostras}`;
     const r = await chamarIA(system, u, 4000);
     if (r._cru) return { notaTime: null, resumo: r._cru.slice(0, 3000), oQueVaiBem: [], problemas: [], porPessoa: [], processo: [], sugestoes: [] };
     return {
@@ -281,7 +282,7 @@ Inclua TODOS os vendedores em "porPessoa". Itens das listas sempre em TEXTO CORR
       oQueVaiBem: listaTexto(r.oQueVaiBem), problemas: listaTexto(r.problemas),
       processo: listaTexto(r.processo), sugestoes: listaTexto(r.sugestoes),
       porPessoa: (Array.isArray(r.porPessoa) ? r.porPessoa : []).map((p) => ({
-        nome: texto(p && p.nome), nota: numero(p && p.nota),
+        nome: texto(p && p.nome),
         leitura: texto(p && p.leitura), prioridade: texto(p && p.prioridade),
       })).filter((p) => p.nome),
     };

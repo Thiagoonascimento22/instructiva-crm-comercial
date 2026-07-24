@@ -3275,11 +3275,10 @@ function PainelAtendimento({ showToast }) {
   }
 
   const alerta = (v) => {
-    if (v.pctSemResposta >= 25) return { cor: "ruim", txt: `${v.pctSemResposta}% sem resposta` };
-    if (v.tempoPrimeiraResposta > 4 * 3600000) return { cor: "ruim", txt: "demora na 1ª resposta" };
+    if (v.pctSemResposta >= 25) return { cor: "ruim", txt: `${v.pctSemResposta}% sem retorno` };
     if (v.pctAbandonadas >= 30) return { cor: "atencao", txt: `${v.pctAbandonadas}% param no meio` };
-    if (v.tempoRespostaMediana > 60 * 60000) return { cor: "atencao", txt: "responde devagar" };
-    return { cor: "bom", txt: "ritmo saudável" };
+    if (v.pctSemResposta >= 10) return { cor: "atencao", txt: `${v.pctSemResposta}% sem retorno` };
+    return { cor: "bom", txt: "acompanha bem" };
   };
   const corNota = (n) => (n == null ? "" : n >= 8 ? " bom" : n >= 6 ? " ok" : " ruim");
   // blindagem: se vier objeto da IA, vira texto em vez de quebrar a tela
@@ -3356,7 +3355,6 @@ function PainelAtendimento({ showToast }) {
             <div className="ia-hero-nums">
               <b>{dados.time.conversas}</b> conversas <i>·</i>
               <b>{dados.vendedores.length}</b> vendedores <i>·</i>
-              <b>{dados.time.tempoRespostaTxt || "—"}</b> de resposta <i>·</i>
               <b className={dados.time.pctSemResposta >= 20 ? "ruim" : ""}>{dados.time.pctSemResposta}%</b> sem resposta
             </div>
             <button className="ia-btn" disabled={rodando === "__equipe" || !dados.temIA} onClick={analisarEquipe}>
@@ -3377,12 +3375,11 @@ function PainelAtendimento({ showToast }) {
               <Bloco tit="Falhas de processo" itens={eq.processo} cls="" />
               {Array.isArray(eq.porPessoa) && eq.porPessoa.length > 0 && (
                 <div className="ia-pessoas">
-                  <span className="at-bloco-tit">Leitura de cada um</span>
+                  <span className="at-bloco-tit">Leitura de cada um <small style={{textTransform:"none",letterSpacing:0,fontWeight:600}}>· a nota de cada um sai na análise individual</small></span>
                   {eq.porPessoa.map((p, i) => (
                     <div key={i} className="ia-pessoa">
                       <div className="ia-pessoa-top">
                         <b>{txt(p.nome)}</b>
-                        {p.nota != null && <span className={"ia-mini-nota" + corNota(p.nota)}>{p.nota}</span>}
                       </div>
                       <p>{txt(p.leitura)}</p>
                       {p.prioridade && <div className="ia-prio">Prioridade: {txt(p.prioridade)}</div>}
@@ -3413,7 +3410,7 @@ function PainelAtendimento({ showToast }) {
                 <span className={"at-selo " + al.cor}>{al.txt}</span>
                 <div className="ia-card-nums">
                   <span>{v.conversas} conversas</span>
-                  <span>1ª resposta {v.tempoPrimeiraRespostaTxt || "—"}</span>
+                  <span>{v.leadsQueResponderam} responderam</span>
                   <span>{v.semResposta} sem resposta</span>
                 </div>
                 <span className="ia-card-ver">{a ? "ver análise →" : "abrir →"}</span>
@@ -3437,14 +3434,11 @@ function PainelAtendimento({ showToast }) {
 
             <div className="at-nums">
               <div><span>Conversas</span><b>{v.conversas}</b></div>
-              <div className="so-info"><span>1ª resposta</span><b>{v.tempoPrimeiraRespostaTxt || "—"}</b></div>
-              <div className="so-info"><span>Resposta média</span><b>{v.tempoRespostaMedianaTxt || "—"}</b></div>
               <div><span>Sem resposta</span><b className={v.pctSemResposta >= 25 ? "ruim" : ""}>{v.semResposta} ({v.pctSemResposta}%)</b></div>
               <div><span>Param no meio</span><b>{v.abandonadas} ({v.pctAbandonadas}%)</b></div>
               <div><span>Msgs por conversa</span><b>{v.msgsPorConversa}</b></div>
             </div>
 
-            <div className="ia-nota-tempo">Os tempos acima são informativos — a IA não usa velocidade de resposta na análise nem na nota. Leads sem retorno, sim.</div>
             {!aSel && <div className="ia-vazio">Clique em <b>Analisar com IA</b> pra ela ler as conversas dele e dar o parecer.</div>}
 
             {aSel && (
