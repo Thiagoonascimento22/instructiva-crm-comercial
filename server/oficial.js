@@ -8,8 +8,30 @@
 
 import { execFile } from "child_process";
 import os from "os";
+import { createRequire } from "module";
 
+const require = createRequire(import.meta.url);
 const GRAPH = "https://graph.facebook.com/v21.0";
+
+// Descobre o binário do ffmpeg de forma robusta, feito UMA vez.
+// 1) ffmpeg-static: binário embutido via npm — NÃO depende do PATH do servidor
+//    (no Railway/nixpacks o "ffmpeg" some do PATH em runtime e todo áudio falha).
+// 2) fallback: "ffmpeg" do PATH / caminhos comuns do sistema.
+const FFMPEG_BIN = (() => {
+  try {
+    const est = require("ffmpeg-static");
+    if (est && typeof est === "string") {
+      try { const f = require("fs"); if (f.existsSync(est)) return est; } catch (_) { return est; }
+    }
+  } catch (_) {}
+  try {
+    const f = require("fs");
+    for (const c of ["/usr/bin/ffmpeg", "/usr/local/bin/ffmpeg", "/opt/homebrew/bin/ffmpeg", "/bin/ffmpeg"]) {
+      if (f.existsSync(c)) return c;
+    }
+  } catch (_) {}
+  return "ffmpeg"; // último recurso: procura no PATH
+})();
 
 export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gerenteOnly, MEDIA_DIR, fs, path }) {
   // O index.js REATRIBUI o objeto db dentro de loadDB(). Por isso resolvemos
@@ -339,7 +361,7 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
      ------------------------------------------------------------ */
   function ffmpegOk() {
     return new Promise((resolve) => {
-      execFile("ffmpeg", ["-version"], (err) => resolve(!err));
+      execFile(FFMPEG_BIN, ["-version"], (err) => resolve(!err));
     });
   }
   async function audioParaMeta(buffer, mime) {
@@ -362,7 +384,7 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
     const saida = path.join(tmp, "out_" + marca + ".ogg");
     try {
       fs.writeFileSync(entrada, buffer);
-      const rodar = (args) => new Promise((resolve) => execFile("ffmpeg", args, (err) => resolve(!err)));
+      const rodar = (args) => new Promise((resolve) => execFile(FFMPEG_BIN, args, (err) => resolve(!err)));
       // 1) troca só o container (instantâneo, quando já é opus)
       let ok = await rodar(["-y", "-i", entrada, "-vn", "-c:a", "copy", "-f", "ogg", saida]);
       let bom = ok && fs.existsSync(saida) && fs.statSync(saida).size > 200
