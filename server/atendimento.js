@@ -213,15 +213,27 @@ MAS AVALIE SIM O ABANDONO:
 - Ao citar isso, fale de quantidade ("deixou 8 leads sem retorno"), nunca de tempo.
 
 O RESTO DA NOTA vem da qualidade da conversa: abordagem, escuta, argumentação, resposta a
-objeção, apresentação da oferta, condução até o fechamento, clareza e tom.`;
+objeção, apresentação da oferta, condução até o fechamento, clareza e tom.
+
+ESCALA DA NOTA — de 0 a 10, e use a escala INTEIRA:
+- 0 a 2: praticamente não atendeu. Leads largados, respostas soltas, nenhuma condução de venda.
+- 3 a 4: falhas graves e frequentes. Abandona conversa quente, não trata objeção, não oferta.
+- 5 a 6: mediano. Atende, mas perde venda por não conduzir até o fim ou por ser genérico demais.
+- 7 a 8: bom vendedor. Conduz a conversa, trata objeção, apresenta oferta e busca o fechamento.
+  Tem pontos a melhorar, mas o trabalho está sendo bem feito.
+- 9 a 10: excelente. Personaliza, escuta, contorna objeção com técnica e fecha com naturalidade.
+
+Não seja duro por esporte: se a pessoa conduz bem a venda, dê 7, 8 ou 9 sem medo. Nota alta com
+crítica pontual é uma avaliação legítima. O que não pode é inventar elogio pra quem está mal.
+Meia nota (7.5, 8.5) é permitida.`;
 
   async function analisarVendedor(vendedor, conversas) {
     const system = TOM + `
 
 Responda SOMENTE com JSON válido, sem markdown:
 {
-  "nota": 6.5,
-  "notaPorque": "1 ou 2 frases diretas explicando a nota",
+  "nota": 7.5,
+  "notaPorque": "1 ou 2 frases diretas explicando a nota, dizendo o que puxou pra cima e o que puxou pra baixo",
   "resumo": "6 a 10 frases descrevendo como essa pessoa atende de verdade: ritmo, tom, condução da venda, onde ela ganha e onde ela perde o cliente",
   "fortes": ["texto de 2 a 4 frases: o que funciona, o trecho que prova e por que isso ajuda a vender"],
   "falhas": ["texto de 2 a 4 frases: o problema, o trecho que prova, e quanto isso custou em venda perdida"],
@@ -260,7 +272,7 @@ Você está olhando o time INTEIRO. Compare as pessoas entre si, mostre quem pux
 pra cima, quem está travando, e o que é problema de processo (que atinge todo mundo) e não
 de pessoa. Responda SOMENTE com JSON válido, sem markdown:
 {
-  "notaTime": 6.5,
+  "notaTime": 7,
   "resumo": "8 a 12 frases sobre como o time atende hoje, com nome de quem puxa pra cima e de quem trava",
   "oQueVaiBem": ["2 a 4 frases: o ponto forte, quem faz isso bem e o exemplo real"],
   "problemas": ["2 a 4 frases: o problema, quem está envolvido, o trecho que prova e quanto custa"],

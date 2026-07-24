@@ -3366,7 +3366,7 @@ function PainelAtendimento({ showToast }) {
             <div className="ia-rel">
               {eq.notaTime != null && (
                 <div className={"ia-nota" + corNota(eq.notaTime)}>
-                  <b>{eq.notaTime}</b><span>nota do time</span>
+                  <b>{eq.notaTime}<i>/10</i></b><span>nota do time</span>
                 </div>
               )}
               <p className="at-resumo">{txt(eq.resumo)}</p>
@@ -3445,7 +3445,7 @@ function PainelAtendimento({ showToast }) {
               <div className="ia-rel">
                 {aSel.nota != null && (
                   <div className={"ia-nota" + corNota(aSel.nota)}>
-                    <b>{aSel.nota}</b><span>{txt(aSel.notaPorque) || "nota do atendimento"}</span>
+                    <b>{aSel.nota}<i>/10</i></b><span>{txt(aSel.notaPorque) || "nota do atendimento"}</span>
                   </div>
                 )}
                 <p className="at-resumo">{txt(aSel.resumo)}</p>
