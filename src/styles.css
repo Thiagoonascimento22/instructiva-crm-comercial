@@ -4161,3 +4161,6 @@ select.input:disabled, .input:disabled { color: var(--muted); opacity: 1; -webki
 .rep-final-item { display: flex; justify-content: space-between; padding: 9px 13px; border-radius: 10px; background: var(--surface-2); }
 .rep-final-item b { font-size: 13px; color: var(--text); }
 .rep-final-item span { font-size: 12.5px; color: var(--muted); }
+.rep-qtd { color: var(--brand); font-weight: 800; }
+.rep-presos { font-size: 11px; color: var(--muted); opacity: .85; }
+.rep-linha .btn-sm { flex: none; }

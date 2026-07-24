@@ -2153,34 +2153,53 @@ function explicaErroMeta(msg) {
 function ModalRepasse({ onClose, showToast, onFeito }) {
   const [dados, setDados] = useState(null);
   const [escolhas, setEscolhas] = useState({});
-  const [rodando, setRodando] = useState(false);
+  const [rodando, setRodando] = useState("");
   const [feito, setFeito] = useState(null);
 
-  useEffect(() => { api.ofRepassePrevia().then(setDados).catch((e) => showToast(e.message)); }, []);
+  const carregar = () => api.ofRepassePrevia().then((d) => {
+    setDados(d);
+    // já deixa marcado o dono do número de cada campanha
+    const pre = {};
+    (d.grupos || []).forEach((g) => { if (g.donoNumeroId) pre[g.chave] = g.donoNumeroId; });
+    setEscolhas((e) => ({ ...pre, ...e }));
+  }).catch((e) => showToast(e.message));
+  useEffect(() => { carregar(); }, []);
 
-  const destinoDe = (g) => escolhas[g.campanhaId || "sem_campanha"] || g.donoNumeroId || "";
-  const nomeDestino = (g) => {
-    const id = destinoDe(g);
-    const v = (dados.vendedores || []).find((x) => x.id === id);
-    return v ? v.nome : "";
-  };
-  const prontos = dados ? dados.grupos.filter((g) => destinoDe(g)) : [];
-  const totalMover = prontos.reduce((s, g) => s + g.conversas, 0);
+  const nomeDe = (id) => ((dados && dados.vendedores) || []).find((v) => v.id === id)?.nome || "";
 
-  async function executar() {
-    if (!totalMover) return;
-    if (!window.confirm(`Passar ${totalMover} conversa(s) para os vendedores? Isso muda o dono das conversas.`)) return;
-    setRodando(true);
+  // passa UMA campanha (o clique direto que o Celso pediu)
+  async function passarUma(g) {
+    const dest = escolhas[g.chave];
+    if (!dest) return showToast("Escolha o vendedor dessa campanha");
+    if (!window.confirm(`Passar ${g.aRepassar} conversa(s) de "${g.campanha}" para ${nomeDe(dest)}?`)) return;
+    setRodando(g.chave);
     try {
-      const porCampanha = {};
-      prontos.forEach((g) => { porCampanha[g.campanhaId || "sem_campanha"] = destinoDe(g); });
-      const r = await api.ofRepasse({ porCampanha, campanhas: prontos.map((g) => g.campanhaId || "sem_campanha") });
+      const r = await api.ofRepasse({ porCampanha: { [g.chave]: dest } });
+      showToast(`✓ ${r.movidas} conversa(s) para ${nomeDe(dest)}`);
+      await carregar();
+      onFeito && onFeito();
+    } catch (e) { showToast("✗ " + e.message); }
+    setRodando("");
+  }
+
+  // passa TODAS de uma vez
+  async function passarTudo() {
+    const mapa = {};
+    (dados.grupos || []).forEach((g) => { if (escolhas[g.chave]) mapa[g.chave] = escolhas[g.chave]; });
+    const total = (dados.grupos || []).filter((g) => escolhas[g.chave]).reduce((s2, g) => s2 + g.aRepassar, 0);
+    if (!total) return showToast("Escolha o vendedor de pelo menos uma campanha");
+    if (!window.confirm(`Passar ${total} conversa(s) para os vendedores?`)) return;
+    setRodando("tudo");
+    try {
+      const r = await api.ofRepasse({ porCampanha: mapa });
       setFeito(r);
       showToast(`✓ ${r.movidas} conversa(s) repassadas`);
       onFeito && onFeito();
     } catch (e) { showToast("✗ " + e.message); }
-    setRodando(false);
+    setRodando("");
   }
+
+  const totalSel = dados ? (dados.grupos || []).filter((g) => escolhas[g.chave]).reduce((s2, g) => s2 + g.aRepassar, 0) : 0;
 
   return (
     <Portal>
@@ -2196,37 +2215,46 @@ function ModalRepasse({ onClose, showToast, onFeito }) {
           {dados && !feito && (
             <>
               <div className="panel-sub" style={{ padding: "0 4px 12px" }}>
-                Essas conversas de disparo estão hoje com <b>você</b>. O sistema já sugere o vendedor
-                <b> dono do número</b> que enviou cada campanha — confira e ajuste se precisar.
+                {dados.totalARepassar > 0
+                  ? <><b>{dados.totalARepassar} conversa(s)</b> de disparo estão presas com gerente/sem dono. Confira o vendedor de cada campanha e clique em <b>Passar</b>.</>
+                  : "Tudo certo — nenhuma conversa de disparo presa com gerente."}
               </div>
 
-              {dados.grupos.length === 0 && <div className="crm-col-vazio">Nenhuma conversa de disparo sua pra repassar.</div>}
+              {dados.grupos.length === 0 && <div className="crm-col-vazio">Nada pra repassar.</div>}
 
               <div className="rep-lista">
                 {dados.grupos.map((g) => {
-                  const chave = g.campanhaId || "sem_campanha";
-                  const dest = destinoDe(g);
+                  const dest = escolhas[g.chave] || "";
+                  const presos = Object.entries(g.presosCom || {}).map(([n, q]) => `${n}: ${q}`).join(" · ");
                   return (
-                    <div key={chave} className={"rep-linha" + (dest ? "" : " sem")}>
+                    <div key={g.chave} className={"rep-linha" + (dest ? "" : " sem")}>
                       <div className="rep-id">
                         <b>{g.campanha}</b>
-                        <span>{g.numeroApelido} · {g.conversas} conversa(s) · {g.responderam} responderam</span>
+                        <span>
+                          {g.numeroApelido} · <b className="rep-qtd">{g.aRepassar}</b> pra passar
+                          {g.jaOk > 0 ? ` · ${g.jaOk} já com vendedor` : ""}
+                          {g.responderam > 0 ? ` · ${g.responderam} responderam` : ""}
+                        </span>
+                        {presos && <span className="rep-presos">hoje com {presos}</span>}
                       </div>
-                      <select className="select" value={dest} onChange={(e) => setEscolhas({ ...escolhas, [chave]: e.target.value })}>
+                      <select className="select" value={dest}
+                        onChange={(e) => setEscolhas({ ...escolhas, [g.chave]: e.target.value })}>
                         <option value="">— escolher vendedor —</option>
                         {(dados.vendedores || []).map((v) => <option key={v.id} value={v.id}>{v.nome}</option>)}
                       </select>
-                      {dest && <span className="rep-ok">→ {nomeDestino(g)}</span>}
+                      <button className="btn btn-primary btn-sm" disabled={!dest || rodando} onClick={() => passarUma(g)}>
+                        {rodando === g.chave ? "…" : "Passar"}
+                      </button>
                     </div>
                   );
                 })}
               </div>
 
               <div className="modal-foot">
-                <span className="panel-sub">{totalMover} conversa(s) prontas pra passar</span>
-                <button className="btn" onClick={onClose}>Cancelar</button>
-                <button className="btn btn-primary" disabled={!totalMover || rodando} onClick={executar}>
-                  {rodando ? "Passando…" : `Passar ${totalMover} conversa(s)`}
+                <span className="panel-sub">{totalSel} conversa(s) selecionadas</span>
+                <button className="btn" onClick={onClose}>Fechar</button>
+                <button className="btn btn-primary" disabled={!totalSel || !!rodando} onClick={passarTudo}>
+                  {rodando === "tudo" ? "Passando…" : `Passar todas (${totalSel})`}
                 </button>
               </div>
             </>
@@ -2240,11 +2268,6 @@ function ModalRepasse({ onClose, showToast, onFeito }) {
                   <div key={nome} className="rep-final-item"><b>{nome}</b><span>{qtd} conversa(s)</span></div>
                 ))}
               </div>
-              {feito.semDestino > 0 && (
-                <div className="panel-sub" style={{ marginTop: 10 }}>
-                  {feito.semDestino} conversa(s) ficaram com você por não ter vendedor definido.
-                </div>
-              )}
               <button className="btn btn-primary" style={{ marginTop: 16, width: "100%", justifyContent: "center" }} onClick={onClose}>Fechar</button>
             </div>
           )}

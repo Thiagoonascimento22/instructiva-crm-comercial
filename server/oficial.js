@@ -2841,60 +2841,73 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
     return null;
   }
 
-  // prévia: mostra o que seria feito, agrupado por campanha
+  // conversa que veio de disparo (campanhas antigas nem sempre têm a marca)
+  const ehDeDisparo = (c) => !!(c.origemDisparo || c.campanhaId || c.campanha);
+  // quem NÃO deveria ser dono final: gerente/admin ou ninguém
+  function precisaRepassar(c) {
+    if (!c.vendedorId) return true;
+    const u = (db.users || []).find((x) => x.id === c.vendedorId);
+    return !u || u.role !== "vendedor";
+  }
+
+  // prévia: TODAS as campanhas com conversas presas em gerente/sem dono
   app.get("/api/oficial/repasse/previa", auth, gerenteOnly, (req, res) => {
     garantirEstrutura();
-    const soDoUsuario = req.query.todos !== "1";
     const grupos = {};
     (db.oficial.chats || []).forEach((c) => {
-      if (!c.origemDisparo) return;
-      if (soDoUsuario && c.vendedorId !== req.user.id) return;
-      const cid = c.campanhaId || "sem_campanha";
+      if (!ehDeDisparo(c)) return;
+      const cid = c.campanhaId || ("nome:" + (c.campanha || "sem"));
       if (!grupos[cid]) {
         const camp = (db.oficial.campanhas || []).find((x) => x.id === c.campanhaId);
         const n = acharNumero(c.numeroOficialId);
         const dono = n && n.vendedorId ? (db.users || []).find((u) => u.id === n.vendedorId) : null;
         grupos[cid] = {
           campanhaId: c.campanhaId || null,
+          chave: cid,
           campanha: c.campanha || (camp && camp.nome) || "Sem campanha",
           numeroId: c.numeroOficialId || null,
           numeroApelido: n ? (n.apelido || n.numero) : "—",
           donoNumeroId: dono ? dono.id : null,
           donoNumeroNome: dono ? dono.nome : "",
-          conversas: 0, responderam: 0,
+          total: 0, aRepassar: 0, jaOk: 0, responderam: 0,
+          presosCom: {},
         };
       }
-      grupos[cid].conversas++;
-      if (c.respondeu) grupos[cid].responderam++;
+      const g = grupos[cid];
+      g.total++;
+      if (c.respondeu) g.responderam++;
+      if (precisaRepassar(c)) {
+        g.aRepassar++;
+        const nome = c.vendedorNome || "sem dono";
+        g.presosCom[nome] = (g.presosCom[nome] || 0) + 1;
+      } else g.jaOk++;
     });
     const vendedores = (db.users || []).filter((u) => u.role === "vendedor" && u.ativo)
       .map((u) => ({ id: u.id, nome: u.nome, foto: u.foto || "" }));
-    res.json({
-      grupos: Object.values(grupos).sort((a, b) => b.conversas - a.conversas),
-      vendedores,
-      meuId: req.user.id,
-    });
+    const lista = Object.values(grupos)
+      .filter((g) => g.aRepassar > 0)
+      .sort((a, b) => b.aRepassar - a.aRepassar);
+    res.json({ grupos: lista, vendedores, totalARepassar: lista.reduce((s2, g) => s2 + g.aRepassar, 0) });
   });
 
-  // executa o repasse
+  // executa: move só o que está com gerente/sem dono (não mexe no que já está certo)
   app.post("/api/oficial/repasse", auth, gerenteOnly, (req, res) => {
     garantirEstrutura();
     const b = req.body || {};
-    const soDoUsuario = b.todos !== true;
-    const mapa = { porCampanha: b.porCampanha && typeof b.porCampanha === "object" ? b.porCampanha : {} };
-    const somenteCampanhas = Array.isArray(b.campanhas) && b.campanhas.length ? new Set(b.campanhas) : null;
+    const mapa = (b.porCampanha && typeof b.porCampanha === "object") ? b.porCampanha : {};
+    const chaves = Object.keys(mapa);
+    if (!chaves.length) return res.status(400).json({ error: "Escolha ao menos uma campanha" });
 
     let movidas = 0, semDestino = 0;
     const porVendedor = {};
     (db.oficial.chats || []).forEach((c) => {
-      if (!c.origemDisparo) return;
-      if (soDoUsuario && c.vendedorId !== req.user.id) return;
-      if (somenteCampanhas && !somenteCampanhas.has(c.campanhaId || "sem_campanha")) return;
-      const destino = repasseAlvo(c, mapa);
-      if (!destino) { semDestino++; return; }
-      const v = (db.users || []).find((u) => u.id === destino && u.ativo);
+      if (!ehDeDisparo(c)) return;
+      if (!precisaRepassar(c)) return;              // já está com um vendedor: não mexe
+      const cid = c.campanhaId || ("nome:" + (c.campanha || "sem"));
+      const destinoId = mapa[cid];
+      if (!destinoId) return;                       // campanha não selecionada
+      const v = (db.users || []).find((u) => u.id === destinoId && u.role === "vendedor" && u.ativo);
       if (!v) { semDestino++; return; }
-      if (c.vendedorId === v.id) return; // já é dele
       c.vendedorId = v.id;
       c.vendedorNome = v.nome;
       c.atribuidoEm = Date.now();
