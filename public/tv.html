@@ -441,11 +441,12 @@ return '<div class="dg" style="--c:'+PAL[i%PAL.length]+'"><span class="bola"></s
 
 /* semanas: linhas finas, atual em laranja */
 var sm=d.semanas||[],ms2=sm.reduce(function(m,x){return Math.max(m,x.valor)},0)||1;
+var somaSem=sm.reduce(function(t,x){return t+x.valor},0)||1;
 $("ls").innerHTML=sm.length?sm.map(function(x,i){
 return '<div class="vd'+(x.atual?" t1":"")+'"><span class="p">'+(i+1)+'ª</span>'
-+'<div class="n"><b>'+esc(x.rot||"")+(x.atual?" · semana atual":"")+'</b><s>'+x.qtd+' venda(s)</s></div>'
++'<div class="n"><b>'+esc(x.rot||"")+(x.atual?" · semana atual":"")+'</b><s>'+x.qtd+' venda(s)'+(x.cruzaMes?" · inclui dias do mês vizinho":"")+'</s></div>'
 +'<div class="trk"><i style="width:'+Math.max(1.5,x.valor/ms2*100)+'%"></i></div>'
-+'<div class="v"><b>'+din(x.valor)+'</b><s>'+(d.geral.venda>0?Math.round(x.valor/d.geral.venda*100):0)+'% do mês</s></div></div>'}).join("")
++'<div class="v"><b>'+din(x.valor)+'</b><s>'+Math.round(x.valor/somaSem*100)+'% do período</s></div></div>'}).join("")
 :'<div class="nd">Sem vendas no mês ainda.</div>';
 }
 

@@ -864,20 +864,33 @@ export function instalarVendas({ app, getDb, saveDB, proximoId, auth, gerenteOnl
     let diasUteis = 0;
     for (let d = 1; d <= diasNoMes; d++) { const w = new Date(ano, mm - 1, d).getDay(); if (w !== 0 && w !== 6) diasUteis++; }
     const metaDia = metaTotal > 0 ? metaTotal / diasUteis : 0;
-    // ---- faturamento por semana do mês ----
+    /* ---- faturamento por semana ----
+       Usa a MESMA semana do card lá de cima: domingo a sábado.
+       Antes aqui era bloco de 7 dias contados do dia 1, então o número
+       da "semana atual" não batia com o card e parecia erro. */
     const semanas = [];
-    let ini2 = new Date(ano, mm - 1, 1);
-    while (ini2.getMonth() === mm - 1) {
-      const fim2 = new Date(ini2); fim2.setDate(fim2.getDate() + 6);
-      const ate = fim2.getMonth() === mm - 1 ? fim2.getDate() : diasNoMes;
-      const dias = porDia.slice(ini2.getDate() - 1, ate);
+    const dd = (t) => { const x = new Date(t); return String(x.getDate()).padStart(2, "0") + "/" + String(x.getMonth() + 1).padStart(2, "0"); };
+    // começa no domingo da semana em que cai o dia 1º
+    const cursor = new Date(ano, mm - 1, 1);
+    cursor.setHours(0, 0, 0, 0);
+    cursor.setDate(cursor.getDate() - cursor.getDay());
+    const limite = new Date(ano, mm - 1, diasNoMes, 23, 59, 59).getTime();
+    const hojeTs = Date.now();
+    while (cursor.getTime() <= limite) {
+      const iniS = new Date(cursor); iniS.setHours(0, 0, 0, 0);
+      const fimS = new Date(iniS); fimS.setDate(fimS.getDate() + 7);   // exclusivo
+      const daSem = (db.vendas.lista || []).filter((v) => v.data >= iniS.getTime() && v.data < fimS.getTime());
+      const fimVisual = new Date(fimS.getTime() - 1);
+      const cruzaMes = iniS.getMonth() !== mm - 1 || fimVisual.getMonth() !== mm - 1;
       semanas.push({
-        rot: String(ini2.getDate()).padStart(2, "0") + "/" + String(mm).padStart(2, "0") + " a " + String(ate).padStart(2, "0") + "/" + String(mm).padStart(2, "0"),
-        valor: dias.reduce((s2, x) => s2 + x.valor, 0),
-        qtd: dias.reduce((s2, x) => s2 + x.qtd, 0),
-        atual: diaHoje >= ini2.getDate() && diaHoje <= ate,
+        rot: dd(iniS) + " a " + dd(fimVisual),
+        valor: daSem.reduce((s2, v) => s2 + num(v.valor), 0),
+        qtd: daSem.length,
+        recebido: daSem.reduce((s2, v) => s2 + num(v.recebido), 0),
+        atual: ehMesAtual && hojeTs >= iniS.getTime() && hojeTs < fimS.getTime(),
+        cruzaMes,
       });
-      ini2 = new Date(ano, mm - 1, ate + 1);
+      cursor.setDate(cursor.getDate() + 7);
     }
 
     // ---- DESTAQUE DO DIA: quem mais vendeu hoje ----
