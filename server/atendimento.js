@@ -198,7 +198,22 @@ COMO AVALIAR:
   Análise curta e genérica não serve pra nada — quem lê precisa saber exatamente o que aconteceu.
 - Escreva como gestor falando com gestor: objetivo, sem jargão corporativo, sem enrolação.
 - Português do Brasil. Critique o trabalho e o comportamento, nunca a pessoa.
-- Termine sempre com o que fazer na prática, em ordem de prioridade.`;
+- Termine sempre com o que fazer na prática, em ordem de prioridade.
+
+NÃO AVALIE VELOCIDADE:
+- Ignore completamente tempo de resposta, demora, rapidez, horário e pontualidade. Esses dados
+  estão sendo revisados e não são confiáveis agora.
+- Nada de "demorou X horas", "respondeu rápido", "resposta lenta", "atendeu fora do horário".
+  Nem nos pontos fortes, nem nas falhas, nem na nota. Nem uma menção.
+
+MAS AVALIE SIM O ABANDONO:
+- Lead que mandou mensagem e NUNCA teve retorno é falha grave e entra na análise e na nota.
+  Isso não é velocidade, é lead largado.
+- Conversa que parou no meio, sem fechamento nem follow-up, também entra.
+- Ao citar isso, fale de quantidade ("deixou 8 leads sem retorno"), nunca de tempo.
+
+O RESTO DA NOTA vem da qualidade da conversa: abordagem, escuta, argumentação, resposta a
+objeção, apresentação da oferta, condução até o fechamento, clareza e tom.`;
 
   async function analisarVendedor(vendedor, conversas) {
     const system = TOM + `
@@ -220,16 +235,13 @@ Responda SOMENTE com JSON válido, sem markdown:
 Cada lista deve ter de 3 a 6 itens. Itens sempre em TEXTO CORRIDO, nunca objeto.`;
     const u = `VENDEDOR: ${vendedor.nome}
 
-NÚMEROS DO PERÍODO:
+VOLUME DO PERÍODO (sem dados de tempo — não avalie velocidade):
 - Conversas: ${vendedor.conversas} · leads que responderam: ${vendedor.leadsQueResponderam}
-- Tempo até a 1ª resposta: ${vendedor.tempoPrimeiraRespostaTxt || "sem dado"}
-- Tempo médio de resposta: ${vendedor.tempoRespostaMedianaTxt || "sem dado"}
-- Leads que falaram e ficaram SEM resposta: ${vendedor.semResposta} (${vendedor.pctSemResposta}%)
-- Conversas abandonadas no meio: ${vendedor.abandonadas} (${vendedor.pctAbandonadas}%)
+- Leads que falaram e ficaram sem retorno nenhum: ${vendedor.semResposta}
+- Conversas que pararam no meio: ${vendedor.abandonadas}
 - Mensagens enviadas por conversa: ${vendedor.msgsPorConversa}
-- Atendimentos fora do horário comercial: ${vendedor.foraDoHorario}
 
-CONVERSAS REAIS:
+CONVERSAS REAIS (é aqui que está a avaliação):
 ${conversas}`;
     const r = await chamarIA(system, u, 3000);
     if (r._cru) return { nota: null, resumo: r._cru.slice(0, 2500), fortes: [], falhas: [], padroes: [], sugestoes: [], frasesBoas: [], frasesRuins: [] };
@@ -259,9 +271,9 @@ de pessoa. Responda SOMENTE com JSON válido, sem markdown:
 
 Inclua TODOS os vendedores em "porPessoa". Itens das listas sempre em TEXTO CORRIDO, nunca objeto.`;
     const linhas = vendedores.map((v) =>
-      `- ${v.nome}: ${v.conversas} conversas · 1ª resposta ${v.tempoPrimeiraRespostaTxt || "—"} · resposta média ${v.tempoRespostaMedianaTxt || "—"} · sem resposta ${v.semResposta} (${v.pctSemResposta}%) · abandonadas ${v.abandonadas} (${v.pctAbandonadas}%) · ${v.msgsPorConversa} msgs/conversa`
+      `- ${v.nome}: ${v.conversas} conversas · ${v.leadsQueResponderam} leads responderam · ${v.semResposta} sem retorno · ${v.abandonadas} pararam no meio · ${v.msgsPorConversa} msgs/conversa`
     ).join("\n");
-    const u = `NÚMEROS DO TIME:\n${linhas}\n\nAMOSTRAS DE CONVERSA DE CADA UM:\n${amostras}`;
+    const u = `VOLUME DO TIME (sem dados de tempo — não avalie velocidade):\n${linhas}\n\nAMOSTRAS DE CONVERSA DE CADA UM (é aqui que está a avaliação):\n${amostras}`;
     const r = await chamarIA(system, u, 4000);
     if (r._cru) return { notaTime: null, resumo: r._cru.slice(0, 3000), oQueVaiBem: [], problemas: [], porPessoa: [], processo: [], sugestoes: [] };
     return {

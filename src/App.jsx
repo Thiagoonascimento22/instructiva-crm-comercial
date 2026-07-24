@@ -3437,13 +3437,14 @@ function PainelAtendimento({ showToast }) {
 
             <div className="at-nums">
               <div><span>Conversas</span><b>{v.conversas}</b></div>
-              <div><span>1ª resposta</span><b>{v.tempoPrimeiraRespostaTxt || "—"}</b></div>
-              <div><span>Resposta média</span><b>{v.tempoRespostaMedianaTxt || "—"}</b></div>
+              <div className="so-info"><span>1ª resposta</span><b>{v.tempoPrimeiraRespostaTxt || "—"}</b></div>
+              <div className="so-info"><span>Resposta média</span><b>{v.tempoRespostaMedianaTxt || "—"}</b></div>
               <div><span>Sem resposta</span><b className={v.pctSemResposta >= 25 ? "ruim" : ""}>{v.semResposta} ({v.pctSemResposta}%)</b></div>
               <div><span>Param no meio</span><b>{v.abandonadas} ({v.pctAbandonadas}%)</b></div>
               <div><span>Msgs por conversa</span><b>{v.msgsPorConversa}</b></div>
             </div>
 
+            <div className="ia-nota-tempo">Os tempos acima são informativos — a IA não usa velocidade de resposta na análise nem na nota. Leads sem retorno, sim.</div>
             {!aSel && <div className="ia-vazio">Clique em <b>Analisar com IA</b> pra ela ler as conversas dele e dar o parecer.</div>}
 
             {aSel && (
