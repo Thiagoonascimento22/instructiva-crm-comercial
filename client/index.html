@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=5, viewport-fit=cover" />
+    <meta name="theme-color" content="#0B5D2E" />
+    <meta name="description" content="Marmitaria Sabor Brasil — marmitas feitas com carinho, em Toledo/PR. Peça direto, sem taxa de aplicativo." />
+    <title>Marmitaria Sabor Brasil — Cardápio</title>
+    <link rel="manifest" href="/manifest.json" />
+    <link rel="icon" href="/icone-192.png" />
+    <link rel="apple-touch-icon" href="/icone-192.png" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Sabor Brasil" />
+    <meta property="og:title" content="Marmitaria Sabor Brasil" />
+    <meta property="og:description" content="Marmitas feitas com carinho para o seu dia. Peça pelo cardápio digital." />
+    <meta property="og:image" content="/logo.png" />
+    <meta property="og:type" content="website" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@500;600;700;800&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  </head>
+  <script>
+      (function () {
+        try {
+          var t = localStorage.getItem('sabor_brasil_tema') === 'escuro' ? 'escuro' : 'claro';
+          document.documentElement.dataset.tema = t;
+          document.querySelector('meta[name=theme-color]').setAttribute('content', t === 'escuro' ? '#0D1310' : '#FFFFFF');
+        } catch (e) {}
+      })();
+    </script>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.jsx"></script>
+    <script>
+      // Se o aplicativo não iniciar em 6 segundos, quase sempre é cache velho no aparelho.
+      // Limpamos e recarregamos uma única vez, sem incomodar quem está pedindo.
+      (function () {
+        setTimeout(function () {
+          var raiz = document.getElementById('root');
+          if (raiz && raiz.children.length > 0) return;
+          if (sessionStorage.getItem('recuperado')) return;
+          sessionStorage.setItem('recuperado', '1');
+          var tarefas = [];
+          if (window.caches) tarefas.push(caches.keys().then(function (ks) {
+            return Promise.all(ks.map(function (k) { return caches.delete(k); }));
+          }));
+          if (navigator.serviceWorker) tarefas.push(navigator.serviceWorker.getRegistrations().then(function (rs) {
+            return Promise.all(rs.map(function (r) { return r.unregister(); }));
+          }));
+          Promise.all(tarefas).catch(function () {}).then(function () { location.reload(true); });
+        }, 6000);
+      })();
+    </script>
+  </body>
+</html>

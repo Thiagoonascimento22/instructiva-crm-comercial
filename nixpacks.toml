@@ -1,10 +1,5 @@
-# ffmpeg: converte o áudio gravado no navegador (WebM) para OGG/Opus,
-# único formato de voz que a Cloud API da Meta aceita.
-[phases.setup]
-nixPkgs = ["nodejs", "ffmpeg"]
-
-[phases.install]
-cmds = ["npm install"]
+[phases.build]
+cmds = ["npm run build"]
 
 [start]
-cmd = "node server/index.js"
+cmd = "node server.js"
