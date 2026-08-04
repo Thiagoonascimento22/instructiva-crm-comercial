@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { api, reais, Ico, usarAviso } from '../comum/uteis.jsx';
+import { api, reais, Ico, usarAviso, Camada } from '../comum/uteis.jsx';
 
 export default function PainelCardapio() {
   const aviso = usarAviso();
@@ -96,7 +96,6 @@ function EditorProduto({ produto, categorias, aoFechar }) {
   const [enviandoFoto, setEnviandoFoto] = useState(false);
   const arquivoRef = useRef();
 
-  useEffect(() => { document.body.classList.add('travado'); return () => document.body.classList.remove('travado'); }, []);
 
   const set = (k, v) => setP((a) => ({ ...a, [k]: v }));
 
@@ -139,6 +138,8 @@ function EditorProduto({ produto, categorias, aoFechar }) {
   const delGrupo = (i) => setP((a) => ({ ...a, grupos: a.grupos.filter((_, k) => k !== i) }));
 
   return (
+    <Camada travarFundo>
+
     <div className="cortina" onClick={(e) => e.target === e.currentTarget && aoFechar()}>
       <div className="janela">
         <div className="janela-topo">
@@ -237,7 +238,8 @@ function EditorProduto({ produto, categorias, aoFechar }) {
           <button className="btn btn-primario" onClick={salvar} disabled={salvando}>{salvando ? 'Salvando…' : 'Salvar item'}</button>
         </div>
       </div>
-    </div>
+      </div>
+    </Camada>
   );
 }
 
@@ -319,6 +321,8 @@ function EditorCategoria({ categoria, aoFechar }) {
   }
 
   return (
+    <Camada travarFundo>
+
     <div className="cortina" onClick={(e) => e.target === e.currentTarget && aoFechar()}>
       <div className="janela">
         <div className="janela-topo">
@@ -346,7 +350,8 @@ function EditorCategoria({ categoria, aoFechar }) {
           <button className="btn btn-primario" onClick={salvar}>Salvar</button>
         </div>
       </div>
-    </div>
+      </div>
+    </Camada>
   );
 }
 

@@ -3,7 +3,7 @@ import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
 import { ler, salvar, UPLOADS_DIR } from '../db.js';
-import { id, token, lojaAberta, STATUS, STATUS_LABEL, telefoneCompleto } from '../util.js';
+import { id, token, lojaAberta, STATUS, STATUS_LABEL, telefoneCompleto, diaLocal, hojeLocal } from '../util.js';
 
 const router = express.Router();
 const SENHA = process.env.ADMIN_SENHA || 'marmita2026';
@@ -205,18 +205,22 @@ router.delete('/produtos/:id', (req, res) => {
 /* ---------------- Pedidos ---------------- */
 router.get('/pedidos', (req, res) => {
   const store = ler('pedidos');
-  const { status, busca, dia } = req.query;
+  const { status, busca, dia, de, ate } = req.query;
   let lista = store.pedidos;
 
-  if (dia) lista = lista.filter((p) => p.criadoEm.slice(0, 10) === dia);
+  if (dia) lista = lista.filter((p) => diaLocal(p.criadoEm) === dia);
+  if (de) lista = lista.filter((p) => diaLocal(p.criadoEm) >= de);
+  if (ate) lista = lista.filter((p) => diaLocal(p.criadoEm) <= ate);
   if (status && status !== 'todos') lista = lista.filter((p) => p.status === status);
   if (busca) {
-    const q = String(busca).toLowerCase();
+    const q = String(busca).toLowerCase().trim();
     lista = lista.filter((p) => p.codigo.includes(q) || p.cliente.nome.toLowerCase().includes(q) || p.cliente.telefone.includes(q));
   }
 
-  const hoje = new Date().toLocaleDateString('sv-SE', { timeZone: 'America/Sao_Paulo' });
-  const doDia = store.pedidos.filter((p) => p.criadoEm.slice(0, 10) === hoje && p.status !== 'cancelado');
+  // total do recorte que está na tela, útil ao fechar o caixa de um dia específico
+  const doRecorte = lista.filter((p) => p.status !== 'cancelado');
+  const hoje = hojeLocal();
+  const doDia = store.pedidos.filter((p) => diaLocal(p.criadoEm) === hoje && p.status !== 'cancelado');
 
   res.json({
     pedidos: lista.slice(0, 200).map((p) => ({ ...p, statusLabel: STATUS_LABEL[p.status], whatsapp: telefoneCompleto(p.cliente.telefone) })),
@@ -227,6 +231,8 @@ router.get('/pedidos', (req, res) => {
       abertos: store.pedidos.filter((p) => ['novo', 'aceito', 'preparando', 'saiu'].includes(p.status)).length,
       novos: store.pedidos.filter((p) => p.status === 'novo').length,
       mensagens: store.pedidos.reduce((s, p) => s + (p.naoLidasLoja || 0), 0),
+      recorteQtd: doRecorte.length,
+      recorteTotal: Number(doRecorte.reduce((s, p) => s + p.total, 0).toFixed(2)),
     },
   });
 });
@@ -278,16 +284,37 @@ router.post('/pedidos/:id/lido', (req, res) => {
 });
 
 /* ---------------- Relatório ---------------- */
+function intervalo(query) {
+  const hoje = hojeLocal();
+  if (query.de || query.ate) {
+    const de = String(query.de || '0000-01-01');
+    const ate = String(query.ate || hoje);
+    return { de: de <= ate ? de : ate, ate: de <= ate ? ate : de };
+  }
+  const dias = Math.min(365, Math.max(1, Number(query.dias) || 7));
+  const inicio = new Date(new Date(hoje + 'T12:00:00Z').getTime() - (dias - 1) * 86400000);
+  return { de: inicio.toISOString().slice(0, 10), ate: hoje };
+}
+
 router.get('/relatorio', (req, res) => {
   const store = ler('pedidos');
-  const dias = Math.min(90, Number(req.query.dias) || 7);
-  const limite = Date.now() - dias * 86400000;
-  const lista = store.pedidos.filter((p) => new Date(p.criadoEm).getTime() >= limite && p.status !== 'cancelado');
+  const { de, ate } = intervalo(req.query);
+  const lista = store.pedidos.filter((p) => {
+    const d = diaLocal(p.criadoEm);
+    return d >= de && d <= ate && p.status !== 'cancelado';
+  });
 
   const porDia = {};
   const porProduto = {};
+  const porBairro = {};
   for (const p of lista) {
-    const d = p.criadoEm.slice(0, 10);
+    const d = diaLocal(p.criadoEm);
+    if (p.tipo === 'entrega' && p.endereco?.bairro) {
+      const b = p.endereco.bairro;
+      porBairro[b] = porBairro[b] || { nome: b, pedidos: 0, total: 0 };
+      porBairro[b].pedidos++;
+      porBairro[b].total = Number((porBairro[b].total + p.total).toFixed(2));
+    }
     porDia[d] = porDia[d] || { dia: d, pedidos: 0, total: 0 };
     porDia[d].pedidos++;
     porDia[d].total = Number((porDia[d].total + p.total).toFixed(2));
@@ -298,15 +325,57 @@ router.get('/relatorio', (req, res) => {
     }
   }
 
+  const bruto = lista.reduce((s, p) => s + p.total, 0);
+  const diasComVenda = Object.keys(porDia).length;
+
   res.json({
-    dias,
-    total: Number(lista.reduce((s, p) => s + p.total, 0).toFixed(2)),
+    de, ate,
+    total: Number(bruto.toFixed(2)),
     pedidos: lista.length,
-    ticketMedio: lista.length ? Number((lista.reduce((s, p) => s + p.total, 0) / lista.length).toFixed(2)) : 0,
+    ticketMedio: lista.length ? Number((bruto / lista.length).toFixed(2)) : 0,
+    mediaDiaria: diasComVenda ? Number((bruto / diasComVenda).toFixed(2)) : 0,
+    diasComVenda,
+    entregas: lista.filter((p) => p.tipo === 'entrega').length,
+    retiradas: lista.filter((p) => p.tipo === 'retirada').length,
+    taxasEntrega: Number(lista.reduce((s, p) => s + (p.taxaEntrega || 0), 0).toFixed(2)),
     porDia: Object.values(porDia).sort((a, b) => a.dia.localeCompare(b.dia)),
-    ranking: Object.values(porProduto).sort((a, b) => b.qtd - a.qtd).slice(0, 15),
+    ranking: Object.values(porProduto).sort((a, b) => b.qtd - a.qtd).slice(0, 20),
+    bairros: Object.values(porBairro).sort((a, b) => b.pedidos - a.pedidos).slice(0, 12),
     formas: lista.reduce((acc, p) => { acc[p.pagamento.forma] = (acc[p.pagamento.forma] || 0) + 1; return acc; }, {}),
   });
+});
+
+// planilha do período, para conferir caixa ou mandar pro contador
+router.get('/relatorio.csv', (req, res) => {
+  const store = ler('pedidos');
+  const { de, ate } = intervalo(req.query);
+  const lista = store.pedidos
+    .filter((p) => { const d = diaLocal(p.criadoEm); return d >= de && d <= ate; })
+    .sort((a, b) => a.criadoEm.localeCompare(b.criadoEm));
+
+  const escapar = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
+  const linhas = [['Data', 'Hora', 'Pedido', 'Cliente', 'Telefone', 'Tipo', 'Bairro', 'Itens', 'Subtotal', 'Entrega', 'Total', 'Pagamento', 'Status'].join(';')];
+
+  for (const p of lista) {
+    const data = new Date(p.criadoEm);
+    const itens = p.itens.map((i) => `${i.qtd}x ${i.nome}`).join(' | ');
+    linhas.push([
+      escapar(diaLocal(p.criadoEm).split('-').reverse().join('/')),
+      escapar(data.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Sao_Paulo' })),
+      escapar(p.codigo), escapar(p.cliente.nome), escapar(p.cliente.telefone),
+      escapar(p.tipo === 'entrega' ? 'Entrega' : 'Retirada'),
+      escapar(p.endereco?.bairro || ''), escapar(itens),
+      escapar(p.subtotal.toFixed(2).replace('.', ',')),
+      escapar((p.taxaEntrega || 0).toFixed(2).replace('.', ',')),
+      escapar(p.total.toFixed(2).replace('.', ',')),
+      escapar({ pix: 'PIX', dinheiro: 'Dinheiro', cartao: 'Cartão' }[p.pagamento.forma] || p.pagamento.forma),
+      escapar(STATUS_LABEL[p.status]),
+    ].join(';'));
+  }
+
+  res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+  res.setHeader('Content-Disposition', `attachment; filename="vendas_${de}_a_${ate}.csv"`);
+  res.send('\uFEFF' + linhas.join('\n'));
 });
 
 export default router;

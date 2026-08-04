@@ -99,6 +99,15 @@ export function montarPedido({ itens = [], tipo, bairro }, cardapio, config) {
   return { itens: itensFinal, subtotal, taxaEntrega, total: Number((subtotal + taxaEntrega).toFixed(2)), erros };
 }
 
+// A data de um pedido é sempre a do relógio de Brasília, não a do servidor.
+export function diaLocal(iso) {
+  return new Date(iso).toLocaleDateString('sv-SE', { timeZone: 'America/Sao_Paulo' });
+}
+
+export function hojeLocal() {
+  return new Date().toLocaleDateString('sv-SE', { timeZone: 'America/Sao_Paulo' });
+}
+
 export const STATUS = ['novo', 'aceito', 'preparando', 'saiu', 'entregue', 'cancelado'];
 export const STATUS_LABEL = {
   novo: 'Pedido recebido',

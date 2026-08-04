@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { api, reais, hora, dataHora, Ico, usarAviso, mascararTelefone } from '../comum/uteis.jsx';
+import { api, reais, hora, dataHora, Ico, usarAviso, mascararTelefone, Camada } from '../comum/uteis.jsx';
 
 const FILTROS = [
   { chave: 'novo', rotulo: 'Novos' },
@@ -41,6 +41,7 @@ export default function PainelPedidos({ aoAtualizarResumo }) {
   const [dados, setDados] = useState(null);
   const [filtro, setFiltro] = useState('novo');
   const [busca, setBusca] = useState('');
+  const [dia, setDia] = useState('');
   const [chatAberto, setChatAberto] = useState(null);
   const [somLigado, setSomLigado] = useState(() => localStorage.getItem('admin_som') !== '0');
   const contagemAnterior = useRef(null);
@@ -50,6 +51,7 @@ export default function PainelPedidos({ aoAtualizarResumo }) {
       const params = new URLSearchParams();
       if (filtro !== 'todos') params.set('status', filtro);
       if (busca) params.set('busca', busca);
+      if (dia) params.set('dia', dia);
       const d = await api(`/api/admin/pedidos?${params}`);
       setDados(d);
       aoAtualizarResumo?.(d.resumo);
@@ -62,11 +64,11 @@ export default function PainelPedidos({ aoAtualizarResumo }) {
     } catch (e) { /* silencioso durante polling */ }
   }
 
-  useEffect(() => { carregar(); }, [filtro, busca]);
+  useEffect(() => { carregar(); }, [filtro, busca, dia]);
   useEffect(() => {
     const t = setInterval(carregar, 12000);
     return () => clearInterval(t);
-  }, [filtro, busca, somLigado]);
+  }, [filtro, busca, dia, somLigado]);
 
   async function mudarStatus(pedido, status) {
     try {
@@ -109,10 +111,27 @@ export default function PainelPedidos({ aoAtualizarResumo }) {
             style={{ width: '100%', border: '1.5px solid var(--linha-forte)', borderRadius: 11, padding: '11px 13px', background: '#fff' }}
           />
         </div>
+        <input
+          type="date"
+          value={dia}
+          onChange={(e) => setDia(e.target.value)}
+          title="Ver os pedidos de um dia"
+          style={{ flexShrink: 0, width: 150, border: '1px solid var(--linha-forte)', borderRadius: 'var(--r-p)', padding: '11px 10px', background: 'var(--superficie)', color: 'var(--tinta)' }}
+        />
         <button className="btn btn-linha btn-p" onClick={alternarSom} title="Alerta sonoro de pedido novo" style={{ flexShrink: 0 }}>
           {somLigado ? '🔔' : '🔕'}
         </button>
       </div>
+
+      {dia && (
+        <div style={{ margin: '0 16px 12px', padding: '11px 14px', borderRadius: 'var(--r-m)', background: 'var(--verde-luz)',
+                      border: '1px solid var(--verde-linha)', display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+          <span style={{ fontSize: 13.5, color: 'var(--verde)', fontWeight: 600, flex: 1 }}>
+            {dia.split('-').reverse().join('/')} · {resumo.recorteQtd} pedido(s) · {reais(resumo.recorteTotal)}
+          </span>
+          <button className="btn btn-texto btn-p" onClick={() => setDia('')}>ver todos</button>
+        </div>
+      )}
 
       <div className="filtros">
         {FILTROS.map((f) => (
@@ -229,8 +248,7 @@ function ChatPedido({ pedido, aoFechar }) {
         if (atual) setChat(atual.chat);
       } catch {}
     }, 6000);
-    document.body.classList.add('travado');
-    return () => { clearInterval(t); document.body.classList.remove('travado'); };
+    return () => clearInterval(t);
   }, [pedido.id]);
 
   useEffect(() => { fim.current?.scrollIntoView({ behavior: 'smooth' }); }, [chat.length]);
@@ -249,6 +267,8 @@ function ChatPedido({ pedido, aoFechar }) {
   const rapidas = ['Pedido confirmado! Já vamos preparar.', 'Seu pedido sai em cerca de 20 minutos.', 'O entregador já está a caminho.', 'Recebemos seu PIX, obrigado!'];
 
   return (
+    <Camada travarFundo>
+
     <div className="cortina" onClick={(e) => e.target === e.currentTarget && aoFechar()}>
       <div className="janela">
         <div className="janela-topo">
@@ -280,6 +300,7 @@ function ChatPedido({ pedido, aoFechar }) {
           <button className="enviar-bolha" type="submit" disabled={!texto.trim()}><Ico.Enviar /></button>
         </form>
       </div>
-    </div>
+      </div>
+    </Camada>
   );
 }

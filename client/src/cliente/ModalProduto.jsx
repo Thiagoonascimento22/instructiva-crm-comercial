@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { reais, Ico, usarCarrinho, usarAviso } from '../comum/uteis.jsx';
+import { reais, Ico, usarCarrinho, usarAviso, Camada } from '../comum/uteis.jsx';
 
 export default function ModalProduto({ produto, tamanhoPreferido = 'P', aoFechar }) {
   const carrinho = usarCarrinho();
@@ -30,8 +30,6 @@ export default function ModalProduto({ produto, tamanhoPreferido = 'P', aoFechar
     setQtd(1);
     setObs('');
     setTentou(false);
-    document.body.classList.add('travado');
-    return () => document.body.classList.remove('travado');
   }, [produto.id, tamanhoPreferido]);
 
   const alternar = (grupo, item) => {
@@ -98,6 +96,8 @@ export default function ModalProduto({ produto, tamanhoPreferido = 'P', aoFechar
   }
 
   return (
+    <Camada travarFundo>
+
     <div className="cortina" onClick={(e) => e.target === e.currentTarget && aoFechar()}>
       <div className="janela" role="dialog" aria-label={produto.nome}>
         <div className="janela-topo">
@@ -196,6 +196,7 @@ export default function ModalProduto({ produto, tamanhoPreferido = 'P', aoFechar
           </button>
         </div>
       </div>
-    </div>
+      </div>
+    </Camada>
   );
 }

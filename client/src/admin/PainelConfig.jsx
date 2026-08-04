@@ -184,69 +184,197 @@ export default function PainelConfig() {
 }
 
 export function PainelRelatorio() {
+  const hoje = new Date().toLocaleDateString('sv-SE', { timeZone: 'America/Sao_Paulo' });
+  const [periodo, setPeriodo] = useState('7');
+  const [de, setDe] = useState(hoje);
+  const [ate, setAte] = useState(hoje);
   const [dados, setDados] = useState(null);
-  const [dias, setDias] = useState(7);
+  const [carregando, setCarregando] = useState(true);
 
-  useEffect(() => { api(`/api/admin/relatorio?dias=${dias}`).then(setDados).catch(() => {}); }, [dias]);
-  if (!dados) return <div className="tela-carga"><div className="roda" /></div>;
+  function faixaDoAtalho(chave) {
+    const d = new Date(hoje + 'T12:00:00Z');
+    const iso = (x) => x.toISOString().slice(0, 10);
+    const menos = (n) => iso(new Date(d.getTime() - n * 86400000));
+    if (chave === 'hoje') return { de: hoje, ate: hoje };
+    if (chave === 'ontem') return { de: menos(1), ate: menos(1) };
+    if (chave === 'mes') return { de: hoje.slice(0, 8) + '01', ate: hoje };
+    if (chave === 'mesPassado') {
+      const p = new Date(d.getFullYear(), d.getMonth() - 1, 1);
+      const fim = new Date(d.getFullYear(), d.getMonth(), 0);
+      const fmt = (x) => `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, '0')}-${String(x.getDate()).padStart(2, '0')}`;
+      return { de: fmt(p), ate: fmt(fim) };
+    }
+    return { de: menos(Number(chave) - 1), ate: hoje };
+  }
 
-  const maximo = Math.max(1, ...dados.porDia.map((d) => d.total));
+  const faixa = periodo === 'livre' ? { de, ate } : faixaDoAtalho(periodo);
+
+  useEffect(() => {
+    setCarregando(true);
+    api(`/api/admin/relatorio?de=${faixa.de}&ate=${faixa.ate}`)
+      .then(setDados).catch(() => {}).finally(() => setCarregando(false));
+  }, [periodo, de, ate]);
+
+  function baixarPlanilha() {
+    const t = localStorage.getItem('admin_token');
+    fetch(`/api/admin/relatorio.csv?de=${faixa.de}&ate=${faixa.ate}`, { headers: { Authorization: `Bearer ${t}` } })
+      .then((r) => r.blob())
+      .then((b) => {
+        const url = URL.createObjectURL(b);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `vendas_${faixa.de}_a_${faixa.ate}.csv`;
+        a.click();
+        URL.revokeObjectURL(url);
+      });
+  }
+
+  const ATALHOS = [
+    { chave: 'hoje', rotulo: 'Hoje' },
+    { chave: 'ontem', rotulo: 'Ontem' },
+    { chave: '7', rotulo: '7 dias' },
+    { chave: '30', rotulo: '30 dias' },
+    { chave: 'mes', rotulo: 'Este mês' },
+    { chave: 'mesPassado', rotulo: 'Mês passado' },
+    { chave: 'livre', rotulo: 'Escolher data' },
+  ];
+
+  const dataBonita = (d) => d.split('-').reverse().join('/');
 
   return (
     <>
       <div className="filtros" style={{ paddingTop: 14 }}>
-        {[7, 15, 30, 90].map((d) => (
-          <button key={d} className={`filtro ${dias === d ? 'ativo' : ''}`} onClick={() => setDias(d)}>{d} dias</button>
+        {ATALHOS.map((a) => (
+          <button key={a.chave} className={`filtro ${periodo === a.chave ? 'ativo' : ''}`} onClick={() => setPeriodo(a.chave)}>
+            {a.rotulo}
+          </button>
         ))}
       </div>
 
-      <div className="metricas">
-        <div className="metrica destaque"><div className="rot">Faturamento</div><div className="num">{reais(dados.total)}</div></div>
-        <div className="metrica"><div className="rot">Pedidos</div><div className="num">{dados.pedidos}</div></div>
-        <div className="metrica"><div className="rot">Ticket médio</div><div className="num">{reais(dados.ticketMedio)}</div></div>
-        <div className="metrica"><div className="rot">Média por dia</div><div className="num">{reais(dados.total / Math.max(1, dados.porDia.length))}</div></div>
-      </div>
-
-      <div className="cartao">
-        <div className="cartao-rot">Faturamento por dia</div>
-        <div style={{ padding: '10px 16px 16px', display: 'flex', alignItems: 'flex-end', gap: 5, height: 150 }}>
-          {dados.porDia.length === 0 && <p style={{ fontSize: 13.5, color: 'var(--tinta-media)' }}>Sem vendas no período.</p>}
-          {dados.porDia.map((d) => (
-            <div key={d.dia} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5 }} title={`${d.dia}: ${reais(d.total)}`}>
-              <div style={{ width: '100%', background: 'var(--verde)', borderRadius: '5px 5px 0 0', height: `${(d.total / maximo) * 108}px`, minHeight: 4 }} />
-              <span style={{ fontSize: 9.5, color: 'var(--tinta-media)', whiteSpace: 'nowrap' }}>{d.dia.slice(8)}/{d.dia.slice(5, 7)}</span>
+      {periodo === 'livre' && (
+        <div className="cartao" style={{ marginLeft: 16, marginRight: 16 }}>
+          <div className="campo">
+            <div className="par" style={{ gridTemplateColumns: '1fr 1fr' }}>
+              <div>
+                <label>De</label>
+                <input type="date" value={de} max={ate} onChange={(e) => setDe(e.target.value)} />
+              </div>
+              <div>
+                <label>Até</label>
+                <input type="date" value={ate} min={de} max={hoje} onChange={(e) => setAte(e.target.value)} />
+              </div>
             </div>
-          ))}
+          </div>
         </div>
+      )}
+
+      <div style={{ padding: '0 16px 10px', fontSize: 12.5, color: 'var(--tinta-suave)', fontWeight: 600 }}>
+        {faixa.de === faixa.ate
+          ? `Dia ${dataBonita(faixa.de)}`
+          : `De ${dataBonita(faixa.de)} até ${dataBonita(faixa.ate)}`}
       </div>
 
-      <div className="cartao">
-        <div className="cartao-rot">Mais vendidos</div>
-        <table className="tabela-simples">
-          <tbody>
-            {dados.ranking.map((r) => (
-              <tr key={r.nome}>
-                <td>{r.nome}<div style={{ fontSize: 12, color: 'var(--tinta-media)' }}>{r.qtd} unidade(s)</div></td>
-                <td>{reais(r.total)}</td>
-              </tr>
-            ))}
-            {dados.ranking.length === 0 && <tr><td style={{ color: 'var(--tinta-media)' }}>Sem dados ainda.</td><td /></tr>}
-          </tbody>
-        </table>
-      </div>
+      {carregando || !dados ? (
+        <div className="tela-carga" style={{ minHeight: 220 }}><div className="roda" /></div>
+      ) : (
+        <>
+          <div className="metricas">
+            <div className="metrica destaque"><div className="rot">Faturamento</div><div className="num">{reais(dados.total)}</div></div>
+            <div className="metrica"><div className="rot">Pedidos</div><div className="num">{dados.pedidos}</div></div>
+            <div className="metrica"><div className="rot">Ticket médio</div><div className="num">{reais(dados.ticketMedio)}</div></div>
+            <div className="metrica"><div className="rot">Média por dia</div><div className="num">{reais(dados.mediaDiaria)}</div></div>
+          </div>
 
-      <div className="cartao">
-        <div className="cartao-rot">Formas de pagamento</div>
-        <table className="tabela-simples">
-          <tbody>
-            {Object.entries(dados.formas).map(([f, n]) => (
-              <tr key={f}><td>{{ pix: 'PIX', dinheiro: 'Dinheiro', cartao: 'Cartão na entrega' }[f] || f}</td><td>{n} pedido(s)</td></tr>
-            ))}
-            {Object.keys(dados.formas).length === 0 && <tr><td style={{ color: 'var(--tinta-media)' }}>Sem dados ainda.</td><td /></tr>}
-          </tbody>
-        </table>
-      </div>
-      <div style={{ height: 24 }} />
+          {dados.pedidos === 0 ? (
+            <div className="vazio-admin">
+              <div className="simbolo">📆</div>
+              <div style={{ fontWeight: 700, color: 'var(--tinta)', marginBottom: 5 }}>Nenhuma venda nesse período</div>
+              <p style={{ fontSize: 13.5 }}>Escolha outra data acima para ver os números.</p>
+            </div>
+          ) : (
+            <>
+              <div className="cartao" style={{ marginLeft: 16, marginRight: 16 }}>
+                <div className="cartao-rot">Faturamento por dia</div>
+                <div style={{ padding: '10px 16px 16px', display: 'flex', alignItems: 'flex-end', gap: 4, height: 150, overflowX: 'auto' }}>
+                  {dados.porDia.map((d) => {
+                    const maximo = Math.max(1, ...dados.porDia.map((x) => x.total));
+                    return (
+                      <div key={d.dia} style={{ flex: '1 0 22px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5 }}
+                           title={`${dataBonita(d.dia)}: ${reais(d.total)} em ${d.pedidos} pedido(s)`}>
+                        <span style={{ fontSize: 9.5, color: 'var(--tinta-suave)', fontWeight: 700 }}>{d.pedidos}</span>
+                        <div style={{ width: '100%', maxWidth: 44, background: 'var(--verde)', borderRadius: '5px 5px 0 0',
+                                      height: `${(d.total / maximo) * 96}px`, minHeight: 4 }} />
+                        <span style={{ fontSize: 9.5, color: 'var(--tinta-suave)', whiteSpace: 'nowrap' }}>
+                          {d.dia.slice(8)}/{d.dia.slice(5, 7)}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div className="cartao" style={{ marginLeft: 16, marginRight: 16 }}>
+                <div className="cartao-rot">Mais vendidos</div>
+                <table className="tabela-simples">
+                  <tbody>
+                    {dados.ranking.map((r, i) => (
+                      <tr key={r.nome}>
+                        <td>
+                          <span style={{ color: 'var(--tinta-suave)', fontWeight: 700, marginRight: 7 }}>{i + 1}º</span>
+                          {r.nome}
+                          <div style={{ fontSize: 12, color: 'var(--tinta-suave)', marginLeft: 24 }}>{r.qtd} unidade(s)</div>
+                        </td>
+                        <td>{reais(r.total)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {dados.bairros.length > 0 && (
+                <div className="cartao" style={{ marginLeft: 16, marginRight: 16 }}>
+                  <div className="cartao-rot">Entregas por bairro</div>
+                  <table className="tabela-simples">
+                    <tbody>
+                      {dados.bairros.map((b) => (
+                        <tr key={b.nome}>
+                          <td>{b.nome}<div style={{ fontSize: 12, color: 'var(--tinta-suave)' }}>{b.pedidos} entrega(s)</div></td>
+                          <td>{reais(b.total)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+
+              <div className="cartao" style={{ marginLeft: 16, marginRight: 16 }}>
+                <div className="cartao-rot">Resumo do período</div>
+                <table className="tabela-simples">
+                  <tbody>
+                    {Object.entries(dados.formas).map(([f, n]) => (
+                      <tr key={f}>
+                        <td>{{ pix: 'PIX', dinheiro: 'Dinheiro', cartao: 'Cartão na entrega' }[f] || f}</td>
+                        <td>{n} pedido(s)</td>
+                      </tr>
+                    ))}
+                    <tr><td>Entregas</td><td>{dados.entregas}</td></tr>
+                    <tr><td>Retiradas no local</td><td>{dados.retiradas}</td></tr>
+                    <tr><td>Recebido em taxa de entrega</td><td>{reais(dados.taxasEntrega)}</td></tr>
+                    <tr><td>Dias com venda</td><td>{dados.diasComVenda}</td></tr>
+                  </tbody>
+                </table>
+              </div>
+
+              <div style={{ padding: '4px 16px 30px' }}>
+                <button className="btn btn-linha" onClick={baixarPlanilha}>Baixar planilha do período</button>
+                <p style={{ textAlign: 'center', fontSize: 12, color: 'var(--tinta-suave)', marginTop: 9 }}>
+                  Abre no Excel e no Google Planilhas, com um pedido por linha.
+                </p>
+              </div>
+            </>
+          )}
+        </>
+      )}
     </>
   );
 }

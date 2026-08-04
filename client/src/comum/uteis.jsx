@@ -1,4 +1,37 @@
 import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
+import { createPortal } from 'react-dom';
+
+/* Camadas (modal, aviso) moram fora da árvore da página.
+   Assim nenhum estilo de layout consegue empurrá-las para trás ou para fora da tela. */
+let camadasAbertas = 0;
+
+export function Camada({ children, travarFundo = false }) {
+  const [alvo] = useState(() => {
+    if (typeof document === 'undefined') return null;
+    let el = document.getElementById('camadas');
+    if (!el) {
+      el = document.createElement('div');
+      el.id = 'camadas';
+      document.body.appendChild(el);
+    }
+    return el;
+  });
+
+  // Uma contagem única cuida da rolagem do fundo. Com dois modais abertos,
+  // fechar um não pode destravar a página enquanto o outro continua aberto.
+  useEffect(() => {
+    if (!travarFundo) return;
+    camadasAbertas += 1;
+    document.body.classList.add('travado');
+    return () => {
+      camadasAbertas = Math.max(0, camadasAbertas - 1);
+      if (camadasAbertas === 0) document.body.classList.remove('travado');
+    };
+  }, [travarFundo]);
+
+  if (!alvo) return null;
+  return createPortal(children, alvo);
+}
 
 /* ---------------- API ---------------- */
 export async function api(caminho, opcoes = {}) {
@@ -76,7 +109,11 @@ export function ProvedorAviso({ children }) {
   return (
     <AvisoCtx.Provider value={mostrar}>
       {children}
-      {aviso && <div className={`nota-flutuante ${aviso.tipo === 'erro' ? 'erro' : ''}`}>{aviso.texto}</div>}
+      {aviso && (
+        <Camada>
+          <div className={`nota-flutuante ${aviso.tipo === 'erro' ? 'erro' : ''}`}>{aviso.texto}</div>
+        </Camada>
+      )}
     </AvisoCtx.Provider>
   );
 }

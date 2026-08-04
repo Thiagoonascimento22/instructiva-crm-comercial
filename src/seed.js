@@ -130,7 +130,7 @@ export const CONFIG_PADRAO = {
     ],
   },
   pagamentos: {
-    pix: { ativo: true, chave: '', titular: 'Marmitaria Sabor Brasil' },
+    pix: { ativo: true, chave: '45999117844', titular: 'Marmitaria Sabor Brasil' },
     dinheiro: { ativo: true },
     cartaoEntrega: { ativo: true, detalhe: 'Débito e crédito na entrega' },
   },
