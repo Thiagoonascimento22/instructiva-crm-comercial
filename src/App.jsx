@@ -6204,10 +6204,10 @@ function OficialCRM({ showToast, isGer = true, onAbrirWhats }) {
                     </select>
                   </div>
                 ) : (
-                  <div><label className="lbl-mini">Transferir para</label>
-                    <select className="input" value="" onChange={(e) => { if (e.target.value) transferir(e.target.value); }}>
-                      <option value="">Escolher vendedor…</option>
-                      {vendedores.filter((v) => v.id !== leadSel.vendedorId).map((v) => <option key={v.id} value={v.id}>{v.nome}</option>)}
+                  <div><label className="lbl-mini">Responsável</label>
+                    <select className="input" value={leadSel.vendedorId || ""} onChange={(e) => { const vid = e.target.value; if (vid && vid !== (leadSel.vendedorId || "")) transferir(vid); }}>
+                      {!leadSel.vendedorId && <option value="">Escolher vendedor…</option>}
+                      {vendedores.map((v) => <option key={v.id} value={v.id}>{v.nome}</option>)}
                     </select>
                   </div>
                 )}
@@ -6886,6 +6886,9 @@ function OficialNumeros({ showToast }) {
   const [numeros, setNumeros] = useState([]);
   const [form, setForm] = useState(null);
   const [webhook, setWebhook] = useState(null);
+  const [igCfg, setIgCfg] = useState(null);   // { igId, usuario, ativo, temToken }
+  const [igForm, setIgForm] = useState(null); // form aberto pra editar Instagram
+  const [salvandoIg, setSalvandoIg] = useState(false);
   const [verWebhook, setVerWebhook] = useState(false);
   const [testando, setTestando] = useState(null);
   const [vendedores, setVendedores] = useState([]);
@@ -6919,6 +6922,7 @@ function OficialNumeros({ showToast }) {
     carregar();
     api.ofIAs().then((l) => setIasNum((l || []).filter((x) => x.ativa))).catch(() => {});
     api.ofWebhookInfo(window.location.origin).then(setWebhook).catch(() => {});
+    api.ofInstagram().then(setIgCfg).catch(() => {});
     api.ofVendedoresLista().then(setVendedores).catch(() => {});
     api.ofTokenGlobalStatus().then((r) => setTokenDef(!!r.definido)).catch(() => {});
   }, []);
@@ -6934,6 +6938,20 @@ function OficialNumeros({ showToast }) {
       showToast("✅ Token da Meta salvo! Vale pra todos os números.");
     } catch (e) { showToast("❌ " + e.message); }
     finally { setSalvandoToken(false); }
+  }
+
+  async function salvarIg() {
+    if (!igForm.igId || !igForm.igId.trim()) return showToast("Informe o ID da conta do Instagram");
+    setSalvandoIg(true);
+    try {
+      const dados = { igId: igForm.igId.trim(), usuario: igForm.usuario || "", ativo: !!igForm.ativo };
+      if (igForm.token && igForm.token.trim()) dados.token = igForm.token.trim();
+      const r = await api.ofSalvarInstagram(dados);
+      setIgCfg({ igId: r.igId, usuario: r.usuario, ativo: r.ativo, temToken: r.temToken });
+      setIgForm(null);
+      showToast("✅ Instagram salvo!");
+    } catch (e) { showToast("❌ " + e.message); }
+    finally { setSalvandoIg(false); }
   }
 
   async function salvar() {
@@ -7138,6 +7156,25 @@ function OficialNumeros({ showToast }) {
         </div>
       )}
 
+      {/* Instagram (Direct) — cai na mesma Caixa de entrada */}
+      <div className="onum-webhook" style={{ marginTop: 12 }}>
+        <div className="onum-webhook-body">
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginBottom: 6 }}>
+            <b>📸 Instagram (Direct)</b>
+            <span style={{ background: igCfg && igCfg.ativo && igCfg.temToken ? "#25A06B" : "#e5e7eb", color: igCfg && igCfg.ativo && igCfg.temToken ? "#fff" : "#6b7280", borderRadius: 20, padding: "2px 12px", fontSize: 12, fontWeight: 700 }}>
+              {igCfg && igCfg.ativo && igCfg.temToken ? "Ativo" : "Desligado"}
+            </span>
+          </div>
+          {igCfg && igCfg.igId
+            ? <p className="onum-webhook-intro">Conta: <b>{igCfg.usuario ? "@" + igCfg.usuario : igCfg.igId}</b> · Token {igCfg.temToken ? "salvo ✅" : "faltando ⚠️"} — os DMs caem aqui na <b>Caixa de entrada</b>.</p>
+            : <p className="onum-webhook-intro">Ligue uma conta Instagram profissional pra <b>receber e responder DMs</b> aqui na Caixa de entrada.</p>}
+          <p className="onum-webhook-fim">Usa o <b>mesmo webhook do WhatsApp</b> (acima). No app da Meta, adicione o produto <b>Instagram</b>, assine o webhook e ative o campo <b>messages</b>.</p>
+          <button className="onum-btn-save" onClick={() => setIgForm({ igId: (igCfg && igCfg.igId) || "", usuario: (igCfg && igCfg.usuario) || "", token: "", ativo: igCfg ? !!igCfg.ativo : true })}>
+            {igCfg && igCfg.igId ? "Editar Instagram" : "Configurar Instagram"}
+          </button>
+        </div>
+      </div>
+
       {/* modal: token global da Meta */}
       {tokenForm && (
         <Portal>
@@ -7163,6 +7200,48 @@ function OficialNumeros({ showToast }) {
             <div className="onum-modal-foot">
               <button className="onum-btn-ghost" onClick={() => setTokenForm(null)}>Cancelar</button>
               <button className="onum-btn-save" onClick={salvarTokenGlobal} disabled={salvandoToken}>{salvandoToken ? "Salvando…" : "Salvar token"}</button>
+            </div>
+          </div>
+        </div>
+        </Portal>
+      )}
+
+      {/* modal: Instagram (Direct) */}
+      {igForm && (
+        <Portal>
+        <div className="modal" onClick={(e) => e.target === e.currentTarget && setIgForm(null)}>
+          <div className="onum-modal">
+            <button className="onum-modal-x" onClick={() => setIgForm(null)}><I.x /></button>
+            <div className="onum-modal-head">
+              <div className="onum-modal-ico">📸</div>
+              <div>
+                <h3>Instagram (Direct)</h3>
+                <p>Ligue a conta pra receber os DMs aqui na Caixa de entrada e responder na mão.</p>
+              </div>
+            </div>
+            <div className="onum-modal-body">
+              <div className="onum-dica" style={{ marginBottom: 12 }}>
+                Precisa de uma conta <b>Instagram profissional</b> (Comercial/Criador) ligada a uma <b>Página do Facebook</b>, e do produto <b>Instagram</b> adicionado no mesmo app da Meta do WhatsApp, com a permissão <b>instagram_manage_messages</b>.
+              </div>
+              <div className="onum-f">
+                <label>@ do perfil <i>(opcional, só pra identificar aqui)</i></label>
+                <input placeholder="escolainstructiva" value={igForm.usuario} onChange={(e) => setIgForm({ ...igForm, usuario: e.target.value })} />
+              </div>
+              <div className="onum-f">
+                <label>ID da conta Instagram <i>(ID da conta profissional)</i></label>
+                <input className="mono" placeholder="Ex: 17841400000000000" value={igForm.igId} onChange={(e) => setIgForm({ ...igForm, igId: e.target.value })} autoFocus />
+              </div>
+              <div className="onum-f">
+                <label>Access Token {igCfg && igCfg.temToken ? <i>(deixe vazio pra manter o atual)</i> : <i>(Page token com instagram_manage_messages)</i>}</label>
+                <input className="mono" placeholder={igCfg && igCfg.temToken ? "deixe vazio pra manter" : "EAA..."} value={igForm.token} onChange={(e) => setIgForm({ ...igForm, token: e.target.value })} />
+              </div>
+              <label style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 6, fontWeight: 600 }}>
+                <input type="checkbox" checked={!!igForm.ativo} onChange={(e) => setIgForm({ ...igForm, ativo: e.target.checked })} /> Ativo
+              </label>
+            </div>
+            <div className="onum-modal-foot">
+              <button className="onum-btn-ghost" onClick={() => setIgForm(null)}>Cancelar</button>
+              <button className="onum-btn-save" onClick={salvarIg} disabled={salvandoIg}>{salvandoIg ? "Salvando…" : "Salvar Instagram"}</button>
             </div>
           </div>
         </div>
@@ -7698,13 +7777,14 @@ function InboxOficial({ isGer, showToast, onIrParaEvolution, target, onTargetUse
             <div className="of-chat-mid">
               <div className="of-chat-nm">
                 {c.nome}
+                {c.canal === "instagram" && <span className="of-pill" style={{ background: "linear-gradient(45deg,#F58529,#DD2A7B,#8134AF)", color: "#fff", borderColor: "transparent" }}>📸 Instagram</span>}
                 {c.comIA && <span className="of-pill" style={{ background: "var(--surface-2)", color: "var(--brand)", borderColor: "var(--line)" }}>🤖 IA atendendo</span>}
                 {c.iaPassou && <span className="of-pill" style={{ background: "#eafaf0", color: "#1a9d54", borderColor: "#aee3c4" }}>✓ IA passou</span>}
                 {c.origemDisparo && <span className="of-pill">{c.campanha || "Disparo"}</span>}
               </div>
               <div className="of-chat-last">{c.ultima ? (c.ultima.role === "me" ? "Você: " : "") + c.ultima.content : "—"}</div>
               {isGer && c.vendedorNome && <div className="of-chat-vend">→ {c.vendedorNome}</div>}
-              {isGer && !c.vendedorId && <div className="of-chat-vend sem">→ aguardando distribuição</div>}
+              {isGer && !c.vendedorId && <div className="of-chat-vend sem">→ {c.canal === "instagram" ? "sem responsável" : "aguardando distribuição"}</div>}
             </div>
             <div className="of-chat-right">
               <span className="of-chat-hora">{c.atualizadoEm ? horaCurta(c.atualizadoEm) : ""}</span>
@@ -7790,17 +7870,23 @@ function InboxOficial({ isGer, showToast, onIrParaEvolution, target, onTargetUse
               <div className="of-chat-av">{iniciais(conversa.nome)}</div>
               <div className="of-conv-info">
                 <b>{conversa.nome}</b>
-                <span>{conversa.numero}{conversa.vendedorNome ? " · com " + conversa.vendedorNome : ""}</span>
+                <span>
+                  {conversa.canal === "instagram"
+                    ? ("📸 Instagram" + (conversa.igUsuario ? " · @" + conversa.igUsuario : "") + (conversa.vendedorNome ? " · com " + conversa.vendedorNome : ""))
+                    : (conversa.numero + (conversa.vendedorNome ? " · com " + conversa.vendedorNome : ""))}
+                </span>
               </div>
+              {conversa.canal === "instagram" && <span className="of-pill" style={{ background: "linear-gradient(45deg,#F58529,#DD2A7B,#8134AF)", color: "#fff", borderColor: "transparent" }}>📸 Instagram</span>}
               {conversa.origemDisparo && conversa.campanha && <span className="of-pill">{conversa.campanha}</span>}
               {(() => {
                 const ms = conversa.mensagens || [];
                 let ue = 0; for (let i = ms.length - 1; i >= 0; i--) { if (ms[i].role === "them") { ue = ms[i].ts || 0; break; } }
                 const jan = janela24h(ue);
-                if (!jan) return <span className="of-janela fechada" title="O lead ainda não te respondeu. No WhatsApp oficial, até ele responder, só template aprovado é entregue."><I.lock className="ico-inline" /> Ainda não respondeu · só template</span>;
+                const ig = conversa.canal === "instagram";
+                if (!jan) return <span className="of-janela fechada" title={ig ? "O cliente ainda não te mandou DM. No Instagram você só responde depois que ele te escreve." : "O lead ainda não te respondeu. No WhatsApp oficial, até ele responder, só template aprovado é entregue."}><I.lock className="ico-inline" /> {ig ? "Aguardando o 1º DM" : "Ainda não respondeu · só template"}</span>;
                 return jan.aberta
-                  ? <span className={"of-janela" + (jan.urgente ? " urg" : "")} title="Tempo restante da janela de 24h do WhatsApp. Ela renova toda vez que o lead te responde. Dentro dela você manda mensagem livre; fora, só template."><I.clock className="ico-inline" /> {jan.texto} de janela</span>
-                  : <span className="of-janela fechada" title="Passou 24h desde a última mensagem do lead. Agora só template aprovado é entregue — a mensagem livre não chega."><I.lock className="ico-inline" /> Janela fechada · só template</span>;
+                  ? <span className={"of-janela" + (jan.urgente ? " urg" : "")} title={ig ? "Tempo restante da janela de 24h do Instagram. Ela renova toda vez que o cliente te manda um DM." : "Tempo restante da janela de 24h do WhatsApp. Ela renova toda vez que o lead te responde. Dentro dela você manda mensagem livre; fora, só template."}><I.clock className="ico-inline" /> {jan.texto} de janela</span>
+                  : <span className="of-janela fechada" title={ig ? "Passou 24h desde o último DM do cliente. No Instagram só dá pra responder dentro dessa janela." : "Passou 24h desde a última mensagem do lead. Agora só template aprovado é entregue — a mensagem livre não chega."}><I.lock className="ico-inline" /> {ig ? "Janela de 24h fechada" : "Janela fechada · só template"}</span>;
               })()}
               <div className="of-conv-acoes">
                 {isGer && conversa.temIA && (
@@ -7903,6 +7989,17 @@ function InboxOficial({ isGer, showToast, onIrParaEvolution, target, onTargetUse
               const jan = janela24h(ue);
               const podeTextoLivre = !!(jan && jan.aberta);
               if (!podeTextoLivre) {
+                const ig = conversa.canal === "instagram";
+                if (ig) {
+                  return (
+                    <div className="of-bloq">
+                      <div className="of-bloq-txt">
+                        <b><I.lock className="ico-inline" /> {ue ? "Passou das 24h desde o último DM" : "Esse contato ainda não te mandou DM"}</b>
+                        <span>No Instagram você só responde dentro de <b>24h</b> da última mensagem do cliente. {ue ? "É esperar ele te chamar de novo." : "Assim que ele te mandar um DM, a conversa libera aqui."}</span>
+                      </div>
+                    </div>
+                  );
+                }
                 return (
                   <div className="of-bloq">
                     <div className="of-bloq-txt">
@@ -7925,7 +8022,7 @@ function InboxOficial({ isGer, showToast, onIrParaEvolution, target, onTargetUse
                   </div>
                 )}
                 <input ref={fileRefOf} type="file" hidden onChange={(e) => { onArquivoOf(e.target.files[0]); e.target.value = ""; }} accept="image/*,video/*,audio/*,application/pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.zip" />
-                <button type="button" className="of-comp-ico" onClick={() => fileRefOf.current && fileRefOf.current.click()} disabled={enviandoMidiaOf} title="Anexar arquivo"><I.clip className="ico" /></button>
+                {conversa.canal !== "instagram" && <button type="button" className="of-comp-ico" onClick={() => fileRefOf.current && fileRefOf.current.click()} disabled={enviandoMidiaOf} title="Anexar arquivo"><I.clip className="ico" /></button>}
                 <button type="button" className="of-comp-ico" onClick={() => setShowEmojiOf((v) => !v)} title="Emojis">😊</button>
                 <textarea
                   ref={taOfRef}
@@ -7942,6 +8039,8 @@ function InboxOficial({ isGer, showToast, onIrParaEvolution, target, onTargetUse
                 />
                 {texto.trim() ? (
                   <button className="btn btn-primary" onClick={() => { enviar(); setShowEmojiOf(false); }}><I.send className="ico" /></button>
+                ) : conversa.canal === "instagram" ? (
+                  <button className="btn btn-primary" disabled style={{ opacity: 0.45 }} title="Escreva uma mensagem"><I.send className="ico" /></button>
                 ) : (
                   <button type="button" className={gravandoOf ? "of-comp-ico grav" : "of-comp-ico"} onClick={toggleGravarOf} disabled={enviandoMidiaOf} title={gravandoOf ? "Parar e enviar" : "Gravar áudio"}>
                     {gravandoOf ? <I.send className="ico" /> : <I.mic className="ico" />}

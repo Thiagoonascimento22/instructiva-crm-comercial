@@ -160,6 +160,8 @@ export const api = {
   ofAtribuir: (id, vendedorId) => req("POST", "/api/oficial/chats/" + encodeURIComponent(id) + "/atribuir", { vendedorId }),
   ofEncerrar: (id) => req("POST", "/api/oficial/chats/" + encodeURIComponent(id) + "/encerrar", { encerrar: true }),
   ofWebhookInfo: (base) => req("GET", "/api/oficial/webhook-info?base=" + encodeURIComponent(base || "")),
+  ofInstagram: () => req("GET", "/api/oficial/instagram"),
+  ofSalvarInstagram: (dados) => req("PUT", "/api/oficial/instagram", dados),
 
   // IAs do Canal Oficial (cérebro)
   ofIAs: () => req("GET", "/api/oficial/ias"),

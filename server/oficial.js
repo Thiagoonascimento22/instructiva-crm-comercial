@@ -70,6 +70,12 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
     if (!db.oficial.verifyToken) {
       db.oficial.verifyToken = "instructiva_" + Math.random().toString(36).slice(2, 10);
     }
+    // Instagram (DM/Direct) — mesma infra da Meta. { igId, token, usuario, ativo }
+    //   igId: id da conta Instagram profissional (usado no envio e pra casar o webhook)
+    //   token: Page access token com instagram_manage_messages (usa o tokenGlobal se vazio)
+    if (!db.oficial.instagram || typeof db.oficial.instagram !== "object") {
+      db.oficial.instagram = { igId: "", token: "", usuario: "", ativo: false };
+    }
   }
 
   function salvar() { saveDB(); }
@@ -348,6 +354,100 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
       type: "text",
       text: { body: texto },
     });
+  }
+
+  /* ============================================================
+     INSTAGRAM (DM / Direct) — mesma Graph API da Meta
+     ============================================================ */
+  function cfgInstagram() {
+    garantirEstrutura();
+    const ig = db.oficial.instagram || {};
+    return { igId: ig.igId || "", token: ig.token || db.oficial.tokenGlobal || "", usuario: ig.usuario || "", ativo: !!ig.ativo };
+  }
+  function chaveChatIG(remetenteId) { return `instagram::${remetenteId}`; }
+  function acharOuCriarChatIG(remetenteId, nome) {
+    const id = chaveChatIG(remetenteId);
+    let chat = db.waChats[id];
+    if (!chat) {
+      chat = {
+        id, canal: "instagram", instance: id,
+        igUserId: remetenteId,   // IGSID do cliente (é pra ele que respondemos)
+        numero: remetenteId,     // compat com telas que leem .numero
+        nome: nome || "Instagram",
+        mensagens: [], naoLidas: 0, atualizadoEm: Date.now(), vendedorId: null,
+      };
+      db.waChats[id] = chat;
+    }
+    return chat;
+  }
+  async function enviarTextoInstagram(destinatarioId, texto) {
+    const cfg = cfgInstagram();
+    if (!cfg.igId || !cfg.token) throw new Error("Instagram não configurado (falta a conta ou o token).");
+    const r = await fetch(`${GRAPH}/${cfg.igId}/messages`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: "Bearer " + cfg.token },
+      body: JSON.stringify({ recipient: { id: destinatarioId }, message: { text: texto } }),
+    });
+    let data = null; try { data = await r.json(); } catch (_) {}
+    if (!r.ok) {
+      const e = (data && data.error) || {};
+      const err = new Error(e.message || ("Falha ao enviar (HTTP " + r.status + ")"));
+      err.code = e.code; err.subcode = e.error_subcode; throw err;
+    }
+    return data;
+  }
+  async function buscarPerfilIG(igsid) {
+    const cfg = cfgInstagram();
+    if (!cfg.token || !igsid) return null;
+    try {
+      const r = await fetch(`${GRAPH}/${igsid}?fields=name,username&access_token=${encodeURIComponent(cfg.token)}`);
+      const d = await r.json();
+      if (r.ok && d) return { nome: d.name || "", usuario: d.username || "" };
+    } catch (_) {}
+    return null;
+  }
+  // Webhook do Instagram: formato Messenger (entry[].messaging[] com sender/recipient/message)
+  async function processarWebhookIG(body) {
+    const cfg = cfgInstagram();
+    for (const entry of body.entry || []) {
+      for (const ev of entry.messaging || []) {
+        const msg = ev.message;
+        if (!msg) continue;              // ignora read/reaction/postback etc.
+        if (msg.is_echo) continue;       // ignora eco das mensagens que NÓS enviamos
+        const remetente = ev.sender && ev.sender.id;
+        if (!remetente) continue;
+        if (cfg.igId && remetente === cfg.igId) continue; // segurança: não trata nós como cliente
+
+        let content = "";
+        let anexoTipo = null, anexoUrl = null;
+        if (typeof msg.text === "string" && msg.text) content = msg.text;
+        else if (Array.isArray(msg.attachments) && msg.attachments.length) {
+          const at = msg.attachments[0]; const t = at.type;
+          anexoTipo = t === "image" ? "image" : (t || "anexo");
+          anexoUrl = at.payload && at.payload.url ? at.payload.url : null;
+          content = t === "image" ? "📷 Foto" : t === "video" ? "🎬 Vídeo" : t === "audio" ? "🎤 Áudio"
+            : t === "story_mention" ? "📸 Mencionou você no story" : t === "share" ? "🔗 Compartilhou um post" : "[" + (t || "anexo") + "]";
+        } else if (msg.reaction) {
+          content = msg.reaction.emoji ? ("reagiu com " + msg.reaction.emoji) : "reação";
+        } else content = "[mensagem]";
+
+        const chat = acharOuCriarChatIG(remetente);
+        // pega o nome/@ do cliente uma única vez
+        if (!chat.igPerfilBuscado) {
+          chat.igPerfilBuscado = true;
+          const p = await buscarPerfilIG(remetente);
+          if (p && (p.nome || p.usuario)) { chat.nome = p.nome || ("@" + p.usuario); if (p.usuario) chat.igUsuario = p.usuario; }
+        }
+        const ts = ev.timestamp ? Number(ev.timestamp) : Date.now();
+        const msgObj = { role: "them", content, ts };
+        if (anexoTipo) { msgObj.tipo = anexoTipo; if (anexoUrl) msgObj.igUrl = anexoUrl; }
+        chat.mensagens.push(msgObj);
+        if (chat.mensagens.length > 300) chat.mensagens = chat.mensagens.slice(-300);
+        chat.naoLidas = (chat.naoLidas || 0) + 1;
+        chat.atualizadoEm = ts;
+      }
+    }
+    salvar();
   }
 
   // faz upload de um arquivo (Buffer) pro Meta e devolve o media_id
@@ -1900,7 +2000,7 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
     return s;
   }
   function reservaPublica(l) {
-    const qtd = (db.oficial.crmLeads || []).filter((x) => x.reservaId === l.id).length;
+    const qtd = (db.oficial.crmLeads || []).filter((x) => x.reservaId === l.id || (Array.isArray(x.reservaIds) && x.reservaIds.includes(l.id))).length;
     return { id: l.id, nome: l.nome, curso: l.curso, tag: l.tag || "", opcoes: Array.isArray(l.opcoes) ? l.opcoes : [], destino: l.destino || "reserva", distribuir: l.distribuir === "manual" ? "manual" : "auto", slug: l.slug, ativa: l.ativa !== false, leads: qtd, criadoEm: l.criadoEm };
   }
   // Sanitiza as opções de pagamento (forma + preço), no máx 3
@@ -1982,8 +2082,6 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
     const email = String(b.email || "").trim().slice(0, 120);
     if (!nome) return res.status(400).json({ error: "Informe seu nome" });
     if (telefone.length < 10 || telefone.length > 13) return res.status(400).json({ error: "WhatsApp inválido" });
-    const ja = (db.oficial.crmLeads || []).find((x) => x.reservaId === lista.id && x.telefone === telefone);
-    if (ja) return res.json({ ok: true, jaEstava: true }); // já está na lista, não duplica
     // opção de pagamento escolhida (forma + preço)
     const opcoes = Array.isArray(lista.opcoes) ? lista.opcoes : [];
     let idx = parseInt(b.opcao, 10);
@@ -1994,6 +2092,52 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
     }
     const opc = idx >= 0 ? opcoes[idx] : null;
     const etapaDestino = etapasCRM().some((e) => e.k === lista.destino) ? lista.destino : (etapasCRM()[0] || {}).k;
+    const novaTag = (lista.tag || lista.nome || "").trim();
+
+    // o lead já PERTENCE a esta lista? (aguenta o campo antigo reservaId e o novo reservaIds)
+    const naEstaLista = (x) => x.reservaId === lista.id || (Array.isArray(x.reservaIds) && x.reservaIds.includes(lista.id));
+
+    // 1) JÁ ESTÁ NESTA LISTA -> não faz nada (não duplica)
+    const jaNaLista = (db.oficial.crmLeads || []).find((x) => x.telefone === telefone && naEstaLista(x));
+    if (jaNaLista) return res.json({ ok: true, jaEstava: true });
+
+    // 2) JÁ EXISTE NO CRM por telefone, mas entrou por OUTRA lista -> ATUALIZA (não duplica):
+    //    adiciona a tag da nova lista e joga na pipeline dela.
+    const existente = (db.oficial.crmLeads || []).find((x) => x.telefone === telefone);
+    if (existente) {
+      if (!Array.isArray(existente.historico)) existente.historico = [];
+      if (!Array.isArray(existente.tags)) existente.tags = [];
+      // passa a pertencer também a esta lista
+      if (!Array.isArray(existente.reservaIds)) existente.reservaIds = existente.reservaId ? [existente.reservaId] : [];
+      if (!existente.reservaIds.includes(lista.id)) existente.reservaIds.push(lista.id);
+      // tag da nova lista (sem repetir)
+      if (novaTag && !existente.tags.includes(novaTag)) existente.tags.push(novaTag);
+      // pipeline (etapa) da nova lista — sem NUNCA puxar o lead pra trás
+      // (se ele já está numa etapa mais avançada, ex: matriculado, mantém onde está)
+      const etapas = etapasCRM();
+      const iAtual = etapas.findIndex((e) => e.k === existente.etapa);
+      const iNova = etapas.findIndex((e) => e.k === etapaDestino);
+      if (iNova > -1 && (iAtual === -1 || iNova >= iAtual) && existente.etapa !== etapaDestino) {
+        existente.etapa = etapaDestino;
+        existente.historico.push({ tipo: "etapa", texto: "Movido para " + (etapas[iNova] ? etapas[iNova].lb : etapaDestino) + " pela lista " + lista.nome, ts: Date.now() });
+      }
+      // atualiza o interesse pra refletir a nova lista (curso/valor/forma) — sem apagar dado bom com vazio
+      if (lista.curso) existente.curso = lista.curso;
+      if (opc) { existente.valor = opc.preco; existente.formaPagamento = opc.forma; }
+      // completa nome/email se estavam faltando
+      if (nome && (!existente.nome || existente.nome === existente.telefone)) existente.nome = nome;
+      if (email && !existente.email) existente.email = email;
+      // se ainda não tinha dono e a lista distribui automático, distribui agora
+      if (!existente.vendedorId && lista.distribuir !== "manual") {
+        const d = distribuirReserva(); existente.vendedorId = d.vendedorId; existente.vendedorNome = d.vendedorNome;
+      }
+      existente.historico.push({ tipo: "lista", texto: "Entrou também pela lista: " + lista.nome + (opc ? (" — " + opc.forma) : ""), ts: Date.now() });
+      existente.atualizadoEm = Date.now();
+      salvar();
+      return res.json({ ok: true, atualizado: true });
+    }
+
+    // 3) NÃO EXISTE -> cria novo lead
     const dist = (lista.distribuir === "manual") ? { vendedorId: null, vendedorNome: "" } : distribuirReserva();
     const lead = {
       id: "lead_" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
@@ -2003,8 +2147,8 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
       formaPagamento: opc ? opc.forma : "",
       etapa: etapaDestino,
       vendedorId: dist.vendedorId, vendedorNome: dist.vendedorNome,
-      origem: "reserva", reservaId: lista.id, reservaNome: lista.nome,
-      tags: [lista.tag || lista.nome].filter(Boolean),
+      origem: "reserva", reservaId: lista.id, reservaIds: [lista.id], reservaNome: lista.nome,
+      tags: novaTag ? [novaTag] : [],
       notas: [],
       historico: [{ tipo: "criado", texto: "Entrou pela lista de reserva: " + lista.nome + (opc ? (" — " + opc.forma) : ""), ts: Date.now() }],
       criadoEm: Date.now(), atualizadoEm: Date.now(),
@@ -3078,7 +3222,7 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
      ============================================================ */
   app.get("/api/oficial/chats", auth, (req, res) => {
     const q = String(req.query.q || "").trim().toLowerCase();
-    let chats = Object.values(db.waChats).filter((c) => c.canal === "oficial");
+    let chats = Object.values(db.waChats).filter((c) => c.canal === "oficial" || c.canal === "instagram");
     const incluirEncerrados = String(req.query.encerrados || "") === "1";
     if (!incluirEncerrados) chats = chats.filter((c) => !c.encerrado);
     if (req.user.role !== "gerente") {
@@ -3117,6 +3261,8 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
         const camp = c.campanhaId ? (db.oficial.campanhas || []).find((x) => x.id === c.campanhaId) : null;
         return {
           id: c.id,
+          canal: c.canal || "oficial",
+          igUsuario: c.igUsuario || "",
           numero: c.numero,
           nome: c.nome,
           naoLidas: c.naoLidas || 0,
@@ -3140,7 +3286,7 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
   /* abrir uma conversa */
   app.get("/api/oficial/chats/:id", auth, (req, res) => {
     const chat = db.waChats[req.params.id];
-    if (!chat || chat.canal !== "oficial") return res.status(404).json({ error: "Conversa não encontrada" });
+    if (!chat || (chat.canal !== "oficial" && chat.canal !== "instagram")) return res.status(404).json({ error: "Conversa não encontrada" });
     if (req.user.role !== "gerente" && chat.vendedorId !== req.user.id) {
       return res.status(403).json({ error: "Sem acesso a essa conversa" });
     }
@@ -3153,6 +3299,8 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
     const v = chat.vendedorId ? db.users.find((u) => u.id === chat.vendedorId) : null;
     res.json({
       id: chat.id,
+      canal: chat.canal || "oficial",
+      igUsuario: chat.igUsuario || "",
       numero: chat.numero,
       nome: chat.nome,
       origemDisparo: !!chat.origemDisparo,
@@ -3170,7 +3318,7 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
   /* enviar mensagem do vendedor/gerente nessa conversa */
   app.post("/api/oficial/chats/:id/send", auth, async (req, res) => {
     const chat = db.waChats[req.params.id];
-    if (!chat || chat.canal !== "oficial") return res.status(404).json({ error: "Conversa não encontrada" });
+    if (!chat || (chat.canal !== "oficial" && chat.canal !== "instagram")) return res.status(404).json({ error: "Conversa não encontrada" });
     if (req.user.role !== "gerente" && chat.vendedorId !== req.user.id) {
       return res.status(403).json({ error: "Sem acesso a essa conversa" });
     }
@@ -3180,22 +3328,38 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
     }
     const texto = String((req.body && req.body.texto) || "").trim();
     if (!texto) return res.status(400).json({ error: "Mensagem vazia" });
-    const numeroCfg = acharNumero(chat.numeroOficialId);
-    if (!numeroCfg) return res.status(400).json({ error: "Número de origem não encontrado" });
+    const ehIG = chat.canal === "instagram";
+    let numeroCfg = null;
+    if (!ehIG) {
+      numeroCfg = acharNumero(chat.numeroOficialId);
+      if (!numeroCfg) return res.status(400).json({ error: "Número de origem não encontrado" });
+    }
     try {
-      const resp = await enviarTextoOficial(numeroCfg, chat.numero, texto);
+      let wamid = null;
+      if (ehIG) {
+        const resp = await enviarTextoInstagram(chat.igUserId || chat.numero, texto);
+        wamid = (resp && (resp.message_id || (resp.messages && resp.messages[0] && resp.messages[0].id))) || null;
+      } else {
+        const resp = await enviarTextoOficial(numeroCfg, chat.numero, texto);
+        wamid = resp && resp.messages && resp.messages[0] && resp.messages[0].id;
+      }
       const ts = Date.now();
-      const wamid = resp && resp.messages && resp.messages[0] && resp.messages[0].id;
       chat.mensagens.push({ role: "me", content: texto, ts, wamid: wamid || null, status: "sent" });
-      if (wamid) { if (!db.oficial.wamidChat) db.oficial.wamidChat = {}; db.oficial.wamidChat[wamid] = chat.id; }
+      if (wamid && !ehIG) { if (!db.oficial.wamidChat) db.oficial.wamidChat = {}; db.oficial.wamidChat[wamid] = chat.id; }
       if (chat.iaId && !chat.iaPausada) chat.iaPausada = true; // humano assumiu -> IA pausa sozinha
       if (chat.mensagens.length > 300) chat.mensagens = chat.mensagens.slice(-300);
       chat.atualizadoEm = ts;
       salvar();
       res.json({ ok: true });
     } catch (e) {
-      // erro típico: janela de 24h fechada (precisa de template)
       const m = String((e && e.message) || "");
+      if (ehIG) {
+        if (/24|window|outside|allowed|10\b|551/i.test(m) || e.code === 10 || e.code === 551 || e.subcode === 2534022) {
+          return res.status(400).json({ error: "O cliente ainda não te mandou DM (ou já passou das 24h). No Instagram só dá pra responder dentro de 24h da última mensagem dele." });
+        }
+        return res.status(400).json({ error: m || "Falha ao enviar no Instagram" });
+      }
+      // erro típico do WhatsApp: janela de 24h fechada (precisa de template)
       if (/131047|24 hours|24h|re-?engagement/i.test(m)) {
         return res.status(400).json({ error: "Esse contato ainda não respondeu (ou passou das 24h). O WhatsApp só entrega template aprovado agora — use o botão Enviar template." });
       }
@@ -3298,7 +3462,7 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
      Grava uma NOTA interna visível a todos os colaboradores (o lead não vê). */
   app.post("/api/oficial/chats/:id/atribuir", auth, (req, res) => {
     const chat = db.waChats[req.params.id];
-    if (!chat || chat.canal !== "oficial") return res.status(404).json({ error: "Conversa não encontrada" });
+    if (!chat || (chat.canal !== "oficial" && chat.canal !== "instagram")) return res.status(404).json({ error: "Conversa não encontrada" });
     // vendedor só pode reatribuir se a conversa for dele
     if (req.user.role !== "gerente" && chat.vendedorId !== req.user.id) {
       return res.status(403).json({ error: "Você só pode transferir conversas suas" });
@@ -3429,6 +3593,7 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
       if (db.oficial.webhookLog.length > 30) db.oficial.webhookLog = db.oficial.webhookLog.slice(0, 30);
       salvar();
 
+      if (body.object === "instagram") { await processarWebhookIG(body); return; }
       if (body.object !== "whatsapp_business_account") return;
       for (const entry of body.entry || []) {
         for (const ch of entry.changes || []) {
@@ -3614,6 +3779,28 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
   });
 
   /* expõe a config do webhook pro painel (URL + verify token) */
+  // ---- Instagram (DM) : configuração ----
+  app.get("/api/oficial/instagram", auth, gerenteOnly, (req, res) => {
+    const ig = cfgInstagram();
+    res.json({
+      igId: ig.igId, usuario: ig.usuario, ativo: ig.ativo,
+      temToken: !!ig.token,        // não devolve o token em si
+      verifyToken: db.oficial.verifyToken, // mesmo webhook do WhatsApp
+    });
+  });
+  app.put("/api/oficial/instagram", auth, gerenteOnly, (req, res) => {
+    garantirEstrutura();
+    const b = req.body || {};
+    const ig = db.oficial.instagram;
+    if (b.igId !== undefined) ig.igId = String(b.igId || "").trim();
+    if (b.usuario !== undefined) ig.usuario = String(b.usuario || "").trim().replace(/^@/, "");
+    if (typeof b.token === "string" && b.token.trim()) ig.token = b.token.trim(); // só troca se vier um novo
+    if (b.ativo !== undefined) ig.ativo = !!b.ativo;
+    salvar();
+    const c = cfgInstagram();
+    res.json({ ok: true, igId: c.igId, usuario: c.usuario, ativo: c.ativo, temToken: !!c.token });
+  });
+
   app.get("/api/oficial/webhook-info", auth, gerenteOnly, (req, res) => {
     const base = String(req.query.base || "").replace(/\/+$/, "");
     res.json({

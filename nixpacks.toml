@@ -1,5 +1,10 @@
-[phases.build]
-cmds = ["npm run build"]
+# ffmpeg: converte o áudio gravado no navegador (WebM) para OGG/Opus,
+# único formato de voz que a Cloud API da Meta aceita.
+[phases.setup]
+nixPkgs = ["nodejs", "ffmpeg"]
+
+[phases.install]
+cmds = ["npm install"]
 
 [start]
-cmd = "node server.js"
+cmd = "node server/index.js"
