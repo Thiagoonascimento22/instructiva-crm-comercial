@@ -774,7 +774,7 @@ export function instalarVendas({ app, getDb, saveDB, proximoId, auth, gerenteOnl
     if (tem("microondas", "micro-ondas")) return "MICROONDAS";
     if (tem("televisor", "tv ")) return "TELEVISORES";
     if (tem("amplificador")) return "AMPLIFICADORES";
-    if (tem("emac")) return t.includes("4") ? "EMAC 4.0" : t.includes("3") ? "EMAC 3.0" : "EMAC";
+    if (tem("emac")) return "EMAC"; // EMAC, EMAC 3.0 e EMAC 4.0 -> tudo num "EMAC" só
     if (tem("analise dc", "análise dc")) return "ANÁLISE DC AVANÇADA";
     if (tem("eletronica inicial", "eletrônica inicial")) return "ELETRÔNICA INICIAL";
     if (tem("eletronica digital")) return "ELETRÔNICA DIGITAL";
