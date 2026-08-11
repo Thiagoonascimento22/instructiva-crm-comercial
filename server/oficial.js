@@ -67,6 +67,21 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
       db.oficial._iaOffV63 = true;
       saveDB();
     }
+    // Recuperação única: conversas de DISPARO que já eram de um vendedor mas foram
+    // "sequestradas" pela IA padrão do número (bug antigo) ficavam invisíveis pra ele.
+    // Pausa a IA nessas conversas pra elas reaparecerem na Caixa de entrada do vendedor.
+    if (!db.oficial._migDisparoIADono) {
+      db.oficial._migDisparoIADono = true;
+      let devolvidas = 0;
+      for (const c of Object.values(db.waChats || {})) {
+        if (c && c.canal === "oficial" && c.origemDisparo && c.vendedorId && c.iaId && !c.iaPausada) {
+          c.iaPausada = true; // IA sai; o vendedor assume e a conversa volta a aparecer
+          devolvidas++;
+        }
+      }
+      if (devolvidas) console.log(`[recuperação] ${devolvidas} conversa(s) de disparo devolvida(s) ao vendedor (IA pausada)`);
+      saveDB();
+    }
     if (!db.oficial.verifyToken) {
       db.oficial.verifyToken = "instructiva_" + Math.random().toString(36).slice(2, 10);
     }
@@ -3744,8 +3759,11 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
             }
 
             // ===== IA por campanha OU distribuição pro vendedor =====
-            // se a conversa ainda não tem IA mas o NÚMERO tem uma IA padrão, atribui ela
-            if (!chat.iaId && numeroCfg.iaId) {
+            // se a conversa ainda não tem IA, NÃO tem dono humano, e o NÚMERO tem uma IA padrão, atribui ela.
+            // IMPORTANTE: se a conversa já é de um vendedor (ex.: disparo "fica comigo"/atribuição manual),
+            // a IA padrão NÃO assume — senão a conversa sumiria da Caixa de entrada do vendedor. A IA padrão
+            // do número só entra em lead NOVO/sem dono.
+            if (!chat.iaId && !chat.vendedorId && numeroCfg.iaId) {
               const iaPadrao = (db.oficial.ias || []).find((x) => x.id === numeroCfg.iaId && x.ativa);
               if (iaPadrao) { chat.iaId = numeroCfg.iaId; chat.iaPausada = false; }
             }
