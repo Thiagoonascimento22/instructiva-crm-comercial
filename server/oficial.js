@@ -1743,7 +1743,7 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
   }
   function proximoVendedorCRM() {
     garantirCRM();
-    let pool = (db.oficial.crmVendedores || []).filter((id) => db.users.some((u) => u.id === id && u.role === "vendedor" && u.ativo));
+    let pool = (db.oficial.crmVendedores || []).filter((id) => db.users.some((u) => u.id === id && (u.role === "vendedor" || u.role === "gerente") && u.ativo));
     if (!pool.length) pool = (db.users || []).filter((u) => u.role === "vendedor" && u.ativo).map((u) => u.id);
     if (!pool.length) return null;
     db.oficial._crmRR = ((db.oficial._crmRR || 0) + 1) % pool.length;
@@ -1803,7 +1803,9 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
     res.json({
       etapas: etapasCRM(),
       leads: leads.map(crmLeadPublico),
-      vendedores: (db.users || []).filter((u) => u.role === "vendedor" && u.ativo).map((u) => ({ id: u.id, nome: u.nome, foto: u.foto || "" })),
+      // donos possíveis do lead: vendedores + gerentes (gerente que também vende
+      // pode receber/assumir lead). ehGerente deixa a tela marcar quem é gerente.
+      vendedores: (db.users || []).filter((u) => (u.role === "vendedor" || u.role === "gerente") && u.ativo).map((u) => ({ id: u.id, nome: u.nome, foto: u.foto || "", ehGerente: u.role === "gerente" })),
       crmVendedores: ehVend ? [] : (db.oficial.crmVendedores || []),
       soMeus: ehVend, // o front usa pra esconder as partes que são só do gerente
     });

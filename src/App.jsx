@@ -4050,7 +4050,7 @@ function ModalCadastrarPipeline({ prefill, onClose, showToast }) {
                 <select className="input" value={form.etapa} onChange={(e) => setForm({ ...form, etapa: e.target.value })}>{etapas.map((et) => <option key={et.k} value={et.k}>{et.lb}</option>)}</select>
               </div>
               <div><label className="lbl-mini">Vendedor</label>
-                <select className="input" value={form.vendedorId} onChange={(e) => setForm({ ...form, vendedorId: e.target.value })}><option value="">Sem dono</option>{vendedores.map((v) => <option key={v.id} value={v.id}>{v.nome}</option>)}</select>
+                <select className="input" value={form.vendedorId} onChange={(e) => setForm({ ...form, vendedorId: e.target.value })}><option value="">Sem dono</option>{vendedores.map((v) => <option key={v.id} value={v.id}>{v.nome}{v.ehGerente ? " (gerente)" : ""}</option>)}</select>
               </div>
             </div>
             <button className="onum-add" style={{ marginTop: 16, width: "100%", justifyContent: "center" }} onClick={salvar} disabled={salvando || carregando}>{salvando ? "Cadastrando…" : "Cadastrar no Pipeline"}</button>
@@ -5919,6 +5919,7 @@ function OficialCRM({ showToast, isGer = true, onAbrirWhats }) {
   const boardRef = useRef(null);
   const autoScrollRef = useRef(0);
   const [marcados, setMarcados] = useState({});
+  const [selN, setSelN] = useState({}); // quantidade digitada por coluna, pra selecionar os N primeiros
   const [tarefaTexto, setTarefaTexto] = useState("");
   const [tarefaQuando, setTarefaQuando] = useState("");
   useEffect(() => {
@@ -6058,6 +6059,12 @@ function OficialCRM({ showToast, isGer = true, onAbrirWhats }) {
   const qtdMarcados = Object.keys(marcados).length;
   const toggleMarcado = (id) => setMarcados((m) => { const n = { ...m }; if (n[id]) delete n[id]; else n[id] = true; return n; });
   const marcarColuna = (ids, on) => setMarcados((m) => { const n = { ...m }; ids.forEach((id) => { if (on) n[id] = true; else delete n[id]; }); return n; });
+  // marca os N primeiros leads de uma coluna (na ordem que aparece na tela)
+  const marcarPrimeirosN = (ids, n) => {
+    const qtd = Math.max(0, Math.min(parseInt(n, 10) || 0, ids.length));
+    if (!qtd) return;
+    setMarcados((m) => { const x = { ...m }; ids.slice(0, qtd).forEach((id) => { x[id] = true; }); return x; });
+  };
   async function atribuirLote(vid) {
     const ids = Object.keys(marcados); if (!ids.length) return;
     try { const r = await api.ofCrmLoteAtribuir({ ids, vendedorId: vid }); showToast(`✓ ${r.alterados} lead(s) atribuído(s)`); setMarcados({}); carregar(); }
@@ -6104,7 +6111,7 @@ function OficialCRM({ showToast, isGer = true, onAbrirWhats }) {
           {isGer && vendedores.length > 0 && (
             <select className="crm-filtro-vend" value={filtroVend} onChange={(e) => setFiltroVend(e.target.value)}>
               <option value="">Todos os vendedores</option>
-              {vendedores.map((v) => <option key={v.id} value={v.id}>{v.nome}</option>)}
+              {vendedores.map((v) => <option key={v.id} value={v.id}>{v.nome}{v.ehGerente ? " (gerente)" : ""}</option>)}
               <option value="__sem">Sem dono</option>
             </select>
           )}
@@ -6126,6 +6133,14 @@ function OficialCRM({ showToast, isGer = true, onAbrirWhats }) {
                 </div>
                 {totalCol > 0 && <span className="crm-col-total">R$ {totalCol.toLocaleString("pt-BR")}</span>}
               </div>
+              {doEt.length > 1 && (
+                <div onClick={(e) => e.stopPropagation()} style={{ display: "flex", alignItems: "center", gap: 6, padding: "0 10px 8px" }} title={"Selecionar os primeiros N de " + et.lb}>
+                  <input type="number" min="1" max={doEt.length} value={selN[et.k] || ""} placeholder="qtd" className="input" style={{ width: 74, padding: "5px 8px", fontSize: 13 }}
+                    onChange={(e) => setSelN({ ...selN, [et.k]: e.target.value })}
+                    onKeyDown={(e) => { if (e.key === "Enter") marcarPrimeirosN(doEt.map((l) => l.id), selN[et.k]); }} />
+                  <button type="button" className="btn btn-sm" onClick={() => marcarPrimeirosN(doEt.map((l) => l.id), selN[et.k])}>Selecionar</button>
+                </div>
+              )}
               <div className="crm-col-body">
                 {doEt.map((l) => (
                   <div key={l.id} className={"crm-card" + (marcados[l.id] ? " marcado" : "")} draggable onDragStart={() => setDragId(l.id)} onDragEnd={() => setDragId(null)} onClick={() => { setSel(l.id); setNovaNota(""); }}>
@@ -6200,14 +6215,14 @@ function OficialCRM({ showToast, isGer = true, onAbrirWhats }) {
                   <div><label className="lbl-mini">Vendedor responsável</label>
                     <select className="input" value={leadSel.vendedorId || ""} onChange={(e) => salvarCampo(sel, "vendedorId", e.target.value)}>
                       <option value="">Sem dono</option>
-                      {vendedores.map((v) => <option key={v.id} value={v.id}>{v.nome}</option>)}
+                      {vendedores.map((v) => <option key={v.id} value={v.id}>{v.nome}{v.ehGerente ? " (gerente)" : ""}</option>)}
                     </select>
                   </div>
                 ) : (
                   <div><label className="lbl-mini">Responsável</label>
                     <select className="input" value={leadSel.vendedorId || ""} onChange={(e) => { const vid = e.target.value; if (vid && vid !== (leadSel.vendedorId || "")) transferir(vid); }}>
                       {!leadSel.vendedorId && <option value="">Escolher vendedor…</option>}
-                      {vendedores.map((v) => <option key={v.id} value={v.id}>{v.nome}</option>)}
+                      {vendedores.map((v) => <option key={v.id} value={v.id}>{v.nome}{v.ehGerente ? " (gerente)" : ""}</option>)}
                     </select>
                   </div>
                 )}
@@ -6274,7 +6289,7 @@ function OficialCRM({ showToast, isGer = true, onAbrirWhats }) {
                   <select className="input" value={criar.etapa} onChange={(e) => setCriar({ ...criar, etapa: e.target.value })}>{etapas.map((e) => <option key={e.k} value={e.k}>{e.lb}</option>)}</select>
                 </div>
                 {isGer && <div><label className="lbl-mini">Vendedor</label>
-                  <select className="input" value={criar.vendedorId} onChange={(e) => setCriar({ ...criar, vendedorId: e.target.value })}><option value="">Sem dono</option>{vendedores.map((v) => <option key={v.id} value={v.id}>{v.nome}</option>)}</select>
+                  <select className="input" value={criar.vendedorId} onChange={(e) => setCriar({ ...criar, vendedorId: e.target.value })}><option value="">Sem dono</option>{vendedores.map((v) => <option key={v.id} value={v.id}>{v.nome}{v.ehGerente ? " (gerente)" : ""}</option>)}</select>
                 </div>}
               </div>
               <button className="onum-add" style={{ marginTop: 16, width: "100%", justifyContent: "center" }} onClick={criarLead}>Criar lead</button>
@@ -6291,7 +6306,7 @@ function OficialCRM({ showToast, isGer = true, onAbrirWhats }) {
               <p className="onum-dica" style={{ marginBottom: 12 }}>Marque os vendedores que vão receber (em rodízio) os leads qualificados pela IA de ligação. Se não marcar nenhum, distribui entre todos os ativos.</p>
               {vendedores.map((v) => (
                 <label key={v.id} className="crm-vend-check">
-                  <input type="checkbox" checked={crmVend.includes(v.id)} onChange={() => toggleVend(v.id)} /> {v.nome}
+                  <input type="checkbox" checked={crmVend.includes(v.id)} onChange={() => toggleVend(v.id)} /> {v.nome}{v.ehGerente ? " (gerente)" : ""}
                 </label>
               ))}
               {vendedores.length === 0 && <div className="crm-vazio-mini">Nenhum vendedor ativo.</div>}
@@ -6317,7 +6332,7 @@ function OficialCRM({ showToast, isGer = true, onAbrirWhats }) {
             <select className="crm-lote-sel" value="" onChange={(e) => { if (e.target.value) atribuirLote(e.target.value === "__sem" ? "" : e.target.value); }}>
               <option value="">Atribuir dono…</option>
               <option value="__sem">Sem dono</option>
-              {vendedores.map((v) => <option key={v.id} value={v.id}>{v.nome}</option>)}
+              {vendedores.map((v) => <option key={v.id} value={v.id}>{v.nome}{v.ehGerente ? " (gerente)" : ""}</option>)}
             </select>
             {isGer && <button className="crm-lote-del" onClick={excluirLote}><I.trash className="ico" /> Excluir</button>}
             <button className="crm-lote-limpar" onClick={() => setMarcados({})}>Limpar</button>
@@ -7743,7 +7758,7 @@ function InboxOficial({ isGer, showToast, onIrParaEvolution, target, onTargetUse
               <option value="todos">Todos os vendedores</option>
               <option value="ia">🤖 Em atendimento por IA</option>
               <option value="sem">Aguardando distribuição</option>
-              {vendedores.map((v) => <option key={v.id} value={v.id}>{v.nome}</option>)}
+              {vendedores.map((v) => <option key={v.id} value={v.id}>{v.nome}{v.ehGerente ? " (gerente)" : ""}</option>)}
             </select>
           </div>
         )}
