@@ -983,6 +983,32 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
     }
   });
 
+  /* ---- assina TODAS as WABAs de uma vez (pra não clicar número por número) ---- */
+  app.post("/api/oficial/assinar-todos", auth, gerenteOnly, async (req, res) => {
+    garantirEstrutura();
+    const resultados = [];
+    for (const n of db.oficial.numeros || []) {
+      if (!n.wabaId) { resultados.push({ apelido: n.apelido, ok: false, erro: "sem WABA ID" }); continue; }
+      if (!tokenDe(n)) { resultados.push({ apelido: n.apelido, ok: false, erro: "sem token" }); continue; }
+      try {
+        const r = await fetch(`${GRAPH}/${n.wabaId}/subscribed_apps`, {
+          method: "POST",
+          headers: { Authorization: `Bearer ${tokenDe(n)}`, "Content-Type": "application/json" },
+        });
+        const data = await r.json().catch(() => ({}));
+        if (r.ok) {
+          n.webhookAssinado = true; n.webhookAssinadoEm = Date.now();
+          resultados.push({ apelido: n.apelido, ok: true });
+        } else {
+          resultados.push({ apelido: n.apelido, ok: false, erro: (data.error && data.error.message) || ("HTTP " + r.status) });
+        }
+      } catch (e) { resultados.push({ apelido: n.apelido, ok: false, erro: e.message }); }
+    }
+    salvar();
+    const ok = resultados.filter((x) => x.ok).length;
+    res.json({ ok, total: resultados.length, resultados });
+  });
+
   /* ---- registra o número na Cloud API (necessário quando a verificação em 2 etapas está ativa) ---- */
   app.post("/api/oficial/numeros/:id/registrar", auth, gerenteOnly, async (req, res) => {
     const n = acharNumero(req.params.id);
@@ -3141,7 +3167,8 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
   });
 
   /* ---- visão geral (todas as campanhas de uma vez) ---- */
-  app.get("/api/oficial/diagnostico", auth, gerenteOnly, async (req, res) => {
+  // diagnóstico de ÁUDIO/ffmpeg (renomeado: antes colidia com o /diagnostico do webhook)
+  app.get("/api/oficial/diagnostico-audio", auth, gerenteOnly, async (req, res) => {
     const temFfmpeg = await ffmpegOk();
     res.json({
       ffmpeg: temFfmpeg,
@@ -3568,21 +3595,27 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
   /* diagnóstico: últimas chamadas recebidas no webhook + status de inscrição de cada WABA */
   app.get("/api/oficial/diagnostico", auth, gerenteOnly, async (req, res) => {
     const log = (db.oficial.webhookLog || []).slice(0, 20);
-    const numeros = [];
-    for (const n of db.oficial.numeros || []) {
+    const lista = db.oficial.numeros || [];
+    // checa a inscrição de todos os números EM PARALELO, com timeout por chamada,
+    // pra a tela nunca travar (antes era sequencial e estourava com muitos números).
+    const numeros = await Promise.all(lista.map(async (n) => {
       let inscrito = null, erro = null;
       if (n.wabaId && tokenDe(n)) {
         try {
+          const ctrl = new AbortController();
+          const t = setTimeout(() => ctrl.abort(), 4000);
           const r = await fetch(`${GRAPH}/${n.wabaId}/subscribed_apps`, {
             headers: { Authorization: `Bearer ${tokenDe(n)}` },
+            signal: ctrl.signal,
           });
+          clearTimeout(t);
           const data = await r.json().catch(() => ({}));
           if (r.ok) inscrito = (data.data || []).length > 0;
           else erro = (data.error && data.error.message) || "erro";
-        } catch (e) { erro = e.message; }
+        } catch (e) { erro = e.name === "AbortError" ? "tempo esgotado ao checar na Meta" : e.message; }
       }
-      numeros.push({ apelido: n.apelido, phoneNumberId: n.phoneNumberId, wabaId: n.wabaId, inscrito, erro });
-    }
+      return { apelido: n.apelido, phoneNumberId: n.phoneNumberId, wabaId: n.wabaId, inscrito, erro };
+    }));
     res.json({ verifyToken: db.oficial.verifyToken, numeros, log });
   });
 
@@ -3881,7 +3914,27 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
     }
   }, 5000);
 
-  // AGENDADOR: dispara as campanhas agendadas quando a hora chega (checa a cada 20s).
+  // RE-ASSINAR WEBHOOK NO BOOT: garante que a Meta continue mandando as respostas
+  // de TODOS os números depois de cada deploy/reinício (assinar de novo é inofensivo:
+  // se já estava assinado, a Meta só confirma). Assim nunca "solta" sozinho.
+  setTimeout(async () => {
+    const ns = (db.oficial && db.oficial.numeros || []).filter((n) => n.wabaId && tokenDe(n));
+    if (!ns.length) return;
+    let ok = 0;
+    for (const n of ns) {
+      try {
+        const r = await fetch(`${GRAPH}/${n.wabaId}/subscribed_apps`, {
+          method: "POST",
+          headers: { Authorization: `Bearer ${tokenDe(n)}`, "Content-Type": "application/json" },
+        });
+        if (r.ok) { n.webhookAssinado = true; n.webhookAssinadoEm = Date.now(); ok++; }
+        else { const d = await r.json().catch(() => ({})); n.webhookErro = (d.error && d.error.message) || ("HTTP " + r.status); }
+      } catch (e) { n.webhookErro = e.message; }
+      await new Promise((r) => setTimeout(r, 150)); // ritmo leve pra não sobrecarregar
+    }
+    salvar();
+    console.log(`[oficial] Webhook re-assinado no boot: ${ok}/${ns.length} número(s) OK`);
+  }, 8000);
   // Roda no servidor e é confiável: as campanhas ficam salvas no banco, então mesmo
   // que o servidor reinicie, elas disparam na hora certa — e se ele estava fora na
   // hora marcada, dispara assim que voltar (agendadoPara <= agora).

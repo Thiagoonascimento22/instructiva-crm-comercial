@@ -104,6 +104,7 @@ export const api = {
   ofExcluirNumero: (id) => req("DELETE", "/api/oficial/numeros/" + id),
   ofRegistrarNumero: (id, pin) => req("POST", "/api/oficial/numeros/" + id + "/registrar", { pin }),
   ofAssinarWebhook: (id) => req("POST", "/api/oficial/numeros/" + id + "/assinar-webhook"),
+  ofAssinarTodos: () => req("POST", "/api/oficial/assinar-todos"),
   ofDiagnostico: () => req("GET", "/api/oficial/diagnostico"),
   ofTemplates: (id) => req("GET", "/api/oficial/numeros/" + id + "/templates"),
   ofEnviarTemplate: (dados) => req("POST", "/api/oficial/enviar-template", dados),

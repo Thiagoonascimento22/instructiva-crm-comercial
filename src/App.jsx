@@ -7038,11 +7038,13 @@ function OficialNumeros({ showToast }) {
   async function diagnostico() {
     showToast("Verificando…");
     try {
-      const d = await api.ofDiagnostico();
+      const d = (await api.ofDiagnostico()) || {};
+      const nums = Array.isArray(d.numeros) ? d.numeros : [];
+      const logs = Array.isArray(d.log) ? d.log : [];
       let txt = "DIAGNÓSTICO DO WEBHOOK (recebimento de respostas)\n";
       txt += "══════════════════════════════════════\n\n";
       // 1) chegou ALGUMA coisa da Meta?
-      const ultimo = d.log && d.log.length ? d.log[0].ts : 0;
+      const ultimo = logs.length ? logs[0].ts : 0;
       if (!ultimo) {
         txt += "⚠️ NENHUMA resposta chegou da Meta até agora.\n";
         txt += "Quando o cliente responde e não aparece aqui, é UMA destas causas:\n\n";
@@ -7059,7 +7061,7 @@ function OficialNumeros({ showToast }) {
       }
       // 2) inscrição + veredito de cada número
       txt += "Cada número está pronto pra receber respostas?\n";
-      for (const n of d.numeros) {
+      for (const n of nums) {
         let veredito;
         if (!n.wabaId) veredito = "❌ SEM WABA ID — edite o número, cole o WABA ID e clique no 🔗 (Assinar webhook).";
         else if (n.inscrito === true) veredito = "✅ inscrita na Meta";
@@ -7069,15 +7071,32 @@ function OficialNumeros({ showToast }) {
       }
       // 3) log cru (mostra o phone_id de quem chegou — útil se o número estiver trocado)
       txt += "\nÚltimas chamadas recebidas da Meta:\n";
-      if (!d.log.length) {
+      if (!logs.length) {
         txt += "(nenhuma ainda)\n";
       } else {
-        for (const l of d.log.slice(0, 8)) {
+        for (const l of logs.slice(0, 8)) {
           const hora = new Date(l.ts).toLocaleTimeString("pt-BR");
           txt += `• ${hora} — ${l.resumo}\n`;
         }
       }
       alert(txt);
+    } catch (e) { showToast("❌ " + e.message); }
+  }
+  async function assinarTodos() {
+    showToast("Assinando o webhook de todos os números…");
+    try {
+      const r = await api.ofAssinarTodos();
+      const falhas = (r.resultados || []).filter((x) => !x.ok);
+      let txt = `WEBHOOK — assinatura em massa\n\n✅ ${r.ok} de ${r.total} número(s) assinados com sucesso.\n`;
+      if (falhas.length) {
+        txt += "\n❌ Não deu certo em:\n";
+        for (const f of falhas) txt += `• ${f.apelido}: ${f.erro || "falha"}\n`;
+        txt += "\n(Se for \"sem WABA ID\", edite o número e cole o WABA ID; depois assine de novo.)";
+      } else {
+        txt += "\nTodos prontos! As respostas agora chegam no sistema.\n\nSe mesmo assim não chegar, confira a URL do webhook no painel da Meta (seção \"Configuração do Webhook na Meta\").";
+      }
+      alert(txt);
+      carregar();
     } catch (e) { showToast("❌ " + e.message); }
   }
   function copiar(txt, label) {
@@ -7097,6 +7116,7 @@ function OficialNumeros({ showToast }) {
             <I.key className="ico" /> Token da Meta {tokenDef ? "✓" : "(configurar)"}
           </button>
           <button className="onum-btn-ghost" onClick={diagnostico} title="Verificar se as respostas estão chegando"><I.search className="ico" /> Diagnóstico</button>
+          <button className="onum-btn-ghost" onClick={assinarTodos} title="Ativa o recebimento de respostas (webhook) em TODOS os números de uma vez"><I.link className="ico" /> Assinar webhook (todos)</button>
           <button className="onum-btn-ghost" onClick={puxarQualidadeTodos} disabled={puxandoQ === "todos"} title="Puxar da Meta a qualidade, o limite e a foto de perfil de todos os números">
             {puxandoQ === "todos" ? "Atualizando…" : <><I.gauge className="ico" /> Atualizar qualidade e fotos</>}
           </button>
