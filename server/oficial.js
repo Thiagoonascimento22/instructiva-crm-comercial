@@ -56,6 +56,7 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
     // campanhas: [{ id, nome, numeroId, template, enviados, falhas, total, criadoEm }]
     if (typeof db.oficial.rrCursor !== "number") db.oficial.rrCursor = 0;
     if (!Array.isArray(db.oficial.reservaListas)) db.oficial.reservaListas = []; // listas de reserva (captação)
+    if (!Array.isArray(db.oficial.webhookReenvio)) db.oficial.webhookReenvio = []; // URLs de outros sistemas (mesmo app da Meta) pra repassar eventos
     if (!Array.isArray(db.oficial.ias)) db.oficial.ias = [];
     // ias: [{ id, nome, ativa, modo, persona, playbook, gatilhoHandoff, criadoEm }]
     //   modo: "fecha" (IA vende sozinha) | "qualifica" (IA conversa e passa pro vendedor)
@@ -3635,6 +3636,26 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
     res.json({ ok: true, removidas });
   });
 
+  /* ---- REENVIO de webhook pra outro(s) sistema(s) que usam o MESMO app da Meta ----
+     O sistema pra onde a Meta aponta recebe tudo e repassa aqui pros "irmãos".
+     Guarda só a BASE (ex: https://xxx.up.railway.app); o repasse já anexa o caminho. */
+  app.get("/api/oficial/webhook-reenvio", auth, gerenteOnly, (req, res) => {
+    garantirEstrutura();
+    res.json({ urls: db.oficial.webhookReenvio || [] });
+  });
+  app.put("/api/oficial/webhook-reenvio", auth, gerenteOnly, (req, res) => {
+    garantirEstrutura();
+    const lista = Array.isArray(req.body && req.body.urls) ? req.body.urls : [];
+    const limpas = lista
+      .map((u) => String(u || "").trim())
+      .map((u) => u.replace(/\/api\/oficial\/webhook.*$/i, "")) // aceita colar a URL completa
+      .map((u) => u.replace(/\/+$/, ""))
+      .filter((u) => /^https?:\/\//i.test(u));
+    db.oficial.webhookReenvio = [...new Set(limpas)];
+    salvar();
+    res.json({ ok: true, urls: db.oficial.webhookReenvio });
+  });
+
   /* ============================================================
      WEBHOOK OFICIAL (Meta chama aqui)
      GET = verificação | POST = mensagens recebidas
@@ -3674,6 +3695,28 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
       });
       if (db.oficial.webhookLog.length > 30) db.oficial.webhookLog = db.oficial.webhookLog.slice(0, 30);
       salvar();
+
+      // ===== REENVIO ENTRE SISTEMAS (mesmo app da Meta servindo mais de um CRM) =====
+      // A Meta manda tudo pra UM sistema (o que a URL aponta). Esse sistema repassa
+      // pros outros o MESMO evento; cada um processa só os números dele e ignora o resto.
+      // O marcador ?fwd=1 garante repasse de UM salto só (nunca vira loop).
+      if (req.query.fwd !== "1") {
+        const destinos = (db.oficial.webhookReenvio || []).filter((u) => /^https?:\/\//i.test(u));
+        if (destinos.length) {
+          const corpo = JSON.stringify(body);
+          for (const base of destinos) {
+            const alvo = base.replace(/\/+$/, "") + "/api/oficial/webhook?fwd=1";
+            (async () => {
+              try {
+                const ctrl = new AbortController();
+                const t = setTimeout(() => ctrl.abort(), 6000);
+                await fetch(alvo, { method: "POST", headers: { "Content-Type": "application/json" }, body: corpo, signal: ctrl.signal });
+                clearTimeout(t);
+              } catch (_) {}
+            })();
+          }
+        }
+      }
 
       if (body.object === "instagram") { await processarWebhookIG(body); return; }
       if (body.object !== "whatsapp_business_account") return;

@@ -161,6 +161,8 @@ export const api = {
   ofAtribuir: (id, vendedorId) => req("POST", "/api/oficial/chats/" + encodeURIComponent(id) + "/atribuir", { vendedorId }),
   ofEncerrar: (id) => req("POST", "/api/oficial/chats/" + encodeURIComponent(id) + "/encerrar", { encerrar: true }),
   ofWebhookInfo: (base) => req("GET", "/api/oficial/webhook-info?base=" + encodeURIComponent(base || "")),
+  ofGetReenvio: () => req("GET", "/api/oficial/webhook-reenvio"),
+  ofSetReenvio: (urls) => req("PUT", "/api/oficial/webhook-reenvio", { urls }),
   ofInstagram: () => req("GET", "/api/oficial/instagram"),
   ofSalvarInstagram: (dados) => req("PUT", "/api/oficial/instagram", dados),
 

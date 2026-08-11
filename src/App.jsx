@@ -6926,6 +6926,8 @@ function OficialNumeros({ showToast }) {
   const [igForm, setIgForm] = useState(null); // form aberto pra editar Instagram
   const [salvandoIg, setSalvandoIg] = useState(false);
   const [verWebhook, setVerWebhook] = useState(false);
+  const [reenvio, setReenvio] = useState("");
+  const [verReenvio, setVerReenvio] = useState(false);
   const [testando, setTestando] = useState(null);
   const [vendedores, setVendedores] = useState([]);
   const [tokenDef, setTokenDef] = useState(false);
@@ -6958,6 +6960,7 @@ function OficialNumeros({ showToast }) {
     carregar();
     api.ofIAs().then((l) => setIasNum((l || []).filter((x) => x.ativa))).catch(() => {});
     api.ofWebhookInfo(window.location.origin).then(setWebhook).catch(() => {});
+    api.ofGetReenvio().then((r) => setReenvio((r.urls || []).join("\n"))).catch(() => {});
     api.ofInstagram().then(setIgCfg).catch(() => {});
     api.ofVendedoresLista().then(setVendedores).catch(() => {});
     api.ofTokenGlobalStatus().then((r) => setTokenDef(!!r.definido)).catch(() => {});
@@ -7099,6 +7102,14 @@ function OficialNumeros({ showToast }) {
       carregar();
     } catch (e) { showToast("❌ " + e.message); }
   }
+  async function salvarReenvio() {
+    try {
+      const urls = reenvio.split(/[\n,]+/).map((s) => s.trim()).filter(Boolean);
+      const r = await api.ofSetReenvio(urls);
+      setReenvio((r.urls || []).join("\n"));
+      showToast(r.urls && r.urls.length ? "✅ Reenvio ativo pra: " + r.urls.join(", ") : "Reenvio desligado");
+    } catch (e) { showToast("❌ " + e.message); }
+  }
   function copiar(txt, label) {
     navigator.clipboard?.writeText(txt).then(() => showToast(`${label} copiado!`)).catch(() => {});
   }
@@ -7234,6 +7245,23 @@ function OficialNumeros({ showToast }) {
           )}
         </div>
       )}
+
+      {/* Reenvio pra outro sistema (mesmo app da Meta) */}
+      <div className="onum-webhook" style={{ marginTop: 12 }}>
+        <button className="onum-webhook-h" onClick={() => setVerReenvio((v) => !v)}>
+          <I.link className="ico" />
+          <span>Usar 2 sistemas no mesmo app da Meta (reenvio)</span>
+          <I.chevron className={"ico chev" + (verReenvio ? " open" : "")} />
+        </button>
+        {verReenvio && (
+          <div className="onum-webhook-body">
+            <p className="onum-webhook-intro">A Meta só manda pra <b>uma</b> URL. Se você tem <b>outro CRM no MESMO app da Meta</b>, configure isto <b>no sistema pra onde a Meta aponta hoje</b> (o que já funciona): cole a URL <b>base</b> do sistema irmão (ex.: <span className="mono">https://xxx.up.railway.app</span>) que este aqui <b>repassa</b> os eventos pra ele. Cada sistema processa só os números dele. Deixe vazio pra desligar.</p>
+            <textarea className="mono" rows={2} style={{ width: "100%", boxSizing: "border-box" }} placeholder="https://outro-sistema.up.railway.app" value={reenvio} onChange={(e) => setReenvio(e.target.value)} />
+            <button className="onum-btn-save" onClick={salvarReenvio}>Salvar reenvio</button>
+            <p className="onum-webhook-fim">Uma URL por linha se tiver mais de um sistema. Pode colar a URL completa do webhook que ele guarda só a base.</p>
+          </div>
+        )}
+      </div>
 
       {/* Instagram (Direct) — cai na mesma Caixa de entrada */}
       <div className="onum-webhook" style={{ marginTop: 12 }}>
