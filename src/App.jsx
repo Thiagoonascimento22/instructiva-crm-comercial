@@ -343,7 +343,16 @@ export default function App() {
     if (!getToken()) { setBooting(false); return; }
     api.me().then(setUser).catch(() => setToken("")).finally(() => setBooting(false));
   }, []);
-  useEffect(() => { if (user) { carregarModulos(); carregarAcessoVend(); } }, [user]);
+  useEffect(() => {
+    if (!user) return;
+    carregarModulos(); carregarAcessoVend();
+    // Reconsulta ao vivo: quando o dono libera/tira um acesso, aparece pra todo mundo
+    // em poucos segundos, SEM precisar deslogar. Também atualiza ao voltar pra aba.
+    const t = setInterval(() => { carregarModulos(); carregarAcessoVend(); }, 15000);
+    const aoVoltar = () => { if (!document.hidden) { carregarModulos(); carregarAcessoVend(); } };
+    document.addEventListener("visibilitychange", aoVoltar);
+    return () => { clearInterval(t); document.removeEventListener("visibilitychange", aoVoltar); };
+  }, [user]);
 
   const vistaInicial = useRef(false);
   useEffect(() => {
