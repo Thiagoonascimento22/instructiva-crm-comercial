@@ -3892,13 +3892,14 @@ function ModalColunas({ etapas, onClose, onChanged, showToast }) {
 
 // Gerenciador de Listas de Reserva (captação). Cada lista = um lançamento (curso+valor)
 // com um link público /r/<slug> pra mandar pra galera. Os leads caem no Pipeline distribuídos.
-function ModalReservaListas({ onClose, showToast, etapas = [] }) {
+function ModalReservaListas({ onClose, showToast, etapas = [], vendedores = [] }) {
   const [listas, setListas] = useState(null);
   const [nome, setNome] = useState("");
   const [curso, setCurso] = useState("");
   const [tag, setTag] = useState("");
   const [destino, setDestino] = useState("reserva");
   const [distribuir, setDistribuir] = useState("auto");
+  const [vendedorFixo, setVendedorFixo] = useState("");
   const [opcoes, setOpcoes] = useState([{ forma: "", preco: "" }]);
   const [criando, setCriando] = useState(false);
   const setOpc = (i, k, v) => setOpcoes((a) => a.map((o, j) => (j === i ? { ...o, [k]: v } : o)));
@@ -3912,9 +3913,10 @@ function ModalReservaListas({ onClose, showToast, etapas = [] }) {
 
   async function criar() {
     if (!nome.trim()) { showToast("Dê um nome à lista"); return; }
+    if (distribuir === "fixo" && !vendedorFixo) { showToast("Escolha o vendedor que vai receber os leads desta lista"); return; }
     const ops = opcoes.map((o) => ({ forma: o.forma.trim(), preco: parseFloat(o.preco) || 0 })).filter((o) => o.forma || o.preco > 0);
     setCriando(true);
-    try { await api.ofReservaCriar({ nome, curso, tag, opcoes: ops, destino, distribuir }); setNome(""); setCurso(""); setTag(""); setOpcoes([{ forma: "", preco: "" }]); setDestino("reserva"); setDistribuir("auto"); showToast("✓ Lista criada"); carregar(); }
+    try { await api.ofReservaCriar({ nome, curso, tag, opcoes: ops, destino, distribuir, vendedorFixoId: vendedorFixo }); setNome(""); setCurso(""); setTag(""); setOpcoes([{ forma: "", preco: "" }]); setDestino("reserva"); setDistribuir("auto"); setVendedorFixo(""); showToast("✓ Lista criada"); carregar(); }
     catch (e) { showToast("✗ " + e.message); } finally { setCriando(false); }
   }
   async function toggle(l) { try { await api.ofReservaEditar(l.id, { ativa: !l.ativa }); carregar(); } catch (e) { showToast("✗ " + e.message); } }
@@ -3953,11 +3955,21 @@ function ModalReservaListas({ onClose, showToast, etapas = [] }) {
                 <label className="lbl-mini">Distribuição</label>
                 <select className="input" value={distribuir} onChange={(e) => setDistribuir(e.target.value)}>
                   <option value="auto">Automática (divide entre os vendedores)</option>
+                  <option value="fixo">Vendedor específico (só ele recebe)</option>
                   <option value="manual">Sem dono (eu distribuo na mão)</option>
                 </select>
               </div>
             </div>
-            <div className="rsv-hint">{distribuir === "auto" ? 'Automática: divide entre os vendedores. QUEM recebe e QUANTO cada um você define em "Quem recebe os leads" (botão no topo do Pipeline) — vale pra todas as listas automáticas e muda na hora. Aqui você só gera o link.' : "Sem dono: todo lead cai sem vendedor e você escolhe pra quem vai, um por um, dentro do Pipeline."}</div>
+            {distribuir === "fixo" && (
+              <div style={{ marginTop: 10 }}>
+                <label className="lbl-mini">Vendedor que vai receber TODOS os leads desta lista</label>
+                <select className="input" value={vendedorFixo} onChange={(e) => setVendedorFixo(e.target.value)}>
+                  <option value="">Escolha o vendedor…</option>
+                  {vendedores.map((v) => <option key={v.id} value={v.id}>{v.nome}{v.ehGerente ? " (gerente)" : ""}</option>)}
+                </select>
+              </div>
+            )}
+            <div className="rsv-hint">{distribuir === "auto" ? 'Automática: divide entre os vendedores. QUEM recebe e QUANTO cada um você define em "Quem recebe os leads" (botão no topo do Pipeline) — vale pra todas as listas automáticas e muda na hora. Aqui você só gera o link.' : distribuir === "fixo" ? "Vendedor específico: TODO lead que entrar por esta lista cai direto pra pessoa escolhida — não passa pelo rodízio. Perfeito quando cada produto/formulário do Meta é de um vendedor. O rodízio das outras listas continua igual." : "Sem dono: todo lead cai sem vendedor e você escolhe pra quem vai, um por um, dentro do Pipeline."}</div>
             <button className="onum-add" style={{ marginTop: 14, display: "block" }} disabled={criando} onClick={criar}><I.plus className="ico" /> Criar lista e gerar link</button>
           </div>
 
@@ -3971,7 +3983,7 @@ function ModalReservaListas({ onClose, showToast, etapas = [] }) {
                     <div className="rsv-nome">{l.nome} {!l.ativa && <span className="rsv-off-tag">pausada</span>}</div>
                     <div className="rsv-meta">{l.curso || "sem curso"}{l.tag ? " · 🏷 " + l.tag : ""} · <b>{l.leads}</b> {l.leads === 1 ? "lead" : "leads"}</div>
                     {(l.opcoes || []).length > 0 && <div className="rsv-opcs-mini">{l.opcoes.map((o, i) => <span key={i} className="rsv-opc-chip">{o.forma} · R$ {Number(o.preco || 0).toLocaleString("pt-BR")}</span>)}</div>}
-                    <div className="rsv-dest">→ cai em <b>{nomeCol(l.destino)}</b> · {l.distribuir === "manual" ? "sem dono (você distribui)" : "distribuição automática"}</div>
+                    <div className="rsv-dest">→ cai em <b>{nomeCol(l.destino)}</b> · {l.distribuir === "manual" ? "sem dono (você distribui)" : l.distribuir === "fixo" ? <>só pra <b>{l.vendedorFixoNome || "vendedor"}</b></> : "distribuição automática"}</div>
                     <div className="rsv-link api" onClick={() => copiarUrl(origin + "/api/reserva/" + l.slug, "Endpoint")} title="Clique pra copiar — é o endpoint que o time usa pra cair lead no CRM">
                       <span className="rsv-link-tag">Endpoint · POST</span>
                       <span className="rsv-link-url">{origin}/api/reserva/{l.slug}</span>
@@ -6315,7 +6327,7 @@ function OficialCRM({ showToast, isGer = true, onAbrirWhats }) {
         </div>
       )}
 
-      {showReserva && <ModalReservaListas etapas={etapas} onClose={() => setShowReserva(false)} showToast={showToast} />}
+      {showReserva && <ModalReservaListas etapas={etapas} vendedores={vendedores} onClose={() => setShowReserva(false)} showToast={showToast} />}
       {waMenu && (
         <Portal>
           <div className="crm-wa-menu" style={{ top: (waMenu.y + 104 > window.innerHeight ? waMenu.yt - 100 : waMenu.y + 4), left: Math.max(8, Math.min(waMenu.x - 214, window.innerWidth - 224)) }} onClick={(e) => e.stopPropagation()}>

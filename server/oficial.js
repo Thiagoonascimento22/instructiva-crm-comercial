@@ -2003,7 +2003,9 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
   }
   function reservaPublica(l) {
     const qtd = (db.oficial.crmLeads || []).filter((x) => x.reservaId === l.id || (Array.isArray(x.reservaIds) && x.reservaIds.includes(l.id))).length;
-    return { id: l.id, nome: l.nome, curso: l.curso, tag: l.tag || "", opcoes: Array.isArray(l.opcoes) ? l.opcoes : [], destino: l.destino || "reserva", distribuir: l.distribuir === "manual" ? "manual" : "auto", slug: l.slug, ativa: l.ativa !== false, leads: qtd, criadoEm: l.criadoEm };
+    const modo = l.distribuir === "manual" ? "manual" : (l.distribuir === "fixo" ? "fixo" : "auto");
+    const vf = (modo === "fixo" && l.vendedorFixoId) ? (db.users || []).find((u) => u.id === l.vendedorFixoId) : null;
+    return { id: l.id, nome: l.nome, curso: l.curso, tag: l.tag || "", opcoes: Array.isArray(l.opcoes) ? l.opcoes : [], destino: l.destino || "reserva", distribuir: modo, vendedorFixoId: l.vendedorFixoId || "", vendedorFixoNome: vf ? vf.nome : "", slug: l.slug, ativa: l.ativa !== false, leads: qtd, criadoEm: l.criadoEm };
   }
   // Sanitiza as opções de pagamento (forma + preço), no máx 3
   function limparOpcoes(arr) {
@@ -2018,6 +2020,30 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
     if (!v) return { vendedorId: null, vendedorNome: "" };
     v.oficialLeadsRecebidos = (v.oficialLeadsRecebidos || 0) + 1;
     return { vendedorId: v.id, vendedorNome: v.nome };
+  }
+  // resolve o dono do lead conforme o modo da lista:
+  //  "fixo"   -> SEMPRE aquele vendedor (se ainda existir/ativo), sem rodízio
+  //  "manual" -> sem dono (o gerente distribui na mão)
+  //  "auto"   -> rodízio normal ("Quem recebe os leads")
+  function donoDaLista(lista) {
+    if (lista.distribuir === "fixo") {
+      const v = (db.users || []).find((u) => u.id === lista.vendedorFixoId && (u.role === "vendedor" || u.role === "gerente") && u.ativo);
+      return v ? { vendedorId: v.id, vendedorNome: v.nome } : { vendedorId: null, vendedorNome: "" };
+    }
+    if (lista.distribuir === "manual") return { vendedorId: null, vendedorNome: "" };
+    return distribuirReserva();
+  }
+  // valida o modo vindo do front e, no "fixo", exige um vendedor válido (vendedor ou gerente ativo)
+  function normalizarDistrib(distribuir, vendedorFixoId) {
+    const modo = distribuir === "manual" ? "manual" : (distribuir === "fixo" ? "fixo" : "auto");
+    let vf = "";
+    if (modo === "fixo") {
+      const vid = String(vendedorFixoId || "").trim();
+      const ok = vid && (db.users || []).some((u) => u.id === vid && (u.role === "vendedor" || u.role === "gerente") && u.ativo);
+      if (!ok) return { erro: "Escolha o vendedor que vai receber os leads desta lista" };
+      vf = vid;
+    }
+    return { modo, vendedorFixoId: vf };
   }
   function escHtml(s) {
     return String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -2035,7 +2061,9 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
     if (!nome) return res.status(400).json({ error: "Dê um nome à lista" });
     let slug; do { slug = slugReserva(); } while ((db.oficial.reservaListas || []).some((x) => x.slug === slug));
     const destino = etapasCRM().some((e) => e.k === b.destino) ? b.destino : (etapasCRM().some((e) => e.k === "reserva") ? "reserva" : (etapasCRM()[0] || {}).k);
-    const lista = { id: proximoId("rsv"), nome, curso: String(b.curso || "").trim().slice(0, 120), tag: String(b.tag || "").trim().slice(0, 40), opcoes: limparOpcoes(b.opcoes), destino, distribuir: b.distribuir === "manual" ? "manual" : "auto", slug, ativa: true, criadoEm: Date.now() };
+    const nd = normalizarDistrib(b.distribuir, b.vendedorFixoId);
+    if (nd.erro) return res.status(400).json({ error: nd.erro });
+    const lista = { id: proximoId("rsv"), nome, curso: String(b.curso || "").trim().slice(0, 120), tag: String(b.tag || "").trim().slice(0, 40), opcoes: limparOpcoes(b.opcoes), destino, distribuir: nd.modo, vendedorFixoId: nd.vendedorFixoId, slug, ativa: true, criadoEm: Date.now() };
     db.oficial.reservaListas.push(lista);
     salvar();
     res.json({ ok: true, lista: reservaPublica(lista) });
@@ -2050,7 +2078,11 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
     if (b.tag !== undefined) l.tag = String(b.tag).trim().slice(0, 40);
     if (b.opcoes !== undefined) l.opcoes = limparOpcoes(b.opcoes);
     if (b.destino !== undefined && etapasCRM().some((e) => e.k === b.destino)) l.destino = b.destino;
-    if (b.distribuir !== undefined) l.distribuir = b.distribuir === "manual" ? "manual" : "auto";
+    if (b.distribuir !== undefined || b.vendedorFixoId !== undefined) {
+      const nd = normalizarDistrib(b.distribuir !== undefined ? b.distribuir : l.distribuir, b.vendedorFixoId !== undefined ? b.vendedorFixoId : l.vendedorFixoId);
+      if (nd.erro) return res.status(400).json({ error: nd.erro });
+      l.distribuir = nd.modo; l.vendedorFixoId = nd.vendedorFixoId;
+    }
     if (b.ativa !== undefined) l.ativa = !!b.ativa;
     salvar();
     res.json({ ok: true, lista: reservaPublica(l) });
@@ -2131,7 +2163,7 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
       if (email && !existente.email) existente.email = email;
       // se ainda não tinha dono e a lista distribui automático, distribui agora
       if (!existente.vendedorId && lista.distribuir !== "manual") {
-        const d = distribuirReserva(); existente.vendedorId = d.vendedorId; existente.vendedorNome = d.vendedorNome;
+        const d = donoDaLista(lista); existente.vendedorId = d.vendedorId; existente.vendedorNome = d.vendedorNome;
       }
       existente.historico.push({ tipo: "lista", texto: "Entrou também pela lista: " + lista.nome + (opc ? (" — " + opc.forma) : ""), ts: Date.now() });
       existente.atualizadoEm = Date.now();
@@ -2140,7 +2172,7 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
     }
 
     // 3) NÃO EXISTE -> cria novo lead
-    const dist = (lista.distribuir === "manual") ? { vendedorId: null, vendedorNome: "" } : distribuirReserva();
+    const dist = donoDaLista(lista);
     const lead = {
       id: "lead_" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
       nome, telefone, email,
