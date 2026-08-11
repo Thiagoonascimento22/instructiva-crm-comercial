@@ -6126,7 +6126,7 @@ function OficialCRM({ showToast, isGer = true, onAbrirWhats }) {
         {isGer && <button className="onum-btn-ghost" onClick={() => setShowColunas(true)}><I.cog className="ico" /> Colunas</button>}
         {isGer && <button className="onum-btn-ghost" onClick={() => setConfig(true)}><I.suporte className="ico" /> Distribuição das ligações</button>}
         {isGer && <button className="onum-btn-ghost" onClick={() => setShowImportar(true)} title="Importar leads de uma planilha CSV"><I.clip className="ico" /> Importar</button>}
-        {isGer && <button className="onum-btn-ghost" onClick={() => setShowExportar(true)} title="Exportar leads (dá pra escolher por tag)"><I.download className="ico" /> Exportar</button>}
+        <button className="onum-btn-ghost" onClick={() => setShowExportar(true)} title="Exportar seus leads (dá pra escolher por tag)"><I.download className="ico" /> Exportar</button>
         <div className="crm-top-right">
           <div className="crm-busca"><I.search className="ico" /><input value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Buscar por nome, telefone, curso, tag..." /></div>
           {isGer && vendedores.length > 0 && (

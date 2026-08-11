@@ -1852,6 +1852,7 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
       soMeus: ehVend, // o front usa pra esconder as partes que são só do gerente
     });
   });
+
   app.post("/api/oficial/crm/lead", auth, permiteVend("crm"), (req, res) => {
     garantirCRM();
     const b = req.body || {};
