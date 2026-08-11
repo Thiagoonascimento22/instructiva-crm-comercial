@@ -7039,15 +7039,38 @@ function OficialNumeros({ showToast }) {
     showToast("Verificando…");
     try {
       const d = await api.ofDiagnostico();
-      let txt = "DIAGNÓSTICO DO WEBHOOK\n\n";
-      txt += "Inscrição de cada número (recebe respostas?):\n";
-      for (const n of d.numeros) {
-        const st = n.inscrito === true ? "✅ SIM" : n.inscrito === false ? "❌ NÃO" : "⚠️ " + (n.erro || "?");
-        txt += `• ${n.apelido}: ${st}\n`;
+      let txt = "DIAGNÓSTICO DO WEBHOOK (recebimento de respostas)\n";
+      txt += "══════════════════════════════════════\n\n";
+      // 1) chegou ALGUMA coisa da Meta?
+      const ultimo = d.log && d.log.length ? d.log[0].ts : 0;
+      if (!ultimo) {
+        txt += "⚠️ NENHUMA resposta chegou da Meta até agora.\n";
+        txt += "Quando o cliente responde e não aparece aqui, é UMA destas causas:\n\n";
+        txt += "  1) O webhook não está configurado (ou aponta pra outro lugar) no\n";
+        txt += "     painel da Meta. Vá em WhatsApp → Configuração → Webhook e cole a\n";
+        txt += "     URL e o Token da seção \"Configuração do Webhook na Meta\" (aqui embaixo).\n";
+        txt += "  2) A WABA do número não está inscrita (veja a lista abaixo — o botão 🔗).\n";
+        txt += "  3) Se este sistema usa o MESMO app da Meta de outro sistema, as respostas\n";
+        txt += "     podem estar caindo no OUTRO sistema. Cada sistema precisa do seu próprio\n";
+        txt += "     app da Meta apontando pra própria URL de webhook.\n\n";
+      } else {
+        txt += "✅ Última chamada recebida da Meta: " + new Date(ultimo).toLocaleString("pt-BR") + "\n";
+        txt += "   (se as respostas ainda não aparecem, confira o número certo abaixo)\n\n";
       }
+      // 2) inscrição + veredito de cada número
+      txt += "Cada número está pronto pra receber respostas?\n";
+      for (const n of d.numeros) {
+        let veredito;
+        if (!n.wabaId) veredito = "❌ SEM WABA ID — edite o número, cole o WABA ID e clique no 🔗 (Assinar webhook).";
+        else if (n.inscrito === true) veredito = "✅ inscrita na Meta";
+        else if (n.inscrito === false) veredito = "❌ NÃO inscrita — clique no 🔗 (Assinar webhook).";
+        else veredito = "⚠️ " + (n.erro || "não deu pra verificar");
+        txt += `• ${n.apelido} (id ${n.phoneNumberId || "?"}): ${veredito}\n`;
+      }
+      // 3) log cru (mostra o phone_id de quem chegou — útil se o número estiver trocado)
       txt += "\nÚltimas chamadas recebidas da Meta:\n";
       if (!d.log.length) {
-        txt += "(nenhuma chamada recebida ainda)\n";
+        txt += "(nenhuma ainda)\n";
       } else {
         for (const l of d.log.slice(0, 8)) {
           const hora = new Date(l.ts).toLocaleTimeString("pt-BR");
