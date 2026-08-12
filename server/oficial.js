@@ -2881,14 +2881,17 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
         chat.origemDisparo = true;
         chat.campanha = campanha.nome;
         chat.campanhaId = campanha.id;
-        // Se a campanha foi criada como "os leads ficam comigo", carimba o dono da conversa
-        // como o remetente. Como atribuirLead() respeita dono já existente, a resposta (e um
-        // eventual repasse da IA) continua com ele, sem cair na distribuição pro time.
-        // Se foi "distribuir pro time", NÃO carimba: aí o rodízio decide quando a pessoa responder.
-        if (campanha.destinoLeads !== "time" && !chat.vendedorId && campanha.criadoPor) {
-          chat.vendedorId = campanha.criadoPor;
-          chat.vendedorNome = campanha.criadoPorNome || "";
-          chat.atribuidoEm = Date.now();
+        // Disparo "fica comigo": a conversa passa a ser de QUEM DISPAROU, sempre —
+        // inclusive se já tivesse outro dono (é o sentido de "fica comigo"). O lead
+        // chega na caixa de quem disparou. Só "distribuir pro time" não carimba (rodízio).
+        if (campanha.destinoLeads !== "time" && campanha.criadoPor) {
+          if (chat.vendedorId !== campanha.criadoPor) {
+            chat.vendedorId = campanha.criadoPor;
+            chat.vendedorNome = campanha.criadoPorNome || "";
+            chat.atribuidoEm = Date.now();
+          }
+          // se o lead já conversou alguma vez, mantém visível (não vira "disparo sem resposta")
+          if ((chat.mensagens || []).some((m) => m.role === "them")) chat.respondeu = true;
         }
         chat.iaId = campanha.iaId || null;
         chat.iaPausada = false;
