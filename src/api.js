@@ -207,6 +207,7 @@ export const api = {
   ofSetCargoFaixa: (id, dados) => req("PUT", "/api/oficial/desempenho/" + id + "/cargo-faixa", dados),
   ofSetPontos: (id, dados) => req("PUT", "/api/oficial/desempenho/" + id + "/pontos", dados),
   ofOcultarVend: (id, oculto) => req("PUT", "/api/oficial/desempenho/" + id + "/ocultar", { oculto }),
+  ofLigarPessoa: (id, pessoaId) => req("PUT", "/api/oficial/desempenho/" + id + "/pessoa", { pessoaId }),
   ofExcluirIA: (id) => req("DELETE", "/api/oficial/ias/" + id),
   ofExtrairArquivo: (nome, base64) => req("POST", "/api/oficial/ias/extrair", { nome, base64 }),
   ofPreviewIA: (dados) => req("POST", "/api/oficial/ias/preview", dados),

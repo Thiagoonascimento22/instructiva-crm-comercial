@@ -3758,7 +3758,9 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
     const ocultos = new Set(db.oficial.desempenhoOcultos || []);
     const usuarios = (db.users || []).filter((u) => (u.role === "vendedor" || u.role === "gerente") && u.ativo);
     return usuarios.map((u) => {
-      const pes = pessoas.find((p) => p.userId === u.id) || pessoas.find((p) => chaveNomeDes(p.nome) === chaveNomeDes(u.nome));
+      const pes = (u.vendasPessoaId && pessoas.find((p) => p.id === u.vendasPessoaId))
+        || pessoas.find((p) => p.userId === u.id)
+        || pessoas.find((p) => chaveNomeDes(p.nome) === chaveNomeDes(u.nome));
       const vendasMes = pes ? vendas.filter((v) => v.pessoaId === pes.id && mesDesempenho(v.data) === mes) : [];
       const receita = vendasMes.reduce((s, v) => s + (Number(v.valor) || 0), 0);
       const qtdVendas = vendasMes.length;
@@ -3779,6 +3781,7 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
       return {
         id: u.id, nome: u.nome, foto: u.foto || "", role: u.role,
         cargo: u.cargo || "trainee", faixa, oculto: ocultos.has(u.id),
+        pessoaId: pes ? pes.id : null, pessoaNome: pes ? pes.nome : null,
         receita, vendas: qtdVendas, ticket, leads: qtdLeads,
         conversao: Math.round(conversao * 100) / 100,
         meta: metaVendedorMes(pes, mes, metasMes),
@@ -3797,7 +3800,19 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
     else if (String(req.query.incluirOcultos || "") !== "1") lista = lista.filter((x) => !x.oculto);
     lista.sort((a, b) => b.receita - a.receita || b.conversao - a.conversao);
     const qtdOcultos = souGerente ? desempenhoDoMes(mes).filter((x) => x.oculto).length : 0;
-    res.json({ mes, cargos: CARGOS, faixas: FAIXAS, proxCargo: PROX_CARGO, semanasNoMes: semanasDoMes(mes).length, vendedores: lista, souGerente, qtdOcultos });
+    // lista de "pessoas" das Vendas, pro gerente ligar cada vendedor à pessoa certa
+    const pessoasVendas = souGerente ? (lerVendasArquivo().pessoas || []).map((p) => ({ id: p.id, nome: p.nome })) : [];
+    res.json({ mes, cargos: CARGOS, faixas: FAIXAS, proxCargo: PROX_CARGO, semanasNoMes: semanasDoMes(mes).length, vendedores: lista, souGerente, qtdOcultos, pessoasVendas });
+  });
+
+  // gerente liga um usuário à "pessoa" das Vendas (resolve quando o nome do login é diferente do das vendas)
+  app.put("/api/oficial/desempenho/:id/pessoa", auth, gerenteOnly, (req, res) => {
+    const u = (db.users || []).find((x) => x.id === req.params.id);
+    if (!u) return res.status(404).json({ error: "Usuário não encontrado" });
+    const pid = String((req.body && req.body.pessoaId) || "").trim();
+    u.vendasPessoaId = pid || null;
+    salvar();
+    res.json({ ok: true, pessoaId: u.vendasPessoaId });
   });
 
   // gerente define cargo/faixa de um vendedor

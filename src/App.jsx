@@ -6100,6 +6100,7 @@ function DetalheVendedor({ v, dados, mes, isGer, showToast, onClose, onMudou, ca
     try { await api.ofSetPontos(v.id, corpo); onMudou(); } catch (e) { showToast("❌ " + e.message); }
   }
   async function ocultar() { const novo = !v.oculto; try { await api.ofOcultarVend(v.id, novo); onMudou(); showToast(novo ? "Ocultado do dashboard" : "Mostrando de novo"); if (novo) onClose(); } catch (e) { showToast("❌ " + e.message); } }
+  async function ligarPessoa(pid) { try { await api.ofLigarPessoa(v.id, pid); onMudou(); showToast(pid ? "Vendas vinculadas" : "Vínculo removido"); } catch (e) { showToast("❌ " + e.message); } }
   const sel = { padding: "3px 5px", width: 50, fontWeight: 600 };
   const anelPct = fm ? (v.pontos / fm.pontos) * 100 : 100;
 
@@ -6128,8 +6129,20 @@ function DetalheVendedor({ v, dados, mes, isGer, showToast, onClose, onMudou, ca
                 <span style={{ fontSize: 10, color: DES.mut2, fontWeight: 700, letterSpacing: ".06em", textTransform: "uppercase" }}>Faixa</span>
                 <select className="input" value={v.faixa} onChange={(e) => mudarCargoFaixa("faixa", e.target.value)} style={{ minWidth: 150 }}>{faixas.map((f) => <option key={f.k} value={f.k}>Faixa {f.nome}</option>)}</select>
               </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                <span style={{ fontSize: 10, color: DES.mut2, fontWeight: 700, letterSpacing: ".06em", textTransform: "uppercase" }}>Vendas registradas como</span>
+                <select className="input" value={v.pessoaId || ""} onChange={(e) => ligarPessoa(e.target.value)} style={{ minWidth: 175 }}>
+                  <option value="">— escolher —</option>
+                  {(dados.pessoasVendas || []).map((p) => <option key={p.id} value={p.id}>{p.nome}</option>)}
+                </select>
+              </div>
               <div style={{ flex: 1 }} />
               <button className="crm-x" onClick={ocultar} style={{ fontSize: 12.5, color: v.oculto ? DES.green : "#ef4444", width: "auto", padding: "8px 12px" }}>{v.oculto ? "Mostrar no dashboard" : "Ocultar do dashboard"}</button>
+            </div>
+          )}
+          {isGer && !v.pessoaId && (dados.pessoasVendas || []).length > 0 && (
+            <div style={{ fontSize: 12.5, color: "#b45309", background: "#fffbeb", border: "1px solid #fde68a", borderRadius: 10, padding: "10px 12px", marginBottom: 20, marginTop: -8 }}>
+              As vendas deste vendedor não estão aparecendo? No campo <b>"Vendas registradas como"</b> acima, escolha qual pessoa do painel de Vendas é ela — aí a receita e a conversão passam a contar aqui.
             </div>
           )}
 
