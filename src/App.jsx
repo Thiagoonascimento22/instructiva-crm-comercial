@@ -5924,39 +5924,46 @@ function extDeAudio(mime) {
 }
 
 
+const fmtMoneyD = (v) => "R$ " + (Number(v) || 0).toLocaleString("pt-BR", { maximumFractionDigits: 0 });
+const fmtPctD = (v) => (Number(v) || 0).toLocaleString("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + "%";
+
 function BarraProg({ titulo, pct, texto, cor }) {
   return (
     <div style={{ marginBottom: 10 }}>
-      <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: "#6b7280", marginBottom: 4 }}><span>{titulo}</span><span>{texto}</span></div>
+      <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: "#6b7280", marginBottom: 4 }}><span>{titulo}</span><span style={{ fontWeight: 600, color: "#374151" }}>{texto}</span></div>
       <div style={{ height: 8, background: "#eef0f2", borderRadius: 20, overflow: "hidden" }}>
-        <div style={{ width: Math.max(2, pct) + "%", height: "100%", background: cor, borderRadius: 20, transition: "width .3s" }} />
+        <div style={{ width: Math.max(2, Math.min(100, pct)) + "%", height: "100%", background: cor, borderRadius: 20, transition: "width .3s" }} />
       </div>
     </div>
   );
 }
 
+function FaixaBadge({ faixa }) {
+  return <span style={{ fontSize: 11, fontWeight: 600, background: faixa.cor, color: faixa.texto, borderRadius: 20, padding: "2px 9px", border: faixa.k === "branca" ? "1px solid #d1d5db" : "none" }}>Faixa {faixa.nome}</span>;
+}
+
 function Desempenho({ showToast, isGer = true }) {
   const [dados, setDados] = useState(null);
   const [mes, setMes] = useState("");
-  const [editando, setEditando] = useState(null);
-  const [editVals, setEditVals] = useState({ cargo: "", faixa: "" });
   const [carregando, setCarregando] = useState(true);
+  const [verOcultos, setVerOcultos] = useState(false);
+  const [detalheId, setDetalheId] = useState(null);
 
-  const carregar = (m) => {
+  const carregar = (m, inclui) => {
     setCarregando(true);
-    api.ofDesempenho(m).then((d) => { setDados(d); setMes(d.mes); setCarregando(false); }).catch((e) => { showToast(e.message); setCarregando(false); });
+    const mm = m !== undefined ? m : mes;
+    const inc = inclui !== undefined ? inclui : verOcultos;
+    api.ofDesempenho(mm, inc).then((d) => { setDados(d); setMes(d.mes); setCarregando(false); }).catch((e) => { showToast(e.message); setCarregando(false); });
   };
   useEffect(() => { carregar(); }, []);
 
-  const fmtMoney = (v) => "R$ " + (Number(v) || 0).toLocaleString("pt-BR", { minimumFractionDigits: 0, maximumFractionDigits: 0 });
-  const fmtPct = (v) => (Number(v) || 0).toLocaleString("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + "%";
   const nomeMes = (m) => { const p = String(m).split("-"); const nomes = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"]; return (nomes[+p[1] - 1] || "?") + "/" + p[0]; };
 
   if (carregando || !dados) return <div style={{ padding: 40, color: "#6b7280" }}>Carregando desempenho…</div>;
 
   const cargos = dados.cargos || [], faixas = dados.faixas || [];
   const cargoDe = (k) => cargos.find((c) => c.k === k) || { nome: k, salario: 0 };
-  const faixaDe = (k) => faixas.find((f) => f.k === k) || { nome: k, cor: "#e5e7eb", texto: "#374151" };
+  const faixaDe = (k) => faixas.find((f) => f.k === k) || { k, nome: k, cor: "#e5e7eb", texto: "#374151" };
   const vends = dados.vendedores || [];
   const totReceita = vends.reduce((s, v) => s + v.receita, 0);
   const totVendas = vends.reduce((s, v) => s + v.vendas, 0);
@@ -5968,23 +5975,27 @@ function Desempenho({ showToast, isGer = true }) {
   { const now = new Date(); for (let i = 0; i < 6; i++) { const d = new Date(now.getFullYear(), now.getMonth() - i, 1); mesesOpcoes.push(d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0")); } }
   if (mes && !mesesOpcoes.includes(mes)) mesesOpcoes.unshift(mes);
 
-  function abrirEditor(v) { if (editando === v.id) setEditando(null); else { setEditando(v.id); setEditVals({ cargo: v.cargo, faixa: v.faixa }); } }
-  async function salvarCargoFaixa(id) {
-    try { await api.ofSetCargoFaixa(id, editVals); setEditando(null); carregar(mes); showToast("Cargo/faixa atualizado"); }
-    catch (e) { showToast("❌ " + e.message); }
-  }
+  const vendDetalhe = detalheId ? vends.find((v) => v.id === detalheId) : null;
 
   return (
     <div className="crm-wrap" style={{ padding: 0 }}>
-      <div className="crm-top" style={{ alignItems: "center", justifyContent: "flex-end" }}>
-        <select className="input" value={mes} onChange={(e) => carregar(e.target.value)} style={{ maxWidth: 150 }}>
-          {mesesOpcoes.map((m) => <option key={m} value={m}>{nomeMes(m)}</option>)}
-        </select>
+      <div className="crm-top" style={{ alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 10 }}>
+        <div style={{ fontSize: 12.5, color: "#6b7280" }}>Meta de pontos por semana: <b style={{ color: "#374151" }}>10</b> · bônus do mês em <b style={{ color: "#374151" }}>+28 / +36 / +40</b> pontos</div>
+        <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
+          {dados.souGerente && dados.qtdOcultos > 0 && (
+            <label style={{ fontSize: 12, color: "#6b7280", display: "flex", gap: 5, alignItems: "center", cursor: "pointer" }}>
+              <input type="checkbox" checked={verOcultos} onChange={(e) => { setVerOcultos(e.target.checked); carregar(mes, e.target.checked); }} /> ver ocultos ({dados.qtdOcultos})
+            </label>
+          )}
+          <select className="input" value={mes} onChange={(e) => carregar(e.target.value)} style={{ maxWidth: 140 }}>
+            {mesesOpcoes.map((m) => <option key={m} value={m}>{nomeMes(m)}</option>)}
+          </select>
+        </div>
       </div>
 
       {dados.souGerente && (
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(150px,1fr))", gap: 12, margin: "4px 0 20px" }}>
-          {[["Receita do time", fmtMoney(totReceita)], ["Vendas", String(totVendas)], ["Leads recebidos", String(totLeads)], ["Conversão média", fmtPct(convMedia)], ["Ticket médio", fmtMoney(ticketMedio)]].map(([lb, val], i) => (
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(140px,1fr))", gap: 12, margin: "4px 0 20px" }}>
+          {[["Receita do time", fmtMoneyD(totReceita)], ["Vendas", String(totVendas)], ["Leads recebidos", String(totLeads)], ["Conversão média", fmtPctD(convMedia)], ["Ticket médio", fmtMoneyD(ticketMedio)]].map(([lb, val], i) => (
             <div key={i} style={{ background: "#fff", border: "1px solid #eef0f2", borderRadius: 14, padding: "14px 16px", boxShadow: "0 1px 2px rgba(0,0,0,0.03)" }}>
               <div style={{ fontSize: 12, color: "#6b7280", marginBottom: 4 }}>{lb}</div>
               <div style={{ fontSize: 20, fontWeight: 700, color: "#111827" }}>{val}</div>
@@ -5994,66 +6005,151 @@ function Desempenho({ showToast, isGer = true }) {
       )}
 
       {vends.length === 0 ? (
-        <div style={{ padding: 30, color: "#6b7280", background: "#fff", borderRadius: 14, border: "1px solid #eef0f2" }}>Sem dados de vendedores nesse mês ainda.</div>
+        <div style={{ padding: 30, color: "#6b7280", background: "#fff", borderRadius: 14, border: "1px solid #eef0f2" }}>Sem vendedores pra mostrar nesse mês.</div>
       ) : (
-        <div style={{ display: "grid", gridTemplateColumns: dados.souGerente ? "repeat(auto-fill,minmax(340px,1fr))" : "minmax(0,460px)", gap: 14 }}>
+        <div style={{ display: "grid", gridTemplateColumns: dados.souGerente ? "repeat(auto-fill,minmax(360px,1fr))" : "minmax(0,480px)", gap: 14 }}>
           {vends.map((v, idx) => {
             const cargo = cargoDe(v.cargo), faixa = faixaDe(v.faixa);
+            const fm = v.faixaMeta;
+            const faixaPct = fm ? Math.min(100, (v.pontos / fm.pontos) * 100) : 100;
             const convPct = Math.min(100, (v.conversao / 6) * 100);
-            const metaAlvo = v.meta || 50000;
-            const recPct = Math.min(100, (v.receita / metaAlvo) * 100);
-            const prox = dados.proxCargo && dados.proxCargo[v.cargo];
             return (
-              <div key={v.id} style={{ background: "#fff", border: "1px solid #eef0f2", borderRadius: 16, padding: 18, boxShadow: "0 1px 3px rgba(0,0,0,0.04)" }}>
+              <div key={v.id} onClick={() => setDetalheId(v.id)} style={{ background: "#fff", border: "1px solid #eef0f2", borderRadius: 16, padding: 18, boxShadow: "0 1px 3px rgba(0,0,0,0.04)", cursor: "pointer", opacity: v.oculto ? 0.55 : 1, transition: "box-shadow .15s, transform .15s" }}
+                onMouseEnter={(e) => { e.currentTarget.style.boxShadow = "0 6px 18px rgba(0,0,0,0.08)"; e.currentTarget.style.transform = "translateY(-2px)"; }}
+                onMouseLeave={(e) => { e.currentTarget.style.boxShadow = "0 1px 3px rgba(0,0,0,0.04)"; e.currentTarget.style.transform = "none"; }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                  {dados.souGerente && <div style={{ fontSize: 15, fontWeight: 700, color: "#9ca3af", width: 22 }}>{idx + 1}º</div>}
-                  {v.foto ? <img src={v.foto} alt="" style={{ width: 46, height: 46, borderRadius: "50%", objectFit: "cover" }} /> : <div style={{ width: 46, height: 46, borderRadius: "50%", background: "linear-gradient(135deg,#F26522,#25A06B)", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700 }}>{(v.nome || "?").slice(0, 1).toUpperCase()}</div>}
+                  {dados.souGerente && <div style={{ fontSize: 15, fontWeight: 800, color: idx === 0 ? "#F26522" : "#c3c7cd", width: 22 }}>{idx + 1}º</div>}
+                  {v.foto ? <img src={v.foto} alt="" style={{ width: 48, height: 48, borderRadius: "50%", objectFit: "cover" }} /> : <div style={{ width: 48, height: 48, borderRadius: "50%", background: "linear-gradient(135deg,#F26522,#25A06B)", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700, fontSize: 18 }}>{(v.nome || "?").slice(0, 1).toUpperCase()}</div>}
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontWeight: 700, color: "#111827", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{v.nome}</div>
-                    <div style={{ display: "flex", gap: 6, marginTop: 3, flexWrap: "wrap", alignItems: "center" }}>
+                    <div style={{ fontWeight: 700, color: "#111827", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{v.nome}{v.oculto ? " (oculto)" : ""}</div>
+                    <div style={{ display: "flex", gap: 6, marginTop: 4, flexWrap: "wrap", alignItems: "center" }}>
                       <span style={{ fontSize: 11, color: "#6b7280" }}>{cargo.nome}</span>
-                      <span style={{ fontSize: 11, fontWeight: 600, background: faixa.cor, color: faixa.texto, borderRadius: 20, padding: "1px 8px" }}>Faixa {faixa.nome}</span>
+                      <FaixaBadge faixa={faixa} />
                     </div>
                   </div>
-                  {dados.souGerente && <button className="crm-x" title="Mudar cargo/faixa" onClick={() => abrirEditor(v)} style={{ fontSize: 15 }}>⚙︎</button>}
+                  <div style={{ textAlign: "right" }}>
+                    <div style={{ fontSize: 24, fontWeight: 800, color: "#25A06B", lineHeight: 1 }}>{v.pontos}</div>
+                    <div style={{ fontSize: 10, color: "#9ca3af" }}>pontos</div>
+                  </div>
                 </div>
 
-                {dados.souGerente && editando === v.id && (
-                  <div style={{ display: "flex", gap: 8, marginTop: 12, flexWrap: "wrap", background: "#f9fafb", padding: 10, borderRadius: 10 }}>
-                    <select className="input" value={editVals.cargo} onChange={(e) => setEditVals({ ...editVals, cargo: e.target.value })} style={{ flex: 1, minWidth: 130 }}>{cargos.map((c) => <option key={c.k} value={c.k}>{c.nome}</option>)}</select>
-                    <select className="input" value={editVals.faixa} onChange={(e) => setEditVals({ ...editVals, faixa: e.target.value })} style={{ flex: 1, minWidth: 110 }}>{faixas.map((f) => <option key={f.k} value={f.k}>Faixa {f.nome}</option>)}</select>
-                    <button className="onum-btn-save" onClick={() => salvarCargoFaixa(v.id)}>Salvar</button>
-                  </div>
-                )}
-
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 8, marginTop: 14 }}>
-                  {[["Receita", fmtMoney(v.receita)], ["Vendas", String(v.vendas)], ["Ticket", fmtMoney(v.ticket)], ["Leads", String(v.leads)], ["Conversão", fmtPct(v.conversao)], ["Meta", v.meta ? fmtMoney(v.meta) : "—"]].map(([lb, val], i) => (
-                    <div key={i} style={{ background: "#f9fafb", borderRadius: 10, padding: "8px 10px" }}>
-                      <div style={{ fontSize: 10.5, color: "#6b7280" }}>{lb}</div>
-                      <div style={{ fontSize: 14.5, fontWeight: 700, color: "#111827" }}>{val}</div>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(5,1fr)", gap: 6, marginTop: 14 }}>
+                  {[["Receita", fmtMoneyD(v.receita)], ["Vendas", String(v.vendas)], ["Ticket", fmtMoneyD(v.ticket)], ["Leads", String(v.leads)], ["Conv.", fmtPctD(v.conversao)]].map(([lb, val], i) => (
+                    <div key={i} style={{ background: "#f9fafb", borderRadius: 9, padding: "7px 6px", textAlign: "center" }}>
+                      <div style={{ fontSize: 9.5, color: "#9ca3af" }}>{lb}</div>
+                      <div style={{ fontSize: 12.5, fontWeight: 700, color: "#111827" }}>{val}</div>
                     </div>
                   ))}
                 </div>
 
                 <div style={{ marginTop: 14 }}>
-                  <BarraProg titulo="Conversão → meta 6%" pct={convPct} texto={fmtPct(v.conversao) + " de 6%"} cor="#25A06B" />
-                  <BarraProg titulo={v.meta ? "Receita → meta do mês" : "Receita → mínimo R$ 50k"} pct={recPct} texto={fmtMoney(v.receita) + " de " + fmtMoney(metaAlvo)} cor="#F26522" />
+                  {fm ? <BarraProg titulo={"Faixa " + faixaDe(fm.proxima).nome + " · mês " + fm.mesesSeguidos + "/" + fm.meses} pct={faixaPct} texto={v.pontos + "/" + fm.pontos + " pts"} cor="#8b5cf6" /> : <div style={{ fontSize: 11.5, color: "#25A06B", fontWeight: 600, marginBottom: 10 }}>Faixa máxima 🏆</div>}
+                  <BarraProg titulo="Conversão → meta 6%" pct={convPct} texto={fmtPctD(v.conversao)} cor="#25A06B" />
                 </div>
-
-                {prox && (
-                  <div style={{ marginTop: 12, fontSize: 11.5, color: "#6b7280", borderTop: "1px dashed #eef0f2", paddingTop: 10 }}>
-                    <b style={{ color: "#374151" }}>Próximo cargo: {cargoDe(prox.proximo).nome}</b><br />
-                    Precisa de {fmtMoney(prox.faturamento)} e {prox.conversao}% de conversão por {prox.meses} meses seguidos.
-                    {v.receita >= prox.faturamento && v.conversao >= prox.conversao ? <span style={{ color: "#25A06B", fontWeight: 600 }}> ✅ mês batido!</span> : ""}
-                  </div>
-                )}
+                <div style={{ marginTop: 6, fontSize: 11, color: "#c3c7cd", textAlign: "center" }}>toque pra ver tudo →</div>
               </div>
             );
           })}
         </div>
       )}
-      <div style={{ marginTop: 18, fontSize: 12, color: "#9ca3af" }}>
-        As métricas do mês são calculadas automaticamente das vendas e dos leads. A pontuação (cultura, CRM, pontualidade) e o cálculo da comissão entram nas próximas etapas.
+
+      {vendDetalhe && <DetalheVendedor v={vendDetalhe} dados={dados} mes={mes} isGer={dados.souGerente} showToast={showToast} onClose={() => setDetalheId(null)} onMudou={() => carregar(mes)} cargoDe={cargoDe} faixaDe={faixaDe} />}
+    </div>
+  );
+}
+
+function DetalheVendedor({ v, dados, mes, isGer, showToast, onClose, onMudou, cargoDe, faixaDe }) {
+  const cargo = cargoDe(v.cargo);
+  const cargos = dados.cargos || [], faixas = dados.faixas || [];
+  const prox = dados.proxCargo && dados.proxCargo[v.cargo];
+  const fm = v.faixaMeta;
+
+  async function mudarCargoFaixa(campo, valor) { try { await api.ofSetCargoFaixa(v.id, { [campo]: valor }); onMudou(); showToast("Atualizado"); } catch (e) { showToast("❌ " + e.message); } }
+  async function salvarSemana(semana, campo, valor) {
+    const s = (v.semanas || []).find((x) => x.n === semana) || { crm: 0, cultura: 0, pontualidade: 0 };
+    const corpo = { mes, semana, crm: s.crm, cultura: s.cultura, pontualidade: s.pontualidade };
+    corpo[campo] = Number(valor);
+    try { await api.ofSetPontos(v.id, corpo); onMudou(); } catch (e) { showToast("❌ " + e.message); }
+  }
+  async function ocultar() { const novo = !v.oculto; try { await api.ofOcultarVend(v.id, novo); onMudou(); showToast(novo ? "Ocultado do dashboard" : "Mostrando de novo"); if (novo) onClose(); } catch (e) { showToast("❌ " + e.message); } }
+
+  return (
+    <div className="pop-bg" onClick={(e) => e.target === e.currentTarget && onClose()}>
+      <div className="pop-sheet" style={{ maxWidth: 680, width: "94%", maxHeight: "92vh", overflowY: "auto" }}>
+        <div className="pop-head" style={{ alignItems: "center" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            {v.foto ? <img src={v.foto} alt="" style={{ width: 52, height: 52, borderRadius: "50%", objectFit: "cover" }} /> : <div style={{ width: 52, height: 52, borderRadius: "50%", background: "linear-gradient(135deg,#F26522,#25A06B)", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700, fontSize: 20 }}>{(v.nome || "?").slice(0, 1).toUpperCase()}</div>}
+            <div>
+              <div style={{ fontWeight: 700, fontSize: 17, color: "#111827" }}>{v.nome}</div>
+              <div style={{ fontSize: 12, color: "#6b7280" }}>{cargo.nome} · base {fmtMoneyD(cargo.salario)}</div>
+            </div>
+          </div>
+          <button className="crm-x" onClick={onClose}>✕</button>
+        </div>
+        <div className="pop-body">
+          {isGer && (
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 16, alignItems: "center" }}>
+              <select className="input" value={v.cargo} onChange={(e) => mudarCargoFaixa("cargo", e.target.value)} style={{ maxWidth: 190 }}>{cargos.map((c) => <option key={c.k} value={c.k}>{c.nome}</option>)}</select>
+              <select className="input" value={v.faixa} onChange={(e) => mudarCargoFaixa("faixa", e.target.value)} style={{ maxWidth: 150 }}>{faixas.map((f) => <option key={f.k} value={f.k}>Faixa {f.nome}</option>)}</select>
+              <div style={{ flex: 1 }} />
+              <button className="crm-x" onClick={ocultar} style={{ fontSize: 12, color: v.oculto ? "#25A06B" : "#ef4444", width: "auto", padding: "6px 10px" }}>{v.oculto ? "Mostrar no dashboard" : "Ocultar do dashboard"}</button>
+            </div>
+          )}
+
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(110px,1fr))", gap: 10, marginBottom: 18 }}>
+            {[["Receita", fmtMoneyD(v.receita)], ["Vendas", String(v.vendas)], ["Ticket médio", fmtMoneyD(v.ticket)], ["Leads recebidos", String(v.leads)], ["Conversão", fmtPctD(v.conversao)], ["Meta", v.meta ? fmtMoneyD(v.meta) : "—"]].map(([lb, val], i) => (
+              <div key={i} style={{ background: "#f9fafb", borderRadius: 12, padding: "12px 14px" }}>
+                <div style={{ fontSize: 11, color: "#6b7280" }}>{lb}</div>
+                <div style={{ fontSize: 17, fontWeight: 700, color: "#111827" }}>{val}</div>
+              </div>
+            ))}
+          </div>
+
+          <div style={{ fontWeight: 700, color: "#111827", marginBottom: 8, fontSize: 14 }}>Pontuação semanal <span style={{ fontSize: 11, color: "#9ca3af", fontWeight: 400 }}>(máx 10/semana · conversão automática, o resto o líder marca)</span></div>
+          <div style={{ overflowX: "auto", border: "1px solid #eef0f2", borderRadius: 12 }}>
+            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12.5, minWidth: 460 }}>
+              <thead><tr style={{ background: "#f9fafb", color: "#6b7280", textAlign: "center" }}>
+                <th style={{ padding: "8px 6px", textAlign: "left" }}>Semana</th><th>Conv. (auto)</th><th>CRM</th><th>Cultura</th><th>Pontual.</th><th>Total</th>
+              </tr></thead>
+              <tbody>
+                {(v.semanas || []).map((s) => (
+                  <tr key={s.n} style={{ borderTop: "1px solid #f1f2f4", textAlign: "center", opacity: s.jaComecou ? 1 : 0.45 }}>
+                    <td style={{ padding: "7px 6px", textAlign: "left", color: "#374151" }}>Semana {s.n}</td>
+                    <td><b style={{ color: "#25A06B" }}>{s.conversaoPts}</b> <span style={{ color: "#c3c7cd", fontSize: 10.5 }}>({fmtPctD(s.conversao)})</span></td>
+                    <td>{isGer ? <select className="input" value={s.crm} onChange={(e) => salvarSemana(s.n, "crm", e.target.value)} style={{ padding: "2px 4px", width: 52 }}><option value={0}>0</option><option value={1}>1</option></select> : s.crm}</td>
+                    <td>{isGer ? <select className="input" value={s.cultura} onChange={(e) => salvarSemana(s.n, "cultura", e.target.value)} style={{ padding: "2px 4px", width: 52 }}><option value={0}>0</option><option value={1}>1</option><option value={2}>2</option></select> : s.cultura}</td>
+                    <td>{isGer ? <select className="input" value={s.pontualidade} onChange={(e) => salvarSemana(s.n, "pontualidade", e.target.value)} style={{ padding: "2px 4px", width: 52 }}><option value={0}>0</option><option value={1}>1</option></select> : s.pontualidade}</td>
+                    <td><b>{s.total}</b></td>
+                  </tr>
+                ))}
+                <tr style={{ borderTop: "2px solid #eef0f2", textAlign: "center", fontWeight: 700, background: "#f9fafb" }}>
+                  <td style={{ padding: "8px 6px", textAlign: "left" }}>Total do mês</td><td colSpan={4}></td><td style={{ color: "#25A06B", fontSize: 15 }}>{v.pontos}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <div style={{ marginTop: 10, fontSize: 12.5, color: "#374151", background: v.bonus.dinheiro ? "#ecfdf5" : "#f9fafb", border: "1px solid " + (v.bonus.dinheiro ? "#a7f3d0" : "#eef0f2"), borderRadius: 10, padding: "10px 12px" }}>
+            {v.bonus.dinheiro ? <span>Bônus do mês ({v.bonus.rotulo} pts): <b>+{v.bonus.adicional.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}%</b> de comissão + <b>{fmtMoneyD(v.bonus.dinheiro)}</b></span> : <span>Ainda sem bônus — precisa passar de <b>28 pontos</b> no mês (tem {v.pontos}).</span>}
+          </div>
+
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(240px,1fr))", gap: 14, marginTop: 18 }}>
+            <div style={{ border: "1px solid #eef0f2", borderRadius: 12, padding: 14 }}>
+              <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 8 }}>Progresso de faixa</div>
+              {fm ? <span>
+                <BarraProg titulo={"Rumo à Faixa " + faixaDe(fm.proxima).nome} pct={Math.min(100, (v.pontos / fm.pontos) * 100)} texto={v.pontos + "/" + fm.pontos + " pts"} cor="#8b5cf6" />
+                <div style={{ fontSize: 12, color: "#6b7280" }}>Precisa de <b>+{fm.pontos} pontos</b> por <b>{fm.meses} meses seguidos</b>. Vai no <b>mês {fm.mesesSeguidos} de {fm.meses}</b>{v.pontos > fm.pontos ? " ✅ (esse mês bateu)" : ""}.</div>
+              </span> : <div style={{ fontSize: 12, color: "#25A06B" }}>Já está na faixa máxima (Preta) 🏆</div>}
+            </div>
+            <div style={{ border: "1px solid #eef0f2", borderRadius: 12, padding: 14 }}>
+              <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 8 }}>Progresso de cargo</div>
+              {prox ? <span>
+                <BarraProg titulo="Faturamento" pct={Math.min(100, (v.receita / prox.faturamento) * 100)} texto={fmtMoneyD(v.receita) + " / " + fmtMoneyD(prox.faturamento)} cor="#F26522" />
+                <BarraProg titulo="Conversão" pct={Math.min(100, (v.conversao / prox.conversao) * 100)} texto={fmtPctD(v.conversao) + " / " + prox.conversao + "%"} cor="#25A06B" />
+                <div style={{ fontSize: 12, color: "#6b7280" }}>Vira <b>{cargoDe(prox.proximo).nome}</b> com isso por <b>{prox.meses} meses seguidos</b>.{v.receita >= prox.faturamento && v.conversao >= prox.conversao ? <span style={{ color: "#25A06B", fontWeight: 600 }}> ✅ mês batido!</span> : ""}</div>
+              </span> : <div style={{ fontSize: 12, color: "#6b7280" }}>Cargo de liderança — evolução avaliada pela diretoria.</div>}
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   );

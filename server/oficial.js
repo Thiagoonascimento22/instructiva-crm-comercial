@@ -3688,18 +3688,73 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
     } catch (_) {}
     return { pessoas: [], lista: [], metasMes: {} };
   }
+  const FAIXA_ORDEM = ["branca", "azul", "roxa", "marrom", "preta"];
   function metaVendedorMes(pes, mes, metasMes) {
     if (!pes) return 0;
     const mm = metasMes || {};
     if (mm[mes] && mm[mes][pes.id] !== undefined && mm[mes][pes.id] !== null && mm[mes][pes.id] !== "") return Number(mm[mes][pes.id]) || 0;
     return Number(pes.metaMensal) || 0;
   }
+  // pontos de conversão pela taxa (escala inbound do documento) — máx 6/semana
+  function pontosConversao(conv) {
+    if (conv < 1.5) return 0; if (conv < 2) return 1; if (conv < 3) return 2;
+    if (conv < 4) return 3; if (conv < 5) return 4; if (conv < 6) return 5; return 6;
+  }
+  // bônus mensal por pontos (aplica a MAIOR faixa)
+  function bonusPontos(total) {
+    if (total > 40) return { rotulo: "acima de 40", adicional: 1.0, dinheiro: 750 };
+    if (total > 36) return { rotulo: "acima de 36", adicional: 0.75, dinheiro: 500 };
+    if (total > 28) return { rotulo: "acima de 28", adicional: 0.5, dinheiro: 300 };
+    return { rotulo: "abaixo de 28", adicional: 0, dinheiro: 0 };
+  }
+  // semanas do mês (cortes fixos por dia — "semana comercial" provisória)
+  function semanasDoMes(mes) {
+    const p = mes.split("-").map(Number), a = p[0], m = p[1];
+    const ultimo = new Date(a, m, 0).getDate();
+    const cortes = [[1, 7], [8, 14], [15, 21], [22, 28], [29, ultimo]];
+    const out = [];
+    for (let i = 0; i < cortes.length; i++) {
+      const d1 = cortes[i][0], d2 = Math.min(cortes[i][1], ultimo);
+      if (d1 > ultimo) break;
+      out.push({ n: i + 1, ini: new Date(a, m - 1, d1, 0, 0, 0).getTime(), fim: new Date(a, m - 1, d2, 23, 59, 59).getTime() });
+    }
+    return out;
+  }
+  function pontosManuais(userId, mes, semana) {
+    const dp = (db.oficial.desempenhoPontos || {})[mes] || {};
+    const u = dp[userId] || {};
+    return u[semana] || { crm: 0, cultura: 0, pontualidade: 0 };
+  }
+  // pontos de um user num mês: por semana, conversão (automática) + manuais
+  function pontosMes(userId, pes, mes, vendas, leads) {
+    const semanas = semanasDoMes(mes), agora = Date.now();
+    const detalhe = semanas.map((s) => {
+      const jaComecou = s.ini <= agora;
+      const vend = pes ? vendas.filter((v) => v.pessoaId === pes.id && v.data >= s.ini && v.data <= s.fim).length : 0;
+      const lds = leads.filter((l) => l.vendedorId === userId && l.criadoEm >= s.ini && l.criadoEm <= s.fim).length;
+      const conv = lds ? (vend / lds) * 100 : 0;
+      const pc = jaComecou ? pontosConversao(conv) : 0;
+      const man = pontosManuais(userId, mes, s.n);
+      const crm = Math.max(0, Math.min(1, Number(man.crm) || 0));
+      const cultura = Math.max(0, Math.min(2, Number(man.cultura) || 0));
+      const pont = Math.max(0, Math.min(1, Number(man.pontualidade) || 0));
+      return { n: s.n, jaComecou, vendas: vend, leads: lds, conversao: Math.round(conv * 100) / 100, conversaoPts: pc, crm, cultura, pontualidade: pont, total: pc + crm + cultura + pont };
+    });
+    return { total: detalhe.reduce((s, x) => s + x.total, 0), semanas: detalhe };
+  }
+  function metaFaixa(faixaAtual) {
+    if (faixaAtual === "branca") return { proxima: "azul", pontos: 36, meses: 3 };
+    const i = FAIXA_ORDEM.indexOf(faixaAtual);
+    if (i >= 0 && i < FAIXA_ORDEM.length - 1) return { proxima: FAIXA_ORDEM[i + 1], pontos: 40, meses: 3 };
+    return null;
+  }
+  const mesMenos = (mes, k) => { let p = mes.split("-").map(Number), a = p[0], m = p[1] - k; while (m <= 0) { m += 12; a -= 1; } return a + "-" + String(m).padStart(2, "0"); };
+
   function desempenhoDoMes(mes) {
     const vd = lerVendasArquivo();
-    const vendas = vd.lista || [];
-    const pessoas = vd.pessoas || [];
-    const metasMes = vd.metasMes || {};
+    const vendas = vd.lista || [], pessoas = vd.pessoas || [], metasMes = vd.metasMes || {};
     const leads = db.oficial.crmLeads || [];
+    const ocultos = new Set(db.oficial.desempenhoOcultos || []);
     const usuarios = (db.users || []).filter((u) => (u.role === "vendedor" || u.role === "gerente") && u.ativo);
     return usuarios.map((u) => {
       const pes = pessoas.find((p) => p.userId === u.id) || pessoas.find((p) => chaveNomeDes(p.nome) === chaveNomeDes(u.nome));
@@ -3710,12 +3765,24 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
       const leadsMes = leads.filter((l) => l.vendedorId === u.id && mesDesempenho(l.criadoEm) === mes);
       const qtdLeads = leadsMes.length;
       const conversao = qtdLeads ? (qtdVendas / qtdLeads) * 100 : 0;
+      const pontos = pontosMes(u.id, pes, mes, vendas, leads);
+      const faixa = u.faixa || "branca";
+      const mf = metaFaixa(faixa);
+      let mesesSeguidos = 0;
+      if (mf) {
+        for (let k = 0; k < 6; k++) {
+          const tot = k === 0 ? pontos.total : pontosMes(u.id, pes, mesMenos(mes, k), vendas, leads).total;
+          if (tot > mf.pontos) mesesSeguidos++; else break;
+        }
+      }
       return {
         id: u.id, nome: u.nome, foto: u.foto || "", role: u.role,
-        cargo: u.cargo || "trainee", faixa: u.faixa || "branca",
+        cargo: u.cargo || "trainee", faixa, oculto: ocultos.has(u.id),
         receita, vendas: qtdVendas, ticket, leads: qtdLeads,
         conversao: Math.round(conversao * 100) / 100,
         meta: metaVendedorMes(pes, mes, metasMes),
+        pontos: pontos.total, semanas: pontos.semanas, bonus: bonusPontos(pontos.total),
+        faixaMeta: mf ? { proxima: mf.proxima, pontos: mf.pontos, meses: mf.meses, mesesSeguidos } : null,
       };
     });
   }
@@ -3724,11 +3791,12 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
     garantirEstrutura();
     const mes = /^\d{4}-\d{2}$/.test(String(req.query.mes || "")) ? req.query.mes : mesDesempenho(Date.now());
     let lista = desempenhoDoMes(mes);
-    // vendedor só vê o dele; gerente vê todos
-    if (req.user.role === "vendedor") lista = lista.filter((x) => x.id === req.user.id);
-    // ranking por receita, depois conversão
+    const souGerente = req.user.role === "gerente";
+    if (!souGerente) lista = lista.filter((x) => x.id === req.user.id);
+    else if (String(req.query.incluirOcultos || "") !== "1") lista = lista.filter((x) => !x.oculto);
     lista.sort((a, b) => b.receita - a.receita || b.conversao - a.conversao);
-    res.json({ mes, cargos: CARGOS, faixas: FAIXAS, proxCargo: PROX_CARGO, vendedores: lista, souGerente: req.user.role === "gerente" });
+    const qtdOcultos = souGerente ? desempenhoDoMes(mes).filter((x) => x.oculto).length : 0;
+    res.json({ mes, cargos: CARGOS, faixas: FAIXAS, proxCargo: PROX_CARGO, semanasNoMes: semanasDoMes(mes).length, vendedores: lista, souGerente, qtdOcultos });
   });
 
   // gerente define cargo/faixa de um vendedor
@@ -3740,6 +3808,37 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
     if (b.faixa !== undefined && FAIXAS.some((f) => f.k === b.faixa)) u.faixa = b.faixa;
     salvar();
     res.json({ ok: true, cargo: u.cargo, faixa: u.faixa });
+  });
+
+  // gerente lança os pontos manuais de uma semana (CRM, cultura, pontualidade)
+  app.put("/api/oficial/desempenho/:id/pontos", auth, gerenteOnly, (req, res) => {
+    const u = (db.users || []).find((x) => x.id === req.params.id);
+    if (!u) return res.status(404).json({ error: "Usuário não encontrado" });
+    const b = req.body || {};
+    const mes = /^\d{4}-\d{2}$/.test(String(b.mes || "")) ? b.mes : mesDesempenho(Date.now());
+    const semana = Math.max(1, Math.min(5, parseInt(b.semana, 10) || 1));
+    if (!db.oficial.desempenhoPontos) db.oficial.desempenhoPontos = {};
+    if (!db.oficial.desempenhoPontos[mes]) db.oficial.desempenhoPontos[mes] = {};
+    if (!db.oficial.desempenhoPontos[mes][u.id]) db.oficial.desempenhoPontos[mes][u.id] = {};
+    db.oficial.desempenhoPontos[mes][u.id][semana] = {
+      crm: Math.max(0, Math.min(1, Number(b.crm) || 0)),
+      cultura: Math.max(0, Math.min(2, Number(b.cultura) || 0)),
+      pontualidade: Math.max(0, Math.min(1, Number(b.pontualidade) || 0)),
+    };
+    salvar();
+    res.json({ ok: true });
+  });
+
+  // gerente esconde/mostra um vendedor no dashboard
+  app.put("/api/oficial/desempenho/:id/ocultar", auth, gerenteOnly, (req, res) => {
+    const u = (db.users || []).find((x) => x.id === req.params.id);
+    if (!u) return res.status(404).json({ error: "Usuário não encontrado" });
+    if (!Array.isArray(db.oficial.desempenhoOcultos)) db.oficial.desempenhoOcultos = [];
+    const oculto = !!(req.body && req.body.oculto);
+    db.oficial.desempenhoOcultos = db.oficial.desempenhoOcultos.filter((x) => x !== u.id);
+    if (oculto) db.oficial.desempenhoOcultos.push(u.id);
+    salvar();
+    res.json({ ok: true, oculto });
   });
 
   /* ---- REENVIO de webhook pra outro(s) sistema(s) que usam o MESMO app da Meta ----
