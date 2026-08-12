@@ -3723,7 +3723,7 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
   function pontosManuais(userId, mes, semana) {
     const dp = (db.oficial.desempenhoPontos || {})[mes] || {};
     const u = dp[userId] || {};
-    return u[semana] || { crm: 0, cultura: 0, pontualidade: 0 };
+    return u[semana] || { crm: 0, cultura: 0, pontualidade: 0, indicacao: 0 };
   }
   // pontos de um user num mês: por semana, conversão (automática) + manuais
   function pontosMes(userId, pes, mes, vendas, leads) {
@@ -3738,7 +3738,8 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
       const crm = Math.max(0, Math.min(1, Number(man.crm) || 0));
       const cultura = Math.max(0, Math.min(2, Number(man.cultura) || 0));
       const pont = Math.max(0, Math.min(1, Number(man.pontualidade) || 0));
-      return { n: s.n, jaComecou, vendas: vend, leads: lds, conversao: Math.round(conv * 100) / 100, conversaoPts: pc, crm, cultura, pontualidade: pont, total: pc + crm + cultura + pont };
+      const indicacao = Math.max(0, Math.min(5, Number(man.indicacao) || 0));
+      return { n: s.n, jaComecou, vendas: vend, leads: lds, conversao: Math.round(conv * 100) / 100, conversaoPts: pc, crm, cultura, pontualidade: pont, indicacao, total: pc + crm + cultura + pont + indicacao };
     });
     return { total: detalhe.reduce((s, x) => s + x.total, 0), semanas: detalhe };
   }
@@ -3824,6 +3825,7 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
       crm: Math.max(0, Math.min(1, Number(b.crm) || 0)),
       cultura: Math.max(0, Math.min(2, Number(b.cultura) || 0)),
       pontualidade: Math.max(0, Math.min(1, Number(b.pontualidade) || 0)),
+      indicacao: Math.max(0, Math.min(5, Number(b.indicacao) || 0)),
     };
     salvar();
     res.json({ ok: true });

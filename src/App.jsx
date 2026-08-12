@@ -5926,20 +5926,38 @@ function extDeAudio(mime) {
 
 const fmtMoneyD = (v) => "R$ " + (Number(v) || 0).toLocaleString("pt-BR", { maximumFractionDigits: 0 });
 const fmtPctD = (v) => (Number(v) || 0).toLocaleString("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + "%";
-const DES = { ink: "#0f172a", mut: "#64748b", mut2: "#94a3b8", line: "#eef1f4", bg: "#f8fafc", orange: "#F26522", green: "#16a34a", purple: "#8b5cf6" };
+const DES = { ink: "#0f172a", mut: "#64748b", mut2: "#94a3b8", line: "#eef1f4", bg: "#f8fafc", orange: "#F26522", green: "#16a34a", purple: "#8b5cf6", gold: "#f59e0b" };
 
-function BarraProg({ pct, cor, alt = 7 }) {
+// cinturão (faixa) desenhado, com graus/estrelas = meses seguidos rumo à próxima
+function Cinturao({ faixa, graus = 0, alt = 24 }) {
+  const clara = faixa.k === "branca";
   return (
-    <div style={{ height: alt, background: DES.line, borderRadius: 20, overflow: "hidden" }}>
-      <div style={{ width: Math.max(3, Math.min(100, pct)) + "%", height: "100%", background: cor, borderRadius: 20, transition: "width .4s ease" }} />
+    <div style={{ position: "relative", height: alt, borderRadius: 6, background: faixa.cor, border: clara ? "1px solid #cbd5e1" : "1px solid rgba(0,0,0,.12)", boxShadow: "0 1px 3px rgba(0,0,0,.14), inset 0 1px 0 rgba(255,255,255,.18)", display: "flex", alignItems: "center", justifyContent: "flex-end", overflow: "hidden" }}>
+      <div style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 6, background: "rgba(0,0,0,.14)" }} />
+      <div style={{ height: "100%", width: 62, background: faixa.k === "preta" ? "#dc2626" : "#0b1220", display: "flex", alignItems: "center", gap: 4, paddingLeft: 9, boxShadow: "-1px 0 3px rgba(0,0,0,.25)" }}>
+        {Array.from({ length: 4 }).map((_, i) => <div key={i} style={{ width: 5, height: 13, borderRadius: 1, background: i < graus ? "#fff" : "rgba(255,255,255,.22)" }} />)}
+      </div>
     </div>
   );
 }
-function Eyebrow({ children, cor }) {
-  return <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: ".07em", textTransform: "uppercase", color: cor || DES.mut2, marginBottom: 8 }}>{children}</div>;
+function AnelPontos({ pct, cor, size = 108, stroke = 9, dentro }) {
+  const r = (size - stroke) / 2, c = 2 * Math.PI * r;
+  const off = c - (Math.min(100, Math.max(0, pct)) / 100) * c;
+  return (
+    <div style={{ position: "relative", width: size, height: size, flexShrink: 0 }}>
+      <svg width={size} height={size} style={{ transform: "rotate(-90deg)", display: "block" }}>
+        <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="#eef1f4" strokeWidth={stroke} />
+        <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke={cor} strokeWidth={stroke} strokeDasharray={c} strokeDashoffset={off} strokeLinecap="round" style={{ transition: "stroke-dashoffset .6s cubic-bezier(.4,0,.2,1)" }} />
+      </svg>
+      <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", lineHeight: 1.05 }}>{dentro}</div>
+    </div>
+  );
 }
-function FaixaBadge({ faixa, mini }) {
-  return <span style={{ fontSize: mini ? 10.5 : 11, fontWeight: 600, background: faixa.cor, color: faixa.texto, borderRadius: 20, padding: mini ? "2px 8px" : "3px 10px", border: faixa.k === "branca" ? "1px solid #d8dde3" : "none", whiteSpace: "nowrap" }}>Faixa {faixa.nome}</span>;
+function BarraProg({ pct, cor, alt = 7 }) {
+  return <div style={{ height: alt, background: DES.line, borderRadius: 20, overflow: "hidden" }}><div style={{ width: Math.max(3, Math.min(100, pct)) + "%", height: "100%", background: cor, borderRadius: 20, transition: "width .5s ease" }} /></div>;
+}
+function Eyebrow({ children, cor }) {
+  return <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: ".08em", textTransform: "uppercase", color: cor || DES.mut2, marginBottom: 9 }}>{children}</div>;
 }
 function Stat({ label, valor, cor, borda }) {
   return (
@@ -5984,8 +6002,7 @@ function Desempenho({ showToast, isGer = true }) {
   const vendDetalhe = detalheId ? vends.find((v) => v.id === detalheId) : null;
 
   return (
-    <div style={{ maxWidth: 1180, margin: "0 auto" }}>
-      {/* cabeçalho */}
+    <div style={{ maxWidth: 1200, margin: "0 auto" }}>
       <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", flexWrap: "wrap", gap: 12, marginBottom: 22 }}>
         <div>
           <div style={{ fontSize: 22, fontWeight: 700, color: DES.ink, letterSpacing: "-.01em" }}>Desempenho do time</div>
@@ -6003,10 +6020,9 @@ function Desempenho({ showToast, isGer = true }) {
         </div>
       </div>
 
-      {/* resumo do time — faixa única */}
       {dados.souGerente && (
         <div style={{ background: "#fff", border: "1px solid " + DES.line, borderRadius: 16, padding: "18px 8px", marginBottom: 22, display: "flex", boxShadow: "0 1px 2px rgba(15,23,42,.04)" }}>
-          <Stat label="Receita do time" valor={fmtMoneyD(totReceita)} cor={DES.ink} />
+          <Stat label="Receita do time" valor={fmtMoneyD(totReceita)} />
           <Stat label="Vendas" valor={String(totVendas)} borda />
           <Stat label="Leads recebidos" valor={String(totLeads)} borda />
           <Stat label="Conversão média" valor={fmtPctD(convMedia)} cor={DES.green} borda />
@@ -6017,48 +6033,40 @@ function Desempenho({ showToast, isGer = true }) {
       {vends.length === 0 ? (
         <div style={{ padding: 40, color: DES.mut, background: "#fff", borderRadius: 16, border: "1px solid " + DES.line, textAlign: "center" }}>Nenhum vendedor pra mostrar neste mês.</div>
       ) : (
-        <div style={{ display: "grid", gridTemplateColumns: dados.souGerente ? "repeat(auto-fill,minmax(380px,1fr))" : "minmax(0,520px)", gap: 18 }}>
+        <div style={{ display: "grid", gridTemplateColumns: dados.souGerente ? "repeat(auto-fill,minmax(410px,1fr))" : "minmax(0,560px)", gap: 18 }}>
           {vends.map((v, idx) => {
             const cargo = cargoDe(v.cargo), faixa = faixaDe(v.faixa), fm = v.faixaMeta;
-            const faixaPct = fm ? Math.min(100, (v.pontos / fm.pontos) * 100) : 100;
+            const prox = fm ? faixaDe(fm.proxima) : null;
+            const anelPct = fm ? (v.pontos / fm.pontos) * 100 : 100;
+            const anelCor = prox ? prox.cor : DES.gold;
             const top = idx === 0 && dados.souGerente;
             return (
-              <div key={v.id} onClick={() => setDetalheId(v.id)} style={{ background: "#fff", border: "1px solid " + DES.line, borderRadius: 18, padding: 24, cursor: "pointer", opacity: v.oculto ? 0.5 : 1, boxShadow: "0 1px 2px rgba(15,23,42,.04)", transition: "box-shadow .18s, transform .18s", position: "relative" }}
-                onMouseEnter={(e) => { e.currentTarget.style.boxShadow = "0 10px 28px rgba(15,23,42,.09)"; e.currentTarget.style.transform = "translateY(-3px)"; }}
-                onMouseLeave={(e) => { e.currentTarget.style.boxShadow = "0 1px 2px rgba(15,23,42,.04)"; e.currentTarget.style.transform = "none"; }}>
-                {/* cabeçalho do card */}
-                <div style={{ display: "flex", alignItems: "center", gap: 14, marginBottom: 22 }}>
-                  <div style={{ position: "relative" }}>
-                    {v.foto ? <img src={v.foto} alt="" style={{ width: 56, height: 56, borderRadius: "50%", objectFit: "cover" }} /> : <div style={{ width: 56, height: 56, borderRadius: "50%", background: "linear-gradient(135deg,#F26522,#16a34a)", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700, fontSize: 21 }}>{(v.nome || "?").slice(0, 1).toUpperCase()}</div>}
-                    {dados.souGerente && <div style={{ position: "absolute", top: -6, left: -6, width: 22, height: 22, borderRadius: "50%", background: top ? DES.orange : "#fff", color: top ? "#fff" : DES.mut, border: "1.5px solid " + (top ? DES.orange : DES.line), display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 800 }}>{idx + 1}</div>}
-                  </div>
+              <div key={v.id} onClick={() => setDetalheId(v.id)} style={{ background: "#fff", border: top ? "1px solid #fde68a" : "1px solid " + DES.line, borderRadius: 20, padding: 24, cursor: "pointer", opacity: v.oculto ? 0.5 : 1, boxShadow: top ? "0 3px 16px rgba(245,158,11,.14)" : "0 1px 2px rgba(15,23,42,.04)", transition: "box-shadow .18s, transform .18s", position: "relative", overflow: "hidden" }}
+                onMouseEnter={(e) => { e.currentTarget.style.boxShadow = "0 12px 30px rgba(15,23,42,.11)"; e.currentTarget.style.transform = "translateY(-3px)"; }}
+                onMouseLeave={(e) => { e.currentTarget.style.boxShadow = top ? "0 3px 16px rgba(245,158,11,.14)" : "0 1px 2px rgba(15,23,42,.04)"; e.currentTarget.style.transform = "none"; }}>
+                {top && <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: 4, background: "linear-gradient(90deg,#f59e0b,#F26522)" }} />}
+
+                <div style={{ display: "flex", alignItems: "center", gap: 13, marginBottom: 18 }}>
+                  {v.foto ? <img src={v.foto} alt="" style={{ width: 46, height: 46, borderRadius: "50%", objectFit: "cover" }} /> : <div style={{ width: 46, height: 46, borderRadius: "50%", background: "linear-gradient(135deg,#F26522,#16a34a)", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700, fontSize: 18 }}>{(v.nome || "?").slice(0, 1).toUpperCase()}</div>}
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontWeight: 700, fontSize: 16.5, color: DES.ink, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{v.nome}{v.oculto ? " · oculto" : ""}</div>
-                    <div style={{ display: "flex", gap: 8, marginTop: 5, flexWrap: "wrap", alignItems: "center" }}>
-                      <span style={{ fontSize: 12.5, color: DES.mut }}>{cargo.nome}</span>
-                      <FaixaBadge faixa={faixa} mini />
-                    </div>
+                    <div style={{ fontSize: 12.5, color: DES.mut, marginTop: 2 }}>{cargo.nome}</div>
+                  </div>
+                  {dados.souGerente && <div style={{ fontSize: 12, fontWeight: 800, color: top ? "#fff" : DES.mut, background: top ? "linear-gradient(135deg,#f59e0b,#F26522)" : DES.bg, border: top ? "none" : "1px solid " + DES.line, borderRadius: 20, padding: "3px 11px", whiteSpace: "nowrap" }}>{top ? "🏆 1º" : idx + 1 + "º"}</div>}
+                </div>
+
+                {/* HERO: anel de pontos + cinturão */}
+                <div style={{ display: "flex", alignItems: "center", gap: 18, background: top ? "linear-gradient(135deg,#fffbeb,#fff7ed)" : DES.bg, borderRadius: 16, padding: "18px 20px", marginBottom: 18 }}>
+                  <AnelPontos pct={anelPct} cor={anelCor} dentro={<><span style={{ fontSize: 27, fontWeight: 800, color: DES.ink, letterSpacing: "-.02em" }}>{v.pontos}</span><span style={{ fontSize: 11, color: DES.mut2, marginTop: 2 }}>{fm ? "de " + fm.pontos : "pts"}</span></>} />
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <Cinturao faixa={faixa} graus={fm ? fm.mesesSeguidos : 4} />
+                    <div style={{ marginTop: 10, fontSize: 14.5, fontWeight: 700, color: DES.ink }}>Faixa {faixa.nome}</div>
+                    {fm ? <div style={{ fontSize: 12.5, color: DES.mut, marginTop: 1 }}>{v.pontos}/{fm.pontos} pts rumo à <b style={{ color: DES.ink }}>{prox.nome}</b> · mês {fm.mesesSeguidos}/{fm.meses}</div>
+                        : <div style={{ fontSize: 12.5, color: DES.gold, marginTop: 1, fontWeight: 600 }}>Topo da carreira 🏆</div>}
+                    {v.bonus.dinheiro > 0 && <div style={{ marginTop: 9, fontSize: 11.5, fontWeight: 700, color: DES.green, background: "#dcfce7", borderRadius: 20, padding: "3px 10px", display: "inline-block" }}>bônus +{v.bonus.adicional.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}% · {fmtMoneyD(v.bonus.dinheiro)}</div>}
                   </div>
                 </div>
 
-                {/* pontos + faixa (destaque) */}
-                <div style={{ background: DES.bg, borderRadius: 14, padding: "16px 18px", marginBottom: 18 }}>
-                  <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginBottom: 12 }}>
-                    <span style={{ fontSize: 34, fontWeight: 800, color: DES.green, lineHeight: 1, letterSpacing: "-.02em" }}>{v.pontos}</span>
-                    <span style={{ fontSize: 12.5, color: DES.mut }}>pontos no mês</span>
-                    <div style={{ flex: 1 }} />
-                    {v.bonus.dinheiro > 0 && <span style={{ fontSize: 11, fontWeight: 700, color: DES.green, background: "#dcfce7", borderRadius: 20, padding: "3px 9px" }}>bônus +{v.bonus.adicional.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}%</span>}
-                  </div>
-                  {fm ? <>
-                    <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11.5, marginBottom: 6 }}>
-                      <span style={{ color: DES.mut }}>Rumo à <b style={{ color: DES.ink }}>Faixa {faixaDe(fm.proxima).nome}</b> · mês {fm.mesesSeguidos}/{fm.meses}</span>
-                      <span style={{ color: DES.mut, fontWeight: 600 }}>{v.pontos}/{fm.pontos} pts</span>
-                    </div>
-                    <BarraProg pct={faixaPct} cor={DES.purple} />
-                  </> : <div style={{ fontSize: 12.5, color: DES.green, fontWeight: 600 }}>Faixa Preta — topo da carreira 🏆</div>}
-                </div>
-
-                {/* métricas */}
                 <div style={{ display: "flex", borderTop: "1px solid " + DES.line, paddingTop: 16 }}>
                   <Stat label="Receita" valor={fmtMoneyD(v.receita)} />
                   <Stat label="Conversão" valor={fmtPctD(v.conversao)} cor={DES.green} borda />
@@ -6066,7 +6074,7 @@ function Desempenho({ showToast, isGer = true }) {
                   <Stat label="Ticket" valor={fmtMoneyD(v.ticket)} borda />
                 </div>
 
-                <div style={{ marginTop: 18, fontSize: 12.5, color: DES.orange, fontWeight: 600, textAlign: "center" }}>Ver desempenho completo →</div>
+                <div style={{ marginTop: 16, fontSize: 12.5, color: DES.orange, fontWeight: 600, textAlign: "center" }}>Ver desempenho completo →</div>
               </div>
             );
           })}
@@ -6082,22 +6090,22 @@ function DetalheVendedor({ v, dados, mes, isGer, showToast, onClose, onMudou, ca
   const cargo = cargoDe(v.cargo);
   const cargos = dados.cargos || [], faixas = dados.faixas || [];
   const prox = dados.proxCargo && dados.proxCargo[v.cargo];
-  const fm = v.faixaMeta;
+  const fm = v.faixaMeta, proxF = fm ? faixaDe(fm.proxima) : null, faixa = faixaDe(v.faixa);
 
   async function mudarCargoFaixa(campo, valor) { try { await api.ofSetCargoFaixa(v.id, { [campo]: valor }); onMudou(); showToast("Atualizado"); } catch (e) { showToast("❌ " + e.message); } }
   async function salvarSemana(semana, campo, valor) {
-    const s = (v.semanas || []).find((x) => x.n === semana) || { crm: 0, cultura: 0, pontualidade: 0 };
-    const corpo = { mes, semana, crm: s.crm, cultura: s.cultura, pontualidade: s.pontualidade };
+    const s = (v.semanas || []).find((x) => x.n === semana) || { crm: 0, cultura: 0, pontualidade: 0, indicacao: 0 };
+    const corpo = { mes, semana, crm: s.crm, cultura: s.cultura, pontualidade: s.pontualidade, indicacao: s.indicacao || 0 };
     corpo[campo] = Number(valor);
     try { await api.ofSetPontos(v.id, corpo); onMudou(); } catch (e) { showToast("❌ " + e.message); }
   }
   async function ocultar() { const novo = !v.oculto; try { await api.ofOcultarVend(v.id, novo); onMudou(); showToast(novo ? "Ocultado do dashboard" : "Mostrando de novo"); if (novo) onClose(); } catch (e) { showToast("❌ " + e.message); } }
-  const selStyle = { padding: "3px 6px", width: 54, fontWeight: 600 };
+  const sel = { padding: "3px 5px", width: 50, fontWeight: 600 };
+  const anelPct = fm ? (v.pontos / fm.pontos) * 100 : 100;
 
   return (
     <div className="pop-bg" onClick={(e) => e.target === e.currentTarget && onClose()}>
-      <div className="pop-sheet" style={{ maxWidth: 700, width: "94%", maxHeight: "92vh", overflowY: "auto", padding: 0 }}>
-        {/* cabeçalho */}
+      <div className="pop-sheet" style={{ maxWidth: 720, width: "94%", maxHeight: "92vh", overflowY: "auto", padding: 0 }}>
         <div style={{ padding: "22px 26px", borderBottom: "1px solid " + DES.line, display: "flex", alignItems: "center", justifyContent: "space-between", position: "sticky", top: 0, background: "#fff", zIndex: 2, borderRadius: "14px 14px 0 0" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
             {v.foto ? <img src={v.foto} alt="" style={{ width: 54, height: 54, borderRadius: "50%", objectFit: "cover" }} /> : <div style={{ width: 54, height: 54, borderRadius: "50%", background: "linear-gradient(135deg,#F26522,#16a34a)", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700, fontSize: 21 }}>{(v.nome || "?").slice(0, 1).toUpperCase()}</div>}
@@ -6111,21 +6119,34 @@ function DetalheVendedor({ v, dados, mes, isGer, showToast, onClose, onMudou, ca
 
         <div style={{ padding: 26 }}>
           {isGer && (
-            <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 22, alignItems: "center" }}>
+            <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 24, alignItems: "flex-end" }}>
               <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                <span style={{ fontSize: 10.5, color: DES.mut2, fontWeight: 600, letterSpacing: ".05em", textTransform: "uppercase" }}>Cargo</span>
+                <span style={{ fontSize: 10, color: DES.mut2, fontWeight: 700, letterSpacing: ".06em", textTransform: "uppercase" }}>Cargo</span>
                 <select className="input" value={v.cargo} onChange={(e) => mudarCargoFaixa("cargo", e.target.value)} style={{ minWidth: 190 }}>{cargos.map((c) => <option key={c.k} value={c.k}>{c.nome}</option>)}</select>
               </div>
               <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                <span style={{ fontSize: 10.5, color: DES.mut2, fontWeight: 600, letterSpacing: ".05em", textTransform: "uppercase" }}>Faixa</span>
+                <span style={{ fontSize: 10, color: DES.mut2, fontWeight: 700, letterSpacing: ".06em", textTransform: "uppercase" }}>Faixa</span>
                 <select className="input" value={v.faixa} onChange={(e) => mudarCargoFaixa("faixa", e.target.value)} style={{ minWidth: 150 }}>{faixas.map((f) => <option key={f.k} value={f.k}>Faixa {f.nome}</option>)}</select>
               </div>
               <div style={{ flex: 1 }} />
-              <button className="crm-x" onClick={ocultar} style={{ fontSize: 12.5, color: v.oculto ? DES.green : "#ef4444", width: "auto", padding: "8px 12px", alignSelf: "flex-end" }}>{v.oculto ? "Mostrar no dashboard" : "Ocultar do dashboard"}</button>
+              <button className="crm-x" onClick={ocultar} style={{ fontSize: 12.5, color: v.oculto ? DES.green : "#ef4444", width: "auto", padding: "8px 12px" }}>{v.oculto ? "Mostrar no dashboard" : "Ocultar do dashboard"}</button>
             </div>
           )}
 
-          {/* métricas */}
+          <div style={{ display: "flex", alignItems: "center", gap: 22, background: DES.bg, borderRadius: 16, padding: "20px 22px", marginBottom: 24, flexWrap: "wrap" }}>
+            <AnelPontos pct={anelPct} cor={proxF ? proxF.cor : DES.gold} size={118} stroke={10} dentro={<><span style={{ fontSize: 30, fontWeight: 800, color: DES.ink }}>{v.pontos}</span><span style={{ fontSize: 12, color: DES.mut2, marginTop: 2 }}>{fm ? "de " + fm.pontos : "pontos"}</span></>} />
+            <div style={{ flex: 1, minWidth: 220 }}>
+              <Cinturao faixa={faixa} graus={fm ? fm.mesesSeguidos : 4} alt={26} />
+              <div style={{ marginTop: 12 }}>
+                {fm ? <>
+                  <div style={{ fontSize: 16, fontWeight: 700, color: DES.ink, marginBottom: 3 }}>Faixa {faixa.nome} → <span style={{ color: DES.purple }}>{proxF.nome}</span></div>
+                  <div style={{ fontSize: 13, color: DES.mut, lineHeight: 1.5 }}>Passar de <b>{fm.pontos} pontos</b> por <b>{fm.meses} meses seguidos</b>. Está no <b>mês {fm.mesesSeguidos} de {fm.meses}</b>{v.pontos > fm.pontos ? <span style={{ color: DES.green, fontWeight: 600 }}> — este mês bateu ✓</span> : ""}.</div>
+                </> : <div style={{ fontSize: 16, fontWeight: 700, color: DES.gold }}>Faixa Preta 🏆 — o topo da carreira</div>}
+                {v.bonus.dinheiro > 0 && <div style={{ marginTop: 12, fontSize: 13, color: DES.green, background: "#f0fdf4", border: "1px solid #bbf7d0", borderRadius: 10, padding: "9px 12px" }}>💰 Bônus deste mês: <b>+{v.bonus.adicional.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}%</b> na comissão + <b>{fmtMoneyD(v.bonus.dinheiro)}</b></div>}
+              </div>
+            </div>
+          </div>
+
           <Eyebrow>Métricas do mês</Eyebrow>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(112px,1fr))", gap: 12, marginBottom: 26 }}>
             {[["Receita", fmtMoneyD(v.receita), DES.ink], ["Vendas", String(v.vendas), DES.ink], ["Ticket médio", fmtMoneyD(v.ticket), DES.ink], ["Leads recebidos", String(v.leads), DES.ink], ["Conversão", fmtPctD(v.conversao), DES.green], ["Meta", v.meta ? fmtMoneyD(v.meta) : "—", DES.ink]].map(([lb, val, cor], i) => (
@@ -6136,56 +6157,45 @@ function DetalheVendedor({ v, dados, mes, isGer, showToast, onClose, onMudou, ca
             ))}
           </div>
 
-          {/* pontuação semanal */}
-          <Eyebrow>Pontuação semanal · máx 10 por semana</Eyebrow>
+          <Eyebrow>Pontuação semanal</Eyebrow>
           <div style={{ border: "1px solid " + DES.line, borderRadius: 14, overflow: "hidden" }}>
-            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+            <div style={{ overflowX: "auto" }}>
+            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13, minWidth: 540 }}>
               <thead><tr style={{ background: DES.bg, color: DES.mut, textAlign: "center", fontSize: 11.5 }}>
                 <th style={{ padding: "10px 14px", textAlign: "left", fontWeight: 600 }}>Semana</th>
-                <th style={{ fontWeight: 600 }}>Conversão<div style={{ fontSize: 9.5, color: DES.mut2, fontWeight: 400 }}>automático</div></th>
-                <th style={{ fontWeight: 600 }}>CRM</th><th style={{ fontWeight: 600 }}>Cultura</th><th style={{ fontWeight: 600 }}>Pontual.</th><th style={{ fontWeight: 600 }}>Total</th>
+                <th style={{ fontWeight: 600 }}>Conversão<div style={{ fontSize: 9, color: DES.mut2, fontWeight: 400 }}>automático</div></th>
+                <th style={{ fontWeight: 600 }}>CRM</th><th style={{ fontWeight: 600 }}>Cultura</th><th style={{ fontWeight: 600 }}>Pontual.</th><th style={{ fontWeight: 600 }}>Indicação</th><th style={{ fontWeight: 600 }}>Total</th>
               </tr></thead>
               <tbody>
                 {(v.semanas || []).map((s) => (
                   <tr key={s.n} style={{ borderTop: "1px solid " + DES.line, textAlign: "center", opacity: s.jaComecou ? 1 : 0.4 }}>
                     <td style={{ padding: "9px 14px", textAlign: "left", color: DES.ink, fontWeight: 500 }}>Semana {s.n}</td>
-                    <td><b style={{ color: DES.green, fontSize: 14 }}>{s.conversaoPts}</b> <span style={{ color: DES.mut2, fontSize: 11 }}>{fmtPctD(s.conversao)}</span></td>
-                    <td>{isGer ? <select className="input" value={s.crm} onChange={(e) => salvarSemana(s.n, "crm", e.target.value)} style={selStyle}><option value={0}>0</option><option value={1}>1</option></select> : <b>{s.crm}</b>}</td>
-                    <td>{isGer ? <select className="input" value={s.cultura} onChange={(e) => salvarSemana(s.n, "cultura", e.target.value)} style={selStyle}><option value={0}>0</option><option value={1}>1</option><option value={2}>2</option></select> : <b>{s.cultura}</b>}</td>
-                    <td>{isGer ? <select className="input" value={s.pontualidade} onChange={(e) => salvarSemana(s.n, "pontualidade", e.target.value)} style={selStyle}><option value={0}>0</option><option value={1}>1</option></select> : <b>{s.pontualidade}</b>}</td>
-                    <td><b style={{ fontSize: 14 }}>{s.total}</b></td>
+                    <td><b style={{ color: DES.green, fontSize: 14 }}>{s.conversaoPts}</b> <span style={{ color: DES.mut2, fontSize: 10.5 }}>{fmtPctD(s.conversao)}</span></td>
+                    <td>{isGer ? <select className="input" value={s.crm} onChange={(e) => salvarSemana(s.n, "crm", e.target.value)} style={sel}><option value={0}>0</option><option value={1}>1</option></select> : <b>{s.crm}</b>}</td>
+                    <td>{isGer ? <select className="input" value={s.cultura} onChange={(e) => salvarSemana(s.n, "cultura", e.target.value)} style={sel}><option value={0}>0</option><option value={1}>1</option><option value={2}>2</option></select> : <b>{s.cultura}</b>}</td>
+                    <td>{isGer ? <select className="input" value={s.pontualidade} onChange={(e) => salvarSemana(s.n, "pontualidade", e.target.value)} style={sel}><option value={0}>0</option><option value={1}>1</option></select> : <b>{s.pontualidade}</b>}</td>
+                    <td>{isGer ? <select className="input" value={s.indicacao || 0} onChange={(e) => salvarSemana(s.n, "indicacao", e.target.value)} style={sel}><option value={0}>0</option><option value={1}>1</option><option value={2}>2</option><option value={3}>3</option><option value={4}>4</option><option value={5}>5</option></select> : <b>{s.indicacao || 0}</b>}</td>
+                    <td><b style={{ fontSize: 14, color: DES.ink }}>{s.total}</b></td>
                   </tr>
                 ))}
                 <tr style={{ borderTop: "2px solid " + DES.line, textAlign: "center", fontWeight: 700, background: DES.bg }}>
-                  <td style={{ padding: "11px 14px", textAlign: "left" }}>Total do mês</td><td colSpan={4} style={{ color: DES.mut2, fontSize: 11.5, fontWeight: 400 }}>conversão + CRM + cultura + pontualidade</td><td style={{ color: DES.green, fontSize: 16 }}>{v.pontos}</td>
+                  <td style={{ padding: "11px 14px", textAlign: "left" }}>Total do mês</td><td colSpan={5} style={{ color: DES.mut2, fontSize: 11, fontWeight: 400 }}>conversão + CRM + cultura + pontualidade + indicação</td><td style={{ color: DES.green, fontSize: 16 }}>{v.pontos}</td>
                 </tr>
               </tbody>
             </table>
+            </div>
           </div>
-          <div style={{ marginTop: 12, fontSize: 13, color: DES.ink, background: v.bonus.dinheiro ? "#f0fdf4" : DES.bg, border: "1px solid " + (v.bonus.dinheiro ? "#bbf7d0" : DES.line), borderRadius: 12, padding: "12px 14px" }}>
-            {v.bonus.dinheiro ? <span>💰 Bônus deste mês ({v.bonus.rotulo} pontos): <b>+{v.bonus.adicional.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}%</b> na comissão + <b>{fmtMoneyD(v.bonus.dinheiro)}</b></span> : <span>Faltam <b>{Math.max(0, 29 - v.pontos)}</b> pontos pro primeiro bônus (precisa passar de 28 no mês — tem {v.pontos}).</span>}
-          </div>
+          <div style={{ marginTop: 10, fontSize: 12.5, color: DES.mut }}>{v.bonus.dinheiro ? "" : <>Faltam <b style={{ color: DES.ink }}>{Math.max(0, 29 - v.pontos)}</b> pontos pro primeiro bônus (passar de 28 no mês).</>}</div>
 
-          {/* progressos */}
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(250px,1fr))", gap: 16, marginTop: 26 }}>
-            <div style={{ border: "1px solid " + DES.line, borderRadius: 14, padding: 18 }}>
-              <Eyebrow cor={DES.purple}>Progresso de faixa</Eyebrow>
-              {fm ? <>
-                <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12.5, marginBottom: 7 }}><span style={{ color: DES.ink, fontWeight: 600 }}>Faixa {faixaDe(fm.proxima).nome}</span><span style={{ color: DES.mut }}>{v.pontos}/{fm.pontos} pts</span></div>
-                <BarraProg pct={Math.min(100, (v.pontos / fm.pontos) * 100)} cor={DES.purple} />
-                <div style={{ fontSize: 12.5, color: DES.mut, marginTop: 10, lineHeight: 1.5 }}>Passar de <b>{fm.pontos} pontos</b> por <b>{fm.meses} meses seguidos</b>. Está no <b>mês {fm.mesesSeguidos} de {fm.meses}</b>{v.pontos > fm.pontos ? <span style={{ color: DES.green, fontWeight: 600 }}> — este mês bateu ✓</span> : ""}.</div>
-              </> : <div style={{ fontSize: 12.5, color: DES.green }}>Já é Faixa Preta — o topo 🏆</div>}
-            </div>
-            <div style={{ border: "1px solid " + DES.line, borderRadius: 14, padding: 18 }}>
-              <Eyebrow cor={DES.orange}>Progresso de cargo</Eyebrow>
-              {prox ? <>
-                <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12.5, marginBottom: 7 }}><span style={{ color: DES.ink, fontWeight: 600 }}>Faturamento</span><span style={{ color: DES.mut }}>{fmtMoneyD(v.receita)} / {fmtMoneyD(prox.faturamento)}</span></div>
-                <BarraProg pct={Math.min(100, (v.receita / prox.faturamento) * 100)} cor={DES.orange} />
-                <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12.5, margin: "12px 0 7px" }}><span style={{ color: DES.ink, fontWeight: 600 }}>Conversão</span><span style={{ color: DES.mut }}>{fmtPctD(v.conversao)} / {prox.conversao}%</span></div>
-                <BarraProg pct={Math.min(100, (v.conversao / prox.conversao) * 100)} cor={DES.green} />
-                <div style={{ fontSize: 12.5, color: DES.mut, marginTop: 10, lineHeight: 1.5 }}>Vira <b>{cargoDe(prox.proximo).nome}</b> mantendo isso por <b>{prox.meses} meses seguidos</b>.{v.receita >= prox.faturamento && v.conversao >= prox.conversao ? <span style={{ color: DES.green, fontWeight: 600 }}> — este mês bateu ✓</span> : ""}</div>
-              </> : <div style={{ fontSize: 12.5, color: DES.mut, lineHeight: 1.5 }}>Cargo de liderança — a evolução é avaliada pela diretoria.</div>}
-            </div>
+          <div style={{ marginTop: 24, border: "1px solid " + DES.line, borderRadius: 14, padding: 18 }}>
+            <Eyebrow cor={DES.orange}>Progresso de cargo</Eyebrow>
+            {prox ? <>
+              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12.5, marginBottom: 7 }}><span style={{ color: DES.ink, fontWeight: 600 }}>Faturamento</span><span style={{ color: DES.mut }}>{fmtMoneyD(v.receita)} / {fmtMoneyD(prox.faturamento)}</span></div>
+              <BarraProg pct={Math.min(100, (v.receita / prox.faturamento) * 100)} cor={DES.orange} />
+              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12.5, margin: "13px 0 7px" }}><span style={{ color: DES.ink, fontWeight: 600 }}>Conversão</span><span style={{ color: DES.mut }}>{fmtPctD(v.conversao)} / {prox.conversao}%</span></div>
+              <BarraProg pct={Math.min(100, (v.conversao / prox.conversao) * 100)} cor={DES.green} />
+              <div style={{ fontSize: 12.5, color: DES.mut, marginTop: 12, lineHeight: 1.5 }}>Vira <b>{cargoDe(prox.proximo).nome}</b> mantendo isso por <b>{prox.meses} meses seguidos</b>{v.receita >= prox.faturamento && v.conversao >= prox.conversao ? <span style={{ color: DES.green, fontWeight: 600 }}> — este mês bateu ✓</span> : ""}.</div>
+            </> : <div style={{ fontSize: 12.5, color: DES.mut, lineHeight: 1.5 }}>Cargo de liderança — a evolução é avaliada pela diretoria.</div>}
           </div>
         </div>
       </div>
