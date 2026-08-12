@@ -3651,6 +3651,97 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
     res.json({ ok: true, removidas });
   });
 
+  /* ============================================================
+     DESEMPENHO — dashboard de métricas, cargo, faixa e progresso
+     Calcula as 5 métricas por vendedor a partir do que já existe
+     (vendas em db.vendas.lista, leads em db.oficial.crmLeads).
+     ============================================================ */
+  const CARGOS = [
+    { k: "trainee", nome: "Trainee de Vendas", salario: 1800 },
+    { k: "assessor", nome: "Assessor de Vendas", salario: 2500 },
+    { k: "supervisor", nome: "Supervisor de Vendas", salario: 3500 },
+    { k: "supervisor_senior", nome: "Supervisor Sênior", salario: 5000 },
+    { k: "coordenador", nome: "Coordenador", salario: 7000 },
+    { k: "gerente_vendas", nome: "Gerente de Vendas", salario: 10000 },
+    { k: "diretor", nome: "Diretor / Sócio", salario: 15000 },
+  ];
+  const FAIXAS = [
+    { k: "branca", nome: "Branca", cor: "#e5e7eb", texto: "#374151" },
+    { k: "azul", nome: "Azul", cor: "#3b82f6", texto: "#ffffff" },
+    { k: "roxa", nome: "Roxa", cor: "#8b5cf6", texto: "#ffffff" },
+    { k: "marrom", nome: "Marrom", cor: "#7c4a1e", texto: "#ffffff" },
+    { k: "preta", nome: "Preta", cor: "#111827", texto: "#ffffff" },
+  ];
+  // regras de subida de cargo (do documento) — usadas pra barra "próximo cargo"
+  const PROX_CARGO = {
+    trainee: { proximo: "assessor", faturamento: 100000, conversao: 5, meses: 3 },
+    assessor: { proximo: "supervisor", faturamento: 150000, conversao: 5, meses: 3 },
+  };
+  const mesDesempenho = (ts) => { const d = new Date(ts || Date.now()); return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0"); };
+  const chaveNomeDes = (n) => String(n || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim().toLowerCase();
+  // as vendas ficam num arquivo SEPARADO (vendas.json, ao lado do crm.json); leio direto,
+  // porque o db daqui não intercepta db.vendas (isso é interno do módulo de vendas).
+  function lerVendasArquivo() {
+    try {
+      const vp = path.join(path.dirname(process.env.DB_PATH || "/data/crm.json"), "vendas.json");
+      if (fs.existsSync(vp)) { const j = JSON.parse(fs.readFileSync(vp, "utf8")); if (j && typeof j === "object") return j; }
+    } catch (_) {}
+    return { pessoas: [], lista: [], metasMes: {} };
+  }
+  function metaVendedorMes(pes, mes, metasMes) {
+    if (!pes) return 0;
+    const mm = metasMes || {};
+    if (mm[mes] && mm[mes][pes.id] !== undefined && mm[mes][pes.id] !== null && mm[mes][pes.id] !== "") return Number(mm[mes][pes.id]) || 0;
+    return Number(pes.metaMensal) || 0;
+  }
+  function desempenhoDoMes(mes) {
+    const vd = lerVendasArquivo();
+    const vendas = vd.lista || [];
+    const pessoas = vd.pessoas || [];
+    const metasMes = vd.metasMes || {};
+    const leads = db.oficial.crmLeads || [];
+    const usuarios = (db.users || []).filter((u) => (u.role === "vendedor" || u.role === "gerente") && u.ativo);
+    return usuarios.map((u) => {
+      const pes = pessoas.find((p) => p.userId === u.id) || pessoas.find((p) => chaveNomeDes(p.nome) === chaveNomeDes(u.nome));
+      const vendasMes = pes ? vendas.filter((v) => v.pessoaId === pes.id && mesDesempenho(v.data) === mes) : [];
+      const receita = vendasMes.reduce((s, v) => s + (Number(v.valor) || 0), 0);
+      const qtdVendas = vendasMes.length;
+      const ticket = qtdVendas ? receita / qtdVendas : 0;
+      const leadsMes = leads.filter((l) => l.vendedorId === u.id && mesDesempenho(l.criadoEm) === mes);
+      const qtdLeads = leadsMes.length;
+      const conversao = qtdLeads ? (qtdVendas / qtdLeads) * 100 : 0;
+      return {
+        id: u.id, nome: u.nome, foto: u.foto || "", role: u.role,
+        cargo: u.cargo || "trainee", faixa: u.faixa || "branca",
+        receita, vendas: qtdVendas, ticket, leads: qtdLeads,
+        conversao: Math.round(conversao * 100) / 100,
+        meta: metaVendedorMes(pes, mes, metasMes),
+      };
+    });
+  }
+
+  app.get("/api/oficial/desempenho", auth, (req, res) => {
+    garantirEstrutura();
+    const mes = /^\d{4}-\d{2}$/.test(String(req.query.mes || "")) ? req.query.mes : mesDesempenho(Date.now());
+    let lista = desempenhoDoMes(mes);
+    // vendedor só vê o dele; gerente vê todos
+    if (req.user.role === "vendedor") lista = lista.filter((x) => x.id === req.user.id);
+    // ranking por receita, depois conversão
+    lista.sort((a, b) => b.receita - a.receita || b.conversao - a.conversao);
+    res.json({ mes, cargos: CARGOS, faixas: FAIXAS, proxCargo: PROX_CARGO, vendedores: lista, souGerente: req.user.role === "gerente" });
+  });
+
+  // gerente define cargo/faixa de um vendedor
+  app.put("/api/oficial/desempenho/:id/cargo-faixa", auth, gerenteOnly, (req, res) => {
+    const u = (db.users || []).find((x) => x.id === req.params.id);
+    if (!u) return res.status(404).json({ error: "Usuário não encontrado" });
+    const b = req.body || {};
+    if (b.cargo !== undefined && CARGOS.some((c) => c.k === b.cargo)) u.cargo = b.cargo;
+    if (b.faixa !== undefined && FAIXAS.some((f) => f.k === b.faixa)) u.faixa = b.faixa;
+    salvar();
+    res.json({ ok: true, cargo: u.cargo, faixa: u.faixa });
+  });
+
   /* ---- REENVIO de webhook pra outro(s) sistema(s) que usam o MESMO app da Meta ----
      O sistema pra onde a Meta aponta recebe tudo e repassa aqui pros "irmãos".
      Guarda só a BASE (ex: https://xxx.up.railway.app); o repasse já anexa o caminho. */

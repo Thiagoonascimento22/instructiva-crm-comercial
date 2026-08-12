@@ -203,6 +203,8 @@ export const api = {
   ofCrmImportar: (dados) => req("POST", "/api/oficial/crm/importar", dados),
   ofCrmLoteAtribuir: (dados) => req("POST", "/api/oficial/crm/lote/atribuir", dados),
   ofCrmLoteExcluir: (dados) => req("POST", "/api/oficial/crm/lote/excluir", dados),
+  ofDesempenho: (mes) => req("GET", "/api/oficial/desempenho" + (mes ? "?mes=" + mes : "")),
+  ofSetCargoFaixa: (id, dados) => req("PUT", "/api/oficial/desempenho/" + id + "/cargo-faixa", dados),
   ofExcluirIA: (id) => req("DELETE", "/api/oficial/ias/" + id),
   ofExtrairArquivo: (nome, base64) => req("POST", "/api/oficial/ias/extrair", { nome, base64 }),
   ofPreviewIA: (dados) => req("POST", "/api/oficial/ias/preview", dados),

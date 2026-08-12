@@ -405,6 +405,7 @@ export default function App() {
     ligacoes: { t: "Ligações IA", s: "A IA liga pro lead, qualifica por voz e passa pro vendedor" },
     crm: { t: "Pipeline", s: "Funil de leads — arraste entre as etapas, atribua e acompanhe" },
     vendas: { t: "Vendas", s: "Metas, ranking e todas as vendas do time" },
+    desempenho: { t: "Desempenho", s: "Métricas, cargo, faixa e progresso de cada vendedor" },
     sistema: { t: "Sistema", s: "Controle dos módulos entregues — visível só pra você (dono)" },
     temperatura: { t: "Temperatura", s: "Melhores horários e dias — quando os leads mais respondem" },
     minhasSolicitacoes: { t: "Minhas solicitações", s: "Acompanhe seus pedidos ao suporte" },
@@ -426,6 +427,7 @@ export default function App() {
         <nav className="nav">
           {(isGer || vendPode("crm")) && mod("crm") && <NavBtn ic={I.pipe} label="Pipeline" active={view === "crm"} onClick={() => setView("crm")} />}
           {(isGer || vendPode("vendas")) && mod("vendas") && <NavBtn ic={I.gauge} label="Vendas" active={view === "vendas"} onClick={() => setView("vendas")} />}
+          {(isGer || isVend) && mod("desempenho") && <NavBtn ic={I.spark} label="Desempenho" active={view === "desempenho"} onClick={() => setView("desempenho")} />}
           {!isSuporte && mod("caixa") && <NavBtn ic={I.wa} label="Caixa de entrada" active={view === "whatsapp"} onClick={() => setView("whatsapp")} />}
           {(isGer || isVend) && mod("disparo") && <NavBtn ic={I.send} label="Disparo" active={view === "disparo"} onClick={() => setView("disparo")} />}
           {isGer && mod("numeros") && <NavBtn ic={I.wa} label="Números" active={view === "numeros"} onClick={() => setView("numeros")} />}
@@ -480,6 +482,7 @@ export default function App() {
           {view === "ligacoes" && isGer && mod("ligacoes") && <OficialLigacoes showToast={showToast} />}
           {view === "vendas" && (isGer || vendPode("vendas")) && mod("vendas") && <PainelVendas showToast={showToast} isGer={isGer} />}
           {view === "crm" && (isGer || vendPode("crm")) && mod("crm") && <OficialCRM showToast={showToast} isGer={isGer} onAbrirWhats={(tel, canal, nome) => { setWaTarget({ numero: tel, canal, nome }); setView("whatsapp"); }} />}
+          {view === "desempenho" && (isGer || isVend) && mod("desempenho") && <Desempenho showToast={showToast} isGer={isGer} />}
           {view === "temperatura" && (isGer || vendPode("temperatura")) && mod("temperatura") && <OficialTemperatura showToast={showToast} />}
           {view === "minhasSolicitacoes" && !isGer && !isSuporte && <PaginaMinhasSolicitacoes itens={minhasSol} recarregar={carregarMinhasSol} showToast={showToast} />}
           {view === "solicitacoes" && (isGer || isSuporte) && <PaginaSolicitacoes showToast={showToast} readonly={isGer} />}
@@ -5920,6 +5923,141 @@ function extDeAudio(mime) {
   return "webm";
 }
 
+
+function BarraProg({ titulo, pct, texto, cor }) {
+  return (
+    <div style={{ marginBottom: 10 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: "#6b7280", marginBottom: 4 }}><span>{titulo}</span><span>{texto}</span></div>
+      <div style={{ height: 8, background: "#eef0f2", borderRadius: 20, overflow: "hidden" }}>
+        <div style={{ width: Math.max(2, pct) + "%", height: "100%", background: cor, borderRadius: 20, transition: "width .3s" }} />
+      </div>
+    </div>
+  );
+}
+
+function Desempenho({ showToast, isGer = true }) {
+  const [dados, setDados] = useState(null);
+  const [mes, setMes] = useState("");
+  const [editando, setEditando] = useState(null);
+  const [editVals, setEditVals] = useState({ cargo: "", faixa: "" });
+  const [carregando, setCarregando] = useState(true);
+
+  const carregar = (m) => {
+    setCarregando(true);
+    api.ofDesempenho(m).then((d) => { setDados(d); setMes(d.mes); setCarregando(false); }).catch((e) => { showToast(e.message); setCarregando(false); });
+  };
+  useEffect(() => { carregar(); }, []);
+
+  const fmtMoney = (v) => "R$ " + (Number(v) || 0).toLocaleString("pt-BR", { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+  const fmtPct = (v) => (Number(v) || 0).toLocaleString("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + "%";
+  const nomeMes = (m) => { const p = String(m).split("-"); const nomes = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"]; return (nomes[+p[1] - 1] || "?") + "/" + p[0]; };
+
+  if (carregando || !dados) return <div style={{ padding: 40, color: "#6b7280" }}>Carregando desempenho…</div>;
+
+  const cargos = dados.cargos || [], faixas = dados.faixas || [];
+  const cargoDe = (k) => cargos.find((c) => c.k === k) || { nome: k, salario: 0 };
+  const faixaDe = (k) => faixas.find((f) => f.k === k) || { nome: k, cor: "#e5e7eb", texto: "#374151" };
+  const vends = dados.vendedores || [];
+  const totReceita = vends.reduce((s, v) => s + v.receita, 0);
+  const totVendas = vends.reduce((s, v) => s + v.vendas, 0);
+  const totLeads = vends.reduce((s, v) => s + v.leads, 0);
+  const convMedia = totLeads ? (totVendas / totLeads) * 100 : 0;
+  const ticketMedio = totVendas ? totReceita / totVendas : 0;
+
+  const mesesOpcoes = [];
+  { const now = new Date(); for (let i = 0; i < 6; i++) { const d = new Date(now.getFullYear(), now.getMonth() - i, 1); mesesOpcoes.push(d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0")); } }
+  if (mes && !mesesOpcoes.includes(mes)) mesesOpcoes.unshift(mes);
+
+  function abrirEditor(v) { if (editando === v.id) setEditando(null); else { setEditando(v.id); setEditVals({ cargo: v.cargo, faixa: v.faixa }); } }
+  async function salvarCargoFaixa(id) {
+    try { await api.ofSetCargoFaixa(id, editVals); setEditando(null); carregar(mes); showToast("Cargo/faixa atualizado"); }
+    catch (e) { showToast("❌ " + e.message); }
+  }
+
+  return (
+    <div className="crm-wrap" style={{ padding: 0 }}>
+      <div className="crm-top" style={{ alignItems: "center", justifyContent: "flex-end" }}>
+        <select className="input" value={mes} onChange={(e) => carregar(e.target.value)} style={{ maxWidth: 150 }}>
+          {mesesOpcoes.map((m) => <option key={m} value={m}>{nomeMes(m)}</option>)}
+        </select>
+      </div>
+
+      {dados.souGerente && (
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(150px,1fr))", gap: 12, margin: "4px 0 20px" }}>
+          {[["Receita do time", fmtMoney(totReceita)], ["Vendas", String(totVendas)], ["Leads recebidos", String(totLeads)], ["Conversão média", fmtPct(convMedia)], ["Ticket médio", fmtMoney(ticketMedio)]].map(([lb, val], i) => (
+            <div key={i} style={{ background: "#fff", border: "1px solid #eef0f2", borderRadius: 14, padding: "14px 16px", boxShadow: "0 1px 2px rgba(0,0,0,0.03)" }}>
+              <div style={{ fontSize: 12, color: "#6b7280", marginBottom: 4 }}>{lb}</div>
+              <div style={{ fontSize: 20, fontWeight: 700, color: "#111827" }}>{val}</div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {vends.length === 0 ? (
+        <div style={{ padding: 30, color: "#6b7280", background: "#fff", borderRadius: 14, border: "1px solid #eef0f2" }}>Sem dados de vendedores nesse mês ainda.</div>
+      ) : (
+        <div style={{ display: "grid", gridTemplateColumns: dados.souGerente ? "repeat(auto-fill,minmax(340px,1fr))" : "minmax(0,460px)", gap: 14 }}>
+          {vends.map((v, idx) => {
+            const cargo = cargoDe(v.cargo), faixa = faixaDe(v.faixa);
+            const convPct = Math.min(100, (v.conversao / 6) * 100);
+            const metaAlvo = v.meta || 50000;
+            const recPct = Math.min(100, (v.receita / metaAlvo) * 100);
+            const prox = dados.proxCargo && dados.proxCargo[v.cargo];
+            return (
+              <div key={v.id} style={{ background: "#fff", border: "1px solid #eef0f2", borderRadius: 16, padding: 18, boxShadow: "0 1px 3px rgba(0,0,0,0.04)" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                  {dados.souGerente && <div style={{ fontSize: 15, fontWeight: 700, color: "#9ca3af", width: 22 }}>{idx + 1}º</div>}
+                  {v.foto ? <img src={v.foto} alt="" style={{ width: 46, height: 46, borderRadius: "50%", objectFit: "cover" }} /> : <div style={{ width: 46, height: 46, borderRadius: "50%", background: "linear-gradient(135deg,#F26522,#25A06B)", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700 }}>{(v.nome || "?").slice(0, 1).toUpperCase()}</div>}
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontWeight: 700, color: "#111827", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{v.nome}</div>
+                    <div style={{ display: "flex", gap: 6, marginTop: 3, flexWrap: "wrap", alignItems: "center" }}>
+                      <span style={{ fontSize: 11, color: "#6b7280" }}>{cargo.nome}</span>
+                      <span style={{ fontSize: 11, fontWeight: 600, background: faixa.cor, color: faixa.texto, borderRadius: 20, padding: "1px 8px" }}>Faixa {faixa.nome}</span>
+                    </div>
+                  </div>
+                  {dados.souGerente && <button className="crm-x" title="Mudar cargo/faixa" onClick={() => abrirEditor(v)} style={{ fontSize: 15 }}>⚙︎</button>}
+                </div>
+
+                {dados.souGerente && editando === v.id && (
+                  <div style={{ display: "flex", gap: 8, marginTop: 12, flexWrap: "wrap", background: "#f9fafb", padding: 10, borderRadius: 10 }}>
+                    <select className="input" value={editVals.cargo} onChange={(e) => setEditVals({ ...editVals, cargo: e.target.value })} style={{ flex: 1, minWidth: 130 }}>{cargos.map((c) => <option key={c.k} value={c.k}>{c.nome}</option>)}</select>
+                    <select className="input" value={editVals.faixa} onChange={(e) => setEditVals({ ...editVals, faixa: e.target.value })} style={{ flex: 1, minWidth: 110 }}>{faixas.map((f) => <option key={f.k} value={f.k}>Faixa {f.nome}</option>)}</select>
+                    <button className="onum-btn-save" onClick={() => salvarCargoFaixa(v.id)}>Salvar</button>
+                  </div>
+                )}
+
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 8, marginTop: 14 }}>
+                  {[["Receita", fmtMoney(v.receita)], ["Vendas", String(v.vendas)], ["Ticket", fmtMoney(v.ticket)], ["Leads", String(v.leads)], ["Conversão", fmtPct(v.conversao)], ["Meta", v.meta ? fmtMoney(v.meta) : "—"]].map(([lb, val], i) => (
+                    <div key={i} style={{ background: "#f9fafb", borderRadius: 10, padding: "8px 10px" }}>
+                      <div style={{ fontSize: 10.5, color: "#6b7280" }}>{lb}</div>
+                      <div style={{ fontSize: 14.5, fontWeight: 700, color: "#111827" }}>{val}</div>
+                    </div>
+                  ))}
+                </div>
+
+                <div style={{ marginTop: 14 }}>
+                  <BarraProg titulo="Conversão → meta 6%" pct={convPct} texto={fmtPct(v.conversao) + " de 6%"} cor="#25A06B" />
+                  <BarraProg titulo={v.meta ? "Receita → meta do mês" : "Receita → mínimo R$ 50k"} pct={recPct} texto={fmtMoney(v.receita) + " de " + fmtMoney(metaAlvo)} cor="#F26522" />
+                </div>
+
+                {prox && (
+                  <div style={{ marginTop: 12, fontSize: 11.5, color: "#6b7280", borderTop: "1px dashed #eef0f2", paddingTop: 10 }}>
+                    <b style={{ color: "#374151" }}>Próximo cargo: {cargoDe(prox.proximo).nome}</b><br />
+                    Precisa de {fmtMoney(prox.faturamento)} e {prox.conversao}% de conversão por {prox.meses} meses seguidos.
+                    {v.receita >= prox.faturamento && v.conversao >= prox.conversao ? <span style={{ color: "#25A06B", fontWeight: 600 }}> ✅ mês batido!</span> : ""}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+      <div style={{ marginTop: 18, fontSize: 12, color: "#9ca3af" }}>
+        As métricas do mês são calculadas automaticamente das vendas e dos leads. A pontuação (cultura, CRM, pontualidade) e o cálculo da comissão entram nas próximas etapas.
+      </div>
+    </div>
+  );
+}
 
 function OficialCRM({ showToast, isGer = true, onAbrirWhats }) {
   // relógio vivo: o "entrou há X min" dos cards se atualiza sozinho
