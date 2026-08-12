@@ -4930,13 +4930,13 @@ function ModalIntegracao({ onClose, showToast }) {
             (visão geral, formas de pagamento, top 3, cursos e ranking) e se atualiza em tempo real.
             Dica: aperte <b>F</b> pra tela cheia.
           </div>
-          <div className="rsv-link api" onClick={() => copiar(origin + "/tv.html?k=" + (dados ? dados.chave : ""), "Link da TV")}>
+          <div className="rsv-link api" onClick={() => copiar(origin + "/tv?k=" + (dados ? dados.tvCodigo : ""), "Link da TV")}>
             <span className="rsv-link-tag">TV</span>
-            <span className="rsv-link-url">{origin}/tv.html?k={dados ? dados.chave : "…"}</span>
+            <span className="rsv-link-url">{origin}/tv?k={dados ? dados.tvCodigo : "…"}</span>
             <span className="rsv-copy">copiar</span>
           </div>
           <a className="btn btn-on" style={{ marginTop: 10, display: "inline-flex" }} target="_blank" rel="noreferrer"
-            href={origin + "/tv.html?k=" + (dados ? dados.chave : "")}>Abrir o painel de TV</a>
+            href={origin + "/tv?k=" + (dados ? dados.tvCodigo : "")}>Abrir o painel de TV</a>
 
           <div className="vd-sec" style={{ marginTop: 22 }}>Nomes diferentes entre os sistemas</div>
           <div className="vd-dica" style={{ marginTop: 0 }}>

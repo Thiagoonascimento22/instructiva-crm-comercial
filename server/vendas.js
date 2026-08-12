@@ -498,9 +498,14 @@ export function instalarVendas({ app, getDb, saveDB, proximoId, auth, gerenteOnl
     }
     return db.vendas.chaveApi;
   }
+  // código CURTO só pra TV (a TV é só leitura, então pode ser curtinho pra caber num link pequeno)
+  function tvCodigo() {
+    if (!db.vendas.tvCodigo) { db.vendas.tvCodigo = Math.random().toString(36).slice(2, 7); salvar(); }
+    return db.vendas.tvCodigo;
+  }
   app.get("/api/vendas/integracao", auth, gerenteOnly, (req, res) => {
     garantir();
-    res.json({ chave: chaveIntegracao(), rota: "/api/vendas/externa" });
+    res.json({ chave: chaveIntegracao(), rota: "/api/vendas/externa", tvCodigo: tvCodigo() });
   });
   app.post("/api/vendas/integracao/nova-chave", auth, gerenteOnly, (req, res) => {
     garantir();
@@ -791,7 +796,7 @@ export function instalarVendas({ app, getDb, saveDB, proximoId, auth, gerenteOnl
   app.get("/api/vendas/tv", (req, res) => {
     garantir();
     const k = String(req.query.k || "").trim();
-    if (!k || k !== chaveIntegracao()) return res.status(401).json({ error: "Chave inválida" });
+    if (!k || (k !== chaveIntegracao() && k !== tvCodigo())) return res.status(401).json({ error: "Chave inválida" });
     const mes = mesValido(req.query.mes) ? req.query.mes : mesDe(Date.now());
     const doMes = (db.vendas.lista || []).filter((v) => mesDe(v.data) === mes);
 
