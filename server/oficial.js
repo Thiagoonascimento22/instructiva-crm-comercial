@@ -83,6 +83,20 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
       if (devolvidas) console.log(`[recuperação] ${devolvidas} conversa(s) de disparo devolvida(s) ao vendedor (IA pausada)`);
       saveDB();
     }
+    // Limpeza definitiva: tira a IA de TODA conversa de disparo (mesmo sem dono definido)
+    // pra IA nunca mais assumir/esconder disparo. Roda de novo (flag própria).
+    if (!db.oficial._migDisparoSemIAv2) {
+      db.oficial._migDisparoSemIAv2 = true;
+      let limpas = 0;
+      for (const c of Object.values(db.waChats || {})) {
+        if (c && c.canal === "oficial" && c.origemDisparo && c.iaId && !c.iaPausada) {
+          c.iaPausada = true;
+          limpas++;
+        }
+      }
+      if (limpas) console.log(`[recuperação v2] ${limpas} conversa(s) de disparo liberada(s) da IA`);
+      saveDB();
+    }
     if (!db.oficial.verifyToken) {
       db.oficial.verifyToken = "instructiva_" + Math.random().toString(36).slice(2, 10);
     }
@@ -3304,16 +3318,13 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
     const incluirEncerrados = String(req.query.encerrados || "") === "1";
     if (!incluirEncerrados) chats = chats.filter((c) => !c.encerrado);
     if (req.user.role !== "gerente") {
-      // vendedor só vê conversas:
-      //  - atribuídas a ele
-      //  - que o lead já respondeu (disparo sem resposta fica invisível)
-      //  - e que NÃO estejam sob comando de uma IA ativa
-      //    (enquanto a IA atende, é privado do gestor; ao passar pro vendedor,
-      //     a IA pausa e atribui, então a conversa aparece JÁ com todo o histórico)
+      // vendedor vê conversas atribuídas a ele que o lead já respondeu
+      // (disparo sem resposta fica invisível pra não lotar a caixa).
+      // GARANTIA: se a conversa é DELE, ela SEMPRE aparece — nenhuma IA esconde
+      // uma conversa que já tem dono. IA só atende lead novo/sem dono.
       chats = chats.filter((c) =>
         c.vendedorId === req.user.id &&
-        (!c.origemDisparo || c.respondeu) &&
-        !(c.iaId && !c.iaPausada)
+        (!c.origemDisparo || c.respondeu)
       );
     } else if (req.query.numeroId && req.query.numeroId !== "todos") {
       chats = chats.filter((c) => c.numeroOficialId === req.query.numeroId);
@@ -3840,7 +3851,10 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
             // IMPORTANTE: se a conversa já é de um vendedor (ex.: disparo "fica comigo"/atribuição manual),
             // a IA padrão NÃO assume — senão a conversa sumiria da Caixa de entrada do vendedor. A IA padrão
             // do número só entra em lead NOVO/sem dono.
-            if (!chat.iaId && !chat.vendedorId && numeroCfg.iaId) {
+            // A IA padrão do número NUNCA assume conversa de disparo nem conversa que já
+            // tem dono — ela só entra em lead NOVO/sem dono que não veio de disparo.
+            // (Disparo é sempre do vendedor; a IA não pode roubar/esconder isso dele.)
+            if (!chat.iaId && !chat.vendedorId && !chat.origemDisparo && numeroCfg.iaId) {
               const iaPadrao = (db.oficial.ias || []).find((x) => x.id === numeroCfg.iaId && x.ativa);
               if (iaPadrao) { chat.iaId = numeroCfg.iaId; chat.iaPausada = false; }
             }
