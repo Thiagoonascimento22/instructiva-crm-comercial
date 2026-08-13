@@ -2298,6 +2298,146 @@ function ModalRepasse({ onClose, showToast, onFeito }) {
 }
 
 
+function MetricasDisparo({ isGer = true, showToast, onClose, onLimpou }) {
+  const [dados, setDados] = useState(null);
+  const [periodo, setPeriodo] = useState("30");
+  const [carregando, setCarregando] = useState(true);
+  const [limpando, setLimpando] = useState(false);
+
+  const carregar = (p) => {
+    setCarregando(true);
+    let de = 0;
+    const pp = p || periodo;
+    if (pp !== "tudo") { const d = new Date(); d.setDate(d.getDate() - (pp === "hoje" ? 0 : Number(pp))); if (pp === "hoje") d.setHours(0, 0, 0, 0); de = d.getTime(); }
+    api.ofDisparoMetricas(de, 0).then((r) => { setDados(r); setCarregando(false); }).catch((e) => { showToast(e.message); setCarregando(false); });
+  };
+  useEffect(() => { carregar(); /* eslint-disable-next-line */ }, []);
+
+  async function limpar() {
+    if (!confirm("Isso remove da caixa de entrada as conversas de disparo que NUNCA responderam (e limpa rastros técnicos antigos), pra deixar o sistema leve e rápido.\n\nNÃO apaga: leads do Pipeline, vendas, usuários, nem conversas que responderam.\n\nDeseja limpar agora?")) return;
+    setLimpando(true);
+    try { const r = await api.ofLimparDisparos(); showToast("✓ Limpo: " + r.conversas + " conversas + rastros"); onLimpou && onLimpou(); }
+    catch (e) { showToast("✗ " + e.message); } finally { setLimpando(false); }
+  }
+
+  const pct = (v) => (Number(v) || 0).toLocaleString("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + "%";
+  const nMil = (v) => (Number(v) || 0).toLocaleString("pt-BR");
+  const g = dados && dados.geral;
+
+  return (
+    <div>
+      <div style={{ padding: "20px 24px", borderBottom: "1px solid " + DES.line, display: "flex", alignItems: "center", justifyContent: "space-between", position: "sticky", top: 0, background: "#fff", zIndex: 2, borderRadius: "14px 14px 0 0", flexWrap: "wrap", gap: 10 }}>
+        <div>
+          <div style={{ fontSize: 18, fontWeight: 700, color: DES.ink }}>Métricas de disparo</div>
+          <div style={{ fontSize: 12.5, color: DES.mut, marginTop: 2 }}>Entrega, leitura e resposta — direto da Meta</div>
+        </div>
+        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+          <select className="input" value={periodo} onChange={(e) => { setPeriodo(e.target.value); carregar(e.target.value); }} style={{ minWidth: 120 }}>
+            <option value="hoje">Hoje</option>
+            <option value="7">Últimos 7 dias</option>
+            <option value="30">Últimos 30 dias</option>
+            <option value="tudo">Tudo</option>
+          </select>
+          <button className="crm-x" onClick={onClose}>✕</button>
+        </div>
+      </div>
+
+      <div style={{ padding: 24 }}>
+        {carregando || !g ? <div style={{ padding: 30, color: DES.mut }}>Carregando…</div> : (
+          <>
+            {/* números gerais */}
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(120px,1fr))", gap: 12, marginBottom: 20 }}>
+              {[["Enviados", nMil(g.enviados), DES.ink], ["Entregues", nMil(g.entregues), DES.green], ["Lidos", nMil(g.lidos), "#2563eb"], ["Responderam", nMil(g.responderam), DES.purple], ["Falhas", nMil(g.falhas), "#dc2626"]].map(([lb, v, cor], i) => (
+                <div key={i} style={{ background: DES.bg, borderRadius: 12, padding: "14px 16px" }}>
+                  <div style={{ fontSize: 11.5, color: DES.mut2, marginBottom: 4 }}>{lb}</div>
+                  <div style={{ fontSize: 22, fontWeight: 800, color: cor }}>{v}</div>
+                </div>
+              ))}
+            </div>
+
+            {/* taxas (o que o Celso quer ver claro) */}
+            <div style={{ border: "1px solid " + DES.line, borderRadius: 14, padding: 18, marginBottom: 20 }}>
+              {[["Taxa de entrega", g.txEntrega, DES.green, "entregues ÷ enviados"], ["Taxa de leitura", g.txLeitura, "#2563eb", "lidos ÷ entregues"], ["Taxa de resposta", g.txResposta, DES.purple, "responderam ÷ entregues"]].map(([lb, v, cor, exp], i) => (
+                <div key={i} style={{ marginBottom: i < 2 ? 16 : 0 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 6 }}>
+                    <span style={{ fontSize: 13, fontWeight: 600, color: DES.ink }}>{lb} <span style={{ fontSize: 11, color: DES.mut2, fontWeight: 400 }}>({exp})</span></span>
+                    <span style={{ fontSize: 18, fontWeight: 800, color: cor }}>{pct(v)}</span>
+                  </div>
+                  <BarraProg pct={v} cor={cor} alt={9} />
+                </div>
+              ))}
+              <div style={{ fontSize: 11.5, color: DES.mut2, marginTop: 12, lineHeight: 1.5 }}>💡 A <b>taxa de leitura</b> depende de a pessoa ter a confirmação de leitura ligada no WhatsApp — muita gente desliga, então esse número costuma parecer mais baixo que o real. Não é erro do sistema, é limitação do WhatsApp.</div>
+            </div>
+
+            {/* por número (identifica número com entrega ruim) */}
+            {(dados.porNumero || []).length > 0 && (
+              <div style={{ marginBottom: 20 }}>
+                <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: ".07em", textTransform: "uppercase", color: DES.mut2, marginBottom: 8 }}>Por número</div>
+                <div style={{ border: "1px solid " + DES.line, borderRadius: 12, overflow: "hidden", overflowX: "auto" }}>
+                  <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12.5, minWidth: 480 }}>
+                    <thead><tr style={{ background: DES.bg, color: DES.mut, textAlign: "right" }}><th style={{ padding: "9px 12px", textAlign: "left" }}>Número</th><th>Enviados</th><th>Entrega</th><th>Leitura</th><th>Resposta</th></tr></thead>
+                    <tbody>{dados.porNumero.map((n, i) => (
+                      <tr key={i} style={{ borderTop: "1px solid " + DES.line, textAlign: "right" }}>
+                        <td style={{ padding: "9px 12px", textAlign: "left", fontWeight: 600, color: DES.ink }}>{n.nome}</td>
+                        <td>{nMil(n.enviados)}</td>
+                        <td style={{ color: n.txEntrega < 60 ? "#dc2626" : DES.green, fontWeight: 600 }}>{pct(n.txEntrega)}</td>
+                        <td>{pct(n.txLeitura)}</td>
+                        <td style={{ color: DES.purple, fontWeight: 600 }}>{pct(n.txResposta)}</td>
+                      </tr>
+                    ))}</tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            {/* por template (qual converte mais) */}
+            {(dados.porTemplate || []).length > 0 && (
+              <div style={{ marginBottom: 20 }}>
+                <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: ".07em", textTransform: "uppercase", color: DES.mut2, marginBottom: 8 }}>Por template</div>
+                <div style={{ border: "1px solid " + DES.line, borderRadius: 12, overflow: "hidden", overflowX: "auto" }}>
+                  <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12.5, minWidth: 480 }}>
+                    <thead><tr style={{ background: DES.bg, color: DES.mut, textAlign: "right" }}><th style={{ padding: "9px 12px", textAlign: "left" }}>Template</th><th>Enviados</th><th>Entrega</th><th>Resposta</th></tr></thead>
+                    <tbody>{dados.porTemplate.map((tp, i) => (
+                      <tr key={i} style={{ borderTop: "1px solid " + DES.line, textAlign: "right" }}>
+                        <td style={{ padding: "9px 12px", textAlign: "left", fontWeight: 600, color: DES.ink }}>{tp.nome}</td>
+                        <td>{nMil(tp.enviados)}</td>
+                        <td style={{ color: DES.green, fontWeight: 600 }}>{pct(tp.txEntrega)}</td>
+                        <td style={{ color: DES.purple, fontWeight: 600 }}>{pct(tp.txResposta)}</td>
+                      </tr>
+                    ))}</tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            {/* campanhas recentes */}
+            <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: ".07em", textTransform: "uppercase", color: DES.mut2, marginBottom: 8 }}>Campanhas ({(dados.campanhas || []).length})</div>
+            <div style={{ border: "1px solid " + DES.line, borderRadius: 12, overflow: "hidden", overflowX: "auto" }}>
+              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12.5, minWidth: 560 }}>
+                <thead><tr style={{ background: DES.bg, color: DES.mut, textAlign: "right" }}><th style={{ padding: "9px 12px", textAlign: "left" }}>Campanha</th><th>Env.</th><th>Entr.</th><th>Lidos</th><th>Resp.</th><th>Falhas</th><th>Tx resp.</th></tr></thead>
+                <tbody>{(dados.campanhas || []).map((c) => (
+                  <tr key={c.id} style={{ borderTop: "1px solid " + DES.line, textAlign: "right" }}>
+                    <td style={{ padding: "9px 12px", textAlign: "left" }}><div style={{ fontWeight: 600, color: DES.ink }}>{c.nome}</div><div style={{ fontSize: 10.5, color: DES.mut2 }}>{c.numero}{c.criadoEm ? " · " + new Date(c.criadoEm).toLocaleDateString("pt-BR") : ""}</div></td>
+                    <td>{nMil(c.enviados)}</td><td style={{ color: DES.green }}>{nMil(c.entregues)}</td><td>{nMil(c.lidos)}</td><td style={{ color: DES.purple }}>{nMil(c.responderam)}</td><td style={{ color: c.falhas ? "#dc2626" : DES.mut2 }}>{nMil(c.falhas)}</td>
+                    <td style={{ fontWeight: 700, color: DES.purple }}>{pct(c.txResposta)}</td>
+                  </tr>
+                ))}</tbody>
+              </table>
+            </div>
+
+            {isGer && (
+              <div style={{ marginTop: 22, borderTop: "1px dashed " + DES.line, paddingTop: 16, display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 10 }}>
+                <div style={{ fontSize: 12, color: DES.mut, maxWidth: 480 }}>Sistema lento? Limpe as conversas de disparo que <b>nunca responderam</b> (ficam só ocupando espaço). Os leads seguem no Pipeline; vendas e conversas que responderam não são tocadas.</div>
+                <button className="btn" onClick={limpar} disabled={limpando} style={{ background: "#fff", border: "1px solid #fca5a5", color: "#dc2626", fontWeight: 600, whiteSpace: "nowrap" }}>{limpando ? "Limpando…" : "🧹 Limpar disparos sem resposta"}</button>
+              </div>
+            )}
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function OficialDisparo({ isGer = true, showToast, preset = null, onPresetUsado }) {
   const [repasse, setRepasse] = useState(false);
   const [campanhas, setCampanhas] = useState([]);
@@ -2312,6 +2452,7 @@ function OficialDisparo({ isGer = true, showToast, preset = null, onPresetUsado 
   const [showResumo, setShowResumo] = useState(false);
   const [showTemplates, setShowTemplates] = useState(false);
   const [showDistrib, setShowDistrib] = useState(false);
+  const [showMetricas, setShowMetricas] = useState(false);
   // quando chega uma lista de leads do Pipeline, abre o wizard já com eles
   const [presetAtivo, setPresetAtivo] = useState(null);
   useEffect(() => {
@@ -2401,6 +2542,7 @@ function OficialDisparo({ isGer = true, showToast, preset = null, onPresetUsado 
             <I.send className="ico" /> Novo disparo
           </button>
           <button className="onum-btn-ghost" onClick={() => setShowTemplates(true)}><I.chat className="ico" /> Templates</button>
+          <button className="onum-btn-ghost" onClick={() => setShowMetricas(true)}><I.gauge className="ico" /> Métricas</button>
           {isGer && <button className="onum-btn-ghost" onClick={() => setShowDistrib(true)}><I.users className="ico" /> Quem recebe os leads</button>}
           {!isGer && meuLimite && !meuLimite.ilimitado && (
             <span className="disp-limite-chip" style={{ color: meuLimite.restante > 0 ? "var(--muted)" : "#dc2626", background: meuLimite.restante > 0 ? "var(--surface-2, #f1f3f8)" : "#fef2f2" }}>
@@ -2501,6 +2643,13 @@ function OficialDisparo({ isGer = true, showToast, preset = null, onPresetUsado 
           <div className="pop-sheet">
             <div className="pop-head"><b>Templates</b><button className="crm-x" onClick={() => setShowTemplates(false)}>✕</button></div>
             <div className="pop-body"><OficialTemplates isGer={isGer} showToast={showToast} /></div>
+          </div>
+        </div>
+      )}
+      {showMetricas && (
+        <div className="pop-bg" onClick={(e) => e.target === e.currentTarget && setShowMetricas(false)}>
+          <div className="pop-sheet" style={{ maxWidth: 860, width: "96%", maxHeight: "92vh", overflowY: "auto", padding: 0 }}>
+            <MetricasDisparo isGer={isGer} showToast={showToast} onClose={() => setShowMetricas(false)} onLimpou={() => { setShowMetricas(false); setTimeout(carregarCampanhas, 800); }} />
           </div>
         </div>
       )}

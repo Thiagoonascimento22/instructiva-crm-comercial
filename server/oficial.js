@@ -3283,6 +3283,73 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
     });
   });
 
+  // ===== MÉTRICAS DE DISPARO — taxas claras (entrega, leitura, resposta) =====
+  app.get("/api/oficial/disparo-metricas", auth, (req, res) => {
+    garantirEstrutura();
+    let campanhas = db.oficial.campanhas || [];
+    if (req.user.role !== "gerente") campanhas = campanhas.filter((c) => campanhaDoUsuario(req, c));
+    const de = parseInt(req.query.de) || 0, ate = parseInt(req.query.ate) || 0;
+    if (de || ate) campanhas = campanhas.filter((c) => (!de || (c.criadoEm || 0) >= de) && (!ate || (c.criadoEm || 0) <= ate));
+    const numMap = {}; (db.oficial.numeros || []).forEach((n) => { numMap[n.id] = n.apelido || n.numero || n.id; });
+    const zera = () => ({ campanhas: 0, total: 0, enviados: 0, entregues: 0, lidos: 0, responderam: 0, falhas: 0 });
+    const soma = (acc, c) => {
+      acc.campanhas++;
+      acc.total += Number(c.total || c.enviados || 0);
+      acc.enviados += Number(c.enviados || 0);
+      acc.entregues += Number(c.entregues || 0);
+      acc.lidos += Number(c.lidos || 0);
+      acc.responderam += Number(c.responderam || 0);
+      acc.falhas += Number(c.falhas || 0);
+      return acc;
+    };
+    const geral = zera(); const porTemplate = {}; const porNumero = {};
+    for (const c of campanhas) {
+      soma(geral, c);
+      const tk = c.template || "—"; if (!porTemplate[tk]) porTemplate[tk] = { nome: tk, ...zera() }; soma(porTemplate[tk], c);
+      const nk = c.numeroId || "—"; if (!porNumero[nk]) porNumero[nk] = { nome: numMap[nk] || "número", ...zera() }; soma(porNumero[nk], c);
+    }
+    // campanhas recentes com as taxas já calculadas
+    const taxa = (a, b) => (b > 0 ? Math.round((a / b) * 1000) / 10 : 0);
+    const comTaxas = (o) => ({ ...o, txEntrega: taxa(o.entregues, o.enviados), txLeitura: taxa(o.lidos, o.entregues), txResposta: taxa(o.responderam, o.entregues) });
+    const lista = campanhas.slice().sort((a, b) => (b.criadoEm || 0) - (a.criadoEm || 0)).slice(0, 100).map((c) => ({
+      id: c.id, nome: c.nome, template: c.template, numero: numMap[c.numeroId] || "", criadoEm: c.criadoEm, criadoPorNome: c.criadoPorNome || "",
+      total: Number(c.total || c.enviados || 0), enviados: Number(c.enviados || 0), entregues: Number(c.entregues || 0),
+      lidos: Number(c.lidos || 0), responderam: Number(c.responderam || 0), falhas: Number(c.falhas || 0),
+      txEntrega: taxa(c.entregues, c.enviados), txLeitura: taxa(c.lidos, c.entregues), txResposta: taxa(c.responderam, c.entregues),
+    }));
+    res.json({
+      geral: comTaxas(geral),
+      porTemplate: Object.values(porTemplate).map(comTaxas).sort((a, b) => b.responderam - a.responderam),
+      porNumero: Object.values(porNumero).map(comTaxas).sort((a, b) => b.enviados - a.enviados),
+      campanhas: lista,
+    });
+  });
+
+  // ===== LIMPEZA MANUAL — remove conversas de disparo sem resposta + lixo técnico =====
+  app.post("/api/oficial/limpar-disparos", auth, gerenteOnly, (req, res) => {
+    garantirEstrutura();
+    const of = db.oficial;
+    let conversas = 0; const novo = {};
+    for (const [k, c] of Object.entries(db.waChats || {})) {
+      const temResposta = c && Array.isArray(c.mensagens) && c.mensagens.some((m) => m.role === "them");
+      if (c && c.origemDisparo && !c.respondeu && !temResposta) { conversas++; continue; }
+      novo[k] = c;
+    }
+    db.waChats = novo;
+    const statusVistos = of.statusVistos ? Object.keys(of.statusVistos).length : 0; of.statusVistos = {};
+    const vivos = new Set(Object.keys(db.waChats));
+    let wamid = 0; const wNovo = {};
+    for (const [w, cid] of Object.entries(of.wamidChat || {})) { if (vivos.has(cid)) wNovo[w] = cid; else wamid++; }
+    of.wamidChat = wNovo;
+    const campVivas = new Set((of.campanhas || []).map((c) => c.id));
+    let msgCamp = 0; const mNovo = {};
+    for (const [cid, v] of Object.entries(of.msgCampanha || {})) { if (campVivas.has(cid)) mNovo[cid] = v; else msgCamp++; }
+    of.msgCampanha = mNovo;
+    db.oficial = of;
+    salvar();
+    res.json({ ok: true, conversas, statusVistos, wamid, msgCamp });
+  });
+
   app.get("/api/oficial/campanhas", auth, (req, res) => {
     let campanhas = db.oficial.campanhas || [];
     if (req.user.role !== "gerente") {

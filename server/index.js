@@ -192,6 +192,46 @@ function loadDB() {
       console.log(
         `Banco carregado. Usuários: ${db.users.length} | Cards: ${db.cards.length}`
       );
+      // ===== limpeza automática no boot: tira o peso morto que incha o banco =====
+      // Roda no reinício, com os dados frescos do disco — sem corrida com o app rodando.
+      // NÃO mexe em: vendas, leads do Pipeline, usuários, conversas que responderam.
+      try {
+        const of = db.oficial || {};
+        const limpou = [];
+        // 1) statusVistos: só rastro de status já processado pela Meta — zera sempre
+        if (of.statusVistos && Object.keys(of.statusVistos).length) { limpou.push("statusVistos " + Object.keys(of.statusVistos).length); of.statusVistos = {}; }
+        // 2) wamidChat: remove IDs que apontam pra conversa que não existe mais
+        if (of.wamidChat && typeof of.wamidChat === "object") {
+          const vivos = new Set(Object.keys(db.waChats || {}));
+          let rem = 0; const novo = {};
+          for (const [w, cid] of Object.entries(of.wamidChat)) { if (vivos.has(cid)) novo[w] = cid; else rem++; }
+          if (rem) { limpou.push("wamidChat " + rem); of.wamidChat = novo; }
+        }
+        // 3) msgCampanha: remove cópias de mensagens de campanhas que não existem mais
+        if (of.msgCampanha && typeof of.msgCampanha === "object") {
+          const campVivas = new Set((of.campanhas || []).map((c) => c.id));
+          let rem = 0; const novo = {};
+          for (const [cid, v] of Object.entries(of.msgCampanha)) { if (campVivas.has(cid)) novo[cid] = v; else rem++; }
+          if (rem) { limpou.push("msgCampanha " + rem); of.msgCampanha = novo; }
+        }
+        // 4) conversas de DISPARO que NUNCA responderam com mais de N dias (padrão 3).
+        //    O lead continua no Pipeline; se responder depois, cria conversa nova.
+        const dias = of.limparDisparoDias === undefined ? 3 : Number(of.limparDisparoDias);
+        if (db.waChats && dias > 0) {
+          const corte = Date.now() - dias * 86400000;
+          let rem = 0; const novo = {};
+          for (const [k, c] of Object.entries(db.waChats)) {
+            const msgs = (c && c.mensagens) || [];
+            const temResposta = msgs.some((m) => m.role === "them");
+            const ultima = c && (c.atualizadoEm || (msgs.length && msgs[msgs.length - 1].ts) || c.criadoEm || 0);
+            if (c && c.origemDisparo && !c.respondeu && !temResposta && ultima && ultima < corte) { rem++; continue; }
+            novo[k] = c;
+          }
+          if (rem) { limpou.push("disparo s/resposta +" + dias + "d: " + rem); db.waChats = novo; }
+        }
+        db.oficial = of;
+        if (limpou.length) { saveDB(); console.log("[limpeza boot] " + limpou.join(" · ")); }
+      } catch (e) { console.log("[limpeza boot] pulada:", e.message); }
     } else {
       db = dbVazio();
       saveDB();

@@ -211,6 +211,8 @@ export const api = {
   ofEtapas: () => req("GET", "/api/oficial/etapas"),
   ofSetEtapaChat: (id, etapa) => req("POST", "/api/oficial/chats/" + id + "/etapa", { etapa }),
   ofReordenarEtapas: (ordem) => req("POST", "/api/oficial/crm/etapas/ordem", { ordem }),
+  ofDisparoMetricas: (de, ate) => req("GET", "/api/oficial/disparo-metricas" + (de || ate ? "?de=" + (de || 0) + "&ate=" + (ate || 0) : "")),
+  ofLimparDisparos: () => req("POST", "/api/oficial/limpar-disparos", {}),
   ofExcluirIA: (id) => req("DELETE", "/api/oficial/ias/" + id),
   ofExtrairArquivo: (nome, base64) => req("POST", "/api/oficial/ias/extrair", { nome, base64 }),
   ofPreviewIA: (dados) => req("POST", "/api/oficial/ias/preview", dados),
