@@ -202,6 +202,7 @@ export const api = {
   ofCrmEtapaExcluir: (k) => req("DELETE", "/api/oficial/crm/etapa/" + k),
   ofCrmImportar: (dados) => req("POST", "/api/oficial/crm/importar", dados),
   ofCrmLoteAtribuir: (dados) => req("POST", "/api/oficial/crm/lote/atribuir", dados),
+  ofCrmLoteEtapa: (dados) => req("POST", "/api/oficial/crm/lote/etapa", dados),
   ofCrmLoteExcluir: (dados) => req("POST", "/api/oficial/crm/lote/excluir", dados),
   ofDesempenho: (mes, inclui) => req("GET", "/api/oficial/desempenho?" + (mes ? "mes=" + mes : "") + (inclui ? "&incluirOcultos=1" : "")),
   ofSetCargoFaixa: (id, dados) => req("PUT", "/api/oficial/desempenho/" + id + "/cargo-faixa", dados),

@@ -428,7 +428,7 @@ export default function App() {
         <nav className="nav">
           {(isGer || vendPode("crm")) && mod("crm") && <NavBtn ic={I.pipe} label="Pipeline" active={view === "crm"} onClick={() => setView("crm")} />}
           {(isGer || vendPode("vendas")) && mod("vendas") && <NavBtn ic={I.gauge} label="Vendas" active={view === "vendas"} onClick={() => setView("vendas")} />}
-          {(isGer || isVend) && mod("desempenho") && <NavBtn ic={I.spark} label="Desempenho" active={view === "desempenho"} onClick={() => setView("desempenho")} />}
+          {(isGer || (isVend && !(acessoVend && acessoVend.desempenhoOculto))) && mod("desempenho") && <NavBtn ic={I.spark} label="Desempenho" active={view === "desempenho"} onClick={() => setView("desempenho")} />}
           {!isSuporte && mod("caixa") && <NavBtn ic={I.wa} label="Caixa de entrada" active={view === "whatsapp"} onClick={() => setView("whatsapp")} />}
           {(isGer || isVend) && mod("disparo") && <NavBtn ic={I.send} label="Disparo" active={view === "disparo"} onClick={() => setView("disparo")} />}
           {isGer && mod("numeros") && <NavBtn ic={I.wa} label="Números" active={view === "numeros"} onClick={() => setView("numeros")} />}
@@ -483,7 +483,7 @@ export default function App() {
           {view === "ligacoes" && isGer && mod("ligacoes") && <OficialLigacoes showToast={showToast} />}
           {view === "vendas" && (isGer || vendPode("vendas")) && mod("vendas") && <PainelVendas showToast={showToast} isGer={isGer} />}
           {view === "crm" && (isGer || vendPode("crm")) && mod("crm") && <OficialCRM showToast={showToast} isGer={isGer} onAbrirWhats={(tel, canal, nome) => { setWaTarget({ numero: tel, canal, nome }); setView("whatsapp"); }} onDisparar={(preset) => { setDisparoPreset(preset); setView("disparo"); }} />}
-          {view === "desempenho" && (isGer || isVend) && mod("desempenho") && <Desempenho showToast={showToast} isGer={isGer} />}
+          {view === "desempenho" && (isGer || (isVend && !(acessoVend && acessoVend.desempenhoOculto))) && mod("desempenho") && <Desempenho showToast={showToast} isGer={isGer} />}
           {view === "temperatura" && (isGer || vendPode("temperatura")) && mod("temperatura") && <OficialTemperatura showToast={showToast} />}
           {view === "minhasSolicitacoes" && !isGer && !isSuporte && <PaginaMinhasSolicitacoes itens={minhasSol} recarregar={carregarMinhasSol} showToast={showToast} />}
           {view === "solicitacoes" && (isGer || isSuporte) && <PaginaSolicitacoes showToast={showToast} readonly={isGer} />}
@@ -6157,6 +6157,13 @@ function Desempenho({ showToast, isGer = true }) {
   const [carregando, setCarregando] = useState(true);
   const [verOcultos, setVerOcultos] = useState(false);
   const [detalheId, setDetalheId] = useState(null);
+  const [vendVe, setVendVe] = useState(true); // vendedores veem o desempenho?
+  useEffect(() => { api.ofAcessoVend().then((r) => setVendVe(!(r.acessoVend && r.acessoVend.desempenhoOculto))).catch(() => {}); }, []);
+  async function alternarVendVe(ve) {
+    setVendVe(ve);
+    try { const r = await api.ofAcessoVend(); await api.ofSetAcessoVend({ ...(r.acessoVend || {}), desempenhoOculto: !ve }); showToast(ve ? "Vendedores agora veem o desempenho" : "Desempenho escondido dos vendedores"); }
+    catch (e) { showToast("✗ " + e.message); setVendVe(!ve); }
+  }
 
   const carregar = (m, inclui) => {
     setCarregando(true);
@@ -6191,7 +6198,12 @@ function Desempenho({ showToast, isGer = true }) {
           <div style={{ fontSize: 22, fontWeight: 700, color: DES.ink, letterSpacing: "-.01em" }}>Desempenho do time</div>
           <div style={{ fontSize: 13, color: DES.mut, marginTop: 2 }}>Meta de 10 pontos por semana · bônus do mês ao passar de 28, 36 e 40 pontos</div>
         </div>
-        <div style={{ display: "flex", gap: 14, alignItems: "center" }}>
+        <div style={{ display: "flex", gap: 14, alignItems: "center", flexWrap: "wrap" }}>
+          {dados.souGerente && (
+            <label style={{ fontSize: 12.5, color: DES.mut, display: "flex", gap: 6, alignItems: "center", cursor: "pointer" }} title="Se desligar, os vendedores não veem a aba Desempenho">
+              <input type="checkbox" checked={vendVe} onChange={(e) => alternarVendVe(e.target.checked)} /> Vendedores veem
+            </label>
+          )}
           {dados.souGerente && dados.qtdOcultos > 0 && (
             <label style={{ fontSize: 12.5, color: DES.mut, display: "flex", gap: 6, alignItems: "center", cursor: "pointer" }}>
               <input type="checkbox" checked={verOcultos} onChange={(e) => { setVerOcultos(e.target.checked); carregar(mes, e.target.checked); }} /> Ver ocultos ({dados.qtdOcultos})
@@ -6576,6 +6588,11 @@ function OficialCRM({ showToast, isGer = true, onAbrirWhats, onDisparar }) {
     try { const r = await api.ofCrmLoteAtribuir({ ids, vendedorId: vid }); showToast(`✓ ${r.alterados} lead(s) atribuído(s)`); setMarcados({}); carregar(); }
     catch (e) { showToast("✗ " + e.message); }
   }
+  async function moverLoteEtapa(k) {
+    const ids = Object.keys(marcados); if (!ids.length || !k) return;
+    try { const r = await api.ofCrmLoteEtapa({ ids, etapa: k }); showToast(`✓ ${r.alterados} lead(s) movido(s)`); setMarcados({}); carregar(); }
+    catch (e) { showToast("✗ " + e.message); }
+  }
   async function excluirLote() {
     const ids = Object.keys(marcados); if (!ids.length) return;
     if (!window.confirm(`Excluir ${ids.length} lead(s) selecionado(s)? Não dá pra desfazer.`)) return;
@@ -6845,6 +6862,10 @@ function OficialCRM({ showToast, isGer = true, onAbrirWhats, onDisparar }) {
               <option value="">Atribuir dono…</option>
               <option value="__sem">Sem dono</option>
               {vendedores.map((v) => <option key={v.id} value={v.id}>{v.nome}{v.ehGerente ? " (gerente)" : ""}</option>)}
+            </select>
+            <select className="crm-lote-sel" value="" onChange={(e) => { if (e.target.value) moverLoteEtapa(e.target.value); }} title="Mover os selecionados para outra etapa do funil">
+              <option value="">Mover para…</option>
+              {etapas.map((e) => <option key={e.k} value={e.k}>{e.lb}</option>)}
             </select>
             {isGer && onDisparar && (
               <button className="crm-lote-del" style={{ background: "#25A06B", color: "#fff", borderColor: "#25A06B" }} title="Disparar um template pros leads selecionados"

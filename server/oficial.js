@@ -1834,7 +1834,7 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
   /* ---- ACESSO DOS VENDEDORES (o dono decide o que cada vendedor pode ver) ---- */
   // Mapa por tela: liga/desliga o acesso do vendedor. Default: tudo desligado
   // (mantém o comportamento antigo, em que essas telas eram só do gerente).
-  const ACESSO_VEND_CHAVES = ["crm", "temperatura", "vendas"];
+  const ACESSO_VEND_CHAVES = ["crm", "temperatura", "vendas", "desempenhoOculto"];
   function acessoVend() {
     const a = (db.oficial && db.oficial.acessoVend) || {};
     const out = {};
@@ -2082,8 +2082,26 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
     salvar();
     res.json({ ok: true, alterados: n });
   });
-  app.post("/api/oficial/crm/lote/excluir", auth, permiteVend("crm"), (req, res) => {
+  // mover vários leads pra uma etapa de uma vez (kanban em lote)
+  app.post("/api/oficial/crm/lote/etapa", auth, permiteVend("crm"), (req, res) => {
     garantirCRM();
+    const b = req.body || {};
+    const ids = Array.isArray(b.ids) ? b.ids : [];
+    const etapa = String(b.etapa || "").trim();
+    if (!etapasCRM().some((e) => e.k === etapa)) return res.status(400).json({ error: "Etapa inválida" });
+    const lbEtapa = (etapasCRM().find((e) => e.k === etapa) || {}).lb || etapa;
+    let n = 0;
+    for (const l of (db.oficial.crmLeads || [])) {
+      if (!ids.includes(l.id)) continue;
+      if (req.user.role === "vendedor" && l.vendedorId !== req.user.id) continue; // vendedor só mexe nos seus
+      if (l.etapa !== etapa) { l.historico = l.historico || []; l.historico.push({ tipo: "etapa", texto: "Movido para " + lbEtapa, ts: Date.now() }); }
+      l.etapa = etapa; l.atualizadoEm = Date.now();
+      n++;
+    }
+    salvar();
+    res.json({ ok: true, alterados: n });
+  });
+  app.post("/api/oficial/crm/lote/excluir", auth, permiteVend("crm"), (req, res) => {    garantirCRM();
     if (req.user.role === "vendedor") return res.status(403).json({ error: "Vendedor não pode excluir leads" });
     const ids = Array.isArray((req.body || {}).ids) ? req.body.ids : [];
     const antes = (db.oficial.crmLeads || []).length;
@@ -3913,6 +3931,8 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
 
   app.get("/api/oficial/desempenho", auth, (req, res) => {
     garantirEstrutura();
+    // gerente pode esconder o desempenho dos vendedores
+    if (req.user.role === "vendedor" && acessoVend().desempenhoOculto) return res.status(403).json({ error: "Acesso restrito" });
     const mes = /^\d{4}-\d{2}$/.test(String(req.query.mes || "")) ? req.query.mes : mesDesempenho(Date.now());
     let lista = desempenhoDoMes(mes);
     const souGerente = req.user.role === "gerente";
