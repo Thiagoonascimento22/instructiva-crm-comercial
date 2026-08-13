@@ -323,6 +323,7 @@ export default function App() {
   });
   useEffect(() => { try { localStorage.setItem("instructiva_view", view); } catch (e) {} }, [view]);
   const [waTarget, setWaTarget] = useState(null);
+  const [disparoPreset, setDisparoPreset] = useState(null); // leads levados do Pipeline pro Disparo
   const [minhasSol, setMinhasSol] = useState([]);
   const carregarMinhasSol = () => { api.solicitacoes().then(setMinhasSol).catch(() => {}); };
   const [toast, setToast] = useState(null);
@@ -476,12 +477,12 @@ export default function App() {
         <div className={"content" + (view === "whatsapp" ? " cheia" : "")}>
           <LembreteFoto user={user} setUser={setUser} showToast={showToast} />
           {view === "whatsapp" && !isSuporte && mod("caixa") && <WhatsApp user={user} showToast={showToast} target={waTarget} onTargetUsed={() => setWaTarget(null)} recarregarSol={carregarMinhasSol} />}
-          {view === "disparo" && (isGer || isVend) && mod("disparo") && <OficialDisparo isGer={isGer} showToast={showToast} />}
+          {view === "disparo" && (isGer || isVend) && mod("disparo") && <OficialDisparo isGer={isGer} showToast={showToast} preset={disparoPreset} onPresetUsado={() => setDisparoPreset(null)} />}
           {view === "numeros" && isGer && mod("numeros") && <OficialNumeros showToast={showToast} />}
           {view === "ia" && isGer && mod("ia") && <OficialIAs showToast={showToast} />}
           {view === "ligacoes" && isGer && mod("ligacoes") && <OficialLigacoes showToast={showToast} />}
           {view === "vendas" && (isGer || vendPode("vendas")) && mod("vendas") && <PainelVendas showToast={showToast} isGer={isGer} />}
-          {view === "crm" && (isGer || vendPode("crm")) && mod("crm") && <OficialCRM showToast={showToast} isGer={isGer} onAbrirWhats={(tel, canal, nome) => { setWaTarget({ numero: tel, canal, nome }); setView("whatsapp"); }} />}
+          {view === "crm" && (isGer || vendPode("crm")) && mod("crm") && <OficialCRM showToast={showToast} isGer={isGer} onAbrirWhats={(tel, canal, nome) => { setWaTarget({ numero: tel, canal, nome }); setView("whatsapp"); }} onDisparar={(preset) => { setDisparoPreset(preset); setView("disparo"); }} />}
           {view === "desempenho" && (isGer || isVend) && mod("desempenho") && <Desempenho showToast={showToast} isGer={isGer} />}
           {view === "temperatura" && (isGer || vendPode("temperatura")) && mod("temperatura") && <OficialTemperatura showToast={showToast} />}
           {view === "minhasSolicitacoes" && !isGer && !isSuporte && <PaginaMinhasSolicitacoes itens={minhasSol} recarregar={carregarMinhasSol} showToast={showToast} />}
@@ -2297,7 +2298,7 @@ function ModalRepasse({ onClose, showToast, onFeito }) {
 }
 
 
-function OficialDisparo({ isGer = true, showToast }) {
+function OficialDisparo({ isGer = true, showToast, preset = null, onPresetUsado }) {
   const [repasse, setRepasse] = useState(false);
   const [campanhas, setCampanhas] = useState([]);
   const [campSel, setCampSel] = useState(null);
@@ -2311,6 +2312,16 @@ function OficialDisparo({ isGer = true, showToast }) {
   const [showResumo, setShowResumo] = useState(false);
   const [showTemplates, setShowTemplates] = useState(false);
   const [showDistrib, setShowDistrib] = useState(false);
+  // quando chega uma lista de leads do Pipeline, abre o wizard já com eles
+  const [presetAtivo, setPresetAtivo] = useState(null);
+  useEffect(() => {
+    if (!preset || !preset.contatos || !preset.contatos.length) return;
+    if (!numeros.length) return; // espera os números carregarem — o efeito re-roda quando a lista mudar
+    setPresetAtivo(preset);
+    setAbrir(true);
+    onPresetUsado && onPresetUsado();
+    // eslint-disable-next-line
+  }, [preset, numeros.length]);
 
   const rangeDe = (d) => {
     if (!d) return [0, 0];
@@ -2482,7 +2493,7 @@ function OficialDisparo({ isGer = true, showToast }) {
         )}
       </div>
 
-      {abrir && <ModalDisparo isGer={isGer} numeros={numeros} showToast={showToast} onClose={() => setAbrir(false)} onDone={() => { setAbrir(false); setTimeout(carregarCampanhas, 1500); if (!isGer) setTimeout(() => api.ofMeuLimite().then(setMeuLimite).catch(() => {}), 1500); }} />}
+      {abrir && <ModalDisparo isGer={isGer} numeros={numeros} showToast={showToast} preset={presetAtivo} onClose={() => { setAbrir(false); setPresetAtivo(null); }} onDone={() => { setAbrir(false); setPresetAtivo(null); setTimeout(carregarCampanhas, 1500); if (!isGer) setTimeout(() => api.ofMeuLimite().then(setMeuLimite).catch(() => {}), 1500); }} />}
       {campSel && <ModalMetricas camp={campSel} isGer={isGer} showToast={showToast} onRepassou={carregarCampanhas} onClose={() => setCampSel(null)} onRetomar={retomarCampanha} onRedisparar={redispararCampanha} onExcluir={excluirCampanha} />}
 
       {showTemplates && (
@@ -2573,7 +2584,7 @@ function LimitesVendedores({ showToast }) {
 }
 
 /* ---------- MODAL DE DISPARO (passo a passo moderno) ---------- */
-function ModalDisparo({ isGer = true, numeros, showToast, onClose, onDone }) {
+function ModalDisparo({ isGer = true, numeros, showToast, onClose, onDone, preset = null }) {
   const [passo, setPasso] = useState(1);
   const [numeroId, setNumeroId] = useState(numeros[0] ? numeros[0].id : "");
   const [templates, setTemplates] = useState([]);
@@ -2584,7 +2595,20 @@ function ModalDisparo({ isGer = true, numeros, showToast, onClose, onDone }) {
   const [textoManual, setTextoManual] = useState("");
   const [nomeCampanha, setNomeCampanha] = useState("");
   const [pularRecebidos, setPularRecebidos] = useState(false);
-  const [destinoLeads, setDestinoLeads] = useState("eu"); // "eu" = fica com quem disparou | "time" = distribui
+  const [destinoLeads, setDestinoLeads] = useState("eu"); // "eu" = fica com quem disparou | "time" = distribui | "vendedor" = fica com um escolhido
+  const [vendedorDestino, setVendedorDestino] = useState("");
+  const [vendedores, setVendedores] = useState([]);
+  useEffect(() => { if (isGer) api.ofVendedoresLista().then((d) => setVendedores((d && d.vendedores) || d || [])).catch(() => setVendedores([])); }, [isGer]);
+  // leads trazidos do Pipeline: já preenche os contatos e o dono
+  useEffect(() => {
+    if (!preset || !preset.contatos || !preset.contatos.length) return;
+    const cs = preset.contatos.map((c) => ({ telefone: String(c.telefone || "").replace(/\D/g, ""), nome: c.nome || "" })).filter((c) => c.telefone);
+    setContatos(cs);
+    setModoContato("manual");
+    setTextoManual(cs.map((c) => (c.nome ? c.nome + ", " : "") + c.telefone).join("\n"));
+    if (preset.vendedorDestino) { setDestinoLeads("vendedor"); setVendedorDestino(preset.vendedorDestino); }
+    // eslint-disable-next-line
+  }, []);
   const [agendar, setAgendar] = useState(false);
   const [dataHora, setDataHora] = useState("");
   const [enviando, setEnviando] = useState(false);
@@ -2650,6 +2674,7 @@ function ModalDisparo({ isGer = true, numeros, showToast, onClose, onDone }) {
         numeroId, template: template.name, idioma: template.language,
         nomeCampanha: nomeCampanha || template.name, contatos, iaId: iaId || null,
         pularRecebidos, agendarPara: agendarPara || undefined, destinoLeads,
+        vendedorDestino: destinoLeads === "vendedor" ? (vendedorDestino || null) : null,
       });
       if (r.agendadoPara) showToast(`Disparo agendado para ${new Date(r.agendadoPara).toLocaleString("pt-BR")} · ${r.total} contato(s)`);
       else showToast(`Disparo iniciado para ${r.total} contato(s)!`);
@@ -2782,11 +2807,20 @@ function ModalDisparo({ isGer = true, numeros, showToast, onClose, onDone }) {
                 <label>Quem responder, vai pra quem?</label>
                 <select className="input" value={destinoLeads} onChange={(e) => setDestinoLeads(e.target.value)}>
                   <option value="eu">Fica comigo (só eu atendo esses leads)</option>
+                  {isGer && <option value="vendedor">Fica com um vendedor (escolher)</option>}
                   <option value="time">Distribuir pro time (rodízio de "Quem recebe os leads")</option>
                 </select>
+                {destinoLeads === "vendedor" && isGer && (
+                  <select className="input" style={{ marginTop: 8 }} value={vendedorDestino} onChange={(e) => setVendedorDestino(e.target.value)}>
+                    <option value="">Escolha o vendedor…</option>
+                    {vendedores.map((v) => <option key={v.id} value={v.id}>{v.nome}{v.ehGerente ? " (gerente)" : ""}</option>)}
+                  </select>
+                )}
                 <span style={{ fontSize: 12, color: "var(--muted)", marginTop: 5, display: "block" }}>
                   {destinoLeads === "eu"
                     ? "Todo mundo que responder esse disparo cai na SUA caixa de entrada e fica no seu nome."
+                    : destinoLeads === "vendedor"
+                    ? "Quem responder cai direto na caixa do vendedor escolhido e fica no nome dele."
                     : "Quem responder é dividido entre os vendedores ligados em \"Quem recebe os leads\", em rodízio."}
                 </span>
               </div>
@@ -6216,7 +6250,7 @@ function DetalheVendedor({ v, dados, mes, isGer, showToast, onClose, onMudou, ca
   );
 }
 
-function OficialCRM({ showToast, isGer = true, onAbrirWhats }) {
+function OficialCRM({ showToast, isGer = true, onAbrirWhats, onDisparar }) {
   // relógio vivo: o "entrou há X min" dos cards se atualiza sozinho
   const [, setTique] = useState(0);
   useEffect(() => {
@@ -6663,6 +6697,17 @@ function OficialCRM({ showToast, isGer = true, onAbrirWhats }) {
               <option value="__sem">Sem dono</option>
               {vendedores.map((v) => <option key={v.id} value={v.id}>{v.nome}{v.ehGerente ? " (gerente)" : ""}</option>)}
             </select>
+            {isGer && onDisparar && (
+              <button className="crm-lote-del" style={{ background: "#25A06B", color: "#fff", borderColor: "#25A06B" }} title="Disparar um template pros leads selecionados"
+                onClick={() => {
+                  const sel = leads.filter((l) => marcados[l.id] && String(l.telefone || "").replace(/\D/g, "").length >= 10);
+                  if (!sel.length) { showToast("Nenhum selecionado tem telefone válido"); return; }
+                  const vd = (filtroVend && filtroVend !== "__sem") ? filtroVend : null;
+                  onDisparar({ contatos: sel.map((l) => ({ telefone: l.telefone, nome: l.nome || "" })), vendedorDestino: vd });
+                }}>
+                <I.send className="ico" /> Disparar ({leads.filter((l) => marcados[l.id]).length})
+              </button>
+            )}
             {isGer && <button className="crm-lote-del" onClick={excluirLote}><I.trash className="ico" /> Excluir</button>}
             <button className="crm-lote-limpar" onClick={() => setMarcados({})}>Limpar</button>
           </div>

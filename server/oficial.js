@@ -2829,8 +2829,13 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
       numeroId: numeroCfg.id,
       criadoPor: req.user.id,        // quem disparou (pro vendedor ver só as dele)
       criadoPorNome: req.user.nome,
-      // pra onde vão os leads que responderem: "eu" (fica com quem disparou) ou "time" (distribui)
-      destinoLeads: b.destinoLeads === "time" ? "time" : "eu",
+      // pra onde vão os leads que responderem: "eu" (fica com quem disparou), "time" (distribui)
+      // ou "vendedor" (fica com um vendedor escolhido — só o gerente pode)
+      destinoLeads: (b.destinoLeads === "time") ? "time"
+        : (b.destinoLeads === "vendedor" && req.user.role === "gerente" && b.vendedorDestino && db.users.some((u) => u.id === b.vendedorDestino && (u.role === "vendedor" || u.role === "gerente") && u.ativo)) ? "vendedor"
+        : "eu",
+      vendedorDestino: (b.destinoLeads === "vendedor" && req.user.role === "gerente" && b.vendedorDestino && db.users.some((u) => u.id === b.vendedorDestino)) ? b.vendedorDestino : null,
+      vendedorDestinoNome: (b.destinoLeads === "vendedor" && b.vendedorDestino) ? ((db.users.find((u) => u.id === b.vendedorDestino) || {}).nome || "") : "",
       template: templateName,
       idioma,
       iaId: iaCampanha ? iaCampanha.id : null,
@@ -2925,13 +2930,16 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
         chat.origemDisparo = true;
         chat.campanha = campanha.nome;
         chat.campanhaId = campanha.id;
-        // Disparo "fica comigo": a conversa passa a ser de QUEM DISPAROU, sempre —
-        // inclusive se já tivesse outro dono (é o sentido de "fica comigo"). O lead
-        // chega na caixa de quem disparou. Só "distribuir pro time" não carimba (rodízio).
-        if (campanha.destinoLeads !== "time" && campanha.criadoPor) {
-          if (chat.vendedorId !== campanha.criadoPor) {
-            chat.vendedorId = campanha.criadoPor;
-            chat.vendedorNome = campanha.criadoPorNome || "";
+        // Dono do disparo: "eu" (quem disparou), "vendedor" (o escolhido pelo gerente),
+        // ou "time" (não carimba — rodízio quando o lead responder). A conversa cai
+        // na caixa desse dono, mesmo que já tivesse outro dono antes.
+        const donoDisparo = campanha.destinoLeads === "vendedor" ? campanha.vendedorDestino
+          : (campanha.destinoLeads !== "time" ? campanha.criadoPor : null);
+        const donoNome = campanha.destinoLeads === "vendedor" ? (campanha.vendedorDestinoNome || "") : (campanha.criadoPorNome || "");
+        if (donoDisparo) {
+          if (chat.vendedorId !== donoDisparo) {
+            chat.vendedorId = donoDisparo;
+            chat.vendedorNome = donoNome;
             chat.atribuidoEm = Date.now();
           }
           // se o lead já conversou alguma vez, mantém visível (não vira "disparo sem resposta")
