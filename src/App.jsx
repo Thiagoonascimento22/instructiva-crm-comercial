@@ -6264,6 +6264,13 @@ function OficialCRM({ showToast, isGer = true, onAbrirWhats }) {
 
   const carregar = () => api.ofCRM().then((d) => { setEtapas(d.etapas || []); setLeads(d.leads || []); setVendedores(d.vendedores || []); setCrmVend(d.crmVendedores || []); }).catch((e) => showToast(e.message));
   useEffect(() => { carregar(); const t = setInterval(carregar, 12000); return () => clearInterval(t); }, []);
+  async function moverEtapa(k, dir) {
+    const arr = etapas.map((e) => e.k);
+    const i = arr.indexOf(k), j = i + dir;
+    if (i < 0 || j < 0 || j >= arr.length) return;
+    const tmp = arr[i]; arr[i] = arr[j]; arr[j] = tmp;
+    try { await api.ofReordenarEtapas(arr); carregar(); } catch (e) { showToast(e.message); }
+  }
   useEffect(() => {
     if (!waMenu) return;
     const fechar = () => setWaMenu(null);
@@ -6446,6 +6453,12 @@ function OficialCRM({ showToast, isGer = true, onAbrirWhats }) {
                   {doEt.length > 0 && <input type="checkbox" className="crm-check-col" checked={doEt.every((l) => marcados[l.id])} onChange={(e) => marcarColuna(doEt.map((l) => l.id), e.target.checked)} title="Selecionar todos desta coluna" />}
                   <span className="crm-col-nome">{et.lb}</span>
                   <span className="crm-col-n">{doEt.length}</span>
+                  {isGer && (
+                    <span onClick={(e) => e.stopPropagation()} style={{ display: "inline-flex", gap: 1, marginLeft: 2 }}>
+                      <button type="button" title="Mover coluna para a esquerda" onClick={() => moverEtapa(et.k, -1)} style={{ border: "none", background: "transparent", cursor: "pointer", color: "#94a3b8", fontSize: 15, padding: "0 2px", lineHeight: 1, fontWeight: 700 }}>‹</button>
+                      <button type="button" title="Mover coluna para a direita" onClick={() => moverEtapa(et.k, 1)} style={{ border: "none", background: "transparent", cursor: "pointer", color: "#94a3b8", fontSize: 15, padding: "0 2px", lineHeight: 1, fontWeight: 700 }}>›</button>
+                    </span>
+                  )}
                 </div>
                 {totalCol > 0 && <span className="crm-col-total">R$ {totalCol.toLocaleString("pt-BR")}</span>}
               </div>
@@ -6656,7 +6669,7 @@ function OficialCRM({ showToast, isGer = true, onAbrirWhats }) {
         </Portal>
       )}
 
-      {comemora && <Comemoracao tipo={comemora.tipo} nome={comemora.nome} valor={comemora.valor} vendedor={comemora.vendedor} foto={comemora.foto} onClose={() => setComemora(null)} />}
+      {/* comemoração (confete/som/popup de ganho e perdido) desativada a pedido */}
 
       {showColunas && <ModalColunas etapas={etapas} onClose={() => setShowColunas(false)} onChanged={carregar} showToast={showToast} />}
       {showExportar && <ModalExportar leads={leads} etapas={etapas} onClose={() => setShowExportar(false)} showToast={showToast} />}
@@ -7833,6 +7846,7 @@ function InboxOficial({ isGer, showToast, onIrParaEvolution, target, onTargetUse
   const [enviandoTpl, setEnviandoTpl] = useState(false);
   const [sel, setSel] = useState(null);
   const [conversa, setConversa] = useState(null);
+  const [etapas, setEtapas] = useState([]);
   const [texto, setTexto] = useState("");
   const [busca, setBusca] = useState("");
   const [vendedores, setVendedores] = useState([]);
@@ -7953,6 +7967,16 @@ function InboxOficial({ isGer, showToast, onIrParaEvolution, target, onTargetUse
     const t = setInterval(carregar, 4000);
     return () => clearInterval(t);
   }, [sel]);
+
+  useEffect(() => { api.ofEtapas().then((d) => setEtapas(d.etapas || [])).catch(() => {}); }, []);
+  async function mudarEtapa(k) {
+    if (!sel) return;
+    try {
+      await api.ofSetEtapaChat(sel, k);
+      setConversa((c) => (c && c.id === sel ? { ...c, etapaLead: k } : c));
+      showToast("Etapa atualizada");
+    } catch (e) { showToast("✗ " + e.message); }
+  }
 
   // rola pro fim SÓ quando: abre a conversa, OU chega msg nova e a pessoa já estava no fim.
   // se a pessoa rolou pra cima pra ler, NÃO puxa mais pra baixo.
@@ -8291,6 +8315,17 @@ function InboxOficial({ isGer, showToast, onIrParaEvolution, target, onTargetUse
                   : <span className="of-janela fechada" title={ig ? "Passou 24h desde o último DM do cliente. No Instagram só dá pra responder dentro dessa janela." : "Passou 24h desde a última mensagem do lead. Agora só template aprovado é entregue — a mensagem livre não chega."}><I.lock className="ico-inline" /> {ig ? "Janela de 24h fechada" : "Janela fechada · só template"}</span>;
               })()}
               <div className="of-conv-acoes">
+                {etapas.length > 0 && conversa && (
+                  <select
+                    value={conversa.etapaLead || ""}
+                    onChange={(e) => mudarEtapa(e.target.value)}
+                    title="Mover este lead no funil (Pipeline)"
+                    style={{ padding: "7px 10px", borderRadius: 8, border: "1px solid #e2e8f0", fontSize: 13, fontWeight: 600, color: "#0f172a", background: "#fff", cursor: "pointer", maxWidth: 175 }}
+                  >
+                    <option value="">Etapa do funil…</option>
+                    {etapas.map((e) => <option key={e.k} value={e.k}>{e.lb}</option>)}
+                  </select>
+                )}
                 {isGer && conversa.temIA && (
                   <button
                     className="of-acao-btn"

@@ -1793,6 +1793,17 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
     if (!Array.isArray(db.oficial.crmLeads)) db.oficial.crmLeads = [];
     if (!Array.isArray(db.oficial.crmVendedores)) db.oficial.crmVendedores = [];
   }
+  // acha (ou cria) o lead do CRM ligado a uma conversa oficial, pelo telefone (últimos 8 dígitos)
+  function leadDoChat(chat, criarSe) {
+    garantirCRM();
+    const nuc = normalizaTelefone(chat.numero || "").replace(/\D/g, "").slice(-8);
+    let lead = nuc.length >= 8 ? (db.oficial.crmLeads || []).find((l) => String(l.telefone || "").replace(/\D/g, "").slice(-8) === nuc) : null;
+    if (!lead && criarSe) {
+      lead = { id: "lead_" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), nome: chat.nome || chat.numero, telefone: normalizaTelefone(chat.numero || ""), etapa: (etapasCRM()[0] || {}).k || "novo", vendedorId: chat.vendedorId || null, valor: 0, origem: "chat", notas: [], historico: [], criadoEm: Date.now(), atualizadoEm: Date.now() };
+      db.oficial.crmLeads.push(lead);
+    }
+    return lead;
+  }
   function crmLeadPublico(l) {
     const v = l.vendedorId ? (db.users || []).find((u) => u.id === l.vendedorId) : null;
     return { id: l.id, nome: l.nome, telefone: l.telefone, email: l.email || "", curso: l.curso || "", etapa: l.etapa, vendedorId: l.vendedorId || null, vendedorNome: v ? v.nome : "", vendedorFoto: v ? (v.foto || "") : "", valor: l.valor || 0, formaPagamento: l.formaPagamento || "", tags: l.tags || [], tarefa: l.tarefa || null, reservaNome: l.reservaNome || "", origem: l.origem || "manual", notas: l.notas || [], historico: l.historico || [], criadoEm: l.criadoEm, atualizadoEm: l.atualizadoEm };
@@ -1979,6 +1990,39 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
     db.oficial.crmEtapas = et.filter((x) => x.k !== req.params.k);
     salvar();
     res.json({ ok: true, etapas: etapasCRM(), movidosPara: destino });
+  });
+
+  // lista as etapas (pra popular o seletor na Caixa de entrada) — qualquer usuário logado
+  app.get("/api/oficial/etapas", auth, (req, res) => { garantirCRM(); res.json({ etapas: etapasCRM() }); });
+
+  // muda a etapa (kanban) do lead ligado a uma conversa, direto da Caixa de entrada.
+  // O vendedor mexe só nas conversas dele. Se o lead ainda não existir no Pipeline, cria.
+  app.post("/api/oficial/chats/:id/etapa", auth, (req, res) => {
+    garantirCRM();
+    const chat = db.waChats[req.params.id];
+    if (!chat || (chat.canal !== "oficial" && chat.canal !== "instagram")) return res.status(404).json({ error: "Conversa não encontrada" });
+    if (req.user.role === "vendedor" && chat.vendedorId !== req.user.id) return res.status(403).json({ error: "Essa conversa não é sua" });
+    const etapa = String((req.body && req.body.etapa) || "").trim();
+    if (!etapasCRM().some((e) => e.k === etapa)) return res.status(400).json({ error: "Etapa inválida" });
+    const lead = leadDoChat(chat, true);
+    if (!lead.vendedorId) lead.vendedorId = chat.vendedorId || req.user.id;
+    if (lead.etapa !== etapa) { lead.historico = lead.historico || []; lead.historico.push({ tipo: "etapa", texto: "Movido para " + etapasCRM().find((e) => e.k === etapa).lb, ts: Date.now() }); }
+    lead.etapa = etapa; lead.atualizadoEm = Date.now();
+    salvar();
+    res.json({ ok: true, etapa: lead.etapa });
+  });
+
+  // reordena as colunas do kanban (gerente) — recebe a nova ordem das chaves
+  app.post("/api/oficial/crm/etapas/ordem", auth, gerenteOnly, (req, res) => {
+    garantirCRM();
+    const ordem = Array.isArray(req.body && req.body.ordem) ? req.body.ordem : [];
+    const atual = etapasCRM();
+    const nova = [];
+    ordem.forEach((k) => { const e = atual.find((x) => x.k === k); if (e && !nova.includes(e)) nova.push(e); });
+    atual.forEach((e) => { if (!nova.includes(e)) nova.push(e); }); // nenhuma coluna some
+    db.oficial.crmEtapas = nova;
+    salvar();
+    res.json({ ok: true, etapas: etapasCRM() });
   });
 
   // ---- Importar leads de planilha (CSV) — gerente ----
@@ -3404,6 +3448,7 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
       iaUltimoErro: chat.iaUltimoErro || null,
       mensagens: chat.mensagens || [],
       notas: chat.notas || [], // notas internas (transferências etc) — lead não vê
+      etapaLead: (() => { const l = leadDoChat(chat, false); return l ? l.etapa : null; })(),
     });
   });
 
