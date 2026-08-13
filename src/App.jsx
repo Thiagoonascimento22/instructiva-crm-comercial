@@ -3816,7 +3816,7 @@ function ModalImportar({ etapas, onClose, onDone, showToast }) {
           curso: iCurso >= 0 ? (r[iCurso] || "") : "",
           valor: iValor >= 0 ? (r[iValor] || "") : "",
         }));
-        const validos = leads.filter((l) => l.nome.trim() && digOk(l.telefone)).length;
+        const validos = leads.filter((l) => digOk(l.telefone)).length;
         setDados({ leads, total: leads.length, validos });
       } catch (err) { showToast("Não consegui ler o arquivo. Confira se é um CSV."); }
     };

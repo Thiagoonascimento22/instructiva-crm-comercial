@@ -2036,9 +2036,9 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
     let criados = 0, pulados = 0, i = 0;
     for (const row of linhas) {
       i++;
-      const nome = String((row && row.nome) || "").trim().slice(0, 80);
       const telefone = String((row && row.telefone) || "").replace(/\D/g, "");
-      if (!nome || telefone.length < 10 || telefone.length > 13) { pulados++; continue; }
+      if (telefone.length < 10 || telefone.length > 13) { pulados++; continue; }
+      const nome = String((row && row.nome) || "").trim().slice(0, 80) || telefone;
       if ((db.oficial.crmLeads || []).some((x) => x.telefone === telefone)) { pulados++; continue; } // dedupe por telefone
       const dist = modo === "manual" ? { vendedorId: null, vendedorNome: "" } : distribuirReserva();
       const lead = {
