@@ -2329,7 +2329,7 @@ function MetricasDisparo({ isGer = true, showToast, onClose, onLimpou }) {
 
   return (
     <div>
-      <div style={{ padding: "20px 24px", borderBottom: "1px solid " + DES.line, display: "flex", alignItems: "center", justifyContent: "space-between", position: "sticky", top: 0, background: "#fff", zIndex: 2, borderRadius: "14px 14px 0 0", flexWrap: "wrap", gap: 10 }}>
+      <div style={{ padding: "20px 24px", borderBottom: "1px solid " + DES.line, display: "flex", alignItems: "center", justifyContent: "space-between", position: "sticky", top: 0, background: "var(--card)", zIndex: 2, borderRadius: "14px 14px 0 0", flexWrap: "wrap", gap: 10 }}>
         <div>
           <div style={{ fontSize: 18, fontWeight: 700, color: DES.ink }}>Métricas de disparo</div>
           <div style={{ fontSize: 12.5, color: DES.mut, marginTop: 2 }}>Entrega, leitura e resposta — direto da Meta</div>
@@ -2431,7 +2431,7 @@ function MetricasDisparo({ isGer = true, showToast, onClose, onLimpou }) {
             {isGer && (
               <div style={{ marginTop: 22, borderTop: "1px dashed " + DES.line, paddingTop: 16, display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 10 }}>
                 <div style={{ fontSize: 12, color: DES.mut, maxWidth: 480 }}>Sistema lento? Limpe as conversas de disparo que <b>nunca responderam</b> (ficam só ocupando espaço). Os leads seguem no Pipeline; vendas e conversas que responderam não são tocadas.</div>
-                <button className="btn" onClick={limpar} disabled={limpando} style={{ background: "#fff", border: "1px solid #fca5a5", color: "#dc2626", fontWeight: 600, whiteSpace: "nowrap" }}>{limpando ? "Limpando…" : "🧹 Limpar disparos sem resposta"}</button>
+                <button className="btn" onClick={limpar} disabled={limpando} style={{ background: "var(--card)", border: "1px solid var(--line)", color: "#dc2626", fontWeight: 600, whiteSpace: "nowrap" }}>{limpando ? "Limpando…" : "🧹 Limpar disparos sem resposta"}</button>
               </div>
             )}
           </>
@@ -6112,7 +6112,7 @@ function extDeAudio(mime) {
 
 const fmtMoneyD = (v) => "R$ " + (Number(v) || 0).toLocaleString("pt-BR", { maximumFractionDigits: 0 });
 const fmtPctD = (v) => (Number(v) || 0).toLocaleString("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + "%";
-const DES = { ink: "#0f172a", mut: "#64748b", mut2: "#94a3b8", line: "#eef1f4", bg: "#f8fafc", orange: "#F26522", green: "#16a34a", purple: "#8b5cf6", gold: "#f59e0b" };
+const DES = { ink: "var(--text)", mut: "var(--muted)", mut2: "var(--faint)", line: "var(--line)", bg: "var(--surface-2)", card: "var(--card)", orange: "#F26522", green: "#16a34a", purple: "#8b5cf6", gold: "#f59e0b" };
 
 // cinturão (faixa) desenhado, com graus/estrelas = meses seguidos rumo à próxima
 function Cinturao({ faixa, graus = 0, alt = 24 }) {
@@ -6191,8 +6191,8 @@ function AnaliseIAVendedor({ showToast, isGer = true }) {
   }
 
   const A = res && res.analise;
-  const Bloco = ({ titulo, itens, cor, bg, ico }) => (!itens || !itens.length) ? null : (
-    <div style={{ background: bg, border: "1px solid " + cor + "33", borderRadius: 14, padding: 18, marginBottom: 14 }}>
+  const Bloco = ({ titulo, itens, cor, ico }) => (!itens || !itens.length) ? null : (
+    <div style={{ background: "var(--surface-2)", border: "1px solid var(--line)", borderLeft: "3px solid " + cor, borderRadius: 14, padding: 18, marginBottom: 14 }}>
       <div style={{ fontSize: 13.5, fontWeight: 700, color: cor, marginBottom: 10, display: "flex", alignItems: "center", gap: 7 }}>{ico} {titulo}</div>
       <ul style={{ margin: 0, paddingLeft: 20, display: "flex", flexDirection: "column", gap: 7 }}>
         {itens.map((t, i) => <li key={i} style={{ fontSize: 13.5, color: DES.ink, lineHeight: 1.5 }}>{t}</li>)}
@@ -6207,7 +6207,7 @@ function AnaliseIAVendedor({ showToast, isGer = true }) {
         <div style={{ fontSize: 13, color: DES.mut, marginTop: 2 }}>A IA lê as conversas {isGer ? "do vendedor" : "suas"} no período e aponta o que está bom, o que melhorar, e alertas.</div>
       </div>
 
-      <div style={{ background: "#fff", border: "1px solid " + DES.line, borderRadius: 16, padding: 18, marginBottom: 20, display: "flex", gap: 12, alignItems: "flex-end", flexWrap: "wrap", boxShadow: "0 1px 2px rgba(15,23,42,.04)" }}>
+      <div style={{ background: "var(--card)", border: "1px solid " + DES.line, borderRadius: 16, padding: 18, marginBottom: 20, display: "flex", gap: 12, alignItems: "flex-end", flexWrap: "wrap", boxShadow: "0 1px 2px rgba(15,23,42,.04)" }}>
         {isGer && (
           <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
             <span style={{ fontSize: 10.5, color: DES.mut2, fontWeight: 700, letterSpacing: ".06em", textTransform: "uppercase" }}>Vendedor</span>
@@ -6237,24 +6237,51 @@ function AnaliseIAVendedor({ showToast, isGer = true }) {
         </button>
       </div>
 
-      {carregando && <div style={{ padding: 40, textAlign: "center", color: DES.mut, background: "#fff", borderRadius: 16, border: "1px solid " + DES.line }}>A IA está lendo as conversas… isso leva alguns segundos.</div>}
+      {carregando && <div style={{ padding: 40, textAlign: "center", color: DES.mut, background: "var(--card)", borderRadius: 16, border: "1px solid " + DES.line }}>A IA está lendo as conversas… isso leva alguns segundos.</div>}
 
       {res && res.vazio && !carregando && (
-        <div style={{ padding: 30, color: DES.mut, background: "#fff", borderRadius: 16, border: "1px solid " + DES.line, textAlign: "center" }}>Nenhuma conversa {isGer ? "desse vendedor" : "sua"} nesse período.</div>
+        <div style={{ padding: 30, color: DES.mut, background: "var(--card)", borderRadius: 16, border: "1px solid " + DES.line, textAlign: "center" }}>Nenhuma conversa {isGer ? "desse vendedor" : "sua"} nesse período.</div>
       )}
 
       {res && !res.vazio && !carregando && (
         <div>
           <div style={{ fontSize: 12, color: DES.mut2, marginBottom: 14 }}>Analisadas {res.analisadas} conversa(s){res.totalConversas > res.analisadas ? " (as mais recentes de " + res.totalConversas + ")" : ""}{isGer && res.vendedor ? " · " + res.vendedor : ""}.</div>
           {A ? <>
-            {A.resumo && <div style={{ background: "linear-gradient(135deg,#fff7ed,#f0fdf4)", border: "1px solid " + DES.line, borderRadius: 16, padding: 20, marginBottom: 16, fontSize: 15, fontWeight: 600, color: DES.ink, lineHeight: 1.5 }}>{A.resumo}</div>}
+            {A.resumo && <div style={{ background: "var(--surface-2)", border: "1px solid " + DES.line, borderRadius: 16, padding: 20, marginBottom: 16, fontSize: 14.5, fontWeight: 500, color: DES.ink, lineHeight: 1.6 }}>{A.resumo}</div>}
+            {Array.isArray(A.passos) && A.passos.length > 0 && (
+              <div style={{ background: "var(--card)", border: "1px solid " + DES.line, borderRadius: 16, padding: 18, marginBottom: 14 }}>
+                <div style={{ fontSize: 13.5, fontWeight: 700, color: DES.ink, marginBottom: 12, display: "flex", alignItems: "center", gap: 7 }}>🎯 Avaliação dos 7 passos</div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                  {A.passos.map((p, i) => {
+                    const st = p.status === "ok" ? { ic: "✅", cor: DES.green, lb: "Fez bem" } : p.status === "parcial" ? { ic: "⚠️", cor: DES.orange, lb: "Parcial" } : { ic: "❌", cor: "#dc2626", lb: "Não fez" };
+                    return (
+                      <div key={i} style={{ display: "flex", gap: 11, padding: "11px 13px", background: DES.bg, borderRadius: 11, borderLeft: "3px solid " + st.cor }}>
+                        <span style={{ fontSize: 16, flexShrink: 0 }}>{st.ic}</span>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontSize: 13, fontWeight: 700, color: DES.ink }}>{p.n}. {p.nome} <span style={{ fontSize: 11, fontWeight: 600, color: st.cor }}>· {st.lb}</span></div>
+                          {p.comentario && <div style={{ fontSize: 12.5, color: DES.mut, marginTop: 3, lineHeight: 1.5 }}>{p.comentario}</div>}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
             <Bloco titulo="O que está indo bem" itens={A.bem} cor={DES.green} bg="#f0fdf4" ico="✅" />
             <Bloco titulo="O que precisa melhorar" itens={A.melhorar} cor={DES.orange} bg="#fff7ed" ico="⚠️" />
             <Bloco titulo="Pontos fortes" itens={A.fortes} cor="#2563eb" bg="#eff6ff" ico="💪" />
             <Bloco titulo="Pontos fracos" itens={A.fracos} cor={DES.mut} bg="#f8fafc" ico="📉" />
             <Bloco titulo="Alertas críticos" itens={A.criticos} cor="#dc2626" bg="#fef2f2" ico="🚨" />
+            {Array.isArray(A.sugestoes) && A.sugestoes.length > 0 && (
+              <div style={{ background: "var(--surface-2)", border: "1px solid var(--line)", borderRadius: 14, padding: 18, marginBottom: 14 }}>
+                <div style={{ fontSize: 13.5, fontWeight: 700, color: "#2563eb", marginBottom: 10, display: "flex", alignItems: "center", gap: 7 }}>💡 Sugestões</div>
+                <ul style={{ margin: 0, paddingLeft: 20, display: "flex", flexDirection: "column", gap: 8 }}>
+                  {A.sugestoes.map((t, i) => <li key={i} style={{ fontSize: 13.5, color: DES.ink, lineHeight: 1.55 }}>{t}</li>)}
+                </ul>
+              </div>
+            )}
           </> : (
-            <div style={{ background: "#fff", border: "1px solid " + DES.line, borderRadius: 16, padding: 20, fontSize: 14, color: DES.ink, whiteSpace: "pre-wrap", lineHeight: 1.6 }}>{res.bruto}</div>
+            <div style={{ background: "var(--card)", border: "1px solid " + DES.line, borderRadius: 16, padding: 20, fontSize: 14, color: DES.ink, whiteSpace: "pre-wrap", lineHeight: 1.6 }}>{res.bruto}</div>
           )}
         </div>
       )}
@@ -6327,7 +6354,7 @@ function Desempenho({ showToast, isGer = true }) {
       </div>
 
       {dados.souGerente && (
-        <div style={{ background: "#fff", border: "1px solid " + DES.line, borderRadius: 16, padding: "18px 8px", marginBottom: 22, display: "flex", boxShadow: "0 1px 2px rgba(15,23,42,.04)" }}>
+        <div style={{ background: "var(--card)", border: "1px solid " + DES.line, borderRadius: 16, padding: "18px 8px", marginBottom: 22, display: "flex", boxShadow: "0 1px 2px rgba(15,23,42,.04)" }}>
           <Stat label="Receita do time" valor={fmtMoneyD(totReceita)} />
           <Stat label="Vendas" valor={String(totVendas)} borda />
           <Stat label="Leads recebidos" valor={String(totLeads)} borda />
@@ -6337,7 +6364,7 @@ function Desempenho({ showToast, isGer = true }) {
       )}
 
       {vends.length === 0 ? (
-        <div style={{ padding: 40, color: DES.mut, background: "#fff", borderRadius: 16, border: "1px solid " + DES.line, textAlign: "center" }}>Nenhum vendedor pra mostrar neste mês.</div>
+        <div style={{ padding: 40, color: DES.mut, background: "var(--card)", borderRadius: 16, border: "1px solid " + DES.line, textAlign: "center" }}>Nenhum vendedor pra mostrar neste mês.</div>
       ) : (
         <div style={{ display: "grid", gridTemplateColumns: dados.souGerente ? "repeat(auto-fill,minmax(410px,1fr))" : "minmax(0,560px)", gap: 18 }}>
           {vends.map((v, idx) => {
@@ -6347,7 +6374,7 @@ function Desempenho({ showToast, isGer = true }) {
             const anelCor = prox ? prox.cor : DES.gold;
             const top = idx === 0 && dados.souGerente;
             return (
-              <div key={v.id} onClick={() => setDetalheId(v.id)} style={{ background: "#fff", border: top ? "1px solid #fde68a" : "1px solid " + DES.line, borderRadius: 20, padding: 24, cursor: "pointer", opacity: v.oculto ? 0.5 : 1, boxShadow: top ? "0 3px 16px rgba(245,158,11,.14)" : "0 1px 2px rgba(15,23,42,.04)", transition: "box-shadow .18s, transform .18s", position: "relative", overflow: "hidden" }}
+              <div key={v.id} onClick={() => setDetalheId(v.id)} style={{ background: "var(--card)", border: top ? "1px solid var(--line)" : "1px solid " + DES.line, borderRadius: 20, padding: 24, cursor: "pointer", opacity: v.oculto ? 0.5 : 1, boxShadow: top ? "0 3px 16px rgba(245,158,11,.14)" : "0 1px 2px rgba(15,23,42,.04)", transition: "box-shadow .18s, transform .18s", position: "relative", overflow: "hidden" }}
                 onMouseEnter={(e) => { e.currentTarget.style.boxShadow = "0 12px 30px rgba(15,23,42,.11)"; e.currentTarget.style.transform = "translateY(-3px)"; }}
                 onMouseLeave={(e) => { e.currentTarget.style.boxShadow = top ? "0 3px 16px rgba(245,158,11,.14)" : "0 1px 2px rgba(15,23,42,.04)"; e.currentTarget.style.transform = "none"; }}>
                 {top && <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: 4, background: "linear-gradient(90deg,#f59e0b,#F26522)" }} />}
@@ -6362,14 +6389,14 @@ function Desempenho({ showToast, isGer = true }) {
                 </div>
 
                 {/* HERO: anel de pontos + cinturão */}
-                <div style={{ display: "flex", alignItems: "center", gap: 18, background: top ? "linear-gradient(135deg,#fffbeb,#fff7ed)" : DES.bg, borderRadius: 16, padding: "18px 20px", marginBottom: 18 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 18, background: top ? "var(--surface-2)" : DES.bg, borderRadius: 16, padding: "18px 20px", marginBottom: 18 }}>
                   <AnelPontos pct={anelPct} cor={anelCor} dentro={<><span style={{ fontSize: 27, fontWeight: 800, color: DES.ink, letterSpacing: "-.02em" }}>{v.pontos}</span><span style={{ fontSize: 11, color: DES.mut2, marginTop: 2 }}>{fm ? "de " + fm.pontos : "pts"}</span></>} />
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <Cinturao faixa={faixa} graus={fm ? fm.mesesSeguidos : 4} />
                     <div style={{ marginTop: 10, fontSize: 14.5, fontWeight: 700, color: DES.ink }}>Faixa {faixa.nome}</div>
                     {fm ? <div style={{ fontSize: 12.5, color: DES.mut, marginTop: 1 }}>{v.pontos}/{fm.pontos} pts rumo à <b style={{ color: DES.ink }}>{prox.nome}</b> · mês {fm.mesesSeguidos}/{fm.meses}</div>
                         : <div style={{ fontSize: 12.5, color: DES.gold, marginTop: 1, fontWeight: 600 }}>Topo da carreira 🏆</div>}
-                    {v.bonus.dinheiro > 0 && <div style={{ marginTop: 9, fontSize: 11.5, fontWeight: 700, color: DES.green, background: "#dcfce7", borderRadius: 20, padding: "3px 10px", display: "inline-block" }}>bônus +{v.bonus.adicional.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}% · {fmtMoneyD(v.bonus.dinheiro)}</div>}
+                    {v.bonus.dinheiro > 0 && <div style={{ marginTop: 9, fontSize: 11.5, fontWeight: 700, color: DES.green, background: "var(--surface-2)", borderRadius: 20, padding: "3px 10px", display: "inline-block" }}>bônus +{v.bonus.adicional.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}% · {fmtMoneyD(v.bonus.dinheiro)}</div>}
                   </div>
                 </div>
 
@@ -6413,7 +6440,7 @@ function DetalheVendedor({ v, dados, mes, isGer, showToast, onClose, onMudou, ca
   return (
     <div className="pop-bg" onClick={(e) => e.target === e.currentTarget && onClose()}>
       <div className="pop-sheet" style={{ maxWidth: 720, width: "94%", maxHeight: "92vh", overflowY: "auto", padding: 0 }}>
-        <div style={{ padding: "22px 26px", borderBottom: "1px solid " + DES.line, display: "flex", alignItems: "center", justifyContent: "space-between", position: "sticky", top: 0, background: "#fff", zIndex: 2, borderRadius: "14px 14px 0 0" }}>
+        <div style={{ padding: "22px 26px", borderBottom: "1px solid " + DES.line, display: "flex", alignItems: "center", justifyContent: "space-between", position: "sticky", top: 0, background: "var(--card)", zIndex: 2, borderRadius: "14px 14px 0 0" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
             {v.foto ? <img src={v.foto} alt="" style={{ width: 54, height: 54, borderRadius: "50%", objectFit: "cover" }} /> : <div style={{ width: 54, height: 54, borderRadius: "50%", background: "linear-gradient(135deg,#F26522,#16a34a)", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700, fontSize: 21 }}>{(v.nome || "?").slice(0, 1).toUpperCase()}</div>}
             <div>
@@ -6447,7 +6474,7 @@ function DetalheVendedor({ v, dados, mes, isGer, showToast, onClose, onMudou, ca
             </div>
           )}
           {isGer && !v.pessoaId && (dados.pessoasVendas || []).length > 0 && (
-            <div style={{ fontSize: 12.5, color: "#b45309", background: "#fffbeb", border: "1px solid #fde68a", borderRadius: 10, padding: "10px 12px", marginBottom: 20, marginTop: -8 }}>
+            <div style={{ fontSize: 12.5, color: "#F26522", background: "var(--surface-2)", border: "1px solid var(--line)", borderRadius: 10, padding: "10px 12px", marginBottom: 20, marginTop: -8 }}>
               As vendas deste vendedor não estão aparecendo? No campo <b>"Vendas registradas como"</b> acima, escolha qual pessoa do painel de Vendas é ela — aí a receita e a conversão passam a contar aqui.
             </div>
           )}
@@ -6461,7 +6488,7 @@ function DetalheVendedor({ v, dados, mes, isGer, showToast, onClose, onMudou, ca
                   <div style={{ fontSize: 16, fontWeight: 700, color: DES.ink, marginBottom: 3 }}>Faixa {faixa.nome} → <span style={{ color: DES.purple }}>{proxF.nome}</span></div>
                   <div style={{ fontSize: 13, color: DES.mut, lineHeight: 1.5 }}>Passar de <b>{fm.pontos} pontos</b> por <b>{fm.meses} meses seguidos</b>. Está no <b>mês {fm.mesesSeguidos} de {fm.meses}</b>{v.pontos > fm.pontos ? <span style={{ color: DES.green, fontWeight: 600 }}> — este mês bateu ✓</span> : ""}.</div>
                 </> : <div style={{ fontSize: 16, fontWeight: 700, color: DES.gold }}>Faixa Preta 🏆 — o topo da carreira</div>}
-                {v.bonus.dinheiro > 0 && <div style={{ marginTop: 12, fontSize: 13, color: DES.green, background: "#f0fdf4", border: "1px solid #bbf7d0", borderRadius: 10, padding: "9px 12px" }}>💰 Bônus deste mês: <b>+{v.bonus.adicional.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}%</b> na comissão + <b>{fmtMoneyD(v.bonus.dinheiro)}</b></div>}
+                {v.bonus.dinheiro > 0 && <div style={{ marginTop: 12, fontSize: 13, color: DES.green, background: "var(--surface-2)", border: "1px solid var(--line)", borderRadius: 10, padding: "9px 12px" }}>💰 Bônus deste mês: <b>+{v.bonus.adicional.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}%</b> na comissão + <b>{fmtMoneyD(v.bonus.dinheiro)}</b></div>}
               </div>
             </div>
           </div>

@@ -1341,13 +1341,13 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
   }
 
   // chamada única (system + user) pra análises — devolve o texto
-  async function analisarComIA(sistema, usuario) {
+  async function analisarComIA(sistema, usuario, maxTokens) {
     const key = process.env.OPENAI_API_KEY;
     if (!key) throw new Error("OPENAI_API_KEY não configurada");
     const r = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
       headers: { "Content-Type": "application/json", "Authorization": "Bearer " + key },
-      body: JSON.stringify({ model: "gpt-4o-mini", max_tokens: 1200, temperature: 0.4, messages: [{ role: "system", content: sistema }, { role: "user", content: usuario }] }),
+      body: JSON.stringify({ model: "gpt-4o-mini", max_tokens: maxTokens || 1200, temperature: 0.4, messages: [{ role: "system", content: sistema }, { role: "user", content: usuario }] }),
     });
     const data = await r.json().catch(() => ({}));
     if (!r.ok) throw new Error((data.error && data.error.message) || "Erro OpenAI " + r.status);
@@ -3420,10 +3420,22 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
       let transcript = linhas.join("\n");
       if (transcript.length > 60000) transcript = transcript.slice(0, 60000) + "\n...(cortado por tamanho)";
 
-      const sistema = "Você é um analista de vendas experiente e direto, especialista em atendimento por WhatsApp. Analise as conversas de um vendedor e dê um feedback honesto, específico e acionável (cite situações reais que viu nas conversas, sem inventar). Responda SOMENTE com um JSON válido, sem nenhum texto fora dele, exatamente nesta estrutura:\n{\"resumo\":\"1 a 2 frases sobre o desempenho geral no período\",\"bem\":[\"o que está indo bem\"],\"melhorar\":[\"o que precisa melhorar\"],\"fortes\":[\"pontos fortes\"],\"fracos\":[\"pontos fracos\"],\"criticos\":[\"alertas críticos\"]}\nRegras: cada item é uma frase curta e específica. Em \"criticos\" coloque SÓ coisas graves (cliente irritado ou sem resposta, promessa não cumprida, oportunidade claramente perdida, demora excessiva pra responder, tom rude ou inadequado). Se não houver nada crítico, use lista vazia []. Escreva em português do Brasil.";
+      const sistema = "Você é um analista de vendas sênior da Instructiva, especialista no método dos 7 Passos da Venda (padrão Conquer). Analise as conversas de WhatsApp de um vendedor e faça uma avaliação PROFUNDA, honesta e específica, sempre citando situações reais que viu nas conversas (nunca invente). Seja detalhado e direto — nada de análise genérica ou rasa.\n\n"
+        + "OS 7 PASSOS DA VENDA (avalie o vendedor em CADA um):\n"
+        + "1. APRESENTAÇÃO: abre citando quem indicou (se houver), dá um overview rápido e emenda numa pergunta aberta de conexão. Puxa pra LIGAÇÃO quem só quer resolver por WhatsApp. NÃO tenta vender tudo por mensagem, não pede desculpa por contatar, não fica só em follow no zap.\n"
+        + "2. CONEXÃO (o coração da venda): faz MUITA pergunta e ouve (ideal ~80% ouvir, 20% falar), levanta as dores reais (o que é importante E urgente), aprofunda a dor (nota de 0 a 10, referência/comparação, sonho, oportunidade já perdida) e cria rapport genuíno. Deve sair sabendo as 2 dores principais e o sonho/ambição do cliente.\n"
+        + "3. DECISÃO IMEDIATA (Pré-DI + DI): mede prioridade ('se encaixar tempo, método e financeiro, você começaria agora?') e faz o combinado (contato único, pode dizer não, quer um sim ou não no final). Antecipa quem decide (esposa/sócio/pais) e se a pessoa tem cartão.\n"
+        + "4. SPEECH (3 portas): apresenta o produto fechando TEMPO -> METODOLOGIA -> FINANCEIRO (nessa ordem), sempre amarrando nas 2 dores do cliente e pegando um 'sim' a cada porta. Não despeja tudo do produto de uma vez.\n"
+        + "5. FECHAMENTO (ancoragem + silêncio): ancora o valor alto (quanto custaria algo equivalente), revela o preço acessível, faz silêncio e usa perguntas fechadas (sim/não). Conduz o cadastro com opções na hora, sem deixar pra 'depois'.\n"
+        + "6. INDICAÇÕES (pega, não pede): logo após o fechamento (ou mesmo sem fechar, se houve conexão), pega indicações por voz de comando, NA HORA — nunca 'depois'.\n"
+        + "7. VALIDAÇÃO: faz o cliente aquecer os indicados (reenviar a mensagem) e diz quem respondeu / quem priorizar, transformando a próxima ligação de fria em quente.\n\n"
+        + "PRINCÍPIOS-CHAVE: o certo é levar a conversa pra LIGAÇÃO (fechar tudo só por WhatsApp é fraco); postura de confiança (conduz, não implora, não fica pedindo desculpa); a venda está na conexão. IMPORTANTE: como você só vê o WhatsApp, avalie o que dá pra ver e, quando um passo deveria acontecer na ligação, verifique se o vendedor pelo menos PUXOU pra ligação — se ele tentou vender tudo no zap, aponte isso como falha.\n\n"
+        + "Responda SOMENTE com um JSON válido, sem texto fora dele, exatamente nesta estrutura:\n"
+        + "{\"resumo\":\"3 a 6 frases com uma análise geral aprofundada do comportamento do vendedor no período (padrões reais, tom, ritmo, condução)\",\"passos\":[{\"n\":1,\"nome\":\"Apresentação\",\"status\":\"ok\",\"comentario\":\"o que o vendedor fez ou deixou de fazer nesse passo, com exemplo real da conversa\"}],\"bem\":[\"...\"],\"melhorar\":[\"...\"],\"fortes\":[\"...\"],\"fracos\":[\"...\"],\"criticos\":[\"...\"],\"sugestoes\":[\"ações práticas e específicas pra melhorar, ligadas aos 7 passos\"]}\n"
+        + "Regras: em \"passos\" traga os 7 passos (n de 1 a 7, com o nome certo), e \"status\" é 'ok' (fez bem), 'parcial' (fez pela metade) ou 'nao' (não fez). Cada \"comentario\" deve ser específico e citar o que viu. \"criticos\" só para coisas graves (cliente sem resposta, promessa não cumprida, oportunidade claramente perdida, demora excessiva, tom rude). Se não houver, use []. \"sugestoes\" deve ter itens acionáveis. Escreva tudo em português do Brasil, com profundidade (não seja raso).";
       const usuario = "Vendedor: " + alvo.nome + "\nConversas analisadas: " + convs.length + (totalConversas > convs.length ? " (as " + convs.length + " mais recentes de " + totalConversas + ")" : "") + "\n\n" + transcript;
 
-      const bruto = await analisarComIA(sistema, usuario);
+      const bruto = await analisarComIA(sistema, usuario, 2400);
       let analise = null;
       try { analise = JSON.parse(String(bruto).replace(/```json/gi, "").replace(/```/g, "").trim()); } catch (_) {}
       res.json({ ok: true, vendedor: alvo.nome, totalConversas, analisadas: convs.length, analise, bruto: analise ? null : bruto });
