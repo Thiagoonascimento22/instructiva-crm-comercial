@@ -6867,12 +6867,12 @@ function OficialCRM({ showToast, isGer = true, onAbrirWhats, onDisparar }) {
               <option value="">Mover para…</option>
               {etapas.map((e) => <option key={e.k} value={e.k}>{e.lb}</option>)}
             </select>
-            {isGer && onDisparar && (
+            {onDisparar && (
               <button className="crm-lote-del" style={{ background: "#25A06B", color: "#fff", borderColor: "#25A06B" }} title="Disparar um template pros leads selecionados"
                 onClick={() => {
                   const sel = leads.filter((l) => marcados[l.id] && String(l.telefone || "").replace(/\D/g, "").length >= 10);
                   if (!sel.length) { showToast("Nenhum selecionado tem telefone válido"); return; }
-                  const vd = (filtroVend && filtroVend !== "__sem") ? filtroVend : null;
+                  const vd = (isGer && filtroVend && filtroVend !== "__sem") ? filtroVend : null;
                   onDisparar({ contatos: sel.map((l) => ({ telefone: l.telefone, nome: l.nome || "" })), vendedorDestino: vd });
                 }}>
                 <I.send className="ico" /> Disparar ({leads.filter((l) => marcados[l.id]).length})
@@ -7973,7 +7973,7 @@ function janela24h(ultimaEntradaTs) {
   return { aberta: true, urgente: resta < 2 * 3600000, resta, texto: h > 0 ? `${h}h ${m}min` : `${m}min`, fim };
 }
 
-function Ticks({ status, texto, erro, erroCodigo }) {
+function Ticks({ status, texto, erro, erroCodigo, lidoEm }) {
   if (!status) return null;
   if (status === "failed") {
     const cru = [erroCodigo ? "(#" + erroCodigo + ")" : "", erro || ""].filter(Boolean).join(" ");
@@ -7988,8 +7988,9 @@ function Ticks({ status, texto, erro, erroCodigo }) {
   const lida = status === "read";
   const dois = status === "delivered" || lida;
   const cor = lida ? "#53bdeb" : "rgba(0,0,0,.42)";
-  const titulo = lida ? "O lead abriu e leu" : status === "delivered" ? "Chegou no celular do lead" : "Aceita pelo WhatsApp, ainda não confirmou a entrega";
-  const palavra = lida ? "lida" : status === "delivered" ? "entregue" : "enviada";
+  const horaLida = lida && lidoEm ? new Date(lidoEm).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }) : "";
+  const titulo = lida ? ("O lead abriu e leu" + (horaLida ? " às " + horaLida : "")) : status === "delivered" ? "Chegou no celular do lead" : "Aceita pelo WhatsApp, ainda não confirmou a entrega";
+  const palavra = lida ? (horaLida ? "lida " + horaLida : "lida") : status === "delivered" ? "entregue" : "enviada";
   return (
     <span title={titulo} style={{ display: "inline-flex", alignItems: "center", gap: 3, marginLeft: 4, verticalAlign: "middle", color: cor }}>
       <svg width={dois ? 17 : 11} height="11" viewBox={dois ? "0 0 17 11" : "0 0 11 11"} fill="none">
@@ -8073,6 +8074,8 @@ function InboxOficial({ isGer, showToast, onIrParaEvolution, target, onTargetUse
   const [cadPipeline, setCadPipeline] = useState(false);
   const [showEmojiOf, setShowEmojiOf] = useState(false);
   const [gravandoOf, setGravandoOf] = useState(false);
+  const [pausadoOf, setPausadoOf] = useState(false);
+  const cancelarOfRef = useRef(false);
   const [enviandoMidiaOf, setEnviandoMidiaOf] = useState(false);
   const fileRefOf = useRef(null);
   const mediaRecOf = useRef(null);
@@ -8272,10 +8275,14 @@ function InboxOficial({ isGer, showToast, onIrParaEvolution, target, onTargetUse
       const fmt = formatoGravacao();
       const mr = new MediaRecorder(stream, fmt ? { mimeType: fmt } : undefined);
       chunksOf.current = [];
+      cancelarOfRef.current = false;
       mr.ondataavailable = (e) => { if (e.data.size > 0) chunksOf.current.push(e.data); };
       mr.onstop = async () => {
         stream.getTracks().forEach((t) => t.stop());
         setGravandoOf(false);
+        setPausadoOf(false);
+        // cancelado: descarta o áudio, não envia
+        if (cancelarOfRef.current) { cancelarOfRef.current = false; chunksOf.current = []; return; }
         const tipoReal = (mr.mimeType || "audio/webm").split(";")[0];
         const blob = new Blob(chunksOf.current, { type: tipoReal });
         if (blob.size < 800) return; // muito curto, ignora
@@ -8295,7 +8302,22 @@ function InboxOficial({ isGer, showToast, onIrParaEvolution, target, onTargetUse
       mediaRecOf.current = mr;
       mr.start();
       setGravandoOf(true);
+      setPausadoOf(false);
     } catch (e) { showToast("✗ Não consegui acessar o microfone"); }
+  }
+  // pausar / retomar a gravação
+  function pausarGravarOf() {
+    const mr = mediaRecOf.current; if (!mr) return;
+    try {
+      if (mr.state === "recording") { mr.pause(); setPausadoOf(true); }
+      else if (mr.state === "paused") { mr.resume(); setPausadoOf(false); }
+    } catch (_) {}
+  }
+  // cancelar: para e descarta (não envia)
+  function cancelarGravarOf() {
+    cancelarOfRef.current = true;
+    try { mediaRecOf.current && mediaRecOf.current.stop(); } catch (_) {}
+    setGravandoOf(false); setPausadoOf(false);
   }
   async function transferir(vendedorId) {
     if (!sel || !vendedorId) return;
@@ -8600,23 +8622,14 @@ function InboxOficial({ isGer, showToast, onIrParaEvolution, target, onTargetUse
                         <OfMidia chatId={conversa.id} m={item.m} />
                       )}
                       {(!item.m.tipo || item.m.tipo === "text" || !item.m.arquivo) && item.m.content}
-                      <span className="of-msg-hora">{horaCurta(item.m.ts)}{item.m.role === "me" && <Ticks status={item.m.status} erro={item.m.erro} erroCodigo={item.m.erroCodigo} texto={!!item.m.template} />}</span>
+                      <span className="of-msg-hora">{horaCurta(item.m.ts)}{item.m.role === "me" && <Ticks status={item.m.status} erro={item.m.erro} erroCodigo={item.m.erroCodigo} lidoEm={item.m.lidoEm} texto={!!item.m.template || item.m.status === "read"} />}</span>
                     </div>
                   </div>
                 )
               ))}
               <div ref={fimRef} />
             </div>
-            {isGer && !conversa.temIA && iasDisp.length > 0 && (
-              <div style={{ margin: "10px 14px 0", padding: "10px 13px", background: "var(--surface-2)", border: "1px solid var(--line)", borderRadius: 11, display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-                <I.spark className="ico" style={{ color: "var(--brand)", flexShrink: 0 }} />
-                <span style={{ fontSize: 12.5, color: "var(--muted)", fontWeight: 600 }}>Deixar a IA atender este lead?</span>
-                <select className="input mono" style={{ maxWidth: 240, height: 34, flex: 1, minWidth: 150 }} defaultValue="" onChange={(e) => { if (e.target.value) { ativarIANaConversa(e.target.value); e.target.value = ""; } }}>
-                  <option value="">Escolher IA…</option>
-                  {iasDisp.map((ia) => <option key={ia.id} value={ia.id}>{ia.nome} · {ia.modo === "qualifica" ? "qualifica → vendedor" : "fecha sozinha"}</option>)}
-                </select>
-              </div>
-            )}
+            {/* barra "Deixar a IA atender este lead?" removida a pedido */}
             {conversa.iaUltimoErro && (
               <div style={{ margin: "10px 14px 0", padding: "11px 14px", background: "#fef2f2", border: "1px solid #fecaca", borderRadius: 11, color: "#b91c1c", fontSize: 12.5, display: "flex", alignItems: "flex-start", gap: 8 }}>
                 <I.alert className="ico" style={{ flexShrink: 0, marginTop: 1 }} />
@@ -8680,7 +8693,7 @@ function InboxOficial({ isGer, showToast, onIrParaEvolution, target, onTargetUse
                   ref={taOfRef}
                   className="of-conv-ta"
                   rows={1}
-                  placeholder={enviandoMidiaOf ? "Enviando…" : gravandoOf ? "Gravando áudio…" : "Escreva uma mensagem…  (Shift+Enter pula linha)"}
+                  placeholder={enviandoMidiaOf ? "Enviando…" : gravandoOf ? (pausadoOf ? "Áudio pausado — retome ou cancele" : "Gravando áudio…") : "Escreva uma mensagem…  (Shift+Enter pula linha)"}
                   value={texto}
                   onChange={(e) => { setTexto(e.target.value); e.target.style.height = "auto"; e.target.style.height = Math.min(e.target.scrollHeight, 140) + "px"; }}
                   onKeyDown={(e) => {
@@ -8693,9 +8706,15 @@ function InboxOficial({ isGer, showToast, onIrParaEvolution, target, onTargetUse
                   <button className="btn btn-primary" onClick={() => { enviar(); setShowEmojiOf(false); }}><I.send className="ico" /></button>
                 ) : conversa.canal === "instagram" ? (
                   <button className="btn btn-primary" disabled style={{ opacity: 0.45 }} title="Escreva uma mensagem"><I.send className="ico" /></button>
+                ) : gravandoOf ? (
+                  <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                    <button type="button" className="of-comp-ico" onClick={cancelarGravarOf} disabled={enviandoMidiaOf} title="Cancelar (descartar áudio)" style={{ color: "#dc2626" }}><I.trash className="ico" /></button>
+                    <button type="button" className="of-comp-ico" onClick={pausarGravarOf} disabled={enviandoMidiaOf} title={pausadoOf ? "Retomar" : "Pausar"} style={{ fontSize: 15, fontWeight: 700 }}>{pausadoOf ? "▶" : "⏸"}</button>
+                    <button type="button" className="of-comp-ico grav" onClick={toggleGravarOf} disabled={enviandoMidiaOf} title="Parar e enviar"><I.send className="ico" /></button>
+                  </span>
                 ) : (
-                  <button type="button" className={gravandoOf ? "of-comp-ico grav" : "of-comp-ico"} onClick={toggleGravarOf} disabled={enviandoMidiaOf} title={gravandoOf ? "Parar e enviar" : "Gravar áudio"}>
-                    {gravandoOf ? <I.send className="ico" /> : <I.mic className="ico" />}
+                  <button type="button" className="of-comp-ico" onClick={toggleGravarOf} disabled={enviandoMidiaOf} title="Gravar áudio">
+                    <I.mic className="ico" />
                   </button>
                 )}
               </div>

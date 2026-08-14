@@ -4233,7 +4233,12 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
                   const det = (e0.error_data && e0.error_data.details) || "";
                   msg.erroCodigo = e0.code || null;
                   msg.erro = [e0.title || e0.message, det].filter(Boolean).join(" — ") || ("erro " + (e0.code || "?"));
-                } else if ((ordem[st.status] || 0) > (ordem[msg.status] || 0)) msg.status = st.status;
+                } else if ((ordem[st.status] || 0) > (ordem[msg.status] || 0)) {
+                  msg.status = st.status;
+                  const quando = st.timestamp ? Number(st.timestamp) * 1000 : Date.now();
+                  if (st.status === "read") msg.lidoEm = quando;
+                  else if (st.status === "delivered") msg.entregueEm = quando;
+                }
               }
             }
             const campId = db.oficial.msgCampanha && db.oficial.msgCampanha[mid];
