@@ -1340,6 +1340,20 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
     return txt;
   }
 
+  // chamada única (system + user) pra análises — devolve o texto
+  async function analisarComIA(sistema, usuario) {
+    const key = process.env.OPENAI_API_KEY;
+    if (!key) throw new Error("OPENAI_API_KEY não configurada");
+    const r = await fetch("https://api.openai.com/v1/chat/completions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Authorization": "Bearer " + key },
+      body: JSON.stringify({ model: "gpt-4o-mini", max_tokens: 1200, temperature: 0.4, messages: [{ role: "system", content: sistema }, { role: "user", content: usuario }] }),
+    });
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error((data.error && data.error.message) || "Erro OpenAI " + r.status);
+    return ((data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content) || "").trim();
+  }
+
   // processa a resposta da IA pra um chat (chamado pelo webhook quando o lead responde)
   // mostra "digitando..." no WhatsApp do lead (e marca a última msg como lida)
   async function mostrarDigitando(numeroCfg, ultimaMsgId) {
@@ -3366,6 +3380,54 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
     db.oficial = of;
     salvar();
     res.json({ ok: true, conversas, statusVistos, wamid, msgCamp });
+  });
+
+  // ===== ANÁLISE IA — a IA lê as conversas do vendedor no período e dá feedback =====
+  app.post("/api/oficial/analise-ia", auth, async (req, res) => {
+    try {
+      garantirEstrutura();
+      const b = req.body || {};
+      let alvoId = req.user.id;
+      if (req.user.role === "gerente" && b.vendedorId) alvoId = b.vendedorId;
+      else if (req.user.role !== "gerente" && b.vendedorId && b.vendedorId !== req.user.id) return res.status(403).json({ error: "Você só pode analisar as suas conversas" });
+      const alvo = (db.users || []).find((u) => u.id === alvoId);
+      if (!alvo) return res.status(404).json({ error: "Vendedor não encontrado" });
+      const de = parseInt(b.de) || 0, ate = parseInt(b.ate) || 0;
+      // reúne as conversas oficiais do vendedor no período
+      const chats = Object.values(db.waChats || {}).filter((c) => c && c.canal === "oficial" && c.vendedorId === alvoId);
+      let convs = [];
+      for (const c of chats) {
+        const msgs = (c.mensagens || []).filter((m) => { const ts = m.ts || 0; return (!de || ts >= de) && (!ate || ts <= ate); });
+        if (msgs.length) convs.push({ nome: c.nome || c.numero, ult: msgs[msgs.length - 1].ts || 0, msgs });
+      }
+      const totalConversas = convs.length;
+      if (!totalConversas) return res.json({ ok: true, vazio: true, totalConversas: 0, vendedor: alvo.nome });
+      convs.sort((a, c) => c.ult - a.ult);
+      convs = convs.slice(0, 40); // cap de conversas (controla custo/token)
+      // monta o transcript (com limites)
+      const linhas = [];
+      for (const c of convs) {
+        linhas.push("=== Conversa com " + c.nome + " ===");
+        for (const m of c.msgs.slice(-30)) {
+          const quem = m.role === "them" ? "CLIENTE" : "VENDEDOR";
+          let txt = (m.role === "them" && m.transcricao) ? m.transcricao
+            : (m.content || (m.template ? "[enviou template: " + m.template + "]" : (m.tipo && m.tipo !== "text" ? "[" + m.tipo + "]" : "")));
+          txt = String(txt || "").replace(/\s+/g, " ").slice(0, 300);
+          if (txt) linhas.push(quem + ": " + txt);
+        }
+        linhas.push("");
+      }
+      let transcript = linhas.join("\n");
+      if (transcript.length > 60000) transcript = transcript.slice(0, 60000) + "\n...(cortado por tamanho)";
+
+      const sistema = "Você é um analista de vendas experiente e direto, especialista em atendimento por WhatsApp. Analise as conversas de um vendedor e dê um feedback honesto, específico e acionável (cite situações reais que viu nas conversas, sem inventar). Responda SOMENTE com um JSON válido, sem nenhum texto fora dele, exatamente nesta estrutura:\n{\"resumo\":\"1 a 2 frases sobre o desempenho geral no período\",\"bem\":[\"o que está indo bem\"],\"melhorar\":[\"o que precisa melhorar\"],\"fortes\":[\"pontos fortes\"],\"fracos\":[\"pontos fracos\"],\"criticos\":[\"alertas críticos\"]}\nRegras: cada item é uma frase curta e específica. Em \"criticos\" coloque SÓ coisas graves (cliente irritado ou sem resposta, promessa não cumprida, oportunidade claramente perdida, demora excessiva pra responder, tom rude ou inadequado). Se não houver nada crítico, use lista vazia []. Escreva em português do Brasil.";
+      const usuario = "Vendedor: " + alvo.nome + "\nConversas analisadas: " + convs.length + (totalConversas > convs.length ? " (as " + convs.length + " mais recentes de " + totalConversas + ")" : "") + "\n\n" + transcript;
+
+      const bruto = await analisarComIA(sistema, usuario);
+      let analise = null;
+      try { analise = JSON.parse(String(bruto).replace(/```json/gi, "").replace(/```/g, "").trim()); } catch (_) {}
+      res.json({ ok: true, vendedor: alvo.nome, totalConversas, analisadas: convs.length, analise, bruto: analise ? null : bruto });
+    } catch (e) { res.status(500).json({ error: e.message || "Falha na análise" }); }
   });
 
   app.get("/api/oficial/campanhas", auth, (req, res) => {

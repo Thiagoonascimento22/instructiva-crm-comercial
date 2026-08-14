@@ -407,6 +407,7 @@ export default function App() {
     crm: { t: "Pipeline", s: "Funil de leads — arraste entre as etapas, atribua e acompanhe" },
     vendas: { t: "Vendas", s: "Metas, ranking e todas as vendas do time" },
     desempenho: { t: "Desempenho", s: "Métricas, cargo, faixa e progresso de cada vendedor" },
+    analiseia: { t: "Análise IA", s: "A IA lê as conversas e aponta o que está bom, o que melhorar e alertas" },
     sistema: { t: "Sistema", s: "Controle dos módulos entregues — visível só pra você (dono)" },
     temperatura: { t: "Temperatura", s: "Melhores horários e dias — quando os leads mais respondem" },
     minhasSolicitacoes: { t: "Minhas solicitações", s: "Acompanhe seus pedidos ao suporte" },
@@ -429,6 +430,7 @@ export default function App() {
           {(isGer || vendPode("crm")) && mod("crm") && <NavBtn ic={I.pipe} label="Pipeline" active={view === "crm"} onClick={() => setView("crm")} />}
           {(isGer || vendPode("vendas")) && mod("vendas") && <NavBtn ic={I.gauge} label="Vendas" active={view === "vendas"} onClick={() => setView("vendas")} />}
           {(isGer || (isVend && !(acessoVend && acessoVend.desempenhoOculto))) && mod("desempenho") && <NavBtn ic={I.spark} label="Desempenho" active={view === "desempenho"} onClick={() => setView("desempenho")} />}
+          {(isGer || isVend) && mod("caixa") && <NavBtn ic={I.spark} label="Análise IA" active={view === "analiseia"} onClick={() => setView("analiseia")} />}
           {!isSuporte && mod("caixa") && <NavBtn ic={I.wa} label="Caixa de entrada" active={view === "whatsapp"} onClick={() => setView("whatsapp")} />}
           {(isGer || isVend) && mod("disparo") && <NavBtn ic={I.send} label="Disparo" active={view === "disparo"} onClick={() => setView("disparo")} />}
           {isGer && mod("numeros") && <NavBtn ic={I.wa} label="Números" active={view === "numeros"} onClick={() => setView("numeros")} />}
@@ -484,6 +486,7 @@ export default function App() {
           {view === "vendas" && (isGer || vendPode("vendas")) && mod("vendas") && <PainelVendas showToast={showToast} isGer={isGer} />}
           {view === "crm" && (isGer || vendPode("crm")) && mod("crm") && <OficialCRM showToast={showToast} isGer={isGer} onAbrirWhats={(tel, canal, nome) => { setWaTarget({ numero: tel, canal, nome }); setView("whatsapp"); }} onDisparar={(preset) => { setDisparoPreset(preset); setView("disparo"); }} />}
           {view === "desempenho" && (isGer || (isVend && !(acessoVend && acessoVend.desempenhoOculto))) && mod("desempenho") && <Desempenho showToast={showToast} isGer={isGer} />}
+          {view === "analiseia" && (isGer || isVend) && mod("caixa") && <AnaliseIAVendedor showToast={showToast} isGer={isGer} />}
           {view === "temperatura" && (isGer || vendPode("temperatura")) && mod("temperatura") && <OficialTemperatura showToast={showToast} />}
           {view === "minhasSolicitacoes" && !isGer && !isSuporte && <PaginaMinhasSolicitacoes itens={minhasSol} recarregar={carregarMinhasSol} showToast={showToast} />}
           {view === "solicitacoes" && (isGer || isSuporte) && <PaginaSolicitacoes showToast={showToast} readonly={isGer} />}
@@ -6147,6 +6150,114 @@ function Stat({ label, valor, cor, borda }) {
     <div style={{ padding: "0 14px", borderLeft: borda ? "1px solid " + DES.line : "none", flex: 1, minWidth: 0 }}>
       <div style={{ fontSize: 10.5, color: DES.mut2, fontWeight: 500, marginBottom: 3, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{label}</div>
       <div style={{ fontSize: 16, fontWeight: 700, color: cor || DES.ink, whiteSpace: "nowrap" }}>{valor}</div>
+    </div>
+  );
+}
+
+function AnaliseIAVendedor({ showToast, isGer = true }) {
+  const [vendedores, setVendedores] = useState([]);
+  const [vendedorId, setVendedorId] = useState("");
+  const [periodo, setPeriodo] = useState("7");
+  const [dataEsp, setDataEsp] = useState("");
+  const [carregando, setCarregando] = useState(false);
+  const [res, setRes] = useState(null);
+
+  useEffect(() => { if (isGer) api.ofVendedoresLista().then((r) => setVendedores((r && r.vendedores) || r || [])).catch(() => {}); }, [isGer]);
+
+  function periodoParaDatas() {
+    const agora = Date.now();
+    if (periodo === "data") {
+      if (!dataEsp) return null;
+      const [y, m, d] = dataEsp.split("-").map(Number);
+      const ini = new Date(y, m - 1, d, 0, 0, 0).getTime();
+      const fim = new Date(y, m - 1, d, 23, 59, 59).getTime();
+      return { de: ini, ate: fim };
+    }
+    if (periodo === "hoje") { const dt = new Date(); dt.setHours(0, 0, 0, 0); return { de: dt.getTime(), ate: agora }; }
+    const dias = Number(periodo);
+    return { de: agora - dias * 86400000, ate: agora };
+  }
+
+  async function analisar() {
+    if (periodo === "data" && !dataEsp) { showToast("Escolha uma data"); return; }
+    const dt = periodoParaDatas();
+    setCarregando(true); setRes(null);
+    try {
+      const r = await api.ofAnaliseIA(isGer ? (vendedorId || undefined) : undefined, dt.de, dt.ate);
+      setRes(r);
+      if (r.vazio) showToast("Nenhuma conversa nesse período");
+    } catch (e) { showToast("✗ " + e.message); }
+    setCarregando(false);
+  }
+
+  const A = res && res.analise;
+  const Bloco = ({ titulo, itens, cor, bg, ico }) => (!itens || !itens.length) ? null : (
+    <div style={{ background: bg, border: "1px solid " + cor + "33", borderRadius: 14, padding: 18, marginBottom: 14 }}>
+      <div style={{ fontSize: 13.5, fontWeight: 700, color: cor, marginBottom: 10, display: "flex", alignItems: "center", gap: 7 }}>{ico} {titulo}</div>
+      <ul style={{ margin: 0, paddingLeft: 20, display: "flex", flexDirection: "column", gap: 7 }}>
+        {itens.map((t, i) => <li key={i} style={{ fontSize: 13.5, color: DES.ink, lineHeight: 1.5 }}>{t}</li>)}
+      </ul>
+    </div>
+  );
+
+  return (
+    <div style={{ maxWidth: 860, margin: "0 auto" }}>
+      <div style={{ marginBottom: 20 }}>
+        <div style={{ fontSize: 22, fontWeight: 700, color: DES.ink, letterSpacing: "-.01em" }}>Análise IA</div>
+        <div style={{ fontSize: 13, color: DES.mut, marginTop: 2 }}>A IA lê as conversas {isGer ? "do vendedor" : "suas"} no período e aponta o que está bom, o que melhorar, e alertas.</div>
+      </div>
+
+      <div style={{ background: "#fff", border: "1px solid " + DES.line, borderRadius: 16, padding: 18, marginBottom: 20, display: "flex", gap: 12, alignItems: "flex-end", flexWrap: "wrap", boxShadow: "0 1px 2px rgba(15,23,42,.04)" }}>
+        {isGer && (
+          <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
+            <span style={{ fontSize: 10.5, color: DES.mut2, fontWeight: 700, letterSpacing: ".06em", textTransform: "uppercase" }}>Vendedor</span>
+            <select className="input" value={vendedorId} onChange={(e) => setVendedorId(e.target.value)} style={{ minWidth: 180 }}>
+              <option value="">Eu ({"gerente"})</option>
+              {vendedores.map((v) => <option key={v.id} value={v.id}>{v.nome}</option>)}
+            </select>
+          </div>
+        )}
+        <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
+          <span style={{ fontSize: 10.5, color: DES.mut2, fontWeight: 700, letterSpacing: ".06em", textTransform: "uppercase" }}>Período</span>
+          <select className="input" value={periodo} onChange={(e) => setPeriodo(e.target.value)} style={{ minWidth: 150 }}>
+            <option value="hoje">Hoje</option>
+            <option value="7">Últimos 7 dias</option>
+            <option value="30">Últimos 30 dias</option>
+            <option value="data">Data específica</option>
+          </select>
+        </div>
+        {periodo === "data" && (
+          <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
+            <span style={{ fontSize: 10.5, color: DES.mut2, fontWeight: 700, letterSpacing: ".06em", textTransform: "uppercase" }}>Dia</span>
+            <input type="date" className="input" value={dataEsp} onChange={(e) => setDataEsp(e.target.value)} />
+          </div>
+        )}
+        <button className="btn btn-primary" onClick={analisar} disabled={carregando} style={{ height: 40 }}>
+          {carregando ? "Analisando…" : "✨ Analisar"}
+        </button>
+      </div>
+
+      {carregando && <div style={{ padding: 40, textAlign: "center", color: DES.mut, background: "#fff", borderRadius: 16, border: "1px solid " + DES.line }}>A IA está lendo as conversas… isso leva alguns segundos.</div>}
+
+      {res && res.vazio && !carregando && (
+        <div style={{ padding: 30, color: DES.mut, background: "#fff", borderRadius: 16, border: "1px solid " + DES.line, textAlign: "center" }}>Nenhuma conversa {isGer ? "desse vendedor" : "sua"} nesse período.</div>
+      )}
+
+      {res && !res.vazio && !carregando && (
+        <div>
+          <div style={{ fontSize: 12, color: DES.mut2, marginBottom: 14 }}>Analisadas {res.analisadas} conversa(s){res.totalConversas > res.analisadas ? " (as mais recentes de " + res.totalConversas + ")" : ""}{isGer && res.vendedor ? " · " + res.vendedor : ""}.</div>
+          {A ? <>
+            {A.resumo && <div style={{ background: "linear-gradient(135deg,#fff7ed,#f0fdf4)", border: "1px solid " + DES.line, borderRadius: 16, padding: 20, marginBottom: 16, fontSize: 15, fontWeight: 600, color: DES.ink, lineHeight: 1.5 }}>{A.resumo}</div>}
+            <Bloco titulo="O que está indo bem" itens={A.bem} cor={DES.green} bg="#f0fdf4" ico="✅" />
+            <Bloco titulo="O que precisa melhorar" itens={A.melhorar} cor={DES.orange} bg="#fff7ed" ico="⚠️" />
+            <Bloco titulo="Pontos fortes" itens={A.fortes} cor="#2563eb" bg="#eff6ff" ico="💪" />
+            <Bloco titulo="Pontos fracos" itens={A.fracos} cor={DES.mut} bg="#f8fafc" ico="📉" />
+            <Bloco titulo="Alertas críticos" itens={A.criticos} cor="#dc2626" bg="#fef2f2" ico="🚨" />
+          </> : (
+            <div style={{ background: "#fff", border: "1px solid " + DES.line, borderRadius: 16, padding: 20, fontSize: 14, color: DES.ink, whiteSpace: "pre-wrap", lineHeight: 1.6 }}>{res.bruto}</div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
