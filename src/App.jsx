@@ -6159,6 +6159,7 @@ function AnaliseIAVendedor({ showToast, isGer = true }) {
   const [vendedorId, setVendedorId] = useState("");
   const [periodo, setPeriodo] = useState("7");
   const [dataEsp, setDataEsp] = useState("");
+  const [dataEspAte, setDataEspAte] = useState("");
   const [carregando, setCarregando] = useState(false);
   const [res, setRes] = useState(null);
   const [modo, setModo] = useState("vendedor"); // gerente: vendedor | objecoes | abordagem
@@ -6171,7 +6172,10 @@ function AnaliseIAVendedor({ showToast, isGer = true }) {
       if (!dataEsp) return null;
       const [y, m, d] = dataEsp.split("-").map(Number);
       const ini = new Date(y, m - 1, d, 0, 0, 0).getTime();
-      const fim = new Date(y, m - 1, d, 23, 59, 59).getTime();
+      let fimBase = dataEsp;
+      if (dataEspAte && dataEspAte >= dataEsp) fimBase = dataEspAte;
+      const [fy, fm, fd] = fimBase.split("-").map(Number);
+      const fim = new Date(fy, fm - 1, fd, 23, 59, 59).getTime();
       return { de: ini, ate: fim };
     }
     if (periodo === "hoje") { const dt = new Date(); dt.setHours(0, 0, 0, 0); return { de: dt.getTime(), ate: agora }; }
@@ -6243,10 +6247,16 @@ function AnaliseIAVendedor({ showToast, isGer = true }) {
           </select>
         </div>
         {periodo === "data" && (
-          <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
-            <span style={{ fontSize: 10.5, color: DES.mut2, fontWeight: 700, letterSpacing: ".06em", textTransform: "uppercase" }}>Dia</span>
-            <input type="date" className="input" value={dataEsp} onChange={(e) => setDataEsp(e.target.value)} />
-          </div>
+          <>
+            <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
+              <span style={{ fontSize: 10.5, color: DES.mut2, fontWeight: 700, letterSpacing: ".06em", textTransform: "uppercase" }}>De</span>
+              <input type="date" className="input" value={dataEsp} onChange={(e) => setDataEsp(e.target.value)} />
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
+              <span style={{ fontSize: 10.5, color: DES.mut2, fontWeight: 700, letterSpacing: ".06em", textTransform: "uppercase" }}>Até (opcional)</span>
+              <input type="date" className="input" value={dataEspAte} min={dataEsp || undefined} onChange={(e) => setDataEspAte(e.target.value)} />
+            </div>
+          </>
         )}
         <button className="btn btn-primary" onClick={analisar} disabled={carregando} style={{ height: 40 }}>
           {carregando ? "Analisando…" : "✨ Analisar"}
@@ -6315,6 +6325,15 @@ function AnaliseIAVendedor({ showToast, isGer = true }) {
                 </div>
               </div>
             )}
+            {A.followup && A.followup.comentario && (() => {
+              const st = A.followup.status === "ok" ? { ic: "✅", cor: DES.green, lb: "Bom" } : A.followup.status === "parcial" ? { ic: "⚠️", cor: DES.orange, lb: "Precisa melhorar" } : { ic: "❌", cor: "#dc2626", lb: "Não faz" };
+              return (
+                <div style={{ background: "var(--surface-2)", border: "1px solid var(--line)", borderLeft: "3px solid " + st.cor, borderRadius: 14, padding: 16, marginBottom: 14 }}>
+                  <div style={{ fontSize: 13.5, fontWeight: 700, color: st.cor, marginBottom: 6, display: "flex", alignItems: "center", gap: 7 }}>{st.ic} Follow-up <span style={{ fontSize: 11, fontWeight: 600 }}>· {st.lb}</span></div>
+                  <div style={{ fontSize: 13, color: DES.ink, lineHeight: 1.55 }}>{A.followup.comentario}</div>
+                </div>
+              );
+            })()}
             <Bloco titulo="O que está indo bem" itens={A.bem} cor={DES.green} bg="#f0fdf4" ico="✅" />
             <Bloco titulo="O que precisa melhorar" itens={A.melhorar} cor={DES.orange} bg="#fff7ed" ico="⚠️" />
             <Bloco titulo="Pontos fortes" itens={A.fortes} cor="#2563eb" bg="#eff6ff" ico="💪" />
