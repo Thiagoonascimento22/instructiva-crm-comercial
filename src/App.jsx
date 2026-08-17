@@ -6161,6 +6161,7 @@ function AnaliseIAVendedor({ showToast, isGer = true }) {
   const [dataEsp, setDataEsp] = useState("");
   const [carregando, setCarregando] = useState(false);
   const [res, setRes] = useState(null);
+  const [modo, setModo] = useState("vendedor"); // gerente: vendedor | objecoes | abordagem
 
   useEffect(() => { if (isGer) api.ofVendedoresLista().then((r) => setVendedores((r && r.vendedores) || r || [])).catch(() => {}); }, [isGer]);
 
@@ -6183,14 +6184,19 @@ function AnaliseIAVendedor({ showToast, isGer = true }) {
     const dt = periodoParaDatas();
     setCarregando(true); setRes(null);
     try {
-      const r = await api.ofAnaliseIA(isGer ? (vendedorId || undefined) : undefined, dt.de, dt.ate);
-      setRes(r);
+      const ehRelatorio = isGer && (modo === "objecoes" || modo === "abordagem");
+      const r = ehRelatorio
+        ? await api.ofRelatorioIA(modo, dt.de, dt.ate, vendedorId || undefined)
+        : await api.ofAnaliseIA(isGer ? (vendedorId || undefined) : undefined, dt.de, dt.ate);
+      setRes({ ...r, _modo: ehRelatorio ? modo : "vendedor" });
       if (r.vazio) showToast("Nenhuma conversa nesse período");
     } catch (e) { showToast("✗ " + e.message); }
     setCarregando(false);
   }
 
-  const A = res && res.analise;
+  const A = res && res._modo === "vendedor" && res.analise;
+  const REL = res && res._modo && res._modo !== "vendedor" && res.relatorio;
+  const nivelCor = (n) => { const s = String(n || "").toLowerCase(); if (s === "alta" || s === "ruim") return "#dc2626"; if (s === "média" || s === "media" || s === "regular") return DES.orange; if (s === "baixa" || s === "bom") return DES.green; return DES.mut; };
   const Bloco = ({ titulo, itens, cor, ico }) => (!itens || !itens.length) ? null : (
     <div style={{ background: "var(--surface-2)", border: "1px solid var(--line)", borderLeft: "3px solid " + cor, borderRadius: 14, padding: 18, marginBottom: 14 }}>
       <div style={{ fontSize: 13.5, fontWeight: 700, color: cor, marginBottom: 10, display: "flex", alignItems: "center", gap: 7 }}>{ico} {titulo}</div>
@@ -6210,9 +6216,19 @@ function AnaliseIAVendedor({ showToast, isGer = true }) {
       <div style={{ background: "var(--card)", border: "1px solid " + DES.line, borderRadius: 16, padding: 18, marginBottom: 20, display: "flex", gap: 12, alignItems: "flex-end", flexWrap: "wrap", boxShadow: "0 1px 2px rgba(15,23,42,.04)" }}>
         {isGer && (
           <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
-            <span style={{ fontSize: 10.5, color: DES.mut2, fontWeight: 700, letterSpacing: ".06em", textTransform: "uppercase" }}>Vendedor</span>
+            <span style={{ fontSize: 10.5, color: DES.mut2, fontWeight: 700, letterSpacing: ".06em", textTransform: "uppercase" }}>Tipo</span>
+            <select className="input" value={modo} onChange={(e) => { setModo(e.target.value); setRes(null); }} style={{ minWidth: 180 }}>
+              <option value="vendedor">Análise por vendedor</option>
+              <option value="objecoes">Relatório de objeções (time)</option>
+              <option value="abordagem">Relatório de abordagem (time)</option>
+            </select>
+          </div>
+        )}
+        {isGer && (
+          <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
+            <span style={{ fontSize: 10.5, color: DES.mut2, fontWeight: 700, letterSpacing: ".06em", textTransform: "uppercase" }}>{modo === "vendedor" ? "Vendedor" : "Vendedor (opcional)"}</span>
             <select className="input" value={vendedorId} onChange={(e) => setVendedorId(e.target.value)} style={{ minWidth: 180 }}>
-              <option value="">Eu ({"gerente"})</option>
+              <option value="">{modo === "vendedor" ? "Eu (gerente)" : "Time todo"}</option>
               {vendedores.map((v) => <option key={v.id} value={v.id}>{v.nome}</option>)}
             </select>
           </div>
@@ -6243,7 +6259,39 @@ function AnaliseIAVendedor({ showToast, isGer = true }) {
         <div style={{ padding: 30, color: DES.mut, background: "var(--card)", borderRadius: 16, border: "1px solid " + DES.line, textAlign: "center" }}>Nenhuma conversa {isGer ? "desse vendedor" : "sua"} nesse período.</div>
       )}
 
-      {res && !res.vazio && !carregando && (
+      {res && !res.vazio && !carregando && REL && (
+        <div>
+          <div style={{ fontSize: 12, color: DES.mut2, marginBottom: 14 }}>Relatório de {res._modo === "objecoes" ? "objeções" : "abordagem"} · {res.analisadas} conversa(s) do time analisada(s){res.totalConversas > res.analisadas ? " (as com mais troca, de " + res.totalConversas + ")" : ""}.</div>
+          {REL.resumo && <div style={{ background: "var(--surface-2)", border: "1px solid " + DES.line, borderLeft: "3px solid " + DES.orange, borderRadius: 16, padding: 20, marginBottom: 16, fontSize: 14.5, fontWeight: 500, color: DES.ink, lineHeight: 1.6 }}>{REL.resumo}</div>}
+          {Array.isArray(REL.itens) && REL.itens.length > 0 && (
+            <div style={{ display: "flex", flexDirection: "column", gap: 12, marginBottom: 16 }}>
+              {REL.itens.map((it, i) => (
+                <div key={i} style={{ background: "var(--card)", border: "1px solid " + DES.line, borderLeft: "3px solid " + nivelCor(it.nivel), borderRadius: 14, padding: 16 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 10, flexWrap: "wrap" }}>
+                    <span style={{ fontSize: 14, fontWeight: 700, color: DES.ink }}>{it.titulo}</span>
+                    {it.nivel && <span style={{ fontSize: 11, fontWeight: 700, color: nivelCor(it.nivel), background: "var(--surface-2)", borderRadius: 20, padding: "2px 10px", textTransform: "uppercase", letterSpacing: ".04em" }}>{it.nivel}</span>}
+                  </div>
+                  {it.detalhe && <div style={{ fontSize: 13, color: DES.mut, marginTop: 6, lineHeight: 1.55 }}>{it.detalhe}</div>}
+                  {it.exemplo && <div style={{ fontSize: 12.5, color: DES.mut2, marginTop: 8, padding: "8px 11px", background: "var(--surface-2)", borderRadius: 9, fontStyle: "italic" }}>Ex.: {it.exemplo}</div>}
+                  {it.recomendacao && <div style={{ fontSize: 13, color: DES.ink, marginTop: 8, display: "flex", gap: 6 }}><span>💡</span><span>{it.recomendacao}</span></div>}
+                </div>
+              ))}
+            </div>
+          )}
+          <Bloco titulo="Destaques" itens={REL.destaques} cor="#2563eb" ico="⭐" />
+          {Array.isArray(REL.recomendacoes) && REL.recomendacoes.length > 0 && (
+            <div style={{ background: "var(--surface-2)", border: "1px solid " + DES.line, borderLeft: "3px solid " + DES.green, borderRadius: 14, padding: 18, marginBottom: 14 }}>
+              <div style={{ fontSize: 13.5, fontWeight: 700, color: DES.green, marginBottom: 10, display: "flex", alignItems: "center", gap: 7 }}>✅ Recomendações pro time</div>
+              <ul style={{ margin: 0, paddingLeft: 20, display: "flex", flexDirection: "column", gap: 8 }}>
+                {REL.recomendacoes.map((t, i) => <li key={i} style={{ fontSize: 13.5, color: DES.ink, lineHeight: 1.55 }}>{t}</li>)}
+              </ul>
+            </div>
+          )}
+          {!REL && res.bruto && <div style={{ background: "var(--card)", border: "1px solid " + DES.line, borderRadius: 16, padding: 20, fontSize: 14, color: DES.ink, whiteSpace: "pre-wrap", lineHeight: 1.6 }}>{res.bruto}</div>}
+        </div>
+      )}
+
+      {res && !res.vazio && !carregando && res._modo === "vendedor" && (
         <div>
           <div style={{ fontSize: 12, color: DES.mut2, marginBottom: 14 }}>Analisadas {res.analisadas} conversa(s){res.totalConversas > res.analisadas ? " (as mais recentes de " + res.totalConversas + ")" : ""}{isGer && res.vendedor ? " · " + res.vendedor : ""}.</div>
           {A ? <>

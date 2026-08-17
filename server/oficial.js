@@ -3442,6 +3442,66 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
     } catch (e) { res.status(500).json({ error: e.message || "Falha na análise" }); }
   });
 
+  // ===== RELATÓRIOS DO TIME (só gerente): objeções e abordagem =====
+  app.post("/api/oficial/relatorio-ia", auth, gerenteOnly, async (req, res) => {
+    try {
+      garantirEstrutura();
+      const b = req.body || {};
+      const tipo = b.tipo === "abordagem" ? "abordagem" : "objecoes";
+      const de = parseInt(b.de) || 0, ate = parseInt(b.ate) || 0;
+      const soVendedor = b.vendedorId || null; // opcional: focar num vendedor
+      const nomeDe = (id) => { const u = (db.users || []).find((x) => x.id === id); return u ? u.nome : ""; };
+      // reúne conversas oficiais do time no período
+      const chats = Object.values(db.waChats || {}).filter((c) => c && c.canal === "oficial" && (!soVendedor || c.vendedorId === soVendedor));
+      let convs = [];
+      for (const c of chats) {
+        const msgs = (c.mensagens || []).filter((m) => { const ts = m.ts || 0; return (!de || ts >= de) && (!ate || ts <= ate); });
+        const respostas = msgs.filter((m) => m.role === "them").length;
+        if (msgs.length && respostas > 0) convs.push({ nome: c.nome || c.numero, vend: nomeDe(c.vendedorId), respostas, msgs });
+      }
+      const totalConversas = convs.length;
+      if (!totalConversas) return res.json({ ok: true, vazio: true, totalConversas: 0, tipo });
+      // prioriza conversas com mais troca (mais objeção/abordagem pra analisar)
+      convs.sort((a, c) => c.respostas - a.respostas);
+      convs = convs.slice(0, 60);
+      const linhas = [];
+      for (const c of convs) {
+        linhas.push("=== Lead " + c.nome + (c.vend ? " (vendedor: " + c.vend + ")" : "") + " ===");
+        for (const m of c.msgs.slice(-24)) {
+          const quem = m.role === "them" ? "CLIENTE" : "VENDEDOR";
+          let txt = (m.role === "them" && m.transcricao) ? m.transcricao
+            : (m.content || (m.template ? "[template: " + m.template + "]" : (m.tipo && m.tipo !== "text" ? "[" + m.tipo + "]" : "")));
+          txt = String(txt || "").replace(/\s+/g, " ").slice(0, 260);
+          if (txt) linhas.push(quem + ": " + txt);
+        }
+        linhas.push("");
+      }
+      let transcript = linhas.join("\n");
+      if (transcript.length > 65000) transcript = transcript.slice(0, 65000) + "\n...(cortado por tamanho)";
+
+      const base = "Você é um analista de vendas sênior da Instructiva, especialista no método dos 7 Passos da Venda (padrão Conquer). Leia as conversas de WhatsApp do TIME comercial e produza um relatório PROFUNDO e específico, citando situações reais (nunca invente). No método: objeções devem ser antecipadas no combinado (DI, 'kimono aberto'); preço se fecha com ancoragem + silêncio; o certo é puxar pra LIGAÇÃO (vender tudo no zap é fraco); postura de confiança; a venda está na conexão.\n\n";
+      let sistema;
+      if (tipo === "objecoes") {
+        sistema = base
+          + "Faça um RELATÓRIO DE OBJEÇÕES: identifique as objeções que os leads MAIS levantam (ex.: preço/'está caro', falta de tempo, 'vou pensar', 'preciso falar com esposa/sócio/pais', 'não tenho interesse agora', 'já faço outro curso', etc.), estime a frequência de cada uma, cite exemplos reais e avalie COMO os vendedores estão respondendo (bem ou mal) e onde o time perde venda.\n"
+          + "Responda SOMENTE com JSON válido, sem texto fora dele:\n"
+          + "{\"resumo\":\"3 a 6 frases sobre o panorama de objeções no período\",\"itens\":[{\"titulo\":\"a objeção\",\"nivel\":\"alta\",\"detalhe\":\"como o time responde hoje e o que falha\",\"exemplo\":\"trecho ou situação real\",\"recomendacao\":\"como contornar essa objeção (ligado ao método)\"}],\"destaques\":[\"achados principais\"],\"recomendacoes\":[\"ações práticas pro time\"]}\n"
+          + "Regras: \"nivel\" é a frequência ('alta', 'média' ou 'baixa'). Ordene os itens da objeção mais frequente pra menos. Português do Brasil, com profundidade.";
+      } else {
+        sistema = base
+          + "Faça um RELATÓRIO DE ABORDAGEM: avalie COMO o time aborda/abre as conversas com os leads — o tom, se puxam pra LIGAÇÃO (certo) ou tentam vender tudo no zap (fraco), se fazem conexão e perguntas, se seguem os 7 passos na abordagem inicial, e a velocidade de resposta. Identifique padrões bons e ruins com exemplos reais.\n"
+          + "Responda SOMENTE com JSON válido, sem texto fora dele:\n"
+          + "{\"resumo\":\"3 a 6 frases sobre a abordagem do time no período\",\"itens\":[{\"titulo\":\"o padrão de abordagem observado\",\"nivel\":\"bom\",\"detalhe\":\"explicação do padrão e impacto\",\"exemplo\":\"situação real\",\"recomendacao\":\"o que ajustar\"}],\"destaques\":[\"achados principais\"],\"recomendacoes\":[\"ações práticas pro time\"]}\n"
+          + "Regras: \"nivel\" é a qualidade do padrão ('bom', 'regular' ou 'ruim'). Português do Brasil, com profundidade.";
+      }
+      const usuario = "Conversas do time analisadas: " + convs.length + (soVendedor ? " (vendedor: " + nomeDe(soVendedor) + ")" : " (todos os vendedores)") + "\n\n" + transcript;
+      const bruto = await analisarComIA(sistema, usuario, 2600);
+      let relatorio = null;
+      try { relatorio = JSON.parse(String(bruto).replace(/```json/gi, "").replace(/```/g, "").trim()); } catch (_) {}
+      res.json({ ok: true, tipo, totalConversas, analisadas: convs.length, relatorio, bruto: relatorio ? null : bruto });
+    } catch (e) { res.status(500).json({ error: e.message || "Falha no relatório" }); }
+  });
+
   app.get("/api/oficial/campanhas", auth, (req, res) => {
     let campanhas = db.oficial.campanhas || [];
     if (req.user.role !== "gerente") {
