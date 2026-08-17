@@ -1820,7 +1820,7 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
   }
   function crmLeadPublico(l) {
     const v = l.vendedorId ? (db.users || []).find((u) => u.id === l.vendedorId) : null;
-    return { id: l.id, nome: l.nome, telefone: l.telefone, email: l.email || "", curso: l.curso || "", etapa: l.etapa, vendedorId: l.vendedorId || null, vendedorNome: v ? v.nome : "", vendedorFoto: v ? (v.foto || "") : "", valor: l.valor || 0, formaPagamento: l.formaPagamento || "", tags: l.tags || [], tarefa: l.tarefa || null, reservaNome: l.reservaNome || "", origem: l.origem || "manual", notas: l.notas || [], historico: l.historico || [], criadoEm: l.criadoEm, atualizadoEm: l.atualizadoEm };
+    return { id: l.id, nome: l.nome, telefone: l.telefone, email: l.email || "", curso: l.curso || "", etapa: l.etapa, vendedorId: l.vendedorId || null, vendedorNome: v ? v.nome : "", vendedorFoto: v ? (v.foto || "") : "", valor: l.valor || 0, formaPagamento: l.formaPagamento || "", tags: l.tags || [], tarefa: l.tarefa || null, reservaNome: l.reservaNome || "", origem: l.origem || "manual", respostasFormulario: l.respostasFormulario || null, notas: l.notas || [], historico: l.historico || [], criadoEm: l.criadoEm, atualizadoEm: l.atualizadoEm };
   }
   function proximoVendedorCRM() {
     garantirCRM();
@@ -2237,6 +2237,24 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
     if (_rsvRate.size > 5000) _rsvRate.clear();
     return true;
   }
+  // sanitiza as respostas do formulário (aditivo, opcional) — protege o banco
+  function sanitizarRespostasFormulario(entrada) {
+    if (!entrada || typeof entrada !== "object" || Array.isArray(entrada)) return null;
+    const out = {}; let n = 0;
+    for (const [k, v] of Object.entries(entrada)) {
+      if (n >= 40) break;
+      const chave = String(k).trim().slice(0, 80);
+      if (!chave || v == null) continue;
+      let val;
+      if (typeof v === "string") { val = v.slice(0, 1000); if (!val.trim()) continue; }
+      else if (typeof v === "number" || typeof v === "boolean") val = v;
+      else if (Array.isArray(v)) { val = v.map((x) => String(x).slice(0, 200)).slice(0, 20); if (!val.length) continue; }
+      else val = String(v).slice(0, 1000);
+      out[chave] = val; n++;
+    }
+    return Object.keys(out).length ? out : null;
+  }
+
   app.post("/api/reserva/:slug", (req, res) => {
     garantirEstrutura(); garantirCRM();
     const lista = (db.oficial.reservaListas || []).find((x) => x.slug === req.params.slug);
@@ -2247,6 +2265,7 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
     const nome = String(b.nome || "").trim().slice(0, 80);
     const telefone = String(b.telefone || "").replace(/\D/g, "");
     const email = String(b.email || "").trim().slice(0, 120);
+    const respForm = sanitizarRespostasFormulario(b.respostasFormulario); // NOVO: opcional, retrocompatível
     if (!nome) return res.status(400).json({ error: "Informe seu nome" });
     if (telefone.length < 10 || telefone.length > 13) return res.status(400).json({ error: "WhatsApp inválido" });
     // opção de pagamento escolhida (forma + preço)
@@ -2264,9 +2283,12 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
     // o lead já PERTENCE a esta lista? (aguenta o campo antigo reservaId e o novo reservaIds)
     const naEstaLista = (x) => x.reservaId === lista.id || (Array.isArray(x.reservaIds) && x.reservaIds.includes(lista.id));
 
-    // 1) JÁ ESTÁ NESTA LISTA -> não faz nada (não duplica)
+    // 1) JÁ ESTÁ NESTA LISTA -> não duplica; se vierem respostas do formulário, atualiza-as
     const jaNaLista = (db.oficial.crmLeads || []).find((x) => x.telefone === telefone && naEstaLista(x));
-    if (jaNaLista) return res.json({ ok: true, jaEstava: true });
+    if (jaNaLista) {
+      if (respForm) { jaNaLista.respostasFormulario = { ...(jaNaLista.respostasFormulario || {}), ...respForm }; jaNaLista.atualizadoEm = Date.now(); salvar(); }
+      return res.json({ ok: true, jaEstava: true });
+    }
 
     // 2) JÁ EXISTE NO CRM por telefone, mas entrou por OUTRA lista -> ATUALIZA (não duplica):
     //    adiciona a tag da nova lista e joga na pipeline dela.
@@ -2294,6 +2316,7 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
       // completa nome/email se estavam faltando
       if (nome && (!existente.nome || existente.nome === existente.telefone)) existente.nome = nome;
       if (email && !existente.email) existente.email = email;
+      if (respForm) existente.respostasFormulario = { ...(existente.respostasFormulario || {}), ...respForm }; // NOVO
       // se ainda não tinha dono e a lista distribui automático, distribui agora
       if (!existente.vendedorId && lista.distribuir !== "manual") {
         const d = donoDaLista(lista); existente.vendedorId = d.vendedorId; existente.vendedorNome = d.vendedorNome;
@@ -2316,6 +2339,7 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
       vendedorId: dist.vendedorId, vendedorNome: dist.vendedorNome,
       origem: "reserva", reservaId: lista.id, reservaIds: [lista.id], reservaNome: lista.nome,
       tags: novaTag ? [novaTag] : [],
+      respostasFormulario: respForm || undefined, // NOVO: respostas do formulário
       notas: [],
       historico: [{ tipo: "criado", texto: "Entrou pela lista de reserva: " + lista.nome + (opc ? (" — " + opc.forma) : ""), ts: Date.now() }],
       criadoEm: Date.now(), atualizadoEm: Date.now(),

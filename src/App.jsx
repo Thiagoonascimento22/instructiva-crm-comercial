@@ -6962,6 +6962,20 @@ function OficialCRM({ showToast, isGer = true, onAbrirWhats, onDisparar }) {
                 )}
               </div>
 
+              {leadSel.respostasFormulario && Object.keys(leadSel.respostasFormulario).length > 0 && (
+                <>
+                  <div className="crm-sec-t"><I.chat className="ico-inline" /> Informações da captação (formulário)</div>
+                  <div style={{ background: "var(--surface-2)", border: "1px solid var(--line)", borderRadius: 10, padding: "10px 12px", display: "flex", flexDirection: "column", gap: 9, marginBottom: 4 }}>
+                    {Object.entries(leadSel.respostasFormulario).map(([k, v]) => (
+                      <div key={k} style={{ display: "flex", flexDirection: "column", gap: 1 }}>
+                        <span style={{ fontSize: 11, color: "var(--faint)", fontWeight: 600 }}>{k}</span>
+                        <span style={{ fontSize: 13.5, color: "var(--text)", wordBreak: "break-word" }}>{Array.isArray(v) ? v.join(", ") : String(v)}</span>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              )}
+
               <div className="crm-sec-t"><I.clock className="ico-inline" /> Próxima tarefa (follow-up)</div>
               <div className="crm-tarefa-box">
                 {leadSel.tarefa && !leadSel.tarefa.feito && (
