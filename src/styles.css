@@ -2757,11 +2757,17 @@ h1, h2, h3, h4, .topbar .greet, .panel-h h3, .login-card .ttl, .login-card h2, .
 
 /* ações na conversa (transferir / suporte) */
 .of-conv-head { position: relative; }
-.of-conv-acoes { display: flex; gap: 6px; }
-.of-acao-btn { display: inline-flex; align-items: center; gap: 5px; padding: 7px 11px; border: 1px solid var(--line); background: var(--card); color: var(--muted); border-radius: 9px; font-size: 12.5px; font-weight: 600; cursor: pointer; transition: .15s; }
+.of-conv-acoes { display: flex; gap: 7px; flex-wrap: wrap; align-items: center; }
+.of-acao-btn { display: inline-flex; align-items: center; gap: 5px; padding: 8px 13px; border: 1px solid var(--line); background: var(--card); color: var(--muted); border-radius: 9px; font-size: 12.5px; font-weight: 600; cursor: pointer; transition: .15s; white-space: nowrap; }
 .of-acao-btn:hover { border-color: var(--of-green); color: var(--of-green-d); }
 .of-acao-btn.sup:hover { border-color: var(--amber); color: var(--amber); }
 .of-acao-btn .ico { width: 14px !important; height: 14px !important; }
+/* Encerrar em destaque, fácil de achar/clicar */
+.of-acao-btn.fim { background: var(--coral); border-color: var(--coral); color: #fff; }
+.of-acao-btn.fim .ico { color: #fff; }
+.of-acao-btn.fim:hover { filter: brightness(.95); border-color: var(--coral); color: #fff; }
+[data-theme="dark"] .of-acao-btn.fim { background: var(--coral); border-color: var(--coral); color: #fff; }
+[data-theme="dark"] .of-acao-btn.fim:hover { filter: brightness(1.08); border-color: var(--coral); color: #fff; }
 
 /* popover de transferência */
 .of-transfer-pop { position: absolute; top: 100%; right: 16px; margin-top: 6px; background: var(--card); border: 1px solid var(--line); border-radius: 12px; box-shadow: var(--shadow-lg); padding: 10px; min-width: 240px; z-index: 30; }
@@ -3098,9 +3104,7 @@ h1, h2, h3, h4, .topbar .greet, .panel-h h3, .login-card .ttl, .login-card h2, .
 /* nota interna (transferência) legível no dark */
 [data-theme="dark"] .of-nota { background: rgba(255,181,71,.16); color: #ffce80; }
 
-/* botão encerrar atendimento */
-.of-acao-btn.fim:hover { border-color: var(--coral); color: var(--coral); }
-[data-theme="dark"] .of-acao-btn.fim:hover { border-color: var(--coral); color: var(--coral); }
+/* botão encerrar atendimento (estilo definido acima, em destaque) */
 
 /* ============================================================
    NÚMEROS OFICIAIS — tela redesenhada

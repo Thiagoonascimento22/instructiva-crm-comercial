@@ -6390,6 +6390,9 @@ function Desempenho({ showToast, isGer = true }) {
   const totLeads = vends.reduce((s, v) => s + v.leads, 0);
   const convMedia = totLeads ? (totVendas / totLeads) * 100 : 0;
   const ticketMedio = totVendas ? totReceita / totVendas : 0;
+  // ranking mostra só os vendedores; gerentes ficam fora do ranking (mas contam nos totais acima)
+  const rankVends = vends.filter((v) => v.role !== "gerente");
+  const foraRanking = vends.filter((v) => v.role === "gerente");
 
   const mesesOpcoes = [];
   { const now = new Date(); for (let i = 0; i < 6; i++) { const d = new Date(now.getFullYear(), now.getMonth() - i, 1); mesesOpcoes.push(d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0")); } }
@@ -6430,11 +6433,11 @@ function Desempenho({ showToast, isGer = true }) {
         </div>
       )}
 
-      {vends.length === 0 ? (
+      {rankVends.length === 0 ? (
         <div style={{ padding: 40, color: DES.mut, background: "var(--card)", borderRadius: 16, border: "1px solid " + DES.line, textAlign: "center" }}>Nenhum vendedor pra mostrar neste mês.</div>
       ) : (
         <div style={{ display: "grid", gridTemplateColumns: dados.souGerente ? "repeat(auto-fill,minmax(410px,1fr))" : "minmax(0,560px)", gap: 18 }}>
-          {vends.map((v, idx) => {
+          {rankVends.map((v, idx) => {
             const cargo = cargoDe(v.cargo), faixa = faixaDe(v.faixa), fm = v.faixaMeta;
             const prox = fm ? faixaDe(fm.proxima) : null;
             const anelPct = fm ? (v.pontos / fm.pontos) * 100 : 100;
@@ -6478,6 +6481,32 @@ function Desempenho({ showToast, isGer = true }) {
               </div>
             );
           })}
+        </div>
+      )}
+
+      {dados.souGerente && foraRanking.length > 0 && (
+        <div style={{ marginTop: 26 }}>
+          <div style={{ fontSize: 13, fontWeight: 700, color: DES.mut, marginBottom: 12, display: "flex", alignItems: "center", gap: 7, textTransform: "uppercase", letterSpacing: ".04em" }}>Fora do ranking (gerência)</div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(300px,1fr))", gap: 14 }}>
+            {foraRanking.map((g) => (
+              <div key={g.id} onClick={() => setDetalheId(g.id)} style={{ background: "var(--card)", border: "1px solid " + DES.line, borderRadius: 16, padding: 18, cursor: "pointer", boxShadow: "0 1px 2px rgba(15,23,42,.04)", transition: "box-shadow .18s, transform .18s" }}
+                onMouseEnter={(e) => { e.currentTarget.style.boxShadow = "0 10px 24px rgba(15,23,42,.10)"; e.currentTarget.style.transform = "translateY(-2px)"; }}
+                onMouseLeave={(e) => { e.currentTarget.style.boxShadow = "0 1px 2px rgba(15,23,42,.04)"; e.currentTarget.style.transform = "none"; }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 14 }}>
+                  {g.foto ? <img src={g.foto} alt="" style={{ width: 42, height: 42, borderRadius: "50%", objectFit: "cover" }} /> : <div style={{ width: 42, height: 42, borderRadius: "50%", background: "linear-gradient(135deg,#F26522,#16a34a)", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700, fontSize: 16 }}>{(g.nome || "?").slice(0, 1).toUpperCase()}</div>}
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontWeight: 700, fontSize: 15.5, color: DES.ink, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{g.nome}</div>
+                    <div style={{ fontSize: 12, color: DES.mut2, marginTop: 1 }}>Gerência · fora do ranking</div>
+                  </div>
+                </div>
+                <div style={{ display: "flex", gap: 0, background: DES.bg, borderRadius: 12, padding: "12px 4px" }}>
+                  <Stat label="Receita" valor={fmtMoneyD(g.receita)} />
+                  <Stat label="Vendas" valor={String(g.vendas)} borda />
+                  <Stat label="Conversão" valor={fmtPctD(g.conversao)} cor={DES.green} borda />
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       )}
 
