@@ -112,6 +112,7 @@ export const api = {
   // ---- Vendas (metas e lançamentos) ----
   vdPainel: (mes, pessoaId) => req("GET", "/api/vendas/painel?mes=" + (mes || "") + (pessoaId ? "&pessoaId=" + pessoaId : "")),
   vdLista: (mes, pessoaId) => req("GET", "/api/vendas?mes=" + (mes || "") + (pessoaId ? "&pessoaId=" + pessoaId : "")),
+  vdPorPeriodo: (de, ate) => req("GET", "/api/vendas/por-periodo?de=" + de + "&ate=" + ate),
   vdCriar: (d) => req("POST", "/api/vendas", d),
   vdEditar: (id, d) => req("PUT", "/api/vendas/" + id, d),
   vdExcluir: (id) => req("DELETE", "/api/vendas/" + id),

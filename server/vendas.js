@@ -284,6 +284,28 @@ export function instalarVendas({ app, getDb, saveDB, proximoId, auth, gerenteOnl
     res.json({ mes, vendas: lista.map(vendaPublica) });
   });
 
+  // vendas agrupadas por vendedor num período (semana ou intervalo específico)
+  app.get("/api/vendas/por-periodo", auth, permiteVend("vendas"), (req, res) => {
+    garantir();
+    const de = parseInt(req.query.de) || 0;
+    const ate = parseInt(req.query.ate) || 0;
+    if (!de || !ate) return res.status(400).json({ error: "Informe o período (de/até)" });
+    let lista = (db.vendas.lista || []).filter((v) => v.data >= de && v.data <= ate);
+    if (ehVend(req.user)) {
+      const minha = pessoaDoUser(req.user);
+      lista = lista.filter((v) => v.pessoaId === (minha ? minha.id : "__nenhuma__"));
+    }
+    const mapa = {};
+    for (const v of lista) {
+      const k = v.pessoaId || "sem";
+      if (!mapa[k]) mapa[k] = { pessoaId: k, nome: v.pessoaNome || "—", qtd: 0, receita: 0 };
+      mapa[k].qtd++;
+      mapa[k].receita += Number(v.valor) || 0;
+    }
+    const linhas = Object.values(mapa).sort((a, b) => b.receita - a.receita || b.qtd - a.qtd);
+    res.json({ de, ate, linhas, totalQtd: linhas.reduce((s, l) => s + l.qtd, 0), totalReceita: linhas.reduce((s, l) => s + l.receita, 0) });
+  });
+
   app.post("/api/vendas", auth, permiteVend("vendas"), (req, res) => {
     garantir();
     const b = req.body || {};

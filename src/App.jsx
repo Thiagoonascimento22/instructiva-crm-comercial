@@ -5227,6 +5227,117 @@ function ModalRegistrarVenda({ prefill, isGer, onClose, showToast }) {
     pessoas={pessoas} isGer={isGer} onSalvo={() => { showToast("🎉 Venda registrada!"); onClose(); }} showToast={showToast} />;
 }
 
+function ModalVendasPeriodo({ isGer = true, onClose, showToast }) {
+  const [ini, setIni] = useState("");
+  const [fim, setFim] = useState("");
+  const [carregando, setCarregando] = useState(false);
+  const [res, setRes] = useState(null);
+  const [rotulo, setRotulo] = useState("");
+
+  function fmtBR(d) { return d.toLocaleDateString("pt-BR"); }
+  function iso(d) { return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0"); }
+
+  async function buscar(deMs, ateMs, lbl) {
+    setCarregando(true); setRes(null); setRotulo(lbl || "");
+    try { const r = await api.vdPorPeriodo(deMs, ateMs); setRes(r); }
+    catch (e) { showToast("✗ " + e.message); }
+    setCarregando(false);
+  }
+  function semana(offset) {
+    const hoje = new Date(); hoje.setHours(0, 0, 0, 0);
+    const dia = (hoje.getDay() + 6) % 7; // segunda = 0
+    const seg = new Date(hoje); seg.setDate(hoje.getDate() - dia - offset * 7);
+    const dom = new Date(seg); dom.setDate(seg.getDate() + 6); dom.setHours(23, 59, 59, 999);
+    setIni(iso(seg)); setFim(iso(dom));
+    buscar(seg.getTime(), dom.getTime(), (offset === 0 ? "Esta semana" : "Semana passada") + " · " + fmtBR(seg) + " a " + fmtBR(dom));
+  }
+  function ultimos(dias) {
+    const ate = new Date(); ate.setHours(23, 59, 59, 999);
+    const de = new Date(); de.setDate(de.getDate() - (dias - 1)); de.setHours(0, 0, 0, 0);
+    setIni(iso(de)); setFim(iso(ate));
+    buscar(de.getTime(), ate.getTime(), "Últimos " + dias + " dias");
+  }
+  function buscarCustom() {
+    if (!ini || !fim) { showToast("Escolha as duas datas"); return; }
+    const [y1, m1, d1] = ini.split("-").map(Number);
+    const [y2, m2, d2] = fim.split("-").map(Number);
+    const de = new Date(y1, m1 - 1, d1, 0, 0, 0).getTime();
+    const ate = new Date(y2, m2 - 1, d2, 23, 59, 59).getTime();
+    if (ate < de) { showToast("A data final está antes da inicial"); return; }
+    buscar(de, ate, fmtBR(new Date(de)) + " a " + fmtBR(new Date(ate)));
+  }
+  const money = (n) => "R$ " + (Number(n) || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2 });
+
+  return (
+    <div className="pop-bg" onClick={(e) => e.target === e.currentTarget && onClose()}>
+      <div className="pop-sheet" style={{ maxWidth: 640, width: "94%", maxHeight: "92vh", overflowY: "auto" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+          <div style={{ fontSize: 18, fontWeight: 700, color: "var(--text)" }}>Vendas por período</div>
+          <button onClick={onClose} style={{ background: "none", border: "none", fontSize: 22, cursor: "pointer", color: "var(--muted)" }}>×</button>
+        </div>
+        <div style={{ fontSize: 13, color: "var(--muted)", marginBottom: 16 }}>Quanto cada vendedor vendeu {isGer ? "" : "(suas vendas) "}numa semana ou num intervalo que você escolher.</div>
+
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 14 }}>
+          <button className="btn btn-sm" onClick={() => semana(0)}>Esta semana</button>
+          <button className="btn btn-sm" onClick={() => semana(1)}>Semana passada</button>
+          <button className="btn btn-sm" onClick={() => ultimos(7)}>Últimos 7 dias</button>
+          <button className="btn btn-sm" onClick={() => ultimos(30)}>Últimos 30 dias</button>
+        </div>
+
+        <div style={{ display: "flex", gap: 10, alignItems: "flex-end", flexWrap: "wrap", padding: 14, background: "var(--surface-2)", borderRadius: 12, marginBottom: 18 }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+            <span style={{ fontSize: 11, color: "var(--faint)", fontWeight: 700, textTransform: "uppercase" }}>De</span>
+            <input type="date" className="input" value={ini} onChange={(e) => setIni(e.target.value)} />
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+            <span style={{ fontSize: 11, color: "var(--faint)", fontWeight: 700, textTransform: "uppercase" }}>Até</span>
+            <input type="date" className="input" value={fim} min={ini || undefined} onChange={(e) => setFim(e.target.value)} />
+          </div>
+          <button className="btn btn-primary btn-sm" onClick={buscarCustom} style={{ height: 38 }}>Buscar</button>
+        </div>
+
+        {rotulo && <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text)", marginBottom: 10 }}>{rotulo}</div>}
+        {carregando && <div style={{ padding: 24, textAlign: "center", color: "var(--muted)" }}>Carregando…</div>}
+
+        {res && !carregando && (
+          res.linhas.length === 0 ? (
+            <div style={{ padding: 24, textAlign: "center", color: "var(--muted)", background: "var(--surface-2)", borderRadius: 12 }}>Nenhuma venda nesse período.</div>
+          ) : (
+            <div>
+              <div style={{ display: "flex", gap: 10, marginBottom: 12 }}>
+                <div style={{ flex: 1, background: "var(--surface-2)", borderRadius: 12, padding: "12px 14px" }}>
+                  <div style={{ fontSize: 11, color: "var(--faint)", fontWeight: 700, textTransform: "uppercase" }}>Total de vendas</div>
+                  <div style={{ fontSize: 22, fontWeight: 800, color: "var(--text)" }}>{res.totalQtd}</div>
+                </div>
+                <div style={{ flex: 1, background: "var(--surface-2)", borderRadius: 12, padding: "12px 14px" }}>
+                  <div style={{ fontSize: 11, color: "var(--faint)", fontWeight: 700, textTransform: "uppercase" }}>Receita total</div>
+                  <div style={{ fontSize: 22, fontWeight: 800, color: "#16a34a" }}>{money(res.totalReceita)}</div>
+                </div>
+              </div>
+              <div style={{ border: "1px solid var(--line)", borderRadius: 12, overflow: "hidden" }}>
+                <div style={{ display: "flex", padding: "9px 14px", background: "var(--surface-2)", fontSize: 11, fontWeight: 700, color: "var(--faint)", textTransform: "uppercase" }}>
+                  <span style={{ flex: 1 }}>Vendedor</span>
+                  <span style={{ width: 90, textAlign: "center" }}>Nº vendas</span>
+                  <span style={{ width: 130, textAlign: "right" }}>Receita</span>
+                </div>
+                {res.linhas.map((l, i) => (
+                  <div key={l.pessoaId} style={{ display: "flex", alignItems: "center", padding: "11px 14px", borderTop: "1px solid var(--line)", background: "var(--card)" }}>
+                    <span style={{ flex: 1, fontSize: 14, fontWeight: 600, color: "var(--text)", display: "flex", alignItems: "center", gap: 8 }}>
+                      <span style={{ fontSize: 12, fontWeight: 700, color: "var(--faint)", width: 18 }}>{i + 1}º</span>{l.nome}
+                    </span>
+                    <span style={{ width: 90, textAlign: "center", fontSize: 15, fontWeight: 700, color: "var(--text)" }}>{l.qtd}</span>
+                    <span style={{ width: 130, textAlign: "right", fontSize: 14, fontWeight: 700, color: "#16a34a" }}>{money(l.receita)}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )
+        )}
+      </div>
+    </div>
+  );
+}
+
 function PainelVendas({ showToast, isGer = true }) {
   const [mes, setMes] = useState("");
   const [dados, setDados] = useState(null);
@@ -5240,6 +5351,7 @@ function PainelVendas({ showToast, isGer = true }) {
   const [diaSel, setDiaSel] = useState(null);   // dia do mês escolhido (número) ou null
   const [showImportarV, setShowImportarV] = useState(false);
   const [showInteg, setShowInteg] = useState(false);
+  const [showPeriodo, setShowPeriodo] = useState(false);
   const [showDup, setShowDup] = useState(false);
   const [pessoaRapida, setPessoaRapida] = useState(null);
   const [porEquipe, setPorEquipe] = useState(true);   // ranking separado por time
@@ -5357,6 +5469,7 @@ function PainelVendas({ showToast, isGer = true }) {
                 <>
                   <div className="vd-menu-fora" onClick={() => setMenuAberto(false)} />
                   <div className="vd-menu">
+                    <button onClick={() => { setShowPeriodo(true); setMenuAberto(false); }}><I.gauge className="ico" /> Vendas por período</button>
                     <button onClick={() => { setShowPessoas(true); setMenuAberto(false); }}><I.users className="ico" /> Equipe &amp; metas</button>
                     <button onClick={() => { setShowImportarV(true); setMenuAberto(false); }}><I.clip className="ico" /> Importar planilha</button>
                     <button onClick={() => { setShowInteg(true); setMenuAberto(false); }}><I.link className="ico" /> Integrar sistema</button>
@@ -5680,6 +5793,7 @@ function PainelVendas({ showToast, isGer = true }) {
       )}
 
       {form && <FormVenda form={form} setForm={setForm} pessoas={pessoas} isGer={isGer} onSalvo={() => { setForm(null); carregar(); }} showToast={showToast} />}
+      {showPeriodo && <ModalVendasPeriodo isGer={isGer} onClose={() => setShowPeriodo(false)} showToast={showToast} />}
       {pessoaRapida && <ModalPessoaRapida pessoa={pessoaRapida} pessoas={pessoas} mes={mes} isGer={isGer} onVerPainel={(id) => trocarEscopo(id)} onClose={() => setPessoaRapida(null)} onSalvo={carregar} showToast={showToast} />}
       {showDup && <ModalDuplicadas mes={mes} onClose={() => setShowDup(false)} onMudou={carregar} showToast={showToast} />}
       {showInteg && <ModalIntegracao onClose={() => setShowInteg(false)} showToast={showToast} />}

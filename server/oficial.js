@@ -3434,8 +3434,8 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
         linhas.push("=== Conversa com " + c.nome + " ===");
         for (const m of c.msgs.slice(-30)) {
           const quem = m.role === "them" ? "CLIENTE" : "VENDEDOR";
-          let txt = (m.role === "them" && m.transcricao) ? m.transcricao
-            : (m.content || (m.template ? "[enviou template: " + m.template + "]" : (m.tipo && m.tipo !== "text" ? "[" + m.tipo + "]" : "")));
+          let txt = m.transcricao ? "[áudio] " + m.transcricao
+            : (m.content || (m.template ? "[enviou template: " + m.template + "]" : (m.tipo === "audio" ? "[áudio sem transcrição]" : (m.tipo && m.tipo !== "text" ? "[" + m.tipo + "]" : ""))));
           txt = String(txt || "").replace(/\s+/g, " ").slice(0, 300);
           if (txt) linhas.push(quem + ": " + txt);
         }
@@ -3453,7 +3453,7 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
         + "5. FECHAMENTO (ancoragem + silêncio): ancora o valor alto (quanto custaria algo equivalente), revela o preço acessível, faz silêncio e usa perguntas fechadas (sim/não). Conduz o cadastro com opções na hora, sem deixar pra 'depois'.\n"
         + "6. INDICAÇÕES (pega, não pede): logo após o fechamento (ou mesmo sem fechar, se houve conexão), pega indicações por voz de comando, NA HORA — nunca 'depois'.\n"
         + "7. VALIDAÇÃO: faz o cliente aquecer os indicados (reenviar a mensagem) e diz quem respondeu / quem priorizar, transformando a próxima ligação de fria em quente.\n\n"
-        + "PRINCÍPIOS-CHAVE: o certo é levar a conversa pra LIGAÇÃO (fechar tudo só por WhatsApp é fraco); postura de confiança (conduz, não implora, não fica pedindo desculpa); a venda está na conexão. IMPORTANTE: como você só vê o WhatsApp, avalie o que dá pra ver e, quando um passo deveria acontecer na ligação, verifique se o vendedor pelo menos PUXOU pra ligação — se ele tentou vender tudo no zap, aponte isso como falha.\n\n"
+        + "PRINCÍPIOS-CHAVE: o certo é levar a conversa pra LIGAÇÃO (fechar tudo só por WhatsApp é fraco); postura de confiança (conduz, não implora, não fica pedindo desculpa); a venda está na conexão. IMPORTANTE: como você só vê o WhatsApp, avalie o que dá pra ver e, quando um passo deveria acontecer na ligação, verifique se o vendedor pelo menos PUXOU pra ligação — se ele tentou vender tudo no zap, aponte isso como falha. As mensagens de áudio aparecem transcritas e marcadas com [áudio] — trate-as como o que a pessoa falou.\n\n"
         + "Responda SOMENTE com um JSON válido, sem texto fora dele, exatamente nesta estrutura:\n"
         + "{\"resumo\":\"3 a 6 frases com uma análise geral aprofundada do comportamento do vendedor no período (padrões reais, tom, ritmo, condução)\",\"passos\":[{\"n\":1,\"nome\":\"Apresentação\",\"status\":\"ok\",\"comentario\":\"o que o vendedor fez ou deixou de fazer nesse passo, com exemplo real da conversa\"}],\"followup\":{\"status\":\"ok\",\"comentario\":\"avaliação do follow-up do vendedor: ele retoma o contato com quem não respondeu ou esfriou? com que cadência? desiste cedo demais ou fica insistente/spam? cite exemplos reais\"},\"bem\":[\"...\"],\"melhorar\":[\"...\"],\"fortes\":[\"...\"],\"fracos\":[\"...\"],\"criticos\":[\"...\"],\"sugestoes\":[\"ações práticas e específicas pra melhorar, ligadas aos 7 passos\"]}\n"
         + "Regras: em \"passos\" traga os 7 passos (n de 1 a 7, com o nome certo), e \"status\" é 'ok' (fez bem), 'parcial' (fez pela metade) ou 'nao' (não fez). Cada \"comentario\" deve ser específico e citar o que viu. Em \"followup\" avalie SE e COMO o vendedor faz follow-up: retomar leads que ficaram sem responder, reengajar quem esfriou, cadência adequada (nem sumir, nem virar spam) — 'ok' se faz bem, 'parcial' se faz pouco/mal, 'nao' se não faz. \"criticos\" só para coisas graves (cliente sem resposta e sem follow-up, promessa não cumprida, oportunidade claramente perdida, demora excessiva, tom rude). Se não houver, use []. \"sugestoes\" deve ter itens acionáveis. Escreva tudo em português do Brasil, com profundidade (não seja raso).";
@@ -3493,8 +3493,8 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
         linhas.push("=== Lead " + c.nome + (c.vend ? " (vendedor: " + c.vend + ")" : "") + " ===");
         for (const m of c.msgs.slice(-24)) {
           const quem = m.role === "them" ? "CLIENTE" : "VENDEDOR";
-          let txt = (m.role === "them" && m.transcricao) ? m.transcricao
-            : (m.content || (m.template ? "[template: " + m.template + "]" : (m.tipo && m.tipo !== "text" ? "[" + m.tipo + "]" : "")));
+          let txt = m.transcricao ? "[áudio] " + m.transcricao
+            : (m.content || (m.template ? "[template: " + m.template + "]" : (m.tipo === "audio" ? "[áudio sem transcrição]" : (m.tipo && m.tipo !== "text" ? "[" + m.tipo + "]" : ""))));
           txt = String(txt || "").replace(/\s+/g, " ").slice(0, 260);
           if (txt) linhas.push(quem + ": " + txt);
         }
@@ -3806,6 +3806,9 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
       const mimeFinal = conv.mime;
       const nomeFinal = conv.filename || filename;
       const tipo = tipoPorMime(mimeFinal);
+      // áudio do vendedor -> transcreve também (pra IA "ouvir" na análise)
+      let transcricaoVend = null;
+      if (tipo === "audio") { try { transcricaoVend = await transcreverAudio(buffer, mimeFinal); } catch (_) {} }
       const mediaId = await uploadMidiaMeta(numeroCfg, buffer, mimeFinal, nomeFinal);
       const respMidia = await enviarMidiaOficial(numeroCfg, chat.numero, tipo, mediaId, caption, nomeFinal);
       const wamidMidia = respMidia && respMidia.messages && respMidia.messages[0] && respMidia.messages[0].id;
@@ -3829,6 +3832,7 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
         msgObj.filename = nomeFinal;
         msgObj.mid = "ofout" + ts + Math.random().toString(36).slice(2, 6);
         if (tipo === "document") msgObj.content = caption || nomeFinal;
+        if (transcricaoVend) msgObj.transcricao = transcricaoVend;
       } else {
         // não deu pra salvar -> mantém o rótulo de texto (fallback antigo)
         msgObj.content = caption ? rotulo + ": " + caption : rotulo;
