@@ -357,10 +357,20 @@ function render(){
   ajustarEscala();
 }
 function ajustarEscala(){
-  // escala o palco fixo (1920x1080) pra caber inteiro na tela, proporcional e centralizado
-  const escala = Math.min(window.innerWidth/1920, window.innerHeight/1080);
+  // escala o palco fixo (1920x1080) pra caber inteiro, com margem de segurança
+  // pra TVs que cortam as bordas (overscan). Guarda a margem no localStorage.
+  let margem = 0.92; // usa 92% da tela por padrão (8% de folga pro overscan)
+  try{ const m=parseFloat(localStorage.getItem("painel_margem")); if(!isNaN(m)&&m>=0.7&&m<=1) margem=m; }catch(_){}
+  const escala = Math.min(window.innerWidth/1920, window.innerHeight/1080) * margem;
   const w=document.querySelector('.wrap');
   if(w) w.style.transform = 'translate(-50%,-50%) scale('+escala+')';
+}
+// permite ajustar a folga na hora pela TV/teclado: + aumenta o painel, - diminui
+function ajustarMargem(delta){
+  let m=0.92; try{ const v=parseFloat(localStorage.getItem("painel_margem")); if(!isNaN(v))m=v; }catch(_){}
+  m=Math.min(1, Math.max(0.7, m+delta));
+  try{ localStorage.setItem("painel_margem", m.toFixed(2)); }catch(_){}
+  ajustarEscala();
 }
 function irPara(i){ idx=(i+paginas.length)%paginas.length; render(); reiniciarTimer(); }
 function passar(dir){ irPara(idx+dir); }
@@ -376,7 +386,7 @@ async function carregar(){
   if(idx>=paginas.length) idx=0;
   render();
 }
-document.addEventListener("keydown",(e)=>{ if(e.key==="ArrowRight")passar(1); else if(e.key==="ArrowLeft")passar(-1); else if(e.key.toLowerCase()==="f"){ if(document.fullscreenElement)document.exitFullscreen(); else document.documentElement.requestFullscreen(); } });
+document.addEventListener("keydown",(e)=>{ if(e.key==="ArrowRight")passar(1); else if(e.key==="ArrowLeft")passar(-1); else if(e.key.toLowerCase()==="f"){ if(document.fullscreenElement)document.exitFullscreen(); else document.documentElement.requestFullscreen(); } else if(e.key==="+"||e.key==="="){ ajustarMargem(0.02); } else if(e.key==="-"||e.key==="_"){ ajustarMargem(-0.02); } });
 window.addEventListener("resize", ajustarEscala);
 function tick(){ const d=new Date(); document.getElementById("clock").textContent=String(d.getHours()).padStart(2,"0")+":"+String(d.getMinutes()).padStart(2,"0"); }
 setInterval(tick,1000); tick();
