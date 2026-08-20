@@ -816,6 +816,7 @@ export function instalarVendas({ app, getDb, saveDB, proximoId, auth, gerenteOnl
   }
 
   app.get("/api/vendas/tv", (req, res) => {
+    res.set("Access-Control-Allow-Origin", "*"); // painel único pode puxar de outro domínio
     garantir();
     const k = String(req.query.k || "").trim();
     if (!k || (k !== chaveIntegracao() && k !== tvCodigo())) return res.status(401).json({ error: "Chave inválida" });
