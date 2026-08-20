@@ -887,6 +887,17 @@ export function instalarVendas({ app, getDb, saveDB, proximoId, auth, gerenteOnl
       recebido: daSemana.reduce((s2, v) => s2 + num(v.recebido), 0),
       qtd: daSemana.length,
     };
+    // ---- ranking por pessoa da SEMANA (mesma janela domingo-sábado) ----
+    const semPorPessoa = {};
+    daSemana.forEach((v) => {
+      if (!semPorPessoa[v.pessoaId]) semPorPessoa[v.pessoaId] = { pessoaId: v.pessoaId, valor: 0, qtd: 0 };
+      semPorPessoa[v.pessoaId].valor += num(v.valor);
+      semPorPessoa[v.pessoaId].qtd++;
+    });
+    const rankingSemana = Object.values(semPorPessoa).map((x) => {
+      const p = db.vendas.pessoas.find((y) => y.id === x.pessoaId) || {};
+      return { nome: p.nome || "—", foto: fotoDe(p), valor: x.valor, qtd: x.qtd, equipe: (p.grupo || "").trim(), foraDoPodio: !!p.foraDoPodio };
+    }).sort((a, b) => b.valor - a.valor);
     const ontem = (porDia[diaHoje - 2] || {}).valor || 0;
     // ---- dias úteis do mês (pra meta diária, como vocês usavam) ----
     let diasUteis = 0;
@@ -940,6 +951,11 @@ export function instalarVendas({ app, getDb, saveDB, proximoId, auth, gerenteOnl
                equipe: p.grupo || "", cursoTop: top ? top[0] : "", cursosQtd: Object.keys(x.cursos).length };
     }).sort((a, b) => b.valor - a.valor);
     const destaque = listaHoje.filter((x) => !x.foraDoPodio)[0] || null;
+    // ranking por pessoa de HOJE (com equipe, pro painel) — listaHoje já existe aqui
+    const rankingHoje = listaHoje.map((x) => {
+      const p = db.vendas.pessoas.find((y) => y.id === x.pessoaId) || {};
+      return { nome: x.nome, foto: x.foto, valor: x.valor, qtd: x.qtd, equipe: (p.grupo || "").trim(), foraDoPodio: !!x.foraDoPodio };
+    });
     const perseguidores = listaHoje.filter((x) => !x.foraDoPodio).slice(1, 4);
 
     // ---- ranking por equipe (sem quem é venda direta) ----
@@ -978,7 +994,7 @@ export function instalarVendas({ app, getDb, saveDB, proximoId, auth, gerenteOnl
       formas: Object.values(formas).sort((a, b) => b.valor - a.valor),
       cursos: Object.values(cursos).sort((a, b) => b.valor - a.valor),
       plataformas: Object.values(plataformas).sort((a, b) => b.valor - a.valor),
-      ranking, porDia,
+      ranking, porDia, rankingHoje, rankingSemana,
     });
   });
 
