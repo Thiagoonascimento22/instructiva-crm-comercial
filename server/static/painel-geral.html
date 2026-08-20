@@ -125,6 +125,18 @@
   .srow .sval .v{font-size:calc(17px * var(--sz));font-weight:800;}
   .srow .sval .q{font-size:calc(12px * var(--sz));color:var(--muted);margin-top:1px;font-weight:600;}
 
+
+  /* banner grande do setor (deixa claro qual setor é na TV) */
+  .setor-banner{display:flex;align-items:center;gap:calc(16px * var(--sz));margin-bottom:calc(16px * var(--sz));flex-shrink:0;}
+  .setor-banner .bico{width:calc(64px * var(--sz));height:calc(64px * var(--sz));border-radius:calc(16px * var(--sz));display:flex;align-items:center;justify-content:center;font-size:calc(34px * var(--sz));flex-shrink:0;}
+  .setor-banner .btxt b{display:block;font-size:calc(34px * var(--sz));font-weight:900;letter-spacing:-.02em;line-height:1;}
+  .setor-banner .btxt span{font-size:calc(13px * var(--sz));color:var(--muted);font-weight:600;letter-spacing:.1em;text-transform:uppercase;}
+  .st-Comercial .bico{background:rgba(37,160,107,.18);} .st-Comercial .btxt b{color:#5fd6a0;}
+  .st-Marketing .bico{background:rgba(139,92,246,.20);} .st-Marketing .btxt b{color:#b39aff;}
+  .st-Suporte .bico{background:rgba(59,130,246,.20);} .st-Suporte .btxt b{color:#7db1ff;}
+  .st-Outro .bico{background:rgba(242,101,34,.18);} .st-Outro .btxt b{color:#ff9d6b;}
+  .setor-pag.uma{grid-template-columns:minmax(0,900px);justify-content:center;}
+
   /* setup */
   .setup-bg{position:fixed;inset:0;background:rgba(4,4,9,.8);display:flex;align-items:center;justify-content:center;z-index:50;padding:20px;}
   .setup{background:#12121b;border:1px solid var(--line);border-radius:24px;padding:34px;max-width:580px;width:100%;box-shadow:0 30px 90px rgba(0,0,0,.6);max-height:92vh;overflow-y:auto;}
@@ -252,9 +264,18 @@ function colunaGeral(sis,dados,cor){
   }
   return '<div class="cidade"><div class="cidade-head"><div><div class="cidade-nome"><span class="cidade-dot" style="color:'+cor+';background:'+cor+'"></span>'+sis.nome+'</div><div class="hoje-pill">☀ Hoje: '+money(hojeV)+' · '+hojeQ+' venda'+(hojeQ===1?'':'s')+'</div></div><div class="cidade-tot"><div class="v">'+money(totV)+'</div><div class="q">no mês · '+totQ+' venda'+(totQ===1?'':'s')+'</div></div></div>'+corpo+'</div>';
 }
+function temSetor(s){ return s && ((s.membros&&s.membros.length) || s.qtd>0); }
+function classeSetorNome(n){ const nn=tipoSetor(n); return "st-"+(nn==="Comercial"||nn==="Marketing"||nn==="Suporte"?nn:"Outro"); }
 function pagSetor(nomeSetor,c,d1,d2){
   const s1=setoresDeUmSistema(d1)[nomeSetor], s2=setoresDeUmSistema(d2)[nomeSetor];
-  return '<div class="pagina" data-tipo="setor"><div class="pag-tit"><b>'+icoSetor(nomeSetor)+' '+nomeSetor+'</b> &nbsp;·&nbsp; '+c.sistemas[0].nome+' e '+c.sistemas[1].nome+'</div><div class="setor-pag">'+colunaSetor(c.sistemas[0],s1,CORES[0],nomeSetor)+colunaSetor(c.sistemas[1],s2,CORES[1],nomeSetor)+'</div></div>';
+  // só entram as unidades que TÊM esse setor
+  const cols=[];
+  if(temSetor(s1)) cols.push(colunaSetor(c.sistemas[0],s1,CORES[0],nomeSetor));
+  if(temSetor(s2)) cols.push(colunaSetor(c.sistemas[1],s2,CORES[1],nomeSetor));
+  const quais=[]; if(temSetor(s1))quais.push(c.sistemas[0].nome); if(temSetor(s2))quais.push(c.sistemas[1].nome);
+  const banner='<div class="setor-banner '+classeSetorNome(nomeSetor)+'"><div class="bico">'+icoSetor(nomeSetor)+'</div><div class="btxt"><b>'+nomeSetor+'</b><span>Ranking do setor · '+(quais.join(" e ")||"—")+'</span></div></div>';
+  const grid='<div class="setor-pag '+(cols.length===1?"uma":"")+'">'+cols.join("")+'</div>';
+  return '<div class="pagina" data-tipo="setor">'+banner+grid+'</div>';
 }
 function colunaSetor(sis,s,cor,nomeSetor){
   const membros=(s&&s.membros)||[];
@@ -262,7 +283,7 @@ function colunaSetor(sis,s,cor,nomeSetor){
   const corpo=membros.length? '<div class="srows">'+membros.slice(0,12).map((m,i)=>
     '<div class="srow r'+(i+1)+'"><div class="spos">'+(i+1)+'º</div>'+(m.foto?'<img class="sav" src="'+m.foto+'">':'<div class="sav">'+ini(m.nome)+'</div>')+'<div class="snome">'+m.nome+'</div><div class="sval"><div class="v">'+money(m.valor)+'</div><div class="q">'+m.qtd+' venda'+(m.qtd===1?'':'s')+'</div></div></div>').join("")+'</div>'
     : '<div class="vazio">Sem vendas neste mês.</div>';
-  return '<div class="un-col"><div class="un-head"><div class="un-nome"><span class="un-dot" style="color:'+cor+';background:'+cor+'"></span>'+sis.nome+' <span class="un-setico">'+icoSetor(nomeSetor)+'</span></div><div class="un-tot"><div class="v">'+money(totV)+'</div><div class="q">'+totQ+' venda'+(totQ===1?'':'s')+'</div></div></div>'+corpo+'</div>';
+  return '<div class="un-col"><div class="un-head"><div class="un-nome"><span class="un-dot" style="color:'+cor+';background:'+cor+'"></span>'+sis.nome+'</div><div class="un-tot"><div class="v">'+money(totV)+'</div><div class="q">'+totQ+' venda'+(totQ===1?'':'s')+'</div></div></div>'+corpo+'</div>';
 }
 
 
@@ -294,7 +315,7 @@ let ultimo={c:null,d1:null,d2:null};
 function montarPaginas(c,d1,d2){
   const s1=setoresDeUmSistema(d1), s2=setoresDeUmSistema(d2);
   // ordem dos setores: Comercial primeiro, depois por maior valor
-  const nomes=new Set([...Object.keys(s1),...Object.keys(s2)]);
+  const nomes=new Set([...Object.keys(s1),...Object.keys(s2)].filter(n=>((s1[n]&&s1[n].qtd>0)||(s2[n]&&s2[n].qtd>0))));
   const ordenados=[...nomes].sort((a,b)=>{
     if(a==="Comercial")return -1; if(b==="Comercial")return 1;
     const va=((s1[a]&&s1[a].valor)||0)+((s2[a]&&s2[a].valor)||0);
