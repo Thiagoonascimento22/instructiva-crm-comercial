@@ -23,7 +23,8 @@
       var(--bg);
     height:100vh;overflow:hidden;
   }
-  .wrap{height:100vh;display:flex;flex-direction:column;padding:calc(22px * var(--sz)) calc(34px * var(--sz));}
+  /* palco de tamanho fixo (1920x1080) escalado pra caber inteiro em qualquer TV */
+  .wrap{position:absolute;top:50%;left:50%;transform-origin:center center;width:1920px;height:1080px;display:flex;flex-direction:column;padding:34px 44px;}
   header{display:flex;align-items:center;justify-content:space-between;gap:20px;margin-bottom:calc(20px * var(--sz));flex-shrink:0;}
   .logo{display:flex;align-items:center;gap:calc(14px * var(--sz));}
   .logo .mark{width:calc(54px * var(--sz));height:calc(54px * var(--sz));border-radius:calc(14px * var(--sz));background:#fff;display:flex;align-items:center;justify-content:center;overflow:hidden;box-shadow:0 8px 26px rgba(0,0,0,.35);}
@@ -356,13 +357,10 @@ function render(){
   ajustarEscala();
 }
 function ajustarEscala(){
-  // reduz o fator --sz até o conteúdo caber na altura da tela (pra caber em qualquer TV)
-  document.documentElement.style.setProperty('--sz', 1);
-  const wrap=document.querySelector('.wrap');
-  let sz=1, tentativas=0;
-  while(wrap.scrollHeight > window.innerHeight+2 && sz>0.55 && tentativas<12){
-    sz-=0.05; document.documentElement.style.setProperty('--sz', sz.toFixed(2)); tentativas++;
-  }
+  // escala o palco fixo (1920x1080) pra caber inteiro na tela, proporcional e centralizado
+  const escala = Math.min(window.innerWidth/1920, window.innerHeight/1080);
+  const w=document.querySelector('.wrap');
+  if(w) w.style.transform = 'translate(-50%,-50%) scale('+escala+')';
 }
 function irPara(i){ idx=(i+paginas.length)%paginas.length; render(); reiniciarTimer(); }
 function passar(dir){ irPara(idx+dir); }
