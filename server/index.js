@@ -2215,6 +2215,12 @@ app.get("/tv", (req, res) => {
   res.sendFile(path.join(dist, "tv.html"));
 });
 
+// Painel Geral (TV) — link fixo pra abrir na TV: /painel-geral
+app.get(["/painel-geral", "/painel-geral.html"], (req, res) => {
+  res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+  res.sendFile(path.join(__dirname, "static", "painel-geral.html"));
+});
+
 app.use(express.static(dist, {
   setHeaders: (res, filePath) => {
     if (filePath.endsWith(".html")) {
