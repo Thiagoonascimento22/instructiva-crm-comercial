@@ -1,22 +1,26 @@
 {
-  "name": "instructiva-crm-comercial",
+  "name": "instructiva-projetos",
   "version": "1.0.0",
   "private": true,
   "type": "module",
+  "description": "Sistema de Gestao de Projetos Instructiva - extracao automatica de tarefas a partir de documentos",
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
-    "dev": "vite",
-    "build": "vite build",
     "start": "node server/index.js",
-    "postinstall": "vite build"
+    "build": "cd client && npm install && npm run build",
+    "dev": "node --watch server/index.js",
+    "dev:client": "cd client && npm run dev"
   },
   "dependencies": {
-    "@vitejs/plugin-react": "^4.3.1",
+    "bcryptjs": "^2.4.3",
+    "dotenv": "^16.4.5",
     "express": "^4.19.2",
-    "ffmpeg-static": "^5.2.0",
-    "mammoth": "^1.12.0",
-    "pdfjs-dist": "^4.0.379",
-    "react": "^18.3.1",
-    "react-dom": "^18.3.1",
-    "vite": "^5.4.2"
+    "jsonwebtoken": "^9.0.2",
+    "mammoth": "^1.8.0",
+    "multer": "^1.4.5-lts.1",
+    "pdf-parse": "^1.1.1",
+    "pdfjs-dist": "^4.10.38"
   }
 }
