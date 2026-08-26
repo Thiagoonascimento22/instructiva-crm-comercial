@@ -118,6 +118,20 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
   function tokenDe(n) {
     return (n && n.token) || (db.oficial && db.oficial.tokenGlobal) || "";
   }
+  // Vendedores que este usuário enxerga/mexe:
+  //  gerente -> null (todos, sem filtro)
+  //  líder   -> ele mesmo + os vendedores que ele lidera (lideradosIds)
+  //  vendedor comum -> só ele
+  function idsVisiveis(user) {
+    if (!user || user.role === "gerente") return null;
+    const ids = [user.id];
+    if (Array.isArray(user.lideradosIds)) user.lideradosIds.forEach((i) => { if (i && !ids.includes(i)) ids.push(i); });
+    return ids;
+  }
+  function podeVerVend(user, vendedorId) {
+    const ids = idsVisiveis(user);
+    return ids === null || (vendedorId != null && ids.includes(vendedorId));
+  }
   function numeroPublico(n) {
     const dono = n.vendedorId ? (db.users || []).find((u) => u.id === n.vendedorId) : null;
     return {
@@ -679,7 +693,7 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
     let lista = db.oficial.numeros || [];
     // vendedor só enxerga os números vinculados a ele
     if (req.user.role !== "gerente") {
-      lista = lista.filter((n) => n.vendedorId === req.user.id);
+      lista = lista.filter((n) => podeVerVend(req.user, n.vendedorId));
     }
     res.json(lista.map(numeroPublico));
   });
@@ -805,7 +819,7 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
     const grid = Array.from({ length: 7 }, () => new Array(24).fill(0)); // [dia][hora]
     let total = 0;
     const chats = Object.values(db.waChats || {}).filter(
-      (c) => c.canal === "oficial" && (souGerente || c.vendedorId === req.user.id)
+      (c) => c.canal === "oficial" && (souGerente || podeVerVend(req.user, c.vendedorId))
     );
     for (const c of chats) {
       for (const m of (c.mensagens || [])) {
@@ -902,7 +916,7 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
   app.get("/api/oficial/metricas", auth, (req, res) => {
     const souGerente = req.user.role === "gerente";
     let numerosBase = db.oficial.numeros || [];
-    if (!souGerente) numerosBase = numerosBase.filter((n) => n.vendedorId === req.user.id);
+    if (!souGerente) numerosBase = numerosBase.filter((n) => podeVerVend(req.user, n.vendedorId));
     const dias = Math.max(0, parseInt(req.query.dias) || 0); // 0 = tudo
     const cutoff = dias > 0 ? Date.now() - dias * 86400000 : 0;
     const dentro = (ts) => !cutoff || (ts || 0) >= cutoff;
@@ -1882,7 +1896,7 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
     garantirCRM();
     const ehVend = req.user.role === "vendedor";
     let leads = (db.oficial.crmLeads || []);
-    if (ehVend) leads = leads.filter((l) => l.vendedorId === req.user.id); // vendedor só vê os leads dele
+    if (ehVend) leads = leads.filter((l) => podeVerVend(req.user, l.vendedorId)); // vendedor só vê os leads dele
     res.json({
       etapas: etapasCRM(),
       leads: leads.map(crmLeadPublico),
@@ -1919,7 +1933,7 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
     const l = (db.oficial.crmLeads || []).find((x) => x.id === req.params.id);
     if (!l) return res.status(404).json({ error: "Lead não encontrado" });
     const b = req.body || {};
-    if (req.user.role === "vendedor" && l.vendedorId !== req.user.id) {
+    if (req.user.role === "vendedor" && !podeVerVend(req.user, l.vendedorId)) {
       return res.status(403).json({ error: "Esse lead não é seu" });
     }
     if (b.etapa !== undefined && etapasCRM().some((e) => e.k === b.etapa)) {
@@ -1953,7 +1967,7 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
     garantirCRM();
     const l = (db.oficial.crmLeads || []).find((x) => x.id === req.params.id);
     if (!l) return res.status(404).json({ error: "Lead não encontrado" });
-    if (req.user.role === "vendedor" && l.vendedorId !== req.user.id) return res.status(403).json({ error: "Esse lead não é seu" });
+    if (req.user.role === "vendedor" && !podeVerVend(req.user, l.vendedorId)) return res.status(403).json({ error: "Esse lead não é seu" });
     const texto = String((req.body || {}).texto || "").trim();
     if (!texto) return res.status(400).json({ error: "Nota vazia" });
     if (!Array.isArray(l.notas)) l.notas = [];
@@ -2017,7 +2031,7 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
     garantirCRM();
     const chat = db.waChats[req.params.id];
     if (!chat || (chat.canal !== "oficial" && chat.canal !== "instagram")) return res.status(404).json({ error: "Conversa não encontrada" });
-    if (req.user.role === "vendedor" && chat.vendedorId !== req.user.id) return res.status(403).json({ error: "Essa conversa não é sua" });
+    if (req.user.role === "vendedor" && !podeVerVend(req.user, chat.vendedorId)) return res.status(403).json({ error: "Essa conversa não é sua" });
     const etapa = String((req.body && req.body.etapa) || "").trim();
     if (!etapasCRM().some((e) => e.k === etapa)) return res.status(400).json({ error: "Etapa inválida" });
     const lead = leadDoChat(chat, true);
@@ -2089,7 +2103,7 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
     let n = 0;
     for (const l of (db.oficial.crmLeads || [])) {
       if (!ids.includes(l.id)) continue;
-      if (req.user.role === "vendedor" && l.vendedorId !== req.user.id) continue; // vendedor só mexe nos seus
+      if (req.user.role === "vendedor" && !podeVerVend(req.user, l.vendedorId)) continue; // vendedor só mexe nos seus
       l.vendedorId = vid;
       l.vendedorNome = vid ? ((db.users.find((u) => u.id === vid) || {}).nome || "") : "";
       l.atualizadoEm = Date.now();
@@ -2109,7 +2123,7 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
     let n = 0;
     for (const l of (db.oficial.crmLeads || [])) {
       if (!ids.includes(l.id)) continue;
-      if (req.user.role === "vendedor" && l.vendedorId !== req.user.id) continue; // vendedor só mexe nos seus
+      if (req.user.role === "vendedor" && !podeVerVend(req.user, l.vendedorId)) continue; // vendedor só mexe nos seus
       if (l.etapa !== etapa) { l.historico = l.historico || []; l.historico.push({ tipo: "etapa", texto: "Movido para " + lbEtapa, ts: Date.now() }); }
       l.etapa = etapa; l.atualizadoEm = Date.now();
       n++;
@@ -3036,7 +3050,7 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
       if (n.ativo === false) return false;
       if (!tokenDe(n)) return false;
       if (req.user.role === "gerente") return true;
-      return !n.vendedorId || n.vendedorId === req.user.id;
+      return !n.vendedorId || podeVerVend(req.user, n.vendedorId);
     });
     res.json({ numeros: lista.map(numeroPublico) });
   });
@@ -3047,7 +3061,7 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
     const b = req.body || {};
     const numeroCfg = acharNumero(b.numeroId);
     if (!numeroCfg) return res.status(404).json({ error: "Número não encontrado" });
-    if (req.user.role === "vendedor" && numeroCfg.vendedorId && numeroCfg.vendedorId !== req.user.id) {
+    if (req.user.role === "vendedor" && numeroCfg.vendedorId && !podeVerVend(req.user, numeroCfg.vendedorId)) {
       return res.status(403).json({ error: "Esse número não é seu" });
     }
     const telefone = normalizaTelefone(b.telefone);
@@ -3202,7 +3216,7 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
     if (req.user.role === "gerente") return true;
     if (campanha.criadoPor === req.user.id) return true;
     const n = acharNumero(campanha.numeroId);
-    return !!(n && n.vendedorId === req.user.id);
+    return !!(n && podeVerVend(req.user, n.vendedorId));
   }
 
   /* ============================================================
@@ -3415,7 +3429,7 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
       const b = req.body || {};
       let alvoId = req.user.id;
       if (req.user.role === "gerente" && b.vendedorId) alvoId = b.vendedorId;
-      else if (req.user.role !== "gerente" && b.vendedorId && b.vendedorId !== req.user.id) return res.status(403).json({ error: "Você só pode analisar as suas conversas" });
+      else if (req.user.role !== "gerente" && b.vendedorId && !podeVerVend(req.user, b.vendedorId)) return res.status(403).json({ error: "Você só pode analisar as conversas suas ou de quem você lidera" });
       const alvo = (db.users || []).find((u) => u.id === alvoId);
       if (!alvo) return res.status(404).json({ error: "Vendedor não encontrado" });
       const de = parseInt(b.de) || 0, ate = parseInt(b.ate) || 0;
@@ -3623,7 +3637,7 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
       // GARANTIA: se a conversa é DELE, ela SEMPRE aparece — nenhuma IA esconde
       // uma conversa que já tem dono. IA só atende lead novo/sem dono.
       chats = chats.filter((c) =>
-        c.vendedorId === req.user.id &&
+        podeVerVend(req.user, c.vendedorId) &&
         (!c.origemDisparo || c.respondeu)
       );
     } else if (req.query.numeroId && req.query.numeroId !== "todos") {
@@ -3676,7 +3690,7 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
   app.get("/api/oficial/chats/:id", auth, (req, res) => {
     const chat = db.waChats[req.params.id];
     if (!chat || (chat.canal !== "oficial" && chat.canal !== "instagram")) return res.status(404).json({ error: "Conversa não encontrada" });
-    if (req.user.role !== "gerente" && chat.vendedorId !== req.user.id) {
+    if (req.user.role !== "gerente" && !podeVerVend(req.user, chat.vendedorId)) {
       return res.status(403).json({ error: "Sem acesso a essa conversa" });
     }
     // enquanto a IA está no comando, o VENDEDOR não vê (gestor acompanha)
@@ -3709,7 +3723,7 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
   app.post("/api/oficial/chats/:id/send", auth, async (req, res) => {
     const chat = db.waChats[req.params.id];
     if (!chat || (chat.canal !== "oficial" && chat.canal !== "instagram")) return res.status(404).json({ error: "Conversa não encontrada" });
-    if (req.user.role !== "gerente" && chat.vendedorId !== req.user.id) {
+    if (req.user.role !== "gerente" && !podeVerVend(req.user, chat.vendedorId)) {
       return res.status(403).json({ error: "Sem acesso a essa conversa" });
     }
     // enquanto a IA está atendendo, ninguém digita — precisa pausar a IA antes
@@ -3779,7 +3793,7 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
   app.post("/api/oficial/chats/:id/midia", auth, async (req, res) => {
     const chat = db.waChats[req.params.id];
     if (!chat || chat.canal !== "oficial") return res.status(404).json({ error: "Conversa não encontrada" });
-    if (req.user.role !== "gerente" && chat.vendedorId !== req.user.id) {
+    if (req.user.role !== "gerente" && !podeVerVend(req.user, chat.vendedorId)) {
       return res.status(403).json({ error: "Sem acesso a essa conversa" });
     }
     if (chat.iaId && !chat.iaPausada) {
@@ -3858,7 +3872,7 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
     const chat = db.waChats[req.params.id];
     if (!chat || (chat.canal !== "oficial" && chat.canal !== "instagram")) return res.status(404).json({ error: "Conversa não encontrada" });
     // vendedor só pode reatribuir se a conversa for dele
-    if (req.user.role !== "gerente" && chat.vendedorId !== req.user.id) {
+    if (req.user.role !== "gerente" && !podeVerVend(req.user, chat.vendedorId)) {
       return res.status(403).json({ error: "Você só pode transferir conversas suas" });
     }
     const vendedorId = String((req.body && req.body.vendedorId) || "");
@@ -3896,7 +3910,7 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
   app.post("/api/oficial/chats/:id/encerrar", auth, (req, res) => {
     const chat = db.waChats[req.params.id];
     if (!chat || chat.canal !== "oficial") return res.status(404).json({ error: "Conversa não encontrada" });
-    if (req.user.role !== "gerente" && chat.vendedorId !== req.user.id) {
+    if (req.user.role !== "gerente" && !podeVerVend(req.user, chat.vendedorId)) {
       return res.status(403).json({ error: "Sem acesso a essa conversa" });
     }
     const encerrar = req.body && req.body.encerrar !== false; // default true
@@ -4100,7 +4114,7 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
     const mes = /^\d{4}-\d{2}$/.test(String(req.query.mes || "")) ? req.query.mes : mesDesempenho(Date.now());
     let lista = desempenhoDoMes(mes);
     const souGerente = req.user.role === "gerente";
-    if (!souGerente) lista = lista.filter((x) => x.id === req.user.id);
+    if (!souGerente) lista = lista.filter((x) => podeVerVend(req.user, x.id));
     else if (String(req.query.incluirOcultos || "") !== "1") lista = lista.filter((x) => !x.oculto);
     lista.sort((a, b) => b.receita - a.receita || b.conversao - a.conversao);
     const qtdOcultos = souGerente ? desempenhoDoMes(mes).filter((x) => x.oculto).length : 0;

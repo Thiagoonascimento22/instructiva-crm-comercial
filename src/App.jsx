@@ -1102,6 +1102,7 @@ function Equipe({ showToast, meId }) {
       {editing && (
         <UserForm
           user={editing.id ? editing : null}
+          todosUsuarios={users}
           onClose={() => setEditing(null)}
           onSaved={(u, novo) => {
             setUsers((l) => (novo ? [...l, u] : l.map((x) => (x.id === u.id ? u : x))));
@@ -1114,13 +1115,17 @@ function Equipe({ showToast, meId }) {
   );
 }
 
-function UserForm({ user, onClose, onSaved }) {
+function UserForm({ user, todosUsuarios, onClose, onSaved }) {
   const novo = !user;
   const [f, setF] = useState({
     nome: user?.nome || "", login: user?.login || "", senha: "",
     role: user?.role || "vendedor", ativo: user ? user.ativo : true,
     podeResponder: user?.podeResponder || false,
+    lideradosIds: Array.isArray(user?.lideradosIds) ? user.lideradosIds : [],
   });
+  // outros vendedores (que não o próprio) pra escolher quem ele lidera
+  const outrosVend = (todosUsuarios || []).filter((u) => u.role === "vendedor" && (!user || u.id !== user.id));
+  const toggleLiderado = (id) => setF((s) => ({ ...s, lideradosIds: s.lideradosIds.includes(id) ? s.lideradosIds.filter((x) => x !== id) : [...s.lideradosIds, id] }));
   const [saving, setSaving] = useState(false);
   const set = (k, v) => setF((s) => ({ ...s, [k]: v }));
   const precisaAcesso = f.role !== "vendedor";
@@ -1134,14 +1139,14 @@ function UserForm({ user, onClose, onSaved }) {
         const dados = { nome: f.nome, role: f.role };
         if (f.login.trim()) dados.login = f.login.trim();
         if (f.senha) dados.senha = f.senha;
-        if (f.role === "vendedor") dados.podeResponder = f.podeResponder;
+        if (f.role === "vendedor") { dados.podeResponder = f.podeResponder; dados.lideradosIds = f.lideradosIds; }
         const u = await api.createUser(dados);
         onSaved(u, true);
       } else {
         const dados = { nome: f.nome, role: f.role, ativo: f.ativo };
         if (f.login.trim() && f.login.trim() !== (user.login || "")) dados.login = f.login.trim();
         if (f.senha) dados.senha = f.senha;
-        if (f.role === "vendedor") dados.podeResponder = f.podeResponder;
+        if (f.role === "vendedor") { dados.podeResponder = f.podeResponder; dados.lideradosIds = f.lideradosIds; }
         const u = await api.updateUser(user.id, dados);
         onSaved(u, false);
       }
@@ -1181,6 +1186,24 @@ function UserForm({ user, onClose, onSaved }) {
               <input type="checkbox" checked={f.podeResponder} onChange={(e) => set("podeResponder", e.target.checked)} style={{ width: 17, height: 17, marginTop: 2, flexShrink: 0 }} />
               <span>Pode responder pelo painel <span style={{ color: "var(--faint)", fontWeight: 400 }}>— libera ele a enviar mensagens pelo sistema (senão, fica só monitoria)</span></span>
             </label>
+          )}
+          {f.role === "vendedor" && outrosVend.length > 0 && (
+            <div className="field" style={{ marginTop: 4 }}>
+              <label>Líder de equipe <span style={{ color: "var(--faint)", fontWeight: 400 }}>— escolha os vendedores que ele também cuida (vê e mexe nas conversas, vendas e pipeline deles)</span></label>
+              <div style={{ display: "flex", flexDirection: "column", gap: 4, maxHeight: 190, overflowY: "auto", border: "1px solid var(--line)", borderRadius: 10, padding: 8, marginTop: 4 }}>
+                {outrosVend.map((v) => (
+                  <label key={v.id} style={{ display: "flex", alignItems: "center", gap: 9, fontSize: 14, cursor: "pointer", padding: "5px 6px", borderRadius: 8, background: f.lideradosIds.includes(v.id) ? "rgba(37,160,107,.08)" : "transparent" }}>
+                    <input type="checkbox" checked={f.lideradosIds.includes(v.id)} onChange={() => toggleLiderado(v.id)} style={{ width: 16, height: 16 }} />
+                    <span>{v.nome}</span>
+                  </label>
+                ))}
+              </div>
+              {f.lideradosIds.length > 0 && (
+                <div style={{ fontSize: 12.5, color: "var(--of-green-d, #16a34a)", marginTop: 6, fontWeight: 600 }}>
+                  Cuida de {f.lideradosIds.length} vendedor{f.lideradosIds.length > 1 ? "es" : ""}.
+                </div>
+              )}
+            </div>
           )}
           {!novo && (
             <label style={{ display: "flex", alignItems: "center", gap: 9, fontSize: 14, cursor: "pointer" }}>

@@ -619,6 +619,12 @@ app.put("/api/users/:id", auth, gerenteOnly, (req, res) => {
   if (meta !== undefined) u.meta = Number(meta) || 0;
   if (ativo !== undefined) u.ativo = !!ativo;
   if (podeResponder !== undefined) u.podeResponder = !!podeResponder;
+  // líder de equipe: lista de vendedores que este usuário pode ver/gerenciar
+  if (req.body && req.body.lideradosIds !== undefined) {
+    const arr = Array.isArray(req.body.lideradosIds) ? req.body.lideradosIds : [];
+    // só aceita IDs de vendedores existentes, e nunca ele mesmo
+    u.lideradosIds = arr.filter((id) => id && id !== u.id && db.users.some((x) => x.id === id && x.role === "vendedor"));
+  }
   saveSoon();
   res.json(semSenha(u));
 });

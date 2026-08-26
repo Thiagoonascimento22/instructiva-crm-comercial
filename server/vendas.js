@@ -163,6 +163,24 @@ export function instalarVendas({ app, getDb, saveDB, proximoId, auth, gerenteOnl
     return p;
   }
   const ehVend = (u) => u && u.role === "vendedor";
+  // pessoaIds que o usuário enxerga nas vendas:
+  //  gerente -> null (todas); líder -> dele + dos liderados; vendedor comum -> só dele
+  function pessoasVisiveisIds(u) {
+    if (!u || u.role === "gerente") return null;
+    const ids = [];
+    const own = pessoaDoUser(u);
+    if (own) ids.push(own.id);
+    if (Array.isArray(u.lideradosIds) && u.lideradosIds.length) {
+      (db.users || []).forEach((x) => {
+        if (u.lideradosIds.includes(x.id)) {
+          const p = pessoaDoUser(x);
+          if (p && !ids.includes(p.id)) ids.push(p.id);
+        }
+      });
+    }
+    return ids;
+  }
+  const podeVerPessoa = (u, pessoaId) => { const ids = pessoasVisiveisIds(u); return ids === null || ids.includes(pessoaId); };
 
   /* Foto que aparece no painel/TV.
      Prioridade: a foto colocada direto na pessoa (serve pra quem NÃO tem login
@@ -274,11 +292,9 @@ export function instalarVendas({ app, getDb, saveDB, proximoId, auth, gerenteOnl
     garantir();
     const mes = mesValido(req.query.mes) ? req.query.mes : mesDe(Date.now());
     let pessoaId = req.query.pessoaId || "";
-    if (ehVend(req.user)) {                       // vendedor só enxerga as vendas dele
-      const minha = pessoaDoUser(req.user);
-      pessoaId = minha ? minha.id : "__nenhuma__";
-    }
+    const idsVis = pessoasVisiveisIds(req.user); // null = gerente (todas)
     let lista = db.vendas.lista.filter((v) => mesDe(v.data) === mes);
+    if (idsVis !== null) lista = lista.filter((v) => idsVis.includes(v.pessoaId)); // vendedor/líder: só o que pode ver
     if (pessoaId) lista = lista.filter((v) => v.pessoaId === pessoaId);
     lista = lista.sort((a, b) => b.data - a.data);
     res.json({ mes, vendas: lista.map(vendaPublica) });
@@ -292,8 +308,8 @@ export function instalarVendas({ app, getDb, saveDB, proximoId, auth, gerenteOnl
     if (!de || !ate) return res.status(400).json({ error: "Informe o período (de/até)" });
     let lista = (db.vendas.lista || []).filter((v) => v.data >= de && v.data <= ate);
     if (ehVend(req.user)) {
-      const minha = pessoaDoUser(req.user);
-      lista = lista.filter((v) => v.pessoaId === (minha ? minha.id : "__nenhuma__"));
+      const idsVis = pessoasVisiveisIds(req.user) || [];
+      lista = lista.filter((v) => idsVis.includes(v.pessoaId));
     }
     const mapa = {};
     for (const v of lista) {
@@ -1021,8 +1037,8 @@ export function instalarVendas({ app, getDb, saveDB, proximoId, auth, gerenteOnl
     let lista = (db.vendas.lista || []).filter((v) =>
       usaPeriodo ? (v.data >= ini && v.data <= fim) : mesDe(v.data) === mes);
     if (!ehGer) {
-      const minha = (db.vendas.pessoas || []).find((p) => p.userId === req.user.id);
-      lista = minha ? lista.filter((v) => v.pessoaId === minha.id) : [];
+      const idsVis = pessoasVisiveisIds(req.user) || [];
+      lista = lista.filter((v) => idsVis.includes(v.pessoaId));
     }
     const soma = (chave, rotulo) => {
       const m = {};
@@ -1074,8 +1090,8 @@ export function instalarVendas({ app, getDb, saveDB, proximoId, auth, gerenteOnl
     // ?pessoaId= -> painel individual ("Minhas vendas"). Vendedor só pode ver o próprio.
     let soDe = req.query.pessoaId || "";
     if (soDe && ehVend(req.user)) {
-      const minha = pessoaDoUser(req.user);
-      soDe = minha ? minha.id : "__nenhuma__";
+      const idsVis = pessoasVisiveisIds(req.user) || [];
+      if (!idsVis.includes(soDe)) { const minha = pessoaDoUser(req.user); soDe = minha ? minha.id : "__nenhuma__"; }
     }
     const todasDoMes = db.vendas.lista.filter((v) => mesDe(v.data) === mes);
     const doMes = soDe ? todasDoMes.filter((v) => v.pessoaId === soDe) : todasDoMes;
