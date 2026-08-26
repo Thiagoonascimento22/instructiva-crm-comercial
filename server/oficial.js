@@ -3626,6 +3626,24 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
      INBOX OFICIAL — lista de chats
      gerente vê todos; vendedor vê só os atribuídos a ele
      ============================================================ */
+  // Carimbo leve da caixa: só diz "mudou algo?" (nº de conversas + atividade mais recente
+  // + nº de não-lidas visíveis). O front pergunta isso a cada poucos segundos e só baixa
+  // a lista pesada quando o carimbo muda. Não monta lista, não manda mensagem — é barato.
+  app.get("/api/oficial/chats-versao", auth, (req, res) => {
+    let n = 0, maxAt = 0, naoLidas = 0;
+    const vals = Object.values(db.waChats || {});
+    for (const c of vals) {
+      if (!(c.canal === "oficial" || c.canal === "instagram")) continue;
+      if (c.encerrado) continue;
+      if (req.user.role !== "gerente" && !podeVerVend(req.user, c.vendedorId)) continue;
+      n++;
+      const at = c.atualizadoEm || 0;
+      if (at > maxAt) maxAt = at;
+      naoLidas += c.naoLidas || 0;
+    }
+    res.json({ v: n + ":" + maxAt + ":" + naoLidas });
+  });
+
   app.get("/api/oficial/chats", auth, (req, res) => {
     const q = String(req.query.q || "").trim().toLowerCase();
     let chats = Object.values(db.waChats).filter((c) => c.canal === "oficial" || c.canal === "instagram");

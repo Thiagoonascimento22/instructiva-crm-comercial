@@ -146,6 +146,7 @@ export const api = {
       const p = [q ? "q=" + encodeURIComponent(q) : "", numeroId ? "numeroId=" + encodeURIComponent(numeroId) : "", campanhaId ? "campanhaId=" + encodeURIComponent(campanhaId) : "", vendedorId ? "vendedorId=" + encodeURIComponent(vendedorId) : ""].filter(Boolean);
       return p.length ? "?" + p.join("&") : "";
     })()),
+  ofChatsVersao: () => req("GET", "/api/oficial/chats-versao"),
   ofChat: (id) => req("GET", "/api/oficial/chats/" + encodeURIComponent(id)),
   ofEnviar: (id, texto) => req("POST", "/api/oficial/chats/" + encodeURIComponent(id) + "/send", { texto }),
   ofEnviarMidia: (id, dados) => req("POST", "/api/oficial/chats/" + encodeURIComponent(id) + "/midia", dados),

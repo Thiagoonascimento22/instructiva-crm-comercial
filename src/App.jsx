@@ -8527,9 +8527,19 @@ function InboxOficial({ isGer, ehLider, showToast, onIrParaEvolution, target, on
   const convIdRef = useRef(null);     // qual conversa está aberta
   const msgCountRef = useRef(0);      // qtd de mensagens da última vez
   const carregarLista = () => api.ofChats(busca, null, campanhaFiltro === "todas" ? null : campanhaFiltro).then((cs) => { setChats(cs); setCarregou(true); }).catch(() => {});
+  const versaoRef = useRef("");
   useEffect(() => {
     carregarLista();
-    const t = setInterval(carregarLista, 8000); // aliviado: era 5000
+    versaoRef.current = ""; // ao trocar busca/campanha, força a próxima checagem a baixar
+    // a cada 6s pergunta só o "carimbo" (barato). Se mudou, aí sim baixa a lista pesada.
+    const t = setInterval(async () => {
+      try {
+        // durante uma busca, mantém o comportamento simples (recarrega direto)
+        if (busca && busca.trim()) { carregarLista(); return; }
+        const r = await api.ofChatsVersao();
+        if (r && r.v !== versaoRef.current) { versaoRef.current = r.v; carregarLista(); }
+      } catch (_) {}
+    }, 6000);
     // todos (gerente e vendedor) podem ver a lista pra transferir
     api.ofVendedoresLista().then(setVendedores).catch(() => {});
     // campanhas pro filtro (o gerente vê todas; o vendedor, as dele)
