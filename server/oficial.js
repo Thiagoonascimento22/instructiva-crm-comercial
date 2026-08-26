@@ -104,7 +104,7 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
     //   igId: id da conta Instagram profissional (usado no envio e pra casar o webhook)
     //   token: Page access token com instagram_manage_messages (usa o tokenGlobal se vazio)
     if (!db.oficial.instagram || typeof db.oficial.instagram !== "object") {
-      db.oficial.instagram = { igId: "", token: "", usuario: "", ativo: false };
+      db.oficial.instagram = { igId: "", token: "", usuario: "", ativo: false, vendedorId: null };
     }
   }
 
@@ -399,12 +399,14 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
     const id = chaveChatIG(remetenteId);
     let chat = db.waChats[id];
     if (!chat) {
+      const cfgIG = (db.oficial && db.oficial.instagram) || {};
       chat = {
         id, canal: "instagram", instance: id,
         igUserId: remetenteId,   // IGSID do cliente (é pra ele que respondemos)
         numero: remetenteId,     // compat com telas que leem .numero
         nome: nome || "Instagram",
-        mensagens: [], naoLidas: 0, atualizadoEm: Date.now(), vendedorId: null,
+        mensagens: [], naoLidas: 0, atualizadoEm: Date.now(),
+        vendedorId: cfgIG.vendedorId || null,   // já entra pro vendedor responsável pelo Insta
       };
       db.waChats[id] = chat;
     }
@@ -4444,6 +4446,7 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
     const ig = cfgInstagram();
     res.json({
       igId: ig.igId, usuario: ig.usuario, ativo: ig.ativo,
+      vendedorId: ig.vendedorId || null,   // vendedor responsável pelas DMs
       temToken: !!ig.token,        // não devolve o token em si
       verifyToken: db.oficial.verifyToken, // mesmo webhook do WhatsApp
     });
@@ -4456,9 +4459,10 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
     if (b.usuario !== undefined) ig.usuario = String(b.usuario || "").trim().replace(/^@/, "");
     if (typeof b.token === "string" && b.token.trim()) ig.token = b.token.trim(); // só troca se vier um novo
     if (b.ativo !== undefined) ig.ativo = !!b.ativo;
+    if (b.vendedorId !== undefined) ig.vendedorId = b.vendedorId || null;
     salvar();
     const c = cfgInstagram();
-    res.json({ ok: true, igId: c.igId, usuario: c.usuario, ativo: c.ativo, temToken: !!c.token });
+    res.json({ ok: true, igId: c.igId, usuario: c.usuario, ativo: c.ativo, vendedorId: c.vendedorId || null, temToken: !!c.token });
   });
 
   app.get("/api/oficial/webhook-info", auth, gerenteOnly, (req, res) => {

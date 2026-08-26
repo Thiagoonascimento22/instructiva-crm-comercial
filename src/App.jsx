@@ -3875,19 +3875,29 @@ function PainelSistema({ modulos, onSalvo, showToast }) {
   );
 }
 
-// Exportar leads escolhendo por tag
+// Exportar leads escolhendo por tag OU por etapa do Kanban
 function ModalExportar({ leads, etapas, onClose, showToast }) {
-  const [sel, setSel] = useState({});
+  const [modo, setModo] = useState("tag");   // "tag" | "etapa"
+  const [sel, setSel] = useState({});        // tags marcadas
+  const [selEt, setSelEt] = useState({});    // etapas marcadas
   const [busca, setBusca] = useState("");
   const tags = useMemo(() => {
     const m = {};
     (leads || []).forEach((l) => (l.tags || []).forEach((t) => { const k = String(t).trim(); if (k) m[k] = (m[k] || 0) + 1; }));
     return Object.entries(m).sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], "pt-BR"));
   }, [leads]);
+  // contagem de leads por etapa do Kanban
+  const etapasCont = useMemo(() => {
+    const m = {};
+    (leads || []).forEach((l) => { const k = l.etapa || "novo"; m[k] = (m[k] || 0) + 1; });
+    return (etapas || []).map((e) => ({ k: e.k, lb: e.lb || e.k, n: m[e.k] || 0 }));
+  }, [leads, etapas]);
+
   const escolhidas = Object.keys(sel).filter((k) => sel[k]);
-  const filtrados = escolhidas.length
-    ? (leads || []).filter((l) => (l.tags || []).some((t) => escolhidas.includes(String(t).trim())))
-    : (leads || []);
+  const escolhidasEt = Object.keys(selEt).filter((k) => selEt[k]);
+  const filtrados = modo === "etapa"
+    ? (escolhidasEt.length ? (leads || []).filter((l) => escolhidasEt.includes(l.etapa || "novo")) : (leads || []))
+    : (escolhidas.length ? (leads || []).filter((l) => (l.tags || []).some((t) => escolhidas.includes(String(t).trim()))) : (leads || []));
   const semTag = (leads || []).filter((l) => !(l.tags || []).length).length;
   const visiveis = tags.filter(([t]) => t.toLowerCase().includes(busca.trim().toLowerCase()));
 
@@ -3908,7 +3918,12 @@ function ModalExportar({ leads, etapas, onClose, showToast }) {
     const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
-    const sufixo = escolhidas.length === 1 ? "-" + escolhidas[0].replace(/[^\w\-]+/g, "_") : escolhidas.length ? "-" + escolhidas.length + "tags" : "-todos";
+    let sufixo;
+    if (modo === "etapa") {
+      sufixo = escolhidasEt.length === 1 ? "-etapa-" + nomeEt(escolhidasEt[0]).replace(/[^\w\-]+/g, "_") : escolhidasEt.length ? "-" + escolhidasEt.length + "etapas" : "-todos";
+    } else {
+      sufixo = escolhidas.length === 1 ? "-" + escolhidas[0].replace(/[^\w\-]+/g, "_") : escolhidas.length ? "-" + escolhidas.length + "tags" : "-todos";
+    }
     a.href = url; a.download = "leads" + sufixo + ".csv"; a.click();
     URL.revokeObjectURL(url);
     showToast(`✓ ${filtrados.length} lead(s) exportado(s)`);
@@ -3920,38 +3935,69 @@ function ModalExportar({ leads, etapas, onClose, showToast }) {
       <div className="pop-sheet" style={{ maxWidth: 560 }}>
         <div className="pop-head"><b>Exportar leads</b><button className="crm-x" onClick={onClose}>✕</button></div>
         <div className="pop-body">
-          <div className="rsv-hint" style={{ marginTop: 0 }}>
-            Escolha as <b>tags</b> que quer exportar. Sem escolher nenhuma, sai <b>tudo</b>. O arquivo vem com
-            nome, telefone, e-mail, valor e a forma de pagamento (pix, boleto ou cartão).
+          {/* seletor: por tag ou por etapa do Kanban */}
+          <div style={{ display: "flex", gap: 8, marginBottom: 4 }}>
+            <button className={"exp-modo" + (modo === "tag" ? " on" : "")} onClick={() => setModo("tag")}
+              style={{ flex: 1, padding: "9px 12px", borderRadius: 10, fontWeight: 700, fontSize: 13.5, cursor: "pointer", border: "1px solid " + (modo === "tag" ? "#F26522" : "var(--line)"), background: modo === "tag" ? "rgba(242,101,34,.08)" : "var(--card)", color: modo === "tag" ? "#F26522" : "var(--muted)" }}>
+              Por tag
+            </button>
+            <button className={"exp-modo" + (modo === "etapa" ? " on" : "")} onClick={() => setModo("etapa")}
+              style={{ flex: 1, padding: "9px 12px", borderRadius: 10, fontWeight: 700, fontSize: 13.5, cursor: "pointer", border: "1px solid " + (modo === "etapa" ? "#F26522" : "var(--line)"), background: modo === "etapa" ? "rgba(242,101,34,.08)" : "var(--card)", color: modo === "etapa" ? "#F26522" : "var(--muted)" }}>
+              Por etapa do Kanban
+            </button>
           </div>
 
-          {tags.length === 0 ? (
-            <div className="of-nova-semtpl" style={{ marginTop: 14 }}>Nenhum lead tem tag ainda — dá pra exportar todos mesmo assim.</div>
+          <div className="rsv-hint" style={{ marginTop: 10 }}>
+            {modo === "etapa"
+              ? <>Escolha as <b>etapas do Kanban</b> que quer exportar. Sem escolher nenhuma, sai <b>tudo</b>.</>
+              : <>Escolha as <b>tags</b> que quer exportar. Sem escolher nenhuma, sai <b>tudo</b>.</>}
+            {" "}O arquivo vem com nome, telefone, e-mail, valor e a forma de pagamento.
+          </div>
+
+          {modo === "etapa" ? (
+            <div className="exp-tags">
+              {etapasCont.map((e) => (
+                <label key={e.k} className={"exp-tag" + (selEt[e.k] ? " on" : "")}>
+                  <input type="checkbox" checked={!!selEt[e.k]} onChange={() => setSelEt((s) => ({ ...s, [e.k]: !s[e.k] }))} />
+                  <span className="exp-tag-nm">{e.lb}</span>
+                  <span className="exp-tag-n">{e.n}</span>
+                </label>
+              ))}
+              {escolhidasEt.length > 0 && (
+                <button className="foto-del" style={{ marginTop: 8 }} onClick={() => setSelEt({})}>limpar seleção</button>
+              )}
+            </div>
           ) : (
-            <>
-              {tags.length > 8 && (
-                <input className="input" style={{ marginTop: 14 }} placeholder="Buscar tag…" value={busca} onChange={(e) => setBusca(e.target.value)} />
-              )}
-              <div className="exp-tags">
-                {visiveis.map(([t, n]) => (
-                  <label key={t} className={"exp-tag" + (sel[t] ? " on" : "")}>
-                    <input type="checkbox" checked={!!sel[t]} onChange={() => setSel((s) => ({ ...s, [t]: !s[t] }))} />
-                    <span className="exp-tag-nm">{t}</span>
-                    <span className="exp-tag-n">{n}</span>
-                  </label>
-                ))}
-                {visiveis.length === 0 && <div className="imp-mais">Nenhuma tag com esse nome.</div>}
-              </div>
-              {escolhidas.length > 0 && (
-                <button className="foto-del" style={{ marginTop: 8 }} onClick={() => setSel({})}>limpar seleção</button>
-              )}
-            </>
+            tags.length === 0 ? (
+              <div className="of-nova-semtpl" style={{ marginTop: 14 }}>Nenhum lead tem tag ainda — dá pra exportar todos mesmo assim.</div>
+            ) : (
+              <>
+                {tags.length > 8 && (
+                  <input className="input" style={{ marginTop: 14 }} placeholder="Buscar tag…" value={busca} onChange={(e) => setBusca(e.target.value)} />
+                )}
+                <div className="exp-tags">
+                  {visiveis.map(([t, n]) => (
+                    <label key={t} className={"exp-tag" + (sel[t] ? " on" : "")}>
+                      <input type="checkbox" checked={!!sel[t]} onChange={() => setSel((s) => ({ ...s, [t]: !s[t] }))} />
+                      <span className="exp-tag-nm">{t}</span>
+                      <span className="exp-tag-n">{n}</span>
+                    </label>
+                  ))}
+                  {visiveis.length === 0 && <div className="imp-mais">Nenhuma tag com esse nome.</div>}
+                </div>
+                {escolhidas.length > 0 && (
+                  <button className="foto-del" style={{ marginTop: 8 }} onClick={() => setSel({})}>limpar seleção</button>
+                )}
+              </>
+            )
           )}
 
           <div className="exp-resumo">
             Vão ser exportados <b>{filtrados.length}</b> lead(s)
-            {escolhidas.length ? <> com {escolhidas.length === 1 ? "a tag" : "as tags"} <b>{escolhidas.join(", ")}</b></> : <> (todos)</>}
-            {!escolhidas.length && semTag > 0 && <span className="exp-obs"> · {semTag} sem tag nenhuma</span>}
+            {modo === "etapa"
+              ? (escolhidasEt.length ? <> {escolhidasEt.length === 1 ? "da etapa" : "das etapas"} <b>{escolhidasEt.map((k) => (etapas.find((e) => e.k === k) || {}).lb || k).join(", ")}</b></> : <> (todas as etapas)</>)
+              : (escolhidas.length ? <> com {escolhidas.length === 1 ? "a tag" : "as tags"} <b>{escolhidas.join(", ")}</b></> : <> (todos)</>)}
+            {modo === "tag" && !escolhidas.length && semTag > 0 && <span className="exp-obs"> · {semTag} sem tag nenhuma</span>}
           </div>
 
           <button className="onum-add" style={{ marginTop: 14, display: "block" }} disabled={!filtrados.length} onClick={baixar}>
@@ -7868,10 +7914,10 @@ function OficialNumeros({ showToast }) {
     if (!igForm.igId || !igForm.igId.trim()) return showToast("Informe o ID da conta do Instagram");
     setSalvandoIg(true);
     try {
-      const dados = { igId: igForm.igId.trim(), usuario: igForm.usuario || "", ativo: !!igForm.ativo };
+      const dados = { igId: igForm.igId.trim(), usuario: igForm.usuario || "", ativo: !!igForm.ativo, vendedorId: igForm.vendedorId || null };
       if (igForm.token && igForm.token.trim()) dados.token = igForm.token.trim();
       const r = await api.ofSalvarInstagram(dados);
-      setIgCfg({ igId: r.igId, usuario: r.usuario, ativo: r.ativo, temToken: r.temToken });
+      setIgCfg({ igId: r.igId, usuario: r.usuario, ativo: r.ativo, vendedorId: r.vendedorId || null, temToken: r.temToken });
       setIgForm(null);
       showToast("✅ Instagram salvo!");
     } catch (e) { showToast("❌ " + e.message); }
@@ -8158,10 +8204,10 @@ function OficialNumeros({ showToast }) {
             </span>
           </div>
           {igCfg && igCfg.igId
-            ? <p className="onum-webhook-intro">Conta: <b>{igCfg.usuario ? "@" + igCfg.usuario : igCfg.igId}</b> · Token {igCfg.temToken ? "salvo ✅" : "faltando ⚠️"} — os DMs caem aqui na <b>Caixa de entrada</b>.</p>
+            ? <p className="onum-webhook-intro">Conta: <b>{igCfg.usuario ? "@" + igCfg.usuario : igCfg.igId}</b> · Token {igCfg.temToken ? "salvo ✅" : "faltando ⚠️"}{igCfg.vendedorId && vendedores.find((v) => v.id === igCfg.vendedorId) ? <> · Atende: <b>{vendedores.find((v) => v.id === igCfg.vendedorId).nome}</b></> : null} — os DMs caem aqui na <b>Caixa de entrada</b>.</p>
             : <p className="onum-webhook-intro">Ligue uma conta Instagram profissional pra <b>receber e responder DMs</b> aqui na Caixa de entrada.</p>}
           <p className="onum-webhook-fim">Usa o <b>mesmo webhook do WhatsApp</b> (acima). No app da Meta, adicione o produto <b>Instagram</b>, assine o webhook e ative o campo <b>messages</b>.</p>
-          <button className="onum-btn-save" onClick={() => setIgForm({ igId: (igCfg && igCfg.igId) || "", usuario: (igCfg && igCfg.usuario) || "", token: "", ativo: igCfg ? !!igCfg.ativo : true })}>
+          <button className="onum-btn-save" onClick={() => setIgForm({ igId: (igCfg && igCfg.igId) || "", usuario: (igCfg && igCfg.usuario) || "", token: "", ativo: igCfg ? !!igCfg.ativo : true, vendedorId: (igCfg && igCfg.vendedorId) || null })}>
             {igCfg && igCfg.igId ? "Editar Instagram" : "Configurar Instagram"}
           </button>
         </div>
@@ -8226,6 +8272,14 @@ function OficialNumeros({ showToast }) {
               <div className="onum-f">
                 <label>Access Token {igCfg && igCfg.temToken ? <i>(deixe vazio pra manter o atual)</i> : <i>(Page token com instagram_manage_messages)</i>}</label>
                 <input className="mono" placeholder={igCfg && igCfg.temToken ? "deixe vazio pra manter" : "EAA..."} value={igForm.token} onChange={(e) => setIgForm({ ...igForm, token: e.target.value })} />
+              </div>
+              <div className="onum-f">
+                <label>Vendedor responsável <i>(quem atende as DMs do Instagram)</i></label>
+                <select value={igForm.vendedorId || ""} onChange={(e) => setIgForm({ ...igForm, vendedorId: e.target.value || null })}>
+                  <option value="">— Ninguém (cai na caixa geral) —</option>
+                  {vendedores.map((v) => <option key={v.id} value={v.id}>{v.nome}</option>)}
+                </select>
+                <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 5 }}>As conversas do Instagram vão direto pra esse vendedor.</div>
               </div>
               <label style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 6, fontWeight: 600 }}>
                 <input type="checkbox" checked={!!igForm.ativo} onChange={(e) => setIgForm({ ...igForm, ativo: e.target.checked })} /> Ativo
