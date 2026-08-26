@@ -3800,6 +3800,25 @@ function PainelSistema({ modulos, onSalvo, showToast }) {
   ];
   const [flags, setFlags] = useState(() => { const o = {}; LISTA.forEach(([k]) => { o[k] = !modulos || modulos[k] !== false; }); return o; });
   const [saving, setSaving] = useState(false);
+  const [baixandoBk, setBaixandoBk] = useState(false);
+  async function baixarBackup() {
+    setBaixandoBk(true);
+    try {
+      const tk = localStorage.getItem("instructiva_crm_token") || "";
+      const r = await fetch("/api/sistema/backup-download", { headers: tk ? { Authorization: "Bearer " + tk } : {} });
+      if (!r.ok) throw new Error("Falha ao baixar (código " + r.status + ")");
+      const blob = await r.blob();
+      const dispo = r.headers.get("Content-Disposition") || "";
+      const m = dispo.match(/filename="?([^"]+)"?/);
+      const nome = (m && m[1]) || ("backup-crm-" + new Date().toISOString().slice(0, 10) + ".json");
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url; a.download = nome; document.body.appendChild(a); a.click();
+      a.remove(); URL.revokeObjectURL(url);
+      showToast("✅ Backup baixado! Guarde num lugar seguro.");
+    } catch (e) { showToast("❌ " + e.message); }
+    finally { setBaixandoBk(false); }
+  }
   const toggle = (k) => setFlags((f) => ({ ...f, [k]: !f[k] }));
   async function salvar() {
     setSaving(true);
@@ -3882,6 +3901,18 @@ function PainelSistema({ modulos, onSalvo, showToast }) {
       </div>
 
       <div className="sist-dica">Configurações continua sempre disponível (é onde ficam os dados de acesso). A cópia entregue usa as próprias chaves de API do cliente, configuradas no ambiente de hospedagem dele.</div>
+
+      <div className="onum-card" style={{ marginTop: 18 }}>
+        <div className="onum-card-h" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+          <div>
+            <b>Backup do banco</b>
+            <div style={{ fontSize: 13, color: "var(--muted)", marginTop: 4 }}>Baixa uma cópia de tudo (conversas, vendas, leads, config) pro seu computador. Guarde num lugar seguro — é a sua rede de segurança.</div>
+          </div>
+          <button className="onum-add" disabled={baixandoBk} onClick={baixarBackup} style={{ whiteSpace: "nowrap" }}>
+            {baixandoBk ? <span className="spin" /> : "⬇"} Baixar backup agora
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

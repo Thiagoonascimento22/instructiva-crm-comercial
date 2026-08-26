@@ -414,6 +414,18 @@ function fazerBackup() {
 }
 /* Listar e restaurar backups pela tela — sem precisar de ninguém técnico */
 function instalarRotasBackup(app, auth, gerenteOnly) {
+  // Baixar o banco atual (crm.json) pro computador — cópia de segurança FORA do Railway.
+  app.get("/api/sistema/backup-download", auth, gerenteOnly, (req, res) => {
+    try {
+      if (!fs.existsSync(DB_PATH)) return res.status(404).json({ error: "Banco não encontrado" });
+      const d = new Date();
+      const stamp = d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0") + "_" + String(d.getHours()).padStart(2, "0") + "h" + String(d.getMinutes()).padStart(2, "0");
+      res.setHeader("Content-Type", "application/json");
+      res.setHeader("Content-Disposition", `attachment; filename="backup-crm-${stamp}.json"`);
+      fs.createReadStream(DB_PATH).pipe(res); // streaming: não carrega tudo na memória
+    } catch (e) { res.status(500).json({ error: e.message }); }
+  });
+
   app.get("/api/sistema/backups", auth, gerenteOnly, (req, res) => {
     try {
       if (!fs.existsSync(BACKUP_DIR)) return res.json({ backups: [] });
