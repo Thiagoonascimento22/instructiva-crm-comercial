@@ -394,6 +394,7 @@ export default function App() {
   const isGer = user.role === "gerente";
   const isSuporte = user.role === "suporte";
   const isVend = !isGer && !isSuporte;
+  const ehLider = isVend && Array.isArray(user.lideradosIds) && user.lideradosIds.length > 0; // vendedor que lidera outros
   const mod = (k) => !modulos || modulos[k] !== false; // módulo ligado? (default ligado enquanto carrega)
   const vendPode = (k) => !!(acessoVend && acessoVend[k] === true); // dono liberou essa tela pro vendedor?
   const badgeSol = minhasSol.filter((s) => s.status === "resolvida" && !s.resolvidoVisto).length;
@@ -483,9 +484,9 @@ export default function App() {
           {view === "numeros" && isGer && mod("numeros") && <OficialNumeros showToast={showToast} />}
           {view === "ia" && isGer && mod("ia") && <OficialIAs showToast={showToast} />}
           {view === "ligacoes" && isGer && mod("ligacoes") && <OficialLigacoes showToast={showToast} />}
-          {view === "vendas" && (isGer || vendPode("vendas")) && mod("vendas") && <PainelVendas showToast={showToast} isGer={isGer} />}
+          {view === "vendas" && (isGer || vendPode("vendas")) && mod("vendas") && <PainelVendas showToast={showToast} isGer={isGer} ehLider={ehLider} />}
           {view === "crm" && (isGer || vendPode("crm")) && mod("crm") && <OficialCRM showToast={showToast} isGer={isGer} onAbrirWhats={(tel, canal, nome) => { setWaTarget({ numero: tel, canal, nome }); setView("whatsapp"); }} onDisparar={(preset) => { setDisparoPreset(preset); setView("disparo"); }} />}
-          {view === "desempenho" && (isGer || (isVend && !(acessoVend && acessoVend.desempenhoOculto))) && mod("desempenho") && <Desempenho showToast={showToast} isGer={isGer} />}
+          {view === "desempenho" && (isGer || (isVend && !(acessoVend && acessoVend.desempenhoOculto))) && mod("desempenho") && <Desempenho showToast={showToast} isGer={isGer} ehLider={ehLider} />}
           {view === "analiseia" && (isGer || isVend) && mod("caixa") && <AnaliseIAVendedor showToast={showToast} isGer={isGer} />}
           {view === "temperatura" && (isGer || vendPode("temperatura")) && mod("temperatura") && <OficialTemperatura showToast={showToast} />}
           {view === "minhasSolicitacoes" && !isGer && !isSuporte && <PaginaMinhasSolicitacoes itens={minhasSol} recarregar={carregarMinhasSol} showToast={showToast} />}
@@ -597,6 +598,8 @@ function Onboarding({ user, onDone }) {
 /* ============================ PIPELINE (KANBAN) ============================ */
 function Pipeline({ user, showToast, irParaWhatsApp }) {
   const isGer = user.role === "gerente";
+  const ehLider = user.role === "vendedor" && Array.isArray(user.lideradosIds) && user.lideradosIds.length > 0;
+  const podeFiltrar = isGer || ehLider; // líder também filtra por vendedor (só os que ele lidera)
   const [cards, setCards] = useState([]);
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -620,7 +623,7 @@ function Pipeline({ user, showToast, irParaWhatsApp }) {
   async function carregar() {
     setLoading(true);
     try {
-      const cs = await api.listCards(isGer ? filtro : null);
+      const cs = await api.listCards(podeFiltrar ? filtro : null);
       setCards(cs);
       if (users.length === 0) setUsers(await api.listVendedores());
     } catch (e) {
@@ -694,7 +697,7 @@ function Pipeline({ user, showToast, irParaWhatsApp }) {
     <>
       {/* AÇÕES */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, marginBottom: 18, flexWrap: "wrap" }}>
-        {isGer ? (
+        {podeFiltrar ? (
           <select className="select" style={{ width: 230 }} value={filtro} onChange={(e) => setFiltro(e.target.value)}>
             <option value="todos">Todos os vendedores</option>
             {users.map((u) => (
@@ -5407,7 +5410,7 @@ function ModalVendasPeriodo({ isGer = true, onClose, showToast }) {
   );
 }
 
-function PainelVendas({ showToast, isGer = true }) {
+function PainelVendas({ showToast, isGer = true, ehLider = false }) {
   const [mes, setMes] = useState("");
   const [dados, setDados] = useState(null);
   const [vendas, setVendas] = useState([]);
@@ -5512,7 +5515,7 @@ function PainelVendas({ showToast, isGer = true }) {
           {dados && (dados.souEu || !isGer) && (
             <button className={escopo === "minhas" ? "on" : ""} onClick={() => trocarEscopo("minhas")}>Minhas vendas</button>
           )}
-          {isGer && (
+          {(isGer || ehLider) && (
             <select className={"vd-switch-sel" + (escopo !== "time" && escopo !== "minhas" ? " on" : "")}
               value={escopo !== "time" && escopo !== "minhas" ? escopo : ""}
               onChange={(e) => trocarEscopo(e.target.value || "time")}>
@@ -6539,7 +6542,7 @@ function AnaliseIAVendedor({ showToast, isGer = true }) {
   );
 }
 
-function Desempenho({ showToast, isGer = true }) {
+function Desempenho({ showToast, isGer = true, ehLider = false }) {
   const [dados, setDados] = useState(null);
   const [mes, setMes] = useState("");
   const [carregando, setCarregando] = useState(true);
@@ -8486,7 +8489,7 @@ function OfMidia({ chatId, m }) {
     : <button className="of-midia-btn" onClick={carregar}>{carregando ? "Carregando…" : "📄 " + (m.filename || "Baixar documento")}</button>;
 }
 
-function InboxOficial({ isGer, showToast, onIrParaEvolution, target, onTargetUsed }) {
+function InboxOficial({ isGer, ehLider, showToast, onIrParaEvolution, target, onTargetUsed }) {
   const [chats, setChats] = useState([]);
   const [carregou, setCarregou] = useState(false);
   const [regVenda, setRegVenda] = useState(false);
@@ -8839,12 +8842,12 @@ function InboxOficial({ isGer, showToast, onIrParaEvolution, target, onTargetUse
           <input placeholder="Buscar por nome ou número" value={busca} onChange={(e) => setBusca(e.target.value)} />
           {isGer && <button className="of-limpar-btn" title="Limpar conversas" onClick={limpar}><I.trash className="ico" /></button>}
         </div>
-        {isGer && vendedores.length > 0 && (
+        {(isGer || ehLider) && vendedores.length > 0 && (
           <div style={{ padding: "0 12px 10px" }}>
             <select className="select" style={{ width: "100%" }} value={filtroVend} onChange={(e) => setFiltroVend(e.target.value)}>
-              <option value="todos">Todos os vendedores</option>
-              <option value="ia">🤖 Em atendimento por IA</option>
-              <option value="sem">Aguardando distribuição</option>
+              <option value="todos">{ehLider && !isGer ? "Minha equipe (todos)" : "Todos os vendedores"}</option>
+              {isGer && <option value="ia">🤖 Em atendimento por IA</option>}
+              {isGer && <option value="sem">Aguardando distribuição</option>}
               {vendedores.map((v) => <option key={v.id} value={v.id}>{v.nome}{v.ehGerente ? " (gerente)" : ""}</option>)}
             </select>
           </div>
@@ -9189,6 +9192,8 @@ function InboxOficial({ isGer, showToast, onIrParaEvolution, target, onTargetUse
 
 function WhatsApp({ user, showToast, target, onTargetUsed, recarregarSol }) {
   const isGer = user.role === "gerente";
+  const ehLider = user.role === "vendedor" && Array.isArray(user.lideradosIds) && user.lideradosIds.length > 0;
+  const podeFiltrar = isGer || ehLider;
   const [canalAba, setCanalAba] = useState(user.role === "gerente" ? "evolution" : "oficial"); // evolution | oficial
   const [chats, setChats] = useState([]);
   const [usersMap, setUsersMap] = useState({});
@@ -9517,7 +9522,7 @@ function WhatsApp({ user, showToast, target, onTargetUsed, recarregarSol }) {
       </div>
 
       {canalAba === "oficial" ? (
-        <InboxOficial isGer={isGer} showToast={showToast} onIrParaEvolution={() => setCanalAba("evolution")} target={target && target.canal === "oficial" ? target : null} onTargetUsed={onTargetUsed} />
+        <InboxOficial isGer={isGer} ehLider={ehLider} showToast={showToast} onIrParaEvolution={() => setCanalAba("evolution")} target={target && target.canal === "oficial" ? target : null} onTargetUsed={onTargetUsed} />
       ) : semEvolution ? (
         <div className="wa-grid"><div className="wa-none">
           <I.wa className="ico" />

@@ -3643,6 +3643,10 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
     } else if (req.query.numeroId && req.query.numeroId !== "todos") {
       chats = chats.filter((c) => c.numeroOficialId === req.query.numeroId);
     }
+    // filtro por vendedor específico (gerente vê todos; líder só os que ele pode ver)
+    if (req.query.vendedorId && req.query.vendedorId !== "todos" && podeVerVend(req.user, req.query.vendedorId)) {
+      chats = chats.filter((c) => c.vendedorId === req.query.vendedorId);
+    }
     // filtro por campanha (ex: ver só as conversas do disparo que EU fiz)
     if (req.query.campanhaId && req.query.campanhaId !== "todas") {
       chats = chats.filter((c) => c.campanhaId === req.query.campanhaId);
@@ -3899,9 +3903,10 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
 
   /* lista de vendedores pra reatribuição (qualquer colaborador logado pode ver) */
   app.get("/api/oficial/vendedores-lista", auth, (req, res) => {
+    const ids = idsVisiveis(req.user); // null = gerente (todos)
     res.json(
       db.users
-        .filter((u) => u.role === "vendedor" && u.ativo)
+        .filter((u) => u.role === "vendedor" && u.ativo && (ids === null || ids.includes(u.id)))
         .map((u) => ({ id: u.id, nome: u.nome, oficialAtivo: !!u.oficialAtivo }))
     );
   });

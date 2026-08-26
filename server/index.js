@@ -1009,10 +1009,11 @@ function podeVerCard(user, card) {
 
 app.get("/api/cards", auth, (req, res) => {
   let cards = db.cards.filter((c) => !c.arquivado);
-  if (req.user.role === "vendedor") {
-    cards = cards.filter((c) => c.responsavelId === req.user.id);
-  } else if (req.query.responsavel && req.query.responsavel !== "todos") {
-    cards = cards.filter((c) => c.responsavelId === req.query.responsavel);
+  const u = req.user;
+  const ids = u.role === "gerente" ? null : [u.id, ...(Array.isArray(u.lideradosIds) ? u.lideradosIds : [])];
+  if (ids !== null) cards = cards.filter((c) => ids.includes(c.responsavelId)); // vendedor vê os dele; líder, dele + liderados
+  if (req.query.responsavel && req.query.responsavel !== "todos") {
+    cards = cards.filter((c) => c.responsavelId === req.query.responsavel); // filtro por um vendedor (gerente ou líder)
   }
   res.json(cards);
 });
@@ -1127,10 +1128,12 @@ app.post("/api/cards/import", auth, (req, res) => {
 
 // lista enxuta de vendedores ativos (pra transferência — acessível a todos)
 app.get("/api/vendedores", auth, (req, res) => {
+  const u = req.user;
+  const ids = u.role === "gerente" ? null : [u.id, ...(Array.isArray(u.lideradosIds) ? u.lideradosIds : [])];
   res.json(
     db.users
-      .filter((u) => u.role === "vendedor" && u.ativo)
-      .map((u) => ({ id: u.id, nome: u.nome }))
+      .filter((x) => x.role === "vendedor" && x.ativo && (ids === null || ids.includes(x.id)))
+      .map((x) => ({ id: x.id, nome: x.nome }))
   );
 });
 

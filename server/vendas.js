@@ -216,7 +216,11 @@ export function instalarVendas({ app, getDb, saveDB, proximoId, auth, gerenteOnl
     garantir();
     const cont = {}, soma = {};
     db.vendas.lista.forEach((v) => { cont[v.pessoaId] = (cont[v.pessoaId] || 0) + 1; soma[v.pessoaId] = (soma[v.pessoaId] || 0) + num(v.valor); });
-    res.json({ pessoas: db.vendas.pessoas.map((p) => ({ ...pessoaPublica(p), vendas: cont[p.id] || 0, total: soma[p.id] || 0 })) });
+    let pessoas = db.vendas.pessoas;
+    const u = req.user;
+    const ehLider = u.role === "vendedor" && Array.isArray(u.lideradosIds) && u.lideradosIds.length > 0;
+    if (ehLider) { const idsVis = pessoasVisiveisIds(u) || []; pessoas = pessoas.filter((p) => idsVis.includes(p.id)); }
+    res.json({ pessoas: pessoas.map((p) => ({ ...pessoaPublica(p), vendas: cont[p.id] || 0, total: soma[p.id] || 0 })) });
   });
 
   app.post("/api/vendas/pessoas", auth, gerenteOnly, (req, res) => {
@@ -1096,8 +1100,12 @@ export function instalarVendas({ app, getDb, saveDB, proximoId, auth, gerenteOnl
     const todasDoMes = db.vendas.lista.filter((v) => mesDe(v.data) === mes);
     const doMes = soDe ? todasDoMes.filter((v) => v.pessoaId === soDe) : todasDoMes;
 
+    // líder vê o ranking só da sub-equipe dele; vendedor comum e gerente veem tudo
+    const _u = req.user;
+    const _ehLider = _u.role === "vendedor" && Array.isArray(_u.lideradosIds) && _u.lideradosIds.length > 0;
+    const _idsLider = _ehLider ? (pessoasVisiveisIds(_u) || []) : null;
     const linhas = db.vendas.pessoas
-      .filter((p) => p.ativo !== false)
+      .filter((p) => p.ativo !== false && (!_idsLider || _idsLider.includes(p.id)))
       .map((p) => {
         const minhas = todasDoMes.filter((v) => v.pessoaId === p.id);
         const venda = minhas.reduce((s, v) => s + num(v.valor), 0);
