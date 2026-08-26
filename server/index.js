@@ -20,6 +20,10 @@ app.use(express.urlencoded({ extended: false, limit: "10mb" })); // Twilio manda
    BANCO EM ARQUIVO JSON (com espera do volume do Railway)
    ============================================================ */
 const DB_PATH = process.env.DB_PATH || "/data/crm.json";
+// As conversas (waChats) ficam num arquivo SEPARADO. Assim, gravar o banco
+// principal (vendas, leads, config) fica leve e rápido, e as conversas são
+// gravadas com folga (throttle) — some o "travadinho" a cada mensagem.
+const CHATS_PATH = path.join(path.dirname(DB_PATH), "waChats.json");
 const MEDIA_DIR = path.join(path.dirname(DB_PATH), "media");
 function garantirPastaMidia() {
   try { fs.mkdirSync(MEDIA_DIR, { recursive: true }); } catch (_) {}
@@ -162,6 +166,15 @@ function loadDB() {
       if (!db.waConfig.horario) db.waConfig.horario = horarioPadrao();
       else db.waConfig.horario = normalizaHorario(db.waConfig.horario);
       if (!db.waChats || typeof db.waChats !== "object") db.waChats = {};
+      // conversas ficam num arquivo próprio (waChats.json). Se ele já existe,
+      // é a fonte da verdade. Se não (primeira vez), usa o que veio do crm.json
+      // e o boot cria o waChats.json a partir daí (migração automática, sem perder nada).
+      try {
+        if (fs.existsSync(CHATS_PATH)) {
+          const chats = JSON.parse(fs.readFileSync(CHATS_PATH, "utf8"));
+          if (chats && typeof chats === "object") db.waChats = chats;
+        }
+      } catch (e) { console.error("Erro ao ler conversas (waChats.json):", e.message); }
       if (!Array.isArray(db.solicitacoes)) db.solicitacoes = [];
       db.solicitacoes.forEach((s) => {
         if (typeof s.resposta !== "string") s.resposta = "";
@@ -313,11 +326,56 @@ function _mesclarComDisco() {
   return db;
 }
 
+// grava o banco principal SEM as conversas (elas vão pro waChats.json)
+function _semChats(obj) { const { waChats, ...resto } = obj || {}; return resto; }
+
 function _gravarNoDisco(paraGravar) {
-  const json = JSON.stringify(paraGravar);
+  const json = JSON.stringify(_semChats(paraGravar));  // conversas NÃO entram aqui
   const tmp = DB_PATH + ".tmp";
   fs.writeFileSync(tmp, json);
   fs.renameSync(tmp, DB_PATH);   // rename é atômico: nunca fica pela metade
+}
+
+/* ===== arquivo separado das conversas (waChats.json) =====
+   Gravar o banco inteiro a cada mensagem era o que travava tudo. Agora as
+   conversas moram no próprio arquivo e são gravadas no MÁXIMO a cada 4s
+   (throttle). O banco principal (pequeno) continua gravando na hora. */
+let _chatsSujo = false, _chatsGravando = false, _chatsUltimo = 0, _chatsTimer = null;
+const CHATS_INTERVALO = 4000;
+
+function _gravarChatsSync() { // usado no encerramento e na migração
+  try {
+    const json = JSON.stringify(db.waChats || {});
+    const tmp = CHATS_PATH + ".tmp";
+    fs.writeFileSync(tmp, json);
+    fs.renameSync(tmp, CHATS_PATH);
+    _chatsSujo = false; _chatsUltimo = Date.now();
+  } catch (e) { console.error("Erro ao salvar conversas:", e.message); }
+}
+
+function gravarChatsEmBreve() {
+  _chatsSujo = true;
+  if (_chatsTimer) return;
+  const espera = Math.max(0, CHATS_INTERVALO - (Date.now() - _chatsUltimo));
+  _chatsTimer = setTimeout(async () => {
+    _chatsTimer = null;
+    if (_chatsGravando) { gravarChatsEmBreve(); return; }
+    if (!_chatsSujo) return;
+    _chatsGravando = true;
+    try {
+      const json = JSON.stringify(db.waChats || {});
+      const tmp = CHATS_PATH + ".tmp";
+      await fs.promises.writeFile(tmp, json);   // assíncrono: não trava o servidor
+      await fs.promises.rename(tmp, CHATS_PATH);
+      _chatsSujo = false; _chatsUltimo = Date.now();
+    } catch (e) {
+      console.error("Erro ao salvar conversas:", e.message);
+      try { _gravarChatsSync(); } catch (_) {}
+    } finally {
+      _chatsGravando = false;
+      if (_chatsSujo) gravarChatsEmBreve();   // mudou de novo durante a gravação
+    }
+  }, espera);
 }
 
 // gravação imediata (usada no encerramento e em pontos críticos)
@@ -326,20 +384,20 @@ function saveDB() {
     // a proteção de deploy só faz sentido nos primeiros minutos de vida do processo
     const paraGravar = _savesFeitos < 3 ? _mesclarComDisco() : db;
     _savesFeitos++;
-    _gravarNoDisco(paraGravar);
+    _gravarNoDisco(paraGravar);   // banco principal (sem conversas)
+    _gravarChatsSync();           // conversas na hora também (é um caso raro/crítico)
     _sujo = false;
   } catch (e) {
     console.error("Erro ao salvar banco:", e.message);
   }
 }
 
-// gravação agrupada: várias mudanças seguidas viram UMA gravação.
-// Subimos de 700ms pra 1500ms: agrupa mais mudanças numa gravação só,
-// então o "travadinho" da gravação pesada acontece bem menos vezes.
-// (No encerramento/SIGTERM a gente grava na hora, então nada se perde num deploy.)
-const SAVE_DEBOUNCE = 1500;
+// gravação agrupada do banco principal (pequeno): rápida e frequente.
+// As conversas são agendadas à parte (gravarChatsEmBreve), com folga.
+const SAVE_DEBOUNCE = 700;
 function saveSoon() {
   _sujo = true;
+  gravarChatsEmBreve();   // qualquer mudança também agenda a gravação das conversas (no máx. 1x/4s)
   if (_timerSave) return;
   _timerSave = setTimeout(async () => {
     _timerSave = null;
@@ -348,7 +406,7 @@ function saveSoon() {
     try {
       const paraGravar = _savesFeitos < 3 ? _mesclarComDisco() : db;
       _savesFeitos++;
-      const json = JSON.stringify(paraGravar);
+      const json = JSON.stringify(_semChats(paraGravar));  // conversas NÃO entram aqui
       const tmp = DB_PATH + ".tmp";
       await fs.promises.writeFile(tmp, json);   // assíncrono: não trava o servidor
       await fs.promises.rename(tmp, DB_PATH);
@@ -365,7 +423,12 @@ function saveSoon() {
 
 // nada se perde ao reiniciar/derrubar o container
 function _salvarAoSair(sinal) {
-  try { if (_timerSave) { clearTimeout(_timerSave); _timerSave = null; } if (_sujo) saveDB(); } catch (_) {}
+  try {
+    if (_timerSave) { clearTimeout(_timerSave); _timerSave = null; }
+    if (_chatsTimer) { clearTimeout(_chatsTimer); _chatsTimer = null; }
+    if (_sujo) saveDB();                    // banco principal + conversas (saveDB grava os dois)
+    else if (_chatsSujo) _gravarChatsSync(); // se só as conversas mudaram, grava elas
+  } catch (_) {}
   if (sinal) process.exit(0);
 }
 process.on("SIGTERM", () => _salvarAoSair("SIGTERM"));
@@ -385,13 +448,17 @@ function fazerBackup() {
     const dia = d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
     const destino = path.join(BACKUP_DIR, `crm-${dia}.json`);
 
+    // backup COMPLETO do dia (banco + conversas juntas), já que agora o crm.json
+    // no disco não guarda as conversas (elas ficam no waChats.json).
+    const completo = JSON.stringify(db);
+
     // SEGURANÇA: o backup do dia é sobrescrito a cada restart. Se o banco tiver
     // ENCOLHIDO muito (sinal de que algo se perdeu), NÃO joga a cópia boa fora —
     // guarda ela à parte antes, pra dar pra voltar atrás.
     try {
       if (fs.existsSync(destino)) {
         const antes = fs.statSync(destino).size;
-        const agora = fs.statSync(DB_PATH).size;
+        const agora = Buffer.byteLength(completo);
         if (antes > 2000 && agora < antes * 0.7) {
           const salvaVidas = path.join(BACKUP_DIR, `crm-${dia}-ANTES-DE-ENCOLHER-${Date.now()}.json`);
           fs.copyFileSync(destino, salvaVidas);
@@ -400,7 +467,7 @@ function fazerBackup() {
       }
     } catch (_) {}
 
-    fs.copyFileSync(DB_PATH, destino); // um backup por dia (sobrescreve se já houver do dia)
+    fs.writeFileSync(destino, completo); // um backup COMPLETO por dia (sobrescreve se já houver do dia)
     // rotação: mantém os 14 mais recentes (as cópias "ANTES-DE-ENCOLHER" ficam)
     const arquivos = fs.readdirSync(BACKUP_DIR).filter((f) => /^crm-\d{4}-\d{2}-\d{2}\.json$/.test(f)).sort();
     while (arquivos.length > 14) {
@@ -417,12 +484,12 @@ function instalarRotasBackup(app, auth, gerenteOnly) {
   // Baixar o banco atual (crm.json) pro computador — cópia de segurança FORA do Railway.
   app.get("/api/sistema/backup-download", auth, gerenteOnly, (req, res) => {
     try {
-      if (!fs.existsSync(DB_PATH)) return res.status(404).json({ error: "Banco não encontrado" });
       const d = new Date();
       const stamp = d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0") + "_" + String(d.getHours()).padStart(2, "0") + "h" + String(d.getMinutes()).padStart(2, "0");
       res.setHeader("Content-Type", "application/json");
       res.setHeader("Content-Disposition", `attachment; filename="backup-crm-${stamp}.json"`);
-      fs.createReadStream(DB_PATH).pipe(res); // streaming: não carrega tudo na memória
+      // manda o banco COMPLETO (com as conversas juntas) — backup íntegro num arquivo só
+      res.end(JSON.stringify(db));
     } catch (e) { res.status(500).json({ error: e.message }); }
   });
 
@@ -454,8 +521,8 @@ function instalarRotasBackup(app, auth, gerenteOnly) {
       const p = path.join(BACKUP_DIR, arq);
       if (!arq || !fs.existsSync(p)) return res.status(404).json({ error: "Backup não encontrado" });
       const j = JSON.parse(fs.readFileSync(p, "utf8"));
-      // guarda o estado atual antes de restaurar (dá pra voltar atrás)
-      try { fs.copyFileSync(DB_PATH, path.join(BACKUP_DIR, `crm-ANTES-DA-RESTAURACAO-${Date.now()}.json`)); } catch (_) {}
+      // guarda o estado atual COMPLETO (com conversas) antes de restaurar (dá pra voltar atrás)
+      try { fs.writeFileSync(path.join(BACKUP_DIR, `crm-ANTES-DA-RESTAURACAO-${Date.now()}.json`), JSON.stringify(db)); } catch (_) {}
       db = j;
       if (!Array.isArray(db.users)) db.users = dbVazio().users;
       if (!db.waConfig) db.waConfig = dbVazio().waConfig;
@@ -2308,6 +2375,10 @@ const PORT = process.env.PORT || 3000;
 aguardarVolume().then(() => {
   garantirPastaMidia();
   loadDB();
+  // MIGRAÇÃO: primeira vez rodando com conversas em arquivo separado.
+  // Se o waChats.json ainda não existe, cria ele agora (a partir do que veio do
+  // crm.json), ANTES de qualquer gravação do banco principal — assim nada se perde.
+  try { if (!fs.existsSync(CHATS_PATH)) { _gravarChatsSync(); console.log("[migração] conversas movidas pro arquivo próprio (waChats.json)"); } } catch (_) {}
   canalOficial.garantirEstrutura(); // cria db.oficial depois de carregar o banco
   resetAdminSeNecessario();
   app.listen(PORT, () => console.log("✓ CRM Comercial rodando na porta", PORT));
