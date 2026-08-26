@@ -333,8 +333,11 @@ function saveDB() {
   }
 }
 
-// gravação agrupada: várias mudanças seguidas viram UMA gravação
-const SAVE_DEBOUNCE = 700;
+// gravação agrupada: várias mudanças seguidas viram UMA gravação.
+// Subimos de 700ms pra 1500ms: agrupa mais mudanças numa gravação só,
+// então o "travadinho" da gravação pesada acontece bem menos vezes.
+// (No encerramento/SIGTERM a gente grava na hora, então nada se perde num deploy.)
+const SAVE_DEBOUNCE = 1500;
 function saveSoon() {
   _sujo = true;
   if (_timerSave) return;
