@@ -361,10 +361,10 @@ export default function App() {
     vistaInicial.current = true;
     // valida a aba restaurada: se não for permitida pro perfil, cai numa aba segura
     const porRole = {
-      gerente: ["whatsapp", "disparo", "numeros", "ia", "ligacoes", "crm", "temperatura", "solicitacoes", "config"],
+      gerente: ["whatsapp", "disparo", "numeros", "crm", "solicitacoes", "config"],
       suporte: ["solicitacoes", "config"],
     };
-    const permitidas = porRole[user.role] || ["whatsapp", "disparo", "minhasSolicitacoes", "config", "crm", "temperatura"];
+    const permitidas = porRole[user.role] || ["whatsapp", "disparo", "minhasSolicitacoes", "config", "crm"];
     if (!permitidas.includes(view)) setView(user.role === "suporte" ? "solicitacoes" : "whatsapp");
   }, [user]);
 
@@ -403,14 +403,12 @@ export default function App() {
     disparo: { t: "Disparo", s: "Disparo em massa pelo número oficial" },
     templates: { t: "Templates", s: "Modelos de mensagem aprovados pela Meta" },
     numeros: { t: "Números", s: "Números oficiais conectados à sua conta Meta" },
-    ia: { t: "Atendente IA", s: "SDR de IA que qualifica os leads e passa pro vendedor" },
-    ligacoes: { t: "Ligações IA", s: "A IA liga pro lead, qualifica por voz e passa pro vendedor" },
+    analiseia: { t: "Análise IA", s: "A IA lê as conversas e aponta o que está bom, o que melhorar e alertas" },
     crm: { t: "Pipeline", s: "Funil de leads — arraste entre as etapas, atribua e acompanhe" },
     vendas: { t: "Vendas", s: "Metas, ranking e todas as vendas do time" },
     desempenho: { t: "Desempenho", s: "Métricas, cargo, faixa e progresso de cada vendedor" },
     analiseia: { t: "Análise IA", s: "A IA lê as conversas e aponta o que está bom, o que melhorar e alertas" },
     sistema: { t: "Sistema", s: "Controle dos módulos entregues — visível só pra você (dono)" },
-    temperatura: { t: "Temperatura", s: "Melhores horários e dias — quando os leads mais respondem" },
     minhasSolicitacoes: { t: "Minhas solicitações", s: "Acompanhe seus pedidos ao suporte" },
     solicitacoes: { t: "Solicitações de suporte", s: "Pedidos de ajuda dos vendedores e análise" },
     equipe: { t: "Equipe & Acessos", s: "Gerencie os atendentes e seus acessos" },
@@ -435,9 +433,6 @@ export default function App() {
           {!isSuporte && mod("caixa") && <NavBtn ic={I.wa} label="Caixa de entrada" active={view === "whatsapp"} onClick={() => setView("whatsapp")} />}
           {(isGer || isVend) && mod("disparo") && <NavBtn ic={I.send} label="Disparo" active={view === "disparo"} onClick={() => setView("disparo")} />}
           {isGer && mod("numeros") && <NavBtn ic={I.wa} label="Números" active={view === "numeros"} onClick={() => setView("numeros")} />}
-          {isGer && mod("ia") && <NavBtn ic={I.spark} label="Atendente IA" active={view === "ia"} onClick={() => setView("ia")} />}
-          {isGer && mod("ligacoes") && <NavBtn ic={I.suporte} label="Ligações IA" active={view === "ligacoes"} onClick={() => setView("ligacoes")} />}
-          {(isGer || vendPode("temperatura")) && mod("temperatura") && <NavBtn ic={I.gauge} label="Temperatura" active={view === "temperatura"} onClick={() => setView("temperatura")} />}
           {!isGer && !isSuporte && <NavBtn ic={I.suporte} label="Minhas solicitações" active={view === "minhasSolicitacoes"} badge={badgeSol} onClick={() => setView("minhasSolicitacoes")} />}
           {(isGer || isSuporte) && mod("solicitacoes") && <NavBtn ic={I.suporte} label="Solicitações" active={view === "solicitacoes"} onClick={() => setView("solicitacoes")} />}
           <NavBtn ic={I.cog} label="Configurações" active={view === "config"} onClick={() => setView("config")} />
@@ -482,13 +477,10 @@ export default function App() {
           {view === "whatsapp" && !isSuporte && mod("caixa") && <WhatsApp user={user} showToast={showToast} target={waTarget} onTargetUsed={() => setWaTarget(null)} recarregarSol={carregarMinhasSol} />}
           {view === "disparo" && (isGer || isVend) && mod("disparo") && <OficialDisparo isGer={isGer} showToast={showToast} preset={disparoPreset} onPresetUsado={() => setDisparoPreset(null)} />}
           {view === "numeros" && isGer && mod("numeros") && <OficialNumeros showToast={showToast} />}
-          {view === "ia" && isGer && mod("ia") && <OficialIAs showToast={showToast} />}
-          {view === "ligacoes" && isGer && mod("ligacoes") && <OficialLigacoes showToast={showToast} />}
           {view === "vendas" && (isGer || vendPode("vendas")) && mod("vendas") && <PainelVendas showToast={showToast} isGer={isGer} ehLider={ehLider} />}
           {view === "crm" && (isGer || vendPode("crm")) && mod("crm") && <OficialCRM showToast={showToast} isGer={isGer} onAbrirWhats={(tel, canal, nome) => { setWaTarget({ numero: tel, canal, nome }); setView("whatsapp"); }} onDisparar={(preset) => { setDisparoPreset(preset); setView("disparo"); }} />}
           {view === "desempenho" && (isGer || (isVend && !(acessoVend && acessoVend.desempenhoOculto))) && mod("desempenho") && <Desempenho showToast={showToast} isGer={isGer} ehLider={ehLider} />}
           {view === "analiseia" && (isGer || isVend) && mod("caixa") && <AnaliseIAVendedor showToast={showToast} isGer={isGer} />}
-          {view === "temperatura" && (isGer || vendPode("temperatura")) && mod("temperatura") && <OficialTemperatura showToast={showToast} />}
           {view === "minhasSolicitacoes" && !isGer && !isSuporte && <PaginaMinhasSolicitacoes itens={minhasSol} recarregar={carregarMinhasSol} showToast={showToast} />}
           {view === "solicitacoes" && (isGer || isSuporte) && <PaginaSolicitacoes showToast={showToast} readonly={isGer} />}
           {view === "config" && <Config user={user} setUser={setUser} showToast={showToast} isGer={isGer} ehDono={ehDono} modulos={modulos} onModulosSalvo={carregarModulos} />}
@@ -612,6 +604,8 @@ function Pipeline({ user, showToast, irParaWhatsApp }) {
   const [fechar, setFechar] = useState(null); // { card } -> modal valor final
   const [modoSel, setModoSel] = useState(false); // seleção em massa
   const [selSet, setSelSet] = useState(() => new Set());
+  const [expandidas, setExpandidas] = useState(() => new Set()); // colunas mostrando todos os cards
+  const LIMITE_COL = 40; // quantos cards desenhar por coluna (o resto entra no "ver mais") — deixa o Pipeline leve
 
   const usersMap = useMemo(() => {
     const m = {};
@@ -761,7 +755,12 @@ function Pipeline({ user, showToast, irParaWhatsApp }) {
       {/* KANBAN */}
       <div className="board">
         {ETAPAS.map((et) => {
-          const lista = cards.filter((c) => c.etapa === et.id);
+          const listaFull = cards.filter((c) => c.etapa === et.id);
+          // desenha só os mais recentes; o resto fica no "ver mais" (deixa a tela leve)
+          const expandida = expandidas.has(et.id);
+          const listaOrd = expandida ? listaFull : [...listaFull].sort((a, b) => (b.atualizadoEm || b.criadoEm || 0) - (a.atualizadoEm || a.criadoEm || 0));
+          const lista = expandida ? listaFull : listaOrd.slice(0, LIMITE_COL);
+          const ocultos = listaFull.length - lista.length;
           return (
             <div
               key={et.id}
@@ -772,10 +771,10 @@ function Pipeline({ user, showToast, irParaWhatsApp }) {
             >
               <div className="col-h">
                 <div className="nm">
-                  {modoSel && <input type="checkbox" className="col-check" checked={lista.length > 0 && lista.every((c) => selSet.has(c.id))} onChange={() => toggleColuna(et.id)} />}
+                  {modoSel && <input type="checkbox" className="col-check" checked={listaFull.length > 0 && listaFull.every((c) => selSet.has(c.id))} onChange={() => toggleColuna(et.id)} />}
                   <span className="bar" style={{ background: et.cor }} /> {et.nome}
                 </div>
-                <span className="cnt">{lista.length}</span>
+                <span className="cnt">{listaFull.length}</span>
               </div>
               <div className="col-body">
                 {lista.length === 0 && <div className="col-empty">Arraste cards pra cá</div>}
@@ -808,6 +807,12 @@ function Pipeline({ user, showToast, irParaWhatsApp }) {
                     </div>
                   </div>
                 ))}
+                {ocultos > 0 && (
+                  <button className="col-vermais" onClick={() => setExpandidas((s) => { const n = new Set(s); n.add(et.id); return n; })}
+                    style={{ width: "100%", padding: "10px", marginTop: 6, border: "1px dashed var(--line)", borderRadius: 10, background: "var(--card)", color: "var(--muted)", fontWeight: 600, fontSize: 13, cursor: "pointer" }}>
+                    ↓ Ver mais {ocultos} {ocultos === 1 ? "card" : "cards"}
+                  </button>
+                )}
               </div>
             </div>
           );
@@ -1375,8 +1380,6 @@ function ConfigDados({ user, setUser, showToast }) {
 function Config({ user, setUser, showToast, isGer, ehDono, modulos, onModulosSalvo }) {
   const abas = [["dados", "Meus dados"]];
   if (isGer) abas.push(["equipe", "Equipe & Acessos"]);
-  if (ehDono) abas.push(["atendimento", "Análise IA"]);
-  if (ehDono) abas.push(["recados", "Recados do time"]);
   if (ehDono) abas.push(["sistema", "Sistema"]);
   const [aba, setAba] = useState("dados");
   return (
@@ -1390,8 +1393,6 @@ function Config({ user, setUser, showToast, isGer, ehDono, modulos, onModulosSal
       )}
       {aba === "dados" && <ConfigDados user={user} setUser={setUser} showToast={showToast} />}
       {aba === "equipe" && isGer && <Equipe showToast={showToast} meId={user.id} />}
-      {aba === "atendimento" && ehDono && <PainelAtendimento showToast={showToast} />}
-      {aba === "recados" && ehDono && <PainelRecados showToast={showToast} />}
       {aba === "sistema" && ehDono && <PainelSistema modulos={modulos} onSalvo={onModulosSalvo} showToast={showToast} />}
     </div>
   );
@@ -1464,14 +1465,6 @@ function PaginaOficial({ user, showToast }) {
         <button className={aba === "metricas" ? "of-tab on" : "of-tab"} onClick={() => setAba("metricas")}>
           <I.cash className="ico" /> Métricas
         </button>
-        <button className={aba === "temperatura" ? "of-tab on" : "of-tab"} onClick={() => setAba("temperatura")}>
-          <I.trend className="ico" /> Temperatura
-        </button>
-        {isGer && (
-          <button className={aba === "ia" ? "of-tab on" : "of-tab"} onClick={() => setAba("ia")}>
-            <I.spark className="ico" /> IA
-          </button>
-        )}
       </div>
       <div className="of-body">
         {aba === "disparo" && <OficialDisparo isGer={isGer} showToast={showToast} />}
@@ -1479,8 +1472,6 @@ function PaginaOficial({ user, showToast }) {
         {aba === "templates" && <OficialTemplates isGer={isGer} showToast={showToast} />}
         {isGer && aba === "numeros" && <OficialNumeros showToast={showToast} />}
         {aba === "metricas" && <OficialMetricas showToast={showToast} />}
-        {aba === "temperatura" && <OficialTemperatura showToast={showToast} />}
-        {isGer && aba === "ia" && <OficialIAs showToast={showToast} />}
       </div>
     </div>
   );
@@ -3803,10 +3794,7 @@ function PainelSistema({ modulos, onSalvo, showToast }) {
     ["disparo", "Disparo", "Campanhas de mensagem em massa por WhatsApp."],
     ["templates", "Templates", "Modelos de mensagem aprovados pela Meta."],
     ["numeros", "Números", "Números oficiais conectados e qualidade de cada um."],
-    ["ia", "Atendente IA", "SDR de IA que atende e qualifica os leads no WhatsApp."],
-    ["ligacoes", "Ligações IA", "A IA liga pro lead, qualifica por voz e passa pro vendedor."],
     ["crm", "Pipeline", "Funil de vendas visual (Kanban) com etapas e distribuição."],
-    ["temperatura", "Temperatura", "Melhores horários e dias pra falar com os leads."],
     ["solicitacoes", "Solicitações", "Pedidos de suporte dos vendedores."],
     ["equipe", "Equipe & Acessos", "Gestão de usuários e permissões da equipe."],
   ];
@@ -3825,10 +3813,7 @@ function PainelSistema({ modulos, onSalvo, showToast }) {
   // [chave, nome, descrição, sensível?, emBreve?]
   const AC_VEND_LISTA = [
     ["crm", "Pipeline", "Vê e move leads no funil — mas só os que são dele.", false, false],
-    ["temperatura", "Temperatura", "Melhores horários e dias pra falar com os leads.", false, false],
     ["vendas", "Vendas", "Lança as próprias vendas e vê o ranking do time. Não importa planilha nem mexe em venda dos outros.", false, false],
-    ["ligacoes", "Ligações IA", "Disparo e histórico de ligações por voz.", false, true],
-    ["ia", "Atendente IA", "Deixa editar o cérebro e a base da IA.", true, true],
     ["numeros", "Números", "Mostra os tokens da Meta e permite excluir números.", true, true],
   ];
   const [acVend, setAcVend] = useState({});
@@ -8544,7 +8529,7 @@ function InboxOficial({ isGer, ehLider, showToast, onIrParaEvolution, target, on
   const carregarLista = () => api.ofChats(busca, null, campanhaFiltro === "todas" ? null : campanhaFiltro).then((cs) => { setChats(cs); setCarregou(true); }).catch(() => {});
   useEffect(() => {
     carregarLista();
-    const t = setInterval(carregarLista, 5000);
+    const t = setInterval(carregarLista, 8000); // aliviado: era 5000
     // todos (gerente e vendedor) podem ver a lista pra transferir
     api.ofVendedoresLista().then(setVendedores).catch(() => {});
     // campanhas pro filtro (o gerente vê todas; o vendedor, as dele)
@@ -8624,7 +8609,7 @@ function InboxOficial({ isGer, ehLider, showToast, onIrParaEvolution, target, on
     if (!sel) { setConversa(null); return; }
     const carregar = () => api.ofChat(sel).then(setConversa).catch(() => {});
     carregar();
-    const t = setInterval(carregar, 4000);
+    const t = setInterval(carregar, 6000); // aliviado: era 4000
     return () => clearInterval(t);
   }, [sel]);
 

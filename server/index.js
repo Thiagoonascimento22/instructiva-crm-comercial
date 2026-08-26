@@ -1015,6 +1015,17 @@ app.get("/api/cards", auth, (req, res) => {
   if (req.query.responsavel && req.query.responsavel !== "todos") {
     cards = cards.filter((c) => c.responsavelId === req.query.responsavel); // filtro por um vendedor (gerente ou líder)
   }
+  // aliviar a tela: cards já fechados/perdidos há mais de 60 dias não vêm por padrão
+  // (continuam guardados; ?tudo=1 traz todos). Só filtra quando NÃO pediram tudo.
+  if (req.query.tudo !== "1") {
+    const CORTE = Date.now() - 60 * 24 * 60 * 60 * 1000;
+    cards = cards.filter((c) => {
+      const encerrado = c.etapa === "fechou" || c.etapa === "perdeu" || c.etapa === "perdido";
+      if (!encerrado) return true;
+      const quando = c.atualizadoEm || c.criadoEm || 0;
+      return quando >= CORTE; // fechado/perdido recente ainda aparece
+    });
+  }
   res.json(cards);
 });
 
