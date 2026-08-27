@@ -514,12 +514,10 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
     const m = String(mime || "").toLowerCase();
     if (!m.startsWith("audio/")) return { buffer, mime: m, filename: null, ok: true };
 
-    // Já é OGG puro? a Meta aceita direto.
-    const jaOgg = /^audio\/ogg/.test(m) && buffer.length > 4 && buffer.slice(0, 4).toString("ascii") === "OggS";
-    if (jaOgg) return { buffer, mime: "audio/ogg", filename: "audio.ogg", ok: true };
-
-    // Qualquer outra coisa (webm do Chrome, mp4 do Safari, m4a, wav...) vira OGG/Opus.
-    // A Meta valida o CONTEÚDO do arquivo, não o rótulo — por isso convertemos sempre.
+    // A Meta valida o CONTEÚDO do arquivo e é RÍGIDA: só aceita um OGG/Opus limpo.
+    // Por isso convertemos SEMPRE (sem atalho "-c:a copy" e sem confiar no OGG do
+    // navegador) — reencoda pra Opus mono 48k, o padrão de voz do WhatsApp.
+    // Isso evita o erro #131053 (arquivo vira application/octet-stream pra Meta).
     if (!fs || !path || !(await ffmpegOk())) {
       return { buffer, mime: m, filename: null, ok: false,
                motivo: "O servidor está sem ffmpeg, então não dá pra converter o áudio pro formato do WhatsApp." };
@@ -531,19 +529,13 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
     try {
       fs.writeFileSync(entrada, buffer);
       const rodar = (args) => new Promise((resolve) => execFile(FFMPEG_BIN, args, (err) => resolve(!err)));
-      // 1) troca só o container (instantâneo, quando já é opus)
-      let ok = await rodar(["-y", "-i", entrada, "-vn", "-c:a", "copy", "-f", "ogg", saida]);
-      let bom = ok && fs.existsSync(saida) && fs.statSync(saida).size > 200
+      // reencoda em opus mono 48k (padrão de voz do WhatsApp) — arquivo limpo que a Meta aceita
+      const ok = await rodar(["-y", "-i", entrada, "-vn", "-ac", "1", "-ar", "48000",
+                              "-c:a", "libopus", "-b:a", "32k", "-f", "ogg", saida]);
+      const bom = ok && fs.existsSync(saida) && fs.statSync(saida).size > 200
         && fs.readFileSync(saida).slice(0, 4).toString("ascii") === "OggS";
-      // 2) reencoda em opus mono 48k (padrão de voz do WhatsApp)
-      if (!bom) {
-        ok = await rodar(["-y", "-i", entrada, "-vn", "-ac", "1", "-ar", "48000",
-                          "-c:a", "libopus", "-b:a", "32k", "-f", "ogg", saida]);
-        bom = ok && fs.existsSync(saida) && fs.statSync(saida).size > 200
-          && fs.readFileSync(saida).slice(0, 4).toString("ascii") === "OggS";
-      }
       if (bom) return { buffer: fs.readFileSync(saida), mime: "audio/ogg", filename: "audio.ogg", ok: true };
-      return { buffer, mime: m, filename: null, ok: false, motivo: "Não consegui converter esse áudio." };
+      return { buffer, mime: m, filename: null, ok: false, motivo: "Não consegui converter esse áudio pro formato do WhatsApp." };
     } catch (e) {
       return { buffer, mime: m, filename: null, ok: false, motivo: "Erro ao converter o áudio." };
     } finally {
