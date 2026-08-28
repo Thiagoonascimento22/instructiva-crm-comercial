@@ -7138,6 +7138,7 @@ function OficialCRM({ showToast, isGer = true, onAbrirWhats, onDisparar }) {
                         </span>
                       )}
                       {l.origem === "ligacao" && <span className="crm-tag-lig"><I.suporte className="ico-inline" /> Ligação</span>}
+                      {l.recorrente && <span className="crm-tag-lig" style={{ background: "#25A06B", color: "#fff", borderColor: "#25A06B" }} title="Este contato voltou a se cadastrar por uma nova captação">🔁 Lead Atualizado</span>}
                       <div className="crm-card-vend">
                         {l.vendedorNome
                           ? <><Avatar nome={l.vendedorNome} foto={l.vendedorFoto} size={22} /><span className="crm-card-vend-nm">{l.vendedorNome.split(" ").slice(0, 2).join(" ")}</span></>

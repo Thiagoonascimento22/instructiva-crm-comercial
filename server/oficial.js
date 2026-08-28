@@ -9,6 +9,8 @@
 import { execFile } from "child_process";
 import os from "os";
 import { createRequire } from "module";
+// lógica central do "Lead Atualizado" (recorrente), pura e testada (server/leadRecorrente.js)
+import { decidirResponsavel, mesclarDados, registrarCaptacao } from "./leadRecorrente.js";
 
 const require = createRequire(import.meta.url);
 const GRAPH = "https://graph.facebook.com/v21.0";
@@ -1828,7 +1830,7 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
   }
   function crmLeadPublico(l) {
     const v = l.vendedorId ? (db.users || []).find((u) => u.id === l.vendedorId) : null;
-    return { id: l.id, nome: l.nome, telefone: l.telefone, email: l.email || "", curso: l.curso || "", etapa: l.etapa, vendedorId: l.vendedorId || null, vendedorNome: v ? v.nome : "", vendedorFoto: v ? (v.foto || "") : "", valor: l.valor || 0, formaPagamento: l.formaPagamento || "", tags: l.tags || [], tarefa: l.tarefa || null, reservaNome: l.reservaNome || "", origem: l.origem || "manual", respostasFormulario: l.respostasFormulario || null, notas: l.notas || [], historico: l.historico || [], criadoEm: l.criadoEm, atualizadoEm: l.atualizadoEm };
+    return { id: l.id, nome: l.nome, telefone: l.telefone, email: l.email || "", curso: l.curso || "", etapa: l.etapa, vendedorId: l.vendedorId || null, vendedorNome: v ? v.nome : "", vendedorFoto: v ? (v.foto || "") : "", valor: l.valor || 0, formaPagamento: l.formaPagamento || "", tags: l.tags || [], tarefa: l.tarefa || null, reservaNome: l.reservaNome || "", origem: l.origem || "manual", respostasFormulario: l.respostasFormulario || null, notas: l.notas || [], historico: l.historico || [], recorrente: !!l.recorrente, ultimaCaptacaoEm: l.ultimaCaptacaoEm || null, criadoEm: l.criadoEm, atualizadoEm: l.atualizadoEm };
   }
   function proximoVendedorCRM() {
     garantirCRM();
@@ -1904,16 +1906,70 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
     garantirCRM();
     const b = req.body || {};
     if (req.user.role === "vendedor") b.vendedorId = req.user.id; // vendedor só cria lead pra si
+
+    // É uma CAPTAÇÃO? (veio de lista/formulário/campanha/endpoint de captação).
+    // Genérico — vale pra QUALQUER lista, sem hardcode: basta a entrada trazer uma
+    // `lista`, uma `origem` de captação (≠ "manual"), ou marcar `captacao: true`.
+    // Cadastro manual comum (sem esses sinais) e edição administrativa (que é o PUT)
+    // NÃO passam por aqui — então o comportamento atual fica intacto.
+    const ehCaptacao = b.captacao === true || !!b.lista || (b.origem && b.origem !== "manual");
+    const telDigitos = String(b.telefone || "").replace(/\D/g, "");
+    const chave = telDigitos.slice(-8);
+
+    if (ehCaptacao && chave.length >= 8) {
+      const existente = (db.oficial.crmLeads || []).find((x) => String(x.telefone || "").replace(/\D/g, "").slice(-8) === chave);
+      if (existente) {
+        // ===== CONTATO JÁ EXISTIA → LEAD ATUALIZADO =====
+        // idempotência: se a MESMA submissão já foi registrada, não duplica
+        if (b.submissionId) {
+          const jaTem = (existente.historico || []).some((h) => h && h.dados && h.dados.submissionId === b.submissionId);
+          if (jaTem) return res.json({ ok: true, atualizado: true, duplicada: true, lead: crmLeadPublico(existente) });
+        }
+        // 1) atualiza os dados atuais SEM apagar dado válido (campo vazio não zera o anterior)
+        const merged = mesclarDados(existente, {
+          nome: b.nome, email: b.email, telefone: telDigitos, curso: b.curso,
+          valor: b.valor, origem: b.origem, respostasFormulario: b.respostasFormulario,
+        });
+        Object.assign(existente, merged.lead);
+        // 2) registra a nova captação no histórico (preserva tudo que já existia)
+        const comHist = registrarCaptacao(existente, {
+          lista: b.lista, origem: b.origem, campanha: b.campanha, curso: b.curso,
+          respostas: b.respostasFormulario, utms: b.utms, submissionId: b.submissionId,
+        });
+        existente.historico = comHist.historico;
+        existente.atualizadoEm = comHist.atualizadoEm;
+        // 3) marca como Lead Atualizado (recorrente) — pro card identificar
+        existente.recorrente = true;
+        existente.ultimaCaptacaoEm = Date.now();
+        // 4) decide o responsável: ativo MANTÉM o vendedor; perdido REDISTRIBUI (rodízio existente)
+        const antes = existente.vendedorId;
+        const dec = decidirResponsavel(existente, () => proximoVendedorCRM());
+        existente.vendedorId = dec.vendedorId;
+        // 5) se estava PERDIDO, reativa: volta pro atendimento numa etapa ativa
+        if (existente.etapa === "perdido") {
+          existente.etapa = etapasCRM().some((e) => e.k === "novo") ? "novo" : (etapasCRM()[0] || {}).k;
+        }
+        if (dec.redistribuido && antes !== existente.vendedorId) {
+          const v = existente.vendedorId ? db.users.find((u) => u.id === existente.vendedorId) : null;
+          existente.historico.push({ tipo: "atribuido", texto: "Redistribuído" + (v ? " para " + v.nome : "") + " (lead recorrente)", ts: Date.now() });
+        }
+        salvar();
+        return res.json({ ok: true, atualizado: true, lead: crmLeadPublico(existente) });
+      }
+      // não existe → cai no fluxo normal abaixo (cria novo), já com origem/etapa da captação
+    }
+
     const lead = {
       id: "lead_" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
       nome: String(b.nome || "Sem nome").slice(0, 80),
-      telefone: String(b.telefone || "").replace(/\D/g, ""),
+      telefone: telDigitos,
       email: String(b.email || "").trim().slice(0, 120),
       curso: String(b.curso || "").trim().slice(0, 120),
       etapa: etapasCRM().some((e) => e.k === b.etapa) ? b.etapa : (etapasCRM()[0] || {}).k,
       vendedorId: (b.vendedorId && db.users.some((u) => u.id === b.vendedorId)) ? b.vendedorId : null,
-      valor: parseFloat(b.valor) || 0, origem: "manual", notas: [],
-      historico: [{ tipo: "criado", texto: "Lead criado manualmente", ts: Date.now() }],
+      valor: parseFloat(b.valor) || 0, origem: ehCaptacao ? String(b.origem || b.lista || "captacao").slice(0, 60) : "manual", notas: [],
+      respostasFormulario: b.respostasFormulario || null,
+      historico: [{ tipo: "criado", texto: ehCaptacao ? ("Lead captado" + (b.lista ? " (" + b.lista + ")" : "")) : "Lead criado manualmente", ts: Date.now() }],
       criadoEm: Date.now(), atualizadoEm: Date.now(),
     };
     db.oficial.crmLeads.unshift(lead);
