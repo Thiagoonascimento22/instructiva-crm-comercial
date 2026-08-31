@@ -6430,7 +6430,39 @@ function AnaliseIAVendedor({ showToast, isGer = true }) {
   const A = res && res._modo === "vendedor" && res.analise;
   const GERAL = res && res._modo === "geral" && res.relatorio;
   const REL = res && res._modo && res._modo !== "vendedor" && res._modo !== "geral" && res.relatorio;
-  function exportarPDF() { try { window.print(); } catch (_) {} }
+  async function exportarPDF() {
+    const el = document.getElementById("relatorio-ia-print");
+    if (!el) { try { window.print(); } catch (_) {} return; }
+    if (showToast) showToast("Gerando PDF…");
+    // mostra o cabeçalho da marca (fica escondido na tela) e força tema claro na captura
+    const cab = el.querySelector(".pdf-cabecalho");
+    const cabAntes = cab ? cab.style.display : null;
+    if (cab) cab.style.display = "block";
+    const varsLight = { "--card": "#ffffff", "--surface-2": "#f7f8fa", "--line": "#e6e8ee", "--ink": "#111418", "--muted": "#5b6472" };
+    const antigos = {};
+    for (const k in varsLight) { antigos[k] = el.style.getPropertyValue(k); el.style.setProperty(k, varsLight[k]); }
+    const bgAntes = el.style.background, padAntes = el.style.padding;
+    el.style.background = "#ffffff"; el.style.padding = "24px";
+    try {
+      const html2pdf = (await import("html2pdf.js")).default;
+      const nome = "relatorio-ia-" + (res && res._modo === "geral" ? "geral-time" : res && res._modo && res._modo !== "vendedor" ? res._modo : ("vendedor" + (res && res.vendedor ? "-" + res.vendedor.split(" ")[0] : ""))) + "-" + new Date().toISOString().slice(0, 10) + ".pdf";
+      await html2pdf().set({
+        margin: [10, 10, 12, 10],
+        filename: nome,
+        image: { type: "jpeg", quality: 0.96 },
+        html2canvas: { scale: 2, useCORS: true, backgroundColor: "#ffffff", logging: false },
+        jsPDF: { unit: "mm", format: "a4", orientation: "portrait" },
+        pagebreak: { mode: ["css", "legacy"] },
+      }).from(el).save();
+      if (showToast) showToast("✅ PDF baixado!");
+    } catch (e) {
+      try { window.print(); } catch (_) {} // fallback: impressão nativa (Salvar como PDF)
+    } finally {
+      if (cab) cab.style.display = cabAntes || "";
+      el.style.background = bgAntes || ""; el.style.padding = padAntes || "";
+      for (const k in varsLight) { if (antigos[k]) el.style.setProperty(k, antigos[k]); else el.style.removeProperty(k); }
+    }
+  }
   function periodoLegivel() {
     if (periodo === "hoje") return "Hoje";
     if (periodo === "7") return "Últimos 7 dias";
@@ -6616,39 +6648,6 @@ function AnaliseIAVendedor({ showToast, isGer = true }) {
             <div style={{ background: "var(--surface-2)", border: "1px solid " + DES.line, borderLeft: "3px solid #2563eb", borderRadius: 14, padding: 18, marginBottom: 14 }}>
               <div style={{ fontSize: 13.5, fontWeight: 700, color: "#2563eb", marginBottom: 8, display: "flex", alignItems: "center", gap: 7 }}>🔄 Follow-up do time</div>
               <div style={{ fontSize: 13.5, color: DES.ink, lineHeight: 1.6 }}>{GERAL.followupTime}</div>
-            </div>
-          )}
-          {Array.isArray(GERAL.ranking) && GERAL.ranking.length > 0 && (
-            <div style={{ background: "var(--card)", border: "1px solid " + DES.line, borderRadius: 16, padding: 18, marginBottom: 14 }}>
-              <div style={{ fontSize: 13.5, fontWeight: 700, color: DES.ink, marginBottom: 12, display: "flex", alignItems: "center", gap: 7 }}>🏆 Ranking detalhado do time</div>
-              <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-                {GERAL.ranking.map((r, i) => {
-                  const st = r.nivel === "destaque" ? { ic: "🟢", cor: DES.green, lb: "Puxa o resultado" } : r.nivel === "atencao" ? { ic: "🔴", cor: "#dc2626", lb: "Precisa de atenção" } : { ic: "🟡", cor: DES.orange, lb: "Regular" };
-                  return (
-                    <div key={i} style={{ background: "var(--surface-2)", borderRadius: 12, borderLeft: "3px solid " + st.cor, padding: "13px 15px" }}>
-                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-                        <div style={{ fontSize: 14, fontWeight: 700, color: DES.ink, display: "flex", alignItems: "center", gap: 7 }}><span>{st.ic}</span> {i + 1}. {r.nome} <span style={{ fontSize: 11, fontWeight: 600, color: st.cor }}>· {st.lb}</span></div>
-                        {(r.nota !== undefined && r.nota !== null) && <span style={{ fontSize: 15, fontWeight: 800, color: st.cor }}>{r.nota}<span style={{ fontSize: 11, opacity: .5 }}>/10</span></span>}
-                      </div>
-                      {r.comentario && <div style={{ fontSize: 12.5, color: DES.mut, marginTop: 6, lineHeight: 1.5 }}>{r.comentario}</div>}
-                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginTop: 10 }}>
-                        {Array.isArray(r.pontosFortes) && r.pontosFortes.length > 0 && (
-                          <div>
-                            <div style={{ fontSize: 11, fontWeight: 700, color: DES.green, marginBottom: 4, textTransform: "uppercase", letterSpacing: ".04em" }}>Fortes</div>
-                            <ul style={{ margin: 0, paddingLeft: 16, display: "flex", flexDirection: "column", gap: 3 }}>{r.pontosFortes.map((t, j) => <li key={j} style={{ fontSize: 12, color: DES.ink, lineHeight: 1.45 }}>{t}</li>)}</ul>
-                          </div>
-                        )}
-                        {Array.isArray(r.pontosFracos) && r.pontosFracos.length > 0 && (
-                          <div>
-                            <div style={{ fontSize: 11, fontWeight: 700, color: "#dc2626", marginBottom: 4, textTransform: "uppercase", letterSpacing: ".04em" }}>A melhorar</div>
-                            <ul style={{ margin: 0, paddingLeft: 16, display: "flex", flexDirection: "column", gap: 3 }}>{r.pontosFracos.map((t, j) => <li key={j} style={{ fontSize: 12, color: DES.ink, lineHeight: 1.45 }}>{t}</li>)}</ul>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
             </div>
           )}
           <Bloco titulo="Destaques do período (bons e ruins)" itens={GERAL.destaques} cor="#2563eb" ico="⭐" />

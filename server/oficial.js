@@ -3605,7 +3605,7 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
       } else {
         // RELATÓRIO GERAL DO TIME — profundo e completo (panorama coletivo)
         sistema = base
-          + "Faça um RELATÓRIO GERAL DO TIME comercial: uma avaliação PROFUNDA, longa e específica do desempenho COLETIVO no atendimento via WhatsApp, sempre citando situações reais (nunca invente). Avalie o time como um todo à luz dos 7 Passos da Venda, mostre onde o time ganha e onde perde venda, as objeções que mais aparecem, como está o follow-up do time, e um ranking detalhado de cada vendedor. Nada de análise rasa ou genérica — quero densidade e exemplos.\n\n"
+          + "Faça um RELATÓRIO GERAL DO TIME comercial: uma avaliação PROFUNDA, longa e específica do desempenho COLETIVO no atendimento via WhatsApp, sempre citando situações reais (nunca invente). Avalie o time COMO UM TODO à luz dos 7 Passos da Venda, mostre onde o time ganha e onde perde venda, as objeções que mais aparecem e como está o follow-up do time. IMPORTANTE: NÃO faça ranking nem avaliação individual de vendedores, e NÃO cite nomes de vendedores — o foco é o time como conjunto (a análise individual é feita à parte). Nada de análise rasa ou genérica — quero densidade e exemplos.\n\n"
           + "OS 7 PASSOS (avalie como o TIME se sai em cada um): 1.Apresentação (abre com indicação/overview e puxa pra LIGAÇÃO, não tenta vender tudo no zap) 2.Conexão (faz muita pergunta, levanta e aprofunda as 2 dores, cria rapport) 3.Decisão Imediata/DI (mede prioridade e faz o combinado, antecipa quem decide) 4.Speech 3 portas (tempo→metodologia→financeiro amarrado nas dores) 5.Fechamento (ancoragem + silêncio + perguntas fechadas, conduz cadastro) 6.Indicações (pega na hora, não pede) 7.Validação (aquece os indicados).\n\n"
           + "Responda SOMENTE com JSON válido, sem texto fora dele, exatamente nesta estrutura:\n"
           + "{"
@@ -3618,12 +3618,11 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
           + "\"gargalos\":[\"onde exatamente o time mais perde venda no funil (qual passo/momento) e por quê\"],"
           + "\"objecoesComuns\":[{\"objecao\":\"a objeção\",\"nivel\":\"alta\",\"comoLidam\":\"como o time responde hoje e o que falha\"}],"
           + "\"followupTime\":\"um parágrafo sobre como está o follow-up COLETIVO do time (retomam quem sumiu? cadência? desistem cedo? viram spam?), com exemplos\","
-          + "\"ranking\":[{\"nome\":\"nome do vendedor\",\"nota\":7,\"nivel\":\"destaque\",\"pontosFortes\":[\"...\"],\"pontosFracos\":[\"...\"],\"comentario\":\"análise específica desse vendedor com base real\"}],"
-          + "\"destaques\":[\"momentos/trechos reais que se destacaram no período (bons E ruins), citando o que aconteceu\"],"
+          + "\"destaques\":[\"momentos/trechos reais que se destacaram no período (bons E ruins), citando o que aconteceu SEM citar nome de vendedor\"],"
           + "\"recomendacoes\":[\"ações práticas e priorizadas pro time todo evoluir\"],"
           + "\"focoProximo\":[\"o que o time deve priorizar no próximo período (2 a 4 focos)\"]"
           + "}\n"
-          + "Regras: \"notaTime\" e \"nota\" (do ranking) são inteiros de 0 a 10. Em \"porPasso\" traga os 7 passos (n de 1 a 7, nome certo) com \"nivel\" 'bom'/'regular'/'ruim'. Em \"objecoesComuns\", \"nivel\" é a frequência ('alta'/'média'/'baixa'), ordenadas da mais comum pra menos. No \"ranking\", \"nivel\" é 'destaque' (puxa o resultado), 'regular' ou 'atencao' (travando); ordene do melhor pro que mais precisa de atenção; inclua TODOS os vendedores que aparecem nas conversas, cada um com pontosFortes e pontosFracos reais. Português do Brasil, DETALHADO e específico em tudo.";
+          + "Regras: \"notaTime\" é inteiro de 0 a 10. Em \"porPasso\" traga os 7 passos (n de 1 a 7, nome certo) com \"nivel\" 'bom'/'regular'/'ruim'. Em \"objecoesComuns\", \"nivel\" é a frequência ('alta'/'média'/'baixa'), ordenadas da mais comum pra menos. NÃO cite nomes de vendedores em nenhuma parte — fale sempre do time como conjunto. Português do Brasil, DETALHADO e específico em tudo.";
       }
       const usuario = "Conversas do time analisadas: " + convs.length + (soVendedor ? " (vendedor: " + nomeDe(soVendedor) + ")" : " (todos os vendedores)") + "\n\n" + transcript;
       const bruto = await analisarComIA(sistema, usuario, tipo === "geral" ? 4500 : 2600);
