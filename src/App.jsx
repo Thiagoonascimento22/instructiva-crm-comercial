@@ -6402,6 +6402,19 @@ function AnaliseIAVendedor({ showToast, isGer = true }) {
 
   const A = res && res._modo === "vendedor" && res.analise;
   const REL = res && res._modo && res._modo !== "vendedor" && res.relatorio;
+  function exportarPDF() { try { window.print(); } catch (_) {} }
+  function periodoLegivel() {
+    if (periodo === "hoje") return "Hoje";
+    if (periodo === "7") return "Últimos 7 dias";
+    if (periodo === "30") return "Últimos 30 dias";
+    if (periodo === "data") return dataEsp ? (dataEsp.split("-").reverse().join("/") + (dataEspAte && dataEspAte !== dataEsp ? " até " + dataEspAte.split("-").reverse().join("/") : "")) : "Data específica";
+    return "";
+  }
+  function escopoLegivel() {
+    if (!isGer) return "Minhas conversas";
+    if (modo !== "vendedor") return vendedorId ? ((vendedores.find((v) => v.id === vendedorId) || {}).nome || "Time") : "Time todo";
+    return vendedorId ? ((vendedores.find((v) => v.id === vendedorId) || {}).nome || "Vendedor") : "Eu (gerente)";
+  }
   const nivelCor = (n) => { const s = String(n || "").toLowerCase(); if (s === "alta" || s === "ruim") return "#dc2626"; if (s === "média" || s === "media" || s === "regular") return DES.orange; if (s === "baixa" || s === "bom") return DES.green; return DES.mut; };
   const Bloco = ({ titulo, itens, cor, ico }) => (!itens || !itens.length) ? null : (
     <div style={{ background: "var(--surface-2)", border: "1px solid var(--line)", borderLeft: "3px solid " + cor, borderRadius: 14, padding: 18, marginBottom: 14 }}>
@@ -6470,6 +6483,24 @@ function AnaliseIAVendedor({ showToast, isGer = true }) {
       {res && res.vazio && !carregando && (
         <div style={{ padding: 30, color: DES.mut, background: "var(--card)", borderRadius: 16, border: "1px solid " + DES.line, textAlign: "center" }}>Nenhuma conversa {isGer ? "desse vendedor" : "sua"} nesse período.</div>
       )}
+
+      {res && !res.vazio && !carregando && (REL || A) && (
+        <div className="no-print" style={{ display: "flex", justifyContent: "flex-end", marginBottom: 12 }}>
+          <button className="btn" onClick={exportarPDF} style={{ height: 38, display: "flex", alignItems: "center", gap: 7, fontWeight: 600, border: "1px solid " + DES.line, background: "var(--card)", color: DES.ink }}>
+            ⬇ Exportar PDF
+          </button>
+        </div>
+      )}
+
+      <div id="relatorio-ia-print">
+        <div className="pdf-cabecalho" style={{ marginBottom: 18, paddingBottom: 14, borderBottom: "2px solid #25A06B" }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+            <div style={{ fontSize: 20, fontWeight: 800, letterSpacing: "-.02em" }}><span style={{ color: "#111418" }}>instruct</span><span style={{ color: "#25A06B" }}>iva</span></div>
+            <div style={{ fontSize: 11, color: "#5b6472" }}>Emitido em {new Date().toLocaleString("pt-BR")}</div>
+          </div>
+          <div style={{ fontSize: 16, fontWeight: 700, color: "#111418", marginTop: 10 }}>Relatório da Análise IA{res && res._modo === "objecoes" ? " — Objeções (time)" : res && res._modo === "abordagem" ? " — Abordagem (time)" : " — Por vendedor"}</div>
+          <div style={{ fontSize: 12.5, color: "#5b6472", marginTop: 3 }}>{escopoLegivel()} · Período: {periodoLegivel()}</div>
+        </div>
 
       {res && !res.vazio && !carregando && REL && (
         <div>
@@ -6554,6 +6585,7 @@ function AnaliseIAVendedor({ showToast, isGer = true }) {
           )}
         </div>
       )}
+      </div>
     </div>
   );
 }

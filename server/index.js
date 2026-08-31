@@ -16,6 +16,13 @@ const app = express();
 app.use(express.json({ limit: "40mb" }));
 app.use(express.urlencoded({ extended: false, limit: "10mb" })); // Twilio manda form-urlencoded (ligação IA)
 
+// Versão do sistema — pra CONFIRMAR qual código está no ar (abra /api/versao no navegador).
+// Se aqui aparecer a versão nova mas o bug continuar, o problema é outro; se aparecer
+// uma versão antiga (ou 404), o deploy não subiu de verdade.
+const VERSAO_SISTEMA = "v216";
+app.get("/api/versao", (req, res) => res.json({ versao: VERSAO_SISTEMA, quando: new Date().toISOString() }));
+
+
 /* ============================================================
    BANCO EM ARQUIVO JSON (com espera do volume do Railway)
    ============================================================ */
