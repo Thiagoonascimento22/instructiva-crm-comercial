@@ -6563,25 +6563,29 @@ function AnaliseIAVendedor({ showToast, isGer = true }) {
           <div style={{ fontSize: 12, color: DES.mut2, marginBottom: 14 }}>Relatório geral do time · {res.analisadas} conversa(s) analisada(s){res.totalConversas > res.analisadas ? " (as com mais troca, de " + res.totalConversas + ")" : ""}.</div>
           {(GERAL.notaTime !== undefined && GERAL.notaTime !== null) && (
             <div style={{ display: "flex", alignItems: "center", gap: 14, background: "var(--card)", border: "1px solid " + DES.line, borderRadius: 16, padding: 18, marginBottom: 16 }}>
-              <div style={{ fontSize: 34, fontWeight: 800, color: (Number(GERAL.notaTime) >= 7 ? DES.green : Number(GERAL.notaTime) >= 5 ? DES.orange : "#dc2626"), lineHeight: 1 }}>{GERAL.notaTime}<span style={{ fontSize: 16, opacity: .5 }}>/10</span></div>
-              <div style={{ fontSize: 13, color: DES.mut, fontWeight: 600 }}>Nota geral do time</div>
+              <div style={{ fontSize: 40, fontWeight: 800, color: (Number(GERAL.notaTime) >= 7 ? DES.green : Number(GERAL.notaTime) >= 5 ? DES.orange : "#dc2626"), lineHeight: 1 }}>{GERAL.notaTime}<span style={{ fontSize: 18, opacity: .5 }}>/10</span></div>
+              <div><div style={{ fontSize: 14, color: DES.ink, fontWeight: 700 }}>Nota geral do time</div><div style={{ fontSize: 12, color: DES.mut, marginTop: 2 }}>desempenho coletivo no período</div></div>
             </div>
           )}
           {GERAL.resumo && <div style={{ background: "var(--surface-2)", border: "1px solid " + DES.line, borderLeft: "3px solid " + DES.orange, borderRadius: 16, padding: 20, marginBottom: 16, fontSize: 14.5, fontWeight: 500, color: DES.ink, lineHeight: 1.6 }}>{GERAL.resumo}</div>}
-          <Bloco titulo="O que o time faz bem" itens={GERAL.oQueVaiBem} cor={DES.green} ico="✅" />
-          <Bloco titulo="Problemas do time" itens={GERAL.problemas} cor="#dc2626" ico="🚨" />
-          {Array.isArray(GERAL.ranking) && GERAL.ranking.length > 0 && (
+          {GERAL.saudeComercial && (
+            <div style={{ background: "var(--card)", border: "1px solid " + DES.line, borderRadius: 14, padding: 18, marginBottom: 14 }}>
+              <div style={{ fontSize: 13.5, fontWeight: 700, color: DES.ink, marginBottom: 8, display: "flex", alignItems: "center", gap: 7 }}>🩺 Saúde comercial</div>
+              <div style={{ fontSize: 13.5, color: DES.ink, lineHeight: 1.6 }}>{GERAL.saudeComercial}</div>
+            </div>
+          )}
+          {Array.isArray(GERAL.porPasso) && GERAL.porPasso.length > 0 && (
             <div style={{ background: "var(--card)", border: "1px solid " + DES.line, borderRadius: 16, padding: 18, marginBottom: 14 }}>
-              <div style={{ fontSize: 13.5, fontWeight: 700, color: DES.ink, marginBottom: 12, display: "flex", alignItems: "center", gap: 7 }}>🏆 Ranking do time</div>
+              <div style={{ fontSize: 13.5, fontWeight: 700, color: DES.ink, marginBottom: 12, display: "flex", alignItems: "center", gap: 7 }}>🎯 Os 7 passos — desempenho do time</div>
               <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                {GERAL.ranking.map((r, i) => {
-                  const st = r.nivel === "destaque" ? { ic: "🟢", cor: DES.green, lb: "Puxa o resultado" } : r.nivel === "atencao" ? { ic: "🔴", cor: "#dc2626", lb: "Precisa de atenção" } : { ic: "🟡", cor: DES.orange, lb: "Regular" };
+                {GERAL.porPasso.map((p, i) => {
+                  const st = p.nivel === "bom" ? { ic: "✅", cor: DES.green } : p.nivel === "ruim" ? { ic: "❌", cor: "#dc2626" } : { ic: "⚠️", cor: DES.orange };
                   return (
                     <div key={i} style={{ display: "flex", gap: 11, padding: "11px 13px", background: "var(--surface-2)", borderRadius: 11, borderLeft: "3px solid " + st.cor }}>
                       <span style={{ fontSize: 15, flexShrink: 0 }}>{st.ic}</span>
                       <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontSize: 13.5, fontWeight: 700, color: DES.ink }}>{i + 1}. {r.nome} <span style={{ fontSize: 11, fontWeight: 600, color: st.cor }}>· {st.lb}</span></div>
-                        {r.comentario && <div style={{ fontSize: 12.5, color: DES.mut, marginTop: 3, lineHeight: 1.5 }}>{r.comentario}</div>}
+                        <div style={{ fontSize: 13, fontWeight: 700, color: DES.ink }}>{p.n}. {p.nome}</div>
+                        {p.comentario && <div style={{ fontSize: 12.5, color: DES.mut, marginTop: 3, lineHeight: 1.5 }}>{p.comentario}</div>}
                       </div>
                     </div>
                   );
@@ -6589,11 +6593,78 @@ function AnaliseIAVendedor({ showToast, isGer = true }) {
               </div>
             </div>
           )}
+          <Bloco titulo="O que o time faz bem" itens={GERAL.oQueVaiBem} cor={DES.green} ico="✅" />
+          <Bloco titulo="Problemas do time" itens={GERAL.problemas} cor="#dc2626" ico="🚨" />
+          <Bloco titulo="Gargalos — onde o time perde venda" itens={GERAL.gargalos} cor={DES.orange} ico="⛔" />
+          {Array.isArray(GERAL.objecoesComuns) && GERAL.objecoesComuns.length > 0 && (
+            <div style={{ background: "var(--card)", border: "1px solid " + DES.line, borderRadius: 16, padding: 18, marginBottom: 14 }}>
+              <div style={{ fontSize: 13.5, fontWeight: 700, color: DES.ink, marginBottom: 12, display: "flex", alignItems: "center", gap: 7 }}>🛡️ Objeções mais comuns</div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                {GERAL.objecoesComuns.map((o, i) => (
+                  <div key={i} style={{ background: "var(--surface-2)", border: "1px solid " + DES.line, borderRadius: 11, padding: "11px 13px" }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "baseline", flexWrap: "wrap" }}>
+                      <span style={{ fontSize: 13.5, fontWeight: 700, color: DES.ink }}>{o.objecao}</span>
+                      {o.nivel && <span style={{ fontSize: 11, fontWeight: 700, color: nivelCor(o.nivel), background: "var(--card)", borderRadius: 20, padding: "2px 10px", textTransform: "uppercase" }}>{o.nivel}</span>}
+                    </div>
+                    {o.comoLidam && <div style={{ fontSize: 12.5, color: DES.mut, marginTop: 5, lineHeight: 1.5 }}>{o.comoLidam}</div>}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+          {GERAL.followupTime && (
+            <div style={{ background: "var(--surface-2)", border: "1px solid " + DES.line, borderLeft: "3px solid #2563eb", borderRadius: 14, padding: 18, marginBottom: 14 }}>
+              <div style={{ fontSize: 13.5, fontWeight: 700, color: "#2563eb", marginBottom: 8, display: "flex", alignItems: "center", gap: 7 }}>🔄 Follow-up do time</div>
+              <div style={{ fontSize: 13.5, color: DES.ink, lineHeight: 1.6 }}>{GERAL.followupTime}</div>
+            </div>
+          )}
+          {Array.isArray(GERAL.ranking) && GERAL.ranking.length > 0 && (
+            <div style={{ background: "var(--card)", border: "1px solid " + DES.line, borderRadius: 16, padding: 18, marginBottom: 14 }}>
+              <div style={{ fontSize: 13.5, fontWeight: 700, color: DES.ink, marginBottom: 12, display: "flex", alignItems: "center", gap: 7 }}>🏆 Ranking detalhado do time</div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                {GERAL.ranking.map((r, i) => {
+                  const st = r.nivel === "destaque" ? { ic: "🟢", cor: DES.green, lb: "Puxa o resultado" } : r.nivel === "atencao" ? { ic: "🔴", cor: "#dc2626", lb: "Precisa de atenção" } : { ic: "🟡", cor: DES.orange, lb: "Regular" };
+                  return (
+                    <div key={i} style={{ background: "var(--surface-2)", borderRadius: 12, borderLeft: "3px solid " + st.cor, padding: "13px 15px" }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                        <div style={{ fontSize: 14, fontWeight: 700, color: DES.ink, display: "flex", alignItems: "center", gap: 7 }}><span>{st.ic}</span> {i + 1}. {r.nome} <span style={{ fontSize: 11, fontWeight: 600, color: st.cor }}>· {st.lb}</span></div>
+                        {(r.nota !== undefined && r.nota !== null) && <span style={{ fontSize: 15, fontWeight: 800, color: st.cor }}>{r.nota}<span style={{ fontSize: 11, opacity: .5 }}>/10</span></span>}
+                      </div>
+                      {r.comentario && <div style={{ fontSize: 12.5, color: DES.mut, marginTop: 6, lineHeight: 1.5 }}>{r.comentario}</div>}
+                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginTop: 10 }}>
+                        {Array.isArray(r.pontosFortes) && r.pontosFortes.length > 0 && (
+                          <div>
+                            <div style={{ fontSize: 11, fontWeight: 700, color: DES.green, marginBottom: 4, textTransform: "uppercase", letterSpacing: ".04em" }}>Fortes</div>
+                            <ul style={{ margin: 0, paddingLeft: 16, display: "flex", flexDirection: "column", gap: 3 }}>{r.pontosFortes.map((t, j) => <li key={j} style={{ fontSize: 12, color: DES.ink, lineHeight: 1.45 }}>{t}</li>)}</ul>
+                          </div>
+                        )}
+                        {Array.isArray(r.pontosFracos) && r.pontosFracos.length > 0 && (
+                          <div>
+                            <div style={{ fontSize: 11, fontWeight: 700, color: "#dc2626", marginBottom: 4, textTransform: "uppercase", letterSpacing: ".04em" }}>A melhorar</div>
+                            <ul style={{ margin: 0, paddingLeft: 16, display: "flex", flexDirection: "column", gap: 3 }}>{r.pontosFracos.map((t, j) => <li key={j} style={{ fontSize: 12, color: DES.ink, lineHeight: 1.45 }}>{t}</li>)}</ul>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+          <Bloco titulo="Destaques do período (bons e ruins)" itens={GERAL.destaques} cor="#2563eb" ico="⭐" />
           {Array.isArray(GERAL.recomendacoes) && GERAL.recomendacoes.length > 0 && (
             <div style={{ background: "var(--surface-2)", border: "1px solid " + DES.line, borderLeft: "3px solid " + DES.green, borderRadius: 14, padding: 18, marginBottom: 14 }}>
               <div style={{ fontSize: 13.5, fontWeight: 700, color: DES.green, marginBottom: 10, display: "flex", alignItems: "center", gap: 7 }}>✅ Recomendações pro time</div>
               <ul style={{ margin: 0, paddingLeft: 20, display: "flex", flexDirection: "column", gap: 8 }}>
                 {GERAL.recomendacoes.map((t, i) => <li key={i} style={{ fontSize: 13.5, color: DES.ink, lineHeight: 1.55 }}>{t}</li>)}
+              </ul>
+            </div>
+          )}
+          {Array.isArray(GERAL.focoProximo) && GERAL.focoProximo.length > 0 && (
+            <div style={{ background: "linear-gradient(135deg, rgba(37,160,107,.08), rgba(242,101,34,.06))", border: "1px solid " + DES.line, borderRadius: 14, padding: 18, marginBottom: 14 }}>
+              <div style={{ fontSize: 13.5, fontWeight: 700, color: DES.ink, marginBottom: 10, display: "flex", alignItems: "center", gap: 7 }}>🎯 Foco pro próximo período</div>
+              <ul style={{ margin: 0, paddingLeft: 20, display: "flex", flexDirection: "column", gap: 8 }}>
+                {GERAL.focoProximo.map((t, i) => <li key={i} style={{ fontSize: 13.5, color: DES.ink, lineHeight: 1.55, fontWeight: 500 }}>{t}</li>)}
               </ul>
             </div>
           )}
@@ -6637,6 +6708,12 @@ function AnaliseIAVendedor({ showToast, isGer = true }) {
         <div>
           <div style={{ fontSize: 12, color: DES.mut2, marginBottom: 14 }}>Analisadas {res.analisadas} conversa(s){res.totalConversas > res.analisadas ? " (as mais recentes de " + res.totalConversas + ")" : ""}{isGer && res.vendedor ? " · " + res.vendedor : ""}.</div>
           {A ? <>
+            {(A.nota !== undefined && A.nota !== null) && (
+              <div style={{ display: "flex", alignItems: "center", gap: 14, background: "var(--card)", border: "1px solid " + DES.line, borderRadius: 16, padding: 18, marginBottom: 16 }}>
+                <div style={{ fontSize: 40, fontWeight: 800, color: (Number(A.nota) >= 7 ? DES.green : Number(A.nota) >= 5 ? DES.orange : "#dc2626"), lineHeight: 1 }}>{A.nota}<span style={{ fontSize: 18, opacity: .5 }}>/10</span></div>
+                <div><div style={{ fontSize: 14, color: DES.ink, fontWeight: 700 }}>Nota{isGer && res.vendedor ? " de " + res.vendedor : ""}</div><div style={{ fontSize: 12, color: DES.mut, marginTop: 2 }}>performance no período</div></div>
+              </div>
+            )}
             {A.resumo && <div style={{ background: "var(--surface-2)", border: "1px solid " + DES.line, borderRadius: 16, padding: 20, marginBottom: 16, fontSize: 14.5, fontWeight: 500, color: DES.ink, lineHeight: 1.6 }}>{A.resumo}</div>}
             {Array.isArray(A.passos) && A.passos.length > 0 && (
               <div style={{ background: "var(--card)", border: "1px solid " + DES.line, borderRadius: 16, padding: 18, marginBottom: 14 }}>
