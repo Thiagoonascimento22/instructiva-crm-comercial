@@ -3549,12 +3549,19 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
     try {
       garantirEstrutura();
       const b = req.body || {};
-      const tipo = b.tipo === "abordagem" ? "abordagem" : "objecoes";
+      const tipo = b.tipo === "abordagem" ? "abordagem" : b.tipo === "geral" ? "geral" : "objecoes";
       const de = parseInt(b.de) || 0, ate = parseInt(b.ate) || 0;
       const soVendedor = b.vendedorId || null; // opcional: focar num vendedor
+      // opcional (relatório geral): lista de vendedores a INCLUIR (marca só quem é do time).
+      // Se vier vazia/ausente, considera todos.
+      const incluir = Array.isArray(b.vendedorIds) ? b.vendedorIds.filter(Boolean) : null;
       const nomeDe = (id) => { const u = (db.users || []).find((x) => x.id === id); return u ? u.nome : ""; };
       // reúne conversas oficiais do time no período
-      const chats = Object.values(db.waChats || {}).filter((c) => c && c.canal === "oficial" && (!soVendedor || c.vendedorId === soVendedor));
+      const chats = Object.values(db.waChats || {}).filter((c) =>
+        c && c.canal === "oficial" &&
+        (!soVendedor || c.vendedorId === soVendedor) &&
+        (!incluir || !incluir.length || incluir.includes(c.vendedorId))
+      );
       let convs = [];
       for (const c of chats) {
         const msgs = (c.mensagens || []).filter((m) => { const ts = m.ts || 0; return (!de || ts >= de) && (!ate || ts <= ate); });
@@ -3589,15 +3596,22 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
           + "Responda SOMENTE com JSON válido, sem texto fora dele:\n"
           + "{\"resumo\":\"3 a 6 frases sobre o panorama de objeções no período\",\"itens\":[{\"titulo\":\"a objeção\",\"nivel\":\"alta\",\"detalhe\":\"como o time responde hoje e o que falha\",\"exemplo\":\"trecho ou situação real\",\"recomendacao\":\"como contornar essa objeção (ligado ao método)\"}],\"destaques\":[\"achados principais\"],\"recomendacoes\":[\"ações práticas pro time\"]}\n"
           + "Regras: \"nivel\" é a frequência ('alta', 'média' ou 'baixa'). Ordene os itens da objeção mais frequente pra menos. Português do Brasil, com profundidade.";
-      } else {
+      } else if (tipo === "abordagem") {
         sistema = base
           + "Faça um RELATÓRIO DE ABORDAGEM: avalie COMO o time aborda/abre as conversas com os leads — o tom, se puxam pra LIGAÇÃO (certo) ou tentam vender tudo no zap (fraco), se fazem conexão e perguntas, se seguem os 7 passos na abordagem inicial, e a velocidade de resposta. Identifique padrões bons e ruins com exemplos reais.\n"
           + "Responda SOMENTE com JSON válido, sem texto fora dele:\n"
           + "{\"resumo\":\"3 a 6 frases sobre a abordagem do time no período\",\"itens\":[{\"titulo\":\"o padrão de abordagem observado\",\"nivel\":\"bom\",\"detalhe\":\"explicação do padrão e impacto\",\"exemplo\":\"situação real\",\"recomendacao\":\"o que ajustar\"}],\"destaques\":[\"achados principais\"],\"recomendacoes\":[\"ações práticas pro time\"]}\n"
           + "Regras: \"nivel\" é a qualidade do padrão ('bom', 'regular' ou 'ruim'). Português do Brasil, com profundidade.";
+      } else {
+        // RELATÓRIO GERAL DO TIME (panorama + ranking de quem puxa/trava)
+        sistema = base
+          + "Faça um RELATÓRIO GERAL DO TIME comercial: um panorama completo do desempenho coletivo no atendimento via WhatsApp. Dê uma NOTA de 0 a 10 pro time, aponte o que o time como um todo faz bem e o que precisa melhorar, e um RANKING dos vendedores dizendo quem está puxando o resultado, quem está regular e quem está travando — com um comentário curto e específico de cada um (baseado nas conversas reais, nunca invente). Considere o método dos 7 Passos.\n"
+          + "Responda SOMENTE com JSON válido, sem texto fora dele:\n"
+          + "{\"notaTime\":7,\"resumo\":\"4 a 7 frases com o panorama geral do time no período\",\"oQueVaiBem\":[\"pontos fortes do time como um todo\"],\"problemas\":[\"problemas coletivos / onde o time perde venda\"],\"ranking\":[{\"nome\":\"nome do vendedor\",\"nivel\":\"destaque\",\"comentario\":\"o que ele faz de bom ou o que trava, com base real\"}],\"recomendacoes\":[\"ações práticas pro time todo evoluir\"]}\n"
+          + "Regras: \"notaTime\" é número inteiro de 0 a 10. No ranking, \"nivel\" é 'destaque' (puxa o resultado), 'regular' ou 'atencao' (está travando); ordene do melhor pro que mais precisa de atenção; inclua TODOS os vendedores que aparecem nas conversas. Português do Brasil, específico e sem enrolação.";
       }
       const usuario = "Conversas do time analisadas: " + convs.length + (soVendedor ? " (vendedor: " + nomeDe(soVendedor) + ")" : " (todos os vendedores)") + "\n\n" + transcript;
-      const bruto = await analisarComIA(sistema, usuario, 2600);
+      const bruto = await analisarComIA(sistema, usuario, tipo === "geral" ? 3200 : 2600);
       let relatorio = null;
       try { relatorio = JSON.parse(String(bruto).replace(/```json/gi, "").replace(/```/g, "").trim()); } catch (_) {}
       res.json({ ok: true, tipo, totalConversas, analisadas: convs.length, relatorio, bruto: relatorio ? null : bruto });

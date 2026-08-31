@@ -6364,9 +6364,34 @@ function AnaliseIAVendedor({ showToast, isGer = true }) {
   const [dataEspAte, setDataEspAte] = useState("");
   const [carregando, setCarregando] = useState(false);
   const [res, setRes] = useState(null);
-  const [modo, setModo] = useState("vendedor"); // gerente: vendedor | objecoes | abordagem
+  const [modo, setModo] = useState("vendedor"); // gerente: vendedor | objecoes | abordagem | geral
+  const [incluirVend, setIncluirVend] = useState(null); // Set de ids incluídos no relatório geral (null = ainda não definido)
 
   useEffect(() => { if (isGer) api.ofVendedoresLista().then((r) => setVendedores((r && r.vendedores) || r || [])).catch(() => {}); }, [isGer]);
+
+  // inicializa a seleção do relatório geral (lembra a última escolha; default = todos)
+  useEffect(() => {
+    if (!isGer || !vendedores.length || incluirVend !== null) return;
+    let salvos = null;
+    try { const raw = localStorage.getItem("instructiva_relatorio_geral_vend"); if (raw) salvos = JSON.parse(raw); } catch (_) {}
+    const ids = vendedores.map((v) => v.id);
+    if (Array.isArray(salvos)) setIncluirVend(new Set(salvos.filter((id) => ids.includes(id))));
+    else setIncluirVend(new Set(ids)); // primeira vez: todos marcados
+  }, [isGer, vendedores, incluirVend]);
+
+  function toggleIncluir(id) {
+    setIncluirVend((prev) => {
+      const n = new Set(prev || []);
+      if (n.has(id)) n.delete(id); else n.add(id);
+      try { localStorage.setItem("instructiva_relatorio_geral_vend", JSON.stringify(Array.from(n))); } catch (_) {}
+      return n;
+    });
+  }
+  function marcarTodosIncluir(marcar) {
+    const n = marcar ? new Set(vendedores.map((v) => v.id)) : new Set();
+    try { localStorage.setItem("instructiva_relatorio_geral_vend", JSON.stringify(Array.from(n))); } catch (_) {}
+    setIncluirVend(n);
+  }
 
   function periodoParaDatas() {
     const agora = Date.now();
@@ -6387,12 +6412,14 @@ function AnaliseIAVendedor({ showToast, isGer = true }) {
 
   async function analisar() {
     if (periodo === "data" && !dataEsp) { showToast("Escolha uma data"); return; }
+    if (isGer && modo === "geral" && incluirVend && incluirVend.size === 0) { showToast("Marque pelo menos uma pessoa pro relatório geral"); return; }
     const dt = periodoParaDatas();
     setCarregando(true); setRes(null);
     try {
-      const ehRelatorio = isGer && (modo === "objecoes" || modo === "abordagem");
+      const ehRelatorio = isGer && (modo === "objecoes" || modo === "abordagem" || modo === "geral");
+      const idsGeral = (modo === "geral" && incluirVend) ? Array.from(incluirVend) : undefined;
       const r = ehRelatorio
-        ? await api.ofRelatorioIA(modo, dt.de, dt.ate, vendedorId || undefined)
+        ? await api.ofRelatorioIA(modo, dt.de, dt.ate, vendedorId || undefined, idsGeral)
         : await api.ofAnaliseIA(isGer ? (vendedorId || undefined) : undefined, dt.de, dt.ate);
       setRes({ ...r, _modo: ehRelatorio ? modo : "vendedor" });
       if (r.vazio) showToast("Nenhuma conversa nesse período");
@@ -6401,7 +6428,8 @@ function AnaliseIAVendedor({ showToast, isGer = true }) {
   }
 
   const A = res && res._modo === "vendedor" && res.analise;
-  const REL = res && res._modo && res._modo !== "vendedor" && res.relatorio;
+  const GERAL = res && res._modo === "geral" && res.relatorio;
+  const REL = res && res._modo && res._modo !== "vendedor" && res._modo !== "geral" && res.relatorio;
   function exportarPDF() { try { window.print(); } catch (_) {} }
   function periodoLegivel() {
     if (periodo === "hoje") return "Hoje";
@@ -6438,12 +6466,13 @@ function AnaliseIAVendedor({ showToast, isGer = true }) {
             <span style={{ fontSize: 10.5, color: DES.mut2, fontWeight: 700, letterSpacing: ".06em", textTransform: "uppercase" }}>Tipo</span>
             <select className="input" value={modo} onChange={(e) => { setModo(e.target.value); setRes(null); }} style={{ minWidth: 180 }}>
               <option value="vendedor">Análise por vendedor</option>
+              <option value="geral">Relatório geral do time</option>
               <option value="objecoes">Relatório de objeções (time)</option>
               <option value="abordagem">Relatório de abordagem (time)</option>
             </select>
           </div>
         )}
-        {isGer && (
+        {isGer && modo !== "geral" && (
           <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
             <span style={{ fontSize: 10.5, color: DES.mut2, fontWeight: 700, letterSpacing: ".06em", textTransform: "uppercase" }}>{modo === "vendedor" ? "Vendedor" : "Vendedor (opcional)"}</span>
             <select className="input" value={vendedorId} onChange={(e) => setVendedorId(e.target.value)} style={{ minWidth: 180 }}>
@@ -6478,13 +6507,40 @@ function AnaliseIAVendedor({ showToast, isGer = true }) {
         </button>
       </div>
 
+      {isGer && modo === "geral" && (
+        <div className="no-print" style={{ background: "var(--card)", border: "1px solid " + DES.line, borderRadius: 16, padding: 18, marginBottom: 20, boxShadow: "0 1px 2px rgba(15,23,42,.04)" }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap", marginBottom: 12 }}>
+            <div>
+              <div style={{ fontSize: 13.5, fontWeight: 700, color: DES.ink }}>Quem entra no relatório</div>
+              <div style={{ fontSize: 12, color: DES.mut, marginTop: 2 }}>Marque só quem é do time de vendas. Quem estiver desmarcado não entra na análise.</div>
+            </div>
+            <div style={{ display: "flex", gap: 8 }}>
+              <button className="btn" onClick={() => marcarTodosIncluir(true)} style={{ fontSize: 12, padding: "5px 10px", border: "1px solid " + DES.line, background: "var(--surface-2)", color: DES.ink }}>Marcar todos</button>
+              <button className="btn" onClick={() => marcarTodosIncluir(false)} style={{ fontSize: 12, padding: "5px 10px", border: "1px solid " + DES.line, background: "var(--surface-2)", color: DES.ink }}>Desmarcar todos</button>
+            </div>
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: 8 }}>
+            {vendedores.map((v) => {
+              const on = incluirVend ? incluirVend.has(v.id) : true;
+              return (
+                <label key={v.id} style={{ display: "flex", alignItems: "center", gap: 9, padding: "8px 11px", borderRadius: 10, border: "1px solid " + (on ? DES.green : DES.line), background: on ? "rgba(37,160,107,.06)" : "var(--surface-2)", cursor: "pointer", fontSize: 13.5, color: DES.ink }}>
+                  <input type="checkbox" checked={on} onChange={() => toggleIncluir(v.id)} style={{ width: 16, height: 16, accentColor: "#25A06B", flexShrink: 0 }} />
+                  <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{v.nome}</span>
+                </label>
+              );
+            })}
+          </div>
+          <div style={{ fontSize: 12, color: DES.mut2, marginTop: 10 }}>{incluirVend ? incluirVend.size : vendedores.length} de {vendedores.length} selecionado(s) · sua escolha fica salva pra próxima.</div>
+        </div>
+      )}
+
       {carregando && <div style={{ padding: 40, textAlign: "center", color: DES.mut, background: "var(--card)", borderRadius: 16, border: "1px solid " + DES.line }}>A IA está lendo as conversas… isso leva alguns segundos.</div>}
 
       {res && res.vazio && !carregando && (
         <div style={{ padding: 30, color: DES.mut, background: "var(--card)", borderRadius: 16, border: "1px solid " + DES.line, textAlign: "center" }}>Nenhuma conversa {isGer ? "desse vendedor" : "sua"} nesse período.</div>
       )}
 
-      {res && !res.vazio && !carregando && (REL || A) && (
+      {res && !res.vazio && !carregando && (REL || A || GERAL) && (
         <div className="no-print" style={{ display: "flex", justifyContent: "flex-end", marginBottom: 12 }}>
           <button className="btn" onClick={exportarPDF} style={{ height: 38, display: "flex", alignItems: "center", gap: 7, fontWeight: 600, border: "1px solid " + DES.line, background: "var(--card)", color: DES.ink }}>
             ⬇ Exportar PDF
@@ -6498,9 +6554,52 @@ function AnaliseIAVendedor({ showToast, isGer = true }) {
             <div style={{ fontSize: 20, fontWeight: 800, letterSpacing: "-.02em" }}><span style={{ color: "#111418" }}>instruct</span><span style={{ color: "#25A06B" }}>iva</span></div>
             <div style={{ fontSize: 11, color: "#5b6472" }}>Emitido em {new Date().toLocaleString("pt-BR")}</div>
           </div>
-          <div style={{ fontSize: 16, fontWeight: 700, color: "#111418", marginTop: 10 }}>Relatório da Análise IA{res && res._modo === "objecoes" ? " — Objeções (time)" : res && res._modo === "abordagem" ? " — Abordagem (time)" : " — Por vendedor"}</div>
+          <div style={{ fontSize: 16, fontWeight: 700, color: "#111418", marginTop: 10 }}>Relatório da Análise IA{res && res._modo === "geral" ? " — Geral do time" : res && res._modo === "objecoes" ? " — Objeções (time)" : res && res._modo === "abordagem" ? " — Abordagem (time)" : " — Por vendedor"}</div>
           <div style={{ fontSize: 12.5, color: "#5b6472", marginTop: 3 }}>{escopoLegivel()} · Período: {periodoLegivel()}</div>
         </div>
+
+      {res && !res.vazio && !carregando && GERAL && (
+        <div>
+          <div style={{ fontSize: 12, color: DES.mut2, marginBottom: 14 }}>Relatório geral do time · {res.analisadas} conversa(s) analisada(s){res.totalConversas > res.analisadas ? " (as com mais troca, de " + res.totalConversas + ")" : ""}.</div>
+          {(GERAL.notaTime !== undefined && GERAL.notaTime !== null) && (
+            <div style={{ display: "flex", alignItems: "center", gap: 14, background: "var(--card)", border: "1px solid " + DES.line, borderRadius: 16, padding: 18, marginBottom: 16 }}>
+              <div style={{ fontSize: 34, fontWeight: 800, color: (Number(GERAL.notaTime) >= 7 ? DES.green : Number(GERAL.notaTime) >= 5 ? DES.orange : "#dc2626"), lineHeight: 1 }}>{GERAL.notaTime}<span style={{ fontSize: 16, opacity: .5 }}>/10</span></div>
+              <div style={{ fontSize: 13, color: DES.mut, fontWeight: 600 }}>Nota geral do time</div>
+            </div>
+          )}
+          {GERAL.resumo && <div style={{ background: "var(--surface-2)", border: "1px solid " + DES.line, borderLeft: "3px solid " + DES.orange, borderRadius: 16, padding: 20, marginBottom: 16, fontSize: 14.5, fontWeight: 500, color: DES.ink, lineHeight: 1.6 }}>{GERAL.resumo}</div>}
+          <Bloco titulo="O que o time faz bem" itens={GERAL.oQueVaiBem} cor={DES.green} ico="✅" />
+          <Bloco titulo="Problemas do time" itens={GERAL.problemas} cor="#dc2626" ico="🚨" />
+          {Array.isArray(GERAL.ranking) && GERAL.ranking.length > 0 && (
+            <div style={{ background: "var(--card)", border: "1px solid " + DES.line, borderRadius: 16, padding: 18, marginBottom: 14 }}>
+              <div style={{ fontSize: 13.5, fontWeight: 700, color: DES.ink, marginBottom: 12, display: "flex", alignItems: "center", gap: 7 }}>🏆 Ranking do time</div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                {GERAL.ranking.map((r, i) => {
+                  const st = r.nivel === "destaque" ? { ic: "🟢", cor: DES.green, lb: "Puxa o resultado" } : r.nivel === "atencao" ? { ic: "🔴", cor: "#dc2626", lb: "Precisa de atenção" } : { ic: "🟡", cor: DES.orange, lb: "Regular" };
+                  return (
+                    <div key={i} style={{ display: "flex", gap: 11, padding: "11px 13px", background: "var(--surface-2)", borderRadius: 11, borderLeft: "3px solid " + st.cor }}>
+                      <span style={{ fontSize: 15, flexShrink: 0 }}>{st.ic}</span>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: 13.5, fontWeight: 700, color: DES.ink }}>{i + 1}. {r.nome} <span style={{ fontSize: 11, fontWeight: 600, color: st.cor }}>· {st.lb}</span></div>
+                        {r.comentario && <div style={{ fontSize: 12.5, color: DES.mut, marginTop: 3, lineHeight: 1.5 }}>{r.comentario}</div>}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+          {Array.isArray(GERAL.recomendacoes) && GERAL.recomendacoes.length > 0 && (
+            <div style={{ background: "var(--surface-2)", border: "1px solid " + DES.line, borderLeft: "3px solid " + DES.green, borderRadius: 14, padding: 18, marginBottom: 14 }}>
+              <div style={{ fontSize: 13.5, fontWeight: 700, color: DES.green, marginBottom: 10, display: "flex", alignItems: "center", gap: 7 }}>✅ Recomendações pro time</div>
+              <ul style={{ margin: 0, paddingLeft: 20, display: "flex", flexDirection: "column", gap: 8 }}>
+                {GERAL.recomendacoes.map((t, i) => <li key={i} style={{ fontSize: 13.5, color: DES.ink, lineHeight: 1.55 }}>{t}</li>)}
+              </ul>
+            </div>
+          )}
+          {!GERAL && res.bruto && <div style={{ background: "var(--card)", border: "1px solid " + DES.line, borderRadius: 16, padding: 20, fontSize: 14, color: DES.ink, whiteSpace: "pre-wrap", lineHeight: 1.6 }}>{res.bruto}</div>}
+        </div>
+      )}
 
       {res && !res.vazio && !carregando && REL && (
         <div>
