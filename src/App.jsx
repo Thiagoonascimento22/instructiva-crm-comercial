@@ -6596,7 +6596,7 @@ function AnaliseIAVendedor({ showToast, isGer = true }) {
           {(GERAL.notaTime !== undefined && GERAL.notaTime !== null) && (
             <div style={{ display: "flex", alignItems: "center", gap: 14, background: "var(--card)", border: "1px solid " + DES.line, borderRadius: 16, padding: 18, marginBottom: 16 }}>
               <div style={{ fontSize: 40, fontWeight: 800, color: (Number(GERAL.notaTime) >= 7 ? DES.green : Number(GERAL.notaTime) >= 5 ? DES.orange : "#dc2626"), lineHeight: 1 }}>{GERAL.notaTime}<span style={{ fontSize: 18, opacity: .5 }}>/10</span></div>
-              <div><div style={{ fontSize: 14, color: DES.ink, fontWeight: 700 }}>Nota geral do time</div><div style={{ fontSize: 12, color: DES.mut, marginTop: 2 }}>desempenho coletivo no período</div></div>
+              <div><div style={{ fontSize: 14, color: DES.ink, fontWeight: 700 }}>Nota geral do time</div><div style={{ fontSize: 12, color: DES.mut, marginTop: 2 }}>estimativa da IA · pode variar um pouco a cada análise</div></div>
             </div>
           )}
           {GERAL.resumo && <div style={{ background: "var(--surface-2)", border: "1px solid " + DES.line, borderLeft: "3px solid " + DES.orange, borderRadius: 16, padding: 20, marginBottom: 16, fontSize: 14.5, fontWeight: 500, color: DES.ink, lineHeight: 1.6 }}>{GERAL.resumo}</div>}
@@ -6710,7 +6710,7 @@ function AnaliseIAVendedor({ showToast, isGer = true }) {
             {(A.nota !== undefined && A.nota !== null) && (
               <div style={{ display: "flex", alignItems: "center", gap: 14, background: "var(--card)", border: "1px solid " + DES.line, borderRadius: 16, padding: 18, marginBottom: 16 }}>
                 <div style={{ fontSize: 40, fontWeight: 800, color: (Number(A.nota) >= 7 ? DES.green : Number(A.nota) >= 5 ? DES.orange : "#dc2626"), lineHeight: 1 }}>{A.nota}<span style={{ fontSize: 18, opacity: .5 }}>/10</span></div>
-                <div><div style={{ fontSize: 14, color: DES.ink, fontWeight: 700 }}>Nota{isGer && res.vendedor ? " de " + res.vendedor : ""}</div><div style={{ fontSize: 12, color: DES.mut, marginTop: 2 }}>performance no período</div></div>
+                <div><div style={{ fontSize: 14, color: DES.ink, fontWeight: 700 }}>Nota{isGer && res.vendedor ? " de " + res.vendedor : ""}</div><div style={{ fontSize: 12, color: DES.mut, marginTop: 2 }}>estimativa da IA · pode variar um pouco a cada análise</div></div>
               </div>
             )}
             {A.resumo && <div style={{ background: "var(--surface-2)", border: "1px solid " + DES.line, borderRadius: 16, padding: 20, marginBottom: 16, fontSize: 14.5, fontWeight: 500, color: DES.ink, lineHeight: 1.6 }}>{A.resumo}</div>}

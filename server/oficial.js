@@ -1365,13 +1365,15 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
   }
 
   // chamada única (system + user) pra análises — devolve o texto
-  async function analisarComIA(sistema, usuario, maxTokens) {
+  async function analisarComIA(sistema, usuario, maxTokens, temp) {
     const key = process.env.OPENAI_API_KEY;
     if (!key) throw new Error("OPENAI_API_KEY não configurada");
     const r = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
       headers: { "Content-Type": "application/json", "Authorization": "Bearer " + key },
-      body: JSON.stringify({ model: "gpt-4o-mini", max_tokens: maxTokens || 1200, temperature: 0.4, messages: [{ role: "system", content: sistema }, { role: "user", content: usuario }] }),
+      // temperatura baixa + seed fixo = análise mais CONSISTENTE (nota varia pouco entre gerações
+      // quando as conversas são as mesmas). Se as conversas mudarem, a nota muda — o que é correto.
+      body: JSON.stringify({ model: "gpt-4o-mini", max_tokens: maxTokens || 1200, temperature: (temp !== undefined ? temp : 0.2), seed: 7, messages: [{ role: "system", content: sistema }, { role: "user", content: usuario }] }),
     });
     const data = await r.json().catch(() => ({}));
     if (!r.ok) throw new Error((data.error && data.error.message) || "Erro OpenAI " + r.status);
