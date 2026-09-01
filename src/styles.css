@@ -2,20 +2,20 @@
    INSTRUCTIVA — MONITORIA DE ATENDIMENTO — DESIGN SYSTEM (índigo-violeta premium)
    ============================================================ */
 :root {
-  /* marca (compartilhada nos dois temas) */
+  /* marca — esmeralda viva (destaque), com menu escuro grafite */
   --brand: #059669;
   --brand-2: #10b981;
   --laranja: #059669;
   --grad: linear-gradient(135deg, #10b981 0%, #059669 100%);
-  --grad-violet: linear-gradient(135deg, #34d399 0%, #6ee7b7 100%);
+  --grad-violet: linear-gradient(135deg, #34d399 0%, #10b981 100%);
 
   /* hero IA — showpiece escuro nos dois temas */
   --ia-hero-bg:
-    radial-gradient(80% 120% at 0% 0%, rgba(79, 70, 229, 0.28), transparent 55%),
-    radial-gradient(90% 140% at 100% 100%, rgba(129, 140, 248, 0.3), transparent 55%),
-    linear-gradient(120deg, #15131f, #1a1530 60%, #241a3a);
+    radial-gradient(80% 120% at 0% 0%, rgba(16, 185, 129, 0.26), transparent 55%),
+    radial-gradient(90% 140% at 100% 100%, rgba(52, 211, 153, 0.22), transparent 55%),
+    linear-gradient(120deg, #10141a, #12181f 60%, #14201d);
 
-  /* ===== CLARO (padrão) ===== */
+  /* ===== CLARO (padrão) — área de trabalho clara e clean ===== */
   --indigo: #059669;
   --indigo-600: #047857;
   --violet: #34d399;
@@ -24,21 +24,22 @@
   --amber: #f59e0b;
   --cyan: #0ea5e9;
 
-  --bg: #f8fafc;
+  --bg: #f5f7f8;
   --card: #ffffff;
-  --surface-2: #f1f5f9;
-  --line: rgba(15, 23, 42, 0.08);
-  --line-2: rgba(15, 23, 42, 0.05);
-  --text: #0f172a;
-  --muted: #64748b;
-  --faint: #94a3b8;
+  --surface-2: #eef1f3;
+  --line: rgba(16, 27, 34, 0.09);
+  --line-2: rgba(16, 27, 34, 0.05);
+  --text: #0e1519;
+  --muted: #5d6b74;
+  --faint: #97a3ab;
 
-  --side-1: #f8fafc;
-  --side-2: #f1f5f9;
-  --side-line: rgba(15, 23, 42, 0.07);
-  --side-text: #334155;
-  --side-muted: #94a3b8;
-  --side-shadow: 1px 0 0 rgba(20, 22, 45, 0.06);
+  /* ===== MENU LATERAL CLARO (clean) ===== */
+  --side-1: #ffffff;
+  --side-2: #f5f7f8;
+  --side-line: rgba(16, 27, 34, 0.07);
+  --side-text: #3a4750;
+  --side-muted: #97a3ab;
+  --side-shadow: 1px 0 0 rgba(16, 27, 34, 0.06);
 
   --lead: #64748b;
   --contato: #059669;
@@ -48,35 +49,35 @@
 
   --glass: rgba(255, 255, 255, 0.72);
   --glass-2: rgba(255, 255, 255, 0.6);
-  --glass-border: rgba(20, 22, 45, 0.08);
+  --glass-border: rgba(16, 27, 34, 0.08);
   --glass-blur: 14px;
 
   --aurora: none;
   --grain-opacity: 0;
 
-  --shadow-sm: 0 1px 2px rgba(20, 22, 45, 0.04);
-  --shadow: 0 1px 3px rgba(20, 22, 45, 0.06), 0 1px 2px rgba(20, 22, 45, 0.04);
-  --shadow-lg: 0 4px 16px -4px rgba(20, 22, 45, 0.1);
-  --card-hover-shadow: 0 2px 8px -2px rgba(20, 22, 45, 0.08);
-  --glow-violet: 0 2px 8px -2px rgba(99, 102, 241, 0.18);
-  --glow-brand: 0 2px 10px -2px rgba(16, 185, 129, 0.3);
+  --shadow-sm: 0 1px 2px rgba(16, 27, 34, 0.05);
+  --shadow: 0 1px 3px rgba(16, 27, 34, 0.07), 0 1px 2px rgba(16, 27, 34, 0.04);
+  --shadow-lg: 0 12px 30px -10px rgba(16, 27, 34, 0.16), 0 4px 12px -4px rgba(16, 27, 34, 0.08);
+  --card-hover-shadow: 0 6px 18px -6px rgba(16, 27, 34, 0.14);
+  --glow-violet: 0 4px 14px -4px rgba(16, 185, 129, 0.26);
+  --glow-brand: 0 6px 18px -6px rgba(16, 185, 129, 0.4);
   --num-glow: none;
-  --sheen: linear-gradient(90deg, transparent, rgba(20, 22, 45, 0.04), transparent);
+  --sheen: linear-gradient(90deg, transparent, rgba(16, 27, 34, 0.04), transparent);
 
-  --nav-hover: rgba(79, 70, 229, 0.06);
+  --nav-hover: rgba(16, 185, 129, 0.09);
   --input-bg: #ffffff;
-  --input-focus-ring: rgba(16, 185, 129, 0.22);
+  --input-focus-ring: rgba(16, 185, 129, 0.24);
   --bubble-them: #ffffff;
-  --th-bg: rgba(20, 22, 45, 0.03);
-  --row-hover: rgba(79, 70, 229, 0.04);
-  --scrim: rgba(20, 22, 45, 0.4);
-  --modal-bg: linear-gradient(180deg, #ffffff, #fbfbff);
-  --scroll-thumb: rgba(20, 22, 45, 0.18);
-  --scroll-thumb-hover: rgba(20, 22, 45, 0.3);
-  --selection: rgba(79, 70, 229, 0.22);
+  --th-bg: rgba(16, 27, 34, 0.03);
+  --row-hover: rgba(16, 185, 129, 0.05);
+  --scrim: rgba(10, 15, 18, 0.45);
+  --modal-bg: linear-gradient(180deg, #ffffff, #fafcfb);
+  --scroll-thumb: rgba(16, 27, 34, 0.18);
+  --scroll-thumb-hover: rgba(16, 27, 34, 0.3);
+  --selection: rgba(16, 185, 129, 0.2);
 
-  --r: 12px;
-  --r-sm: 8px;
+  --r: 15px;
+  --r-sm: 10px;
 }
 
 /* ===== ESCURO ===== */
@@ -4460,3 +4461,14 @@ select.input:disabled, .input:disabled { color: var(--muted); opacity: 1; -webki
 .of-origem-lb { font-size: 11px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; margin-right: 2px; }
 .of-origem-tag { font-size: 12px; font-weight: 600; color: var(--ink); background: var(--card); border: 1px solid var(--line); border-radius: 20px; padding: 3px 11px; white-space: nowrap; }
 .of-origem-tag.tag { background: rgba(242,101,34,.08); border-color: rgba(242,101,34,.25); color: #c2410c; }
+
+/* ===== Repaginada v226: grafite premium + esmeralda ===== */
+.panel { transition: box-shadow .2s ease, transform .2s ease; }
+.panel:hover { box-shadow: var(--card-hover-shadow); }
+.btn { transition: all .18s cubic-bezier(.4,0,.2,1); }
+.btn:hover { border-color: var(--brand); }
+.btn-primary { box-shadow: var(--glow-brand); }
+.btn-primary:hover { filter: brightness(1.05); transform: translateY(-1px); box-shadow: var(--shadow-lg); }
+::selection { background: var(--selection); }
+/* garante o subtítulo do logo legível no menu escuro */
+.brand .tag { color: var(--side-muted); }
