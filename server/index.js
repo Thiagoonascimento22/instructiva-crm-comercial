@@ -19,7 +19,7 @@ app.use(express.urlencoded({ extended: false, limit: "10mb" })); // Twilio manda
 // Versão do sistema — pra CONFIRMAR qual código está no ar (abra /api/versao no navegador).
 // Se aqui aparecer a versão nova mas o bug continuar, o problema é outro; se aparecer
 // uma versão antiga (ou 404), o deploy não subiu de verdade.
-const VERSAO_SISTEMA = "v231-cinza";
+const VERSAO_SISTEMA = "v232-premium";
 app.get("/api/versao", (req, res) => res.json({ versao: VERSAO_SISTEMA, quando: new Date().toISOString() }));
 console.log("==> Instructiva CRM versão:", VERSAO_SISTEMA);
 
