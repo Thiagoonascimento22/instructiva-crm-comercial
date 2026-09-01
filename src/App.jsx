@@ -7181,7 +7181,18 @@ function OficialCRM({ showToast, isGer = true, onAbrirWhats, onDisparar }) {
   const [novaNota, setNovaNota] = useState("");
 
   const carregar = () => api.ofCRM().then((d) => { setEtapas(d.etapas || []); setLeads(d.leads || []); setVendedores(d.vendedores || []); setCrmVend(d.crmVendedores || []); }).catch((e) => showToast(e.message));
-  useEffect(() => { carregar(); const t = setInterval(carregar, 12000); return () => clearInterval(t); }, []);
+  const versaoCrmRef = useRef("");
+  useEffect(() => {
+    let vivo = true;
+    carregar();
+    // baseline do "carimbo" (não recarrega à toa na 1ª vez)
+    api.ofCrmVersao().then((r) => { if (r && vivo) versaoCrmRef.current = r.v; }).catch(() => {});
+    // a cada 10s pergunta só o carimbo leve; só recarrega a lista se MUDOU (lead novo/movido/editado)
+    const t = setInterval(async () => {
+      try { const r = await api.ofCrmVersao(); if (vivo && r && r.v !== versaoCrmRef.current) { versaoCrmRef.current = r.v; carregar(); } } catch (_) {}
+    }, 10000);
+    return () => { vivo = false; clearInterval(t); };
+  }, []);
   async function moverEtapa(k, dir) {
     const arr = etapas.map((e) => e.k);
     const i = arr.indexOf(k), j = i + dir;

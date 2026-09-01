@@ -2027,6 +2027,21 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
     salvar();
     res.json({ ok: true, lead: crmLeadPublico(lead) });
   });
+  // Carimbo leve do Pipeline: só diz "mudou algo?" (nº de leads + atividade mais recente).
+  // O front pergunta isso a cada 10s e só baixa a lista pesada quando muda. Não mapeia nada.
+  app.get("/api/oficial/crm/versao", auth, permiteVend("crm"), (req, res) => {
+    garantirCRM();
+    const ehVend = req.user.role === "vendedor";
+    let n = 0, maxAt = 0;
+    for (const l of (db.oficial.crmLeads || [])) {
+      if (ehVend && !podeVerVend(req.user, l.vendedorId)) continue;
+      n++;
+      const at = l.atualizadoEm || 0;
+      if (at > maxAt) maxAt = at;
+    }
+    res.json({ v: n + ":" + maxAt });
+  });
+
   // busca UM lead completo (com histórico/notas) — usado ao ABRIR o lead no Pipeline
   app.get("/api/oficial/crm/lead/:id", auth, permiteVend("crm"), (req, res) => {
     garantirCRM();
