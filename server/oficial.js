@@ -3829,7 +3829,17 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
       iaUltimoErro: chat.iaUltimoErro || null,
       mensagens: chat.mensagens || [],
       notas: chat.notas || [], // notas internas (transferências etc) — lead não vê
-      etapaLead: (() => { const l = leadDoChat(chat, false); return l ? l.etapa : null; })(),
+      ...(() => {
+        const l = leadDoChat(chat, false);
+        return {
+          etapaLead: l ? l.etapa : null,
+          // de onde o lead veio (pro vendedor personalizar o atendimento)
+          origemLead: l ? (l.origem || "") : "",
+          cursoLead: l ? (l.curso || "") : "",
+          tagsLead: l && Array.isArray(l.tags) ? l.tags : [],
+          recorrenteLead: !!(l && l.recorrente),
+        };
+      })(),
     });
   });
 

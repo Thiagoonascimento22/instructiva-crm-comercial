@@ -9283,6 +9283,23 @@ function InboxOficial({ isGer, ehLider, showToast, onIrParaEvolution, target, on
                 </div>
               )}
             </div>
+            {(() => {
+              const camp = conversa.origemDisparo && conversa.campanha ? conversa.campanha : "";
+              const orig = conversa.origemLead && !["manual", "ligacao"].includes(conversa.origemLead) && conversa.origemLead !== camp ? conversa.origemLead : "";
+              const curso = conversa.cursoLead || "";
+              const tags = Array.isArray(conversa.tagsLead) ? conversa.tagsLead : [];
+              if (!camp && !orig && !curso && !tags.length && !conversa.recorrenteLead) return null;
+              return (
+                <div className="of-origem-bar">
+                  <span className="of-origem-lb">De onde veio:</span>
+                  {camp && <span className="of-origem-tag" title="Campanha de disparo">📣 {camp}</span>}
+                  {orig && <span className="of-origem-tag" title="Lista / origem de captação">🎯 {orig}</span>}
+                  {curso && <span className="of-origem-tag" title="Curso/treinamento de interesse">📘 {curso}</span>}
+                  {tags.map((t, i) => <span key={i} className="of-origem-tag tag" title="Tag do lead">🏷️ {t}</span>)}
+                  {conversa.recorrenteLead && <span className="of-origem-tag" style={{ background: "#25A06B", color: "#fff", borderColor: "#25A06B" }} title="Este contato voltou por uma nova captação">🔁 Lead recorrente</span>}
+                </div>
+              );
+            })()}
             <div className="of-conv-msgs" ref={msgsBoxRef} onScroll={onScrollMsgs}>
               {timeline.map((item, i) => (
                 item.tipo === "nota" ? (
