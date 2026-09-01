@@ -2,23 +2,23 @@
    INSTRUCTIVA — MONITORIA DE ATENDIMENTO — DESIGN SYSTEM (índigo-violeta premium)
    ============================================================ */
 :root {
-  /* marca — esmeralda viva (destaque), com menu escuro grafite */
-  --brand: #059669;
-  --brand-2: #10b981;
-  --laranja: #059669;
-  --grad: linear-gradient(135deg, #10b981 0%, #059669 100%);
-  --grad-violet: linear-gradient(135deg, #34d399 0%, #10b981 100%);
+  /* marca — azul moderno sóbrio (destaque), menu claro */
+  --brand: #2563eb;
+  --brand-2: #3b82f6;
+  --laranja: #2563eb;
+  --grad: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+  --grad-violet: linear-gradient(135deg, #60a5fa 0%, #3b82f6 100%);
 
   /* hero IA — showpiece escuro nos dois temas */
   --ia-hero-bg:
-    radial-gradient(80% 120% at 0% 0%, rgba(16, 185, 129, 0.26), transparent 55%),
-    radial-gradient(90% 140% at 100% 100%, rgba(52, 211, 153, 0.22), transparent 55%),
-    linear-gradient(120deg, #10141a, #12181f 60%, #14201d);
+    radial-gradient(80% 120% at 0% 0%, rgba(37, 99, 235, 0.30), transparent 55%),
+    radial-gradient(90% 140% at 100% 100%, rgba(59, 130, 246, 0.26), transparent 55%),
+    linear-gradient(120deg, #0e1220, #121a2e 60%, #14203a);
 
   /* ===== CLARO (padrão) — área de trabalho clara e clean ===== */
-  --indigo: #059669;
-  --indigo-600: #047857;
-  --violet: #34d399;
+  --indigo: #2563eb;
+  --indigo-600: #1d4ed8;
+  --violet: #3b82f6;
   --mint: #10b981;
   --coral: #f43f5e;
   --amber: #f59e0b;
@@ -42,7 +42,7 @@
   --side-shadow: 1px 0 0 rgba(16, 27, 34, 0.06);
 
   --lead: #64748b;
-  --contato: #059669;
+  --contato: #2563eb;
   --negociando: #f59e0b;
   --fechou: #10b981;
   --perdeu: #f43f5e;
@@ -59,22 +59,22 @@
   --shadow: 0 1px 3px rgba(16, 27, 34, 0.07), 0 1px 2px rgba(16, 27, 34, 0.04);
   --shadow-lg: 0 12px 30px -10px rgba(16, 27, 34, 0.16), 0 4px 12px -4px rgba(16, 27, 34, 0.08);
   --card-hover-shadow: 0 6px 18px -6px rgba(16, 27, 34, 0.14);
-  --glow-violet: 0 4px 14px -4px rgba(16, 185, 129, 0.26);
-  --glow-brand: 0 6px 18px -6px rgba(16, 185, 129, 0.4);
+  --glow-violet: 0 4px 14px -4px rgba(37, 99, 235, 0.26);
+  --glow-brand: 0 6px 18px -6px rgba(37, 99, 235, 0.42);
   --num-glow: none;
   --sheen: linear-gradient(90deg, transparent, rgba(16, 27, 34, 0.04), transparent);
 
-  --nav-hover: rgba(16, 185, 129, 0.09);
+  --nav-hover: rgba(37, 99, 235, 0.09);
   --input-bg: #ffffff;
-  --input-focus-ring: rgba(16, 185, 129, 0.24);
+  --input-focus-ring: rgba(37, 99, 235, 0.24);
   --bubble-them: #ffffff;
   --th-bg: rgba(16, 27, 34, 0.03);
-  --row-hover: rgba(16, 185, 129, 0.05);
+  --row-hover: rgba(37, 99, 235, 0.05);
   --scrim: rgba(10, 15, 18, 0.45);
   --modal-bg: linear-gradient(180deg, #ffffff, #fafcfb);
   --scroll-thumb: rgba(16, 27, 34, 0.18);
   --scroll-thumb-hover: rgba(16, 27, 34, 0.3);
-  --selection: rgba(16, 185, 129, 0.2);
+  --selection: rgba(37, 99, 235, 0.2);
 
   --r: 15px;
   --r-sm: 10px;
@@ -2489,7 +2489,7 @@ h1, h2, h3, h4, .topbar .greet, .panel-h h3, .login-card .ttl, .login-card h2, .
 /* ============================================================
    CANAL OFICIAL (Cloud API) — disparo, vendedores, números, inbox
    ============================================================ */
-:root { --of-green: #10b981; --of-green-d: #059669; --of-green-soft: rgba(16,185,129,.12); }
+:root { --of-green: #2563eb; --of-green-d: #1d4ed8; --of-green-soft: rgba(37,99,235,.12); }
 
 .of-wrap { display: flex; flex-direction: column; gap: 16px; }
 .of-tabs { display: flex; gap: 6px; flex-wrap: wrap; }
