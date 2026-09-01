@@ -1380,6 +1380,35 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
     return ((data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content) || "").trim();
   }
 
+  // Painel do gerente: quem se autoavaliou na IA e quantas vezes (hoje / 7 dias / 30 dias / total)
+  app.get("/api/oficial/autoavaliacoes", auth, gerenteOnly, (req, res) => {
+    garantirEstrutura();
+    const eventos = Array.isArray(db.oficial.autoavaliacoes) ? db.oficial.autoavaliacoes : [];
+    const agora = Date.now();
+    const hoje0 = new Date(); hoje0.setHours(0, 0, 0, 0);
+    const inicioHoje = hoje0.getTime();
+    const sem = agora - 7 * 24 * 60 * 60 * 1000;
+    const mes = agora - 30 * 24 * 60 * 60 * 1000;
+    const por = {};
+    for (const e of eventos) {
+      const id = e.v; if (!id) continue;
+      if (!por[id]) por[id] = { hoje: 0, semana: 0, mes: 0, total: 0, ultima: 0 };
+      const ts = e.ts || 0;
+      por[id].total++;
+      if (ts >= inicioHoje) por[id].hoje++;
+      if (ts >= sem) por[id].semana++;
+      if (ts >= mes) por[id].mes++;
+      if (ts > por[id].ultima) por[id].ultima = ts;
+    }
+    // lista todos os vendedores ativos (mesmo os que fizeram 0, pra ver quem NÃO se avalia)
+    const vend = (db.users || []).filter((u) => u.role === "vendedor" && u.ativo);
+    const linhas = vend.map((u) => ({ vendedorId: u.id, nome: u.nome, foto: u.foto || "", ...(por[u.id] || { hoje: 0, semana: 0, mes: 0, total: 0, ultima: 0 }) }));
+    // ordena: quem mais se avaliou (no mês) primeiro
+    linhas.sort((a, b) => b.mes - a.mes || b.total - a.total || a.nome.localeCompare(b.nome));
+    const totais = linhas.reduce((s, l) => ({ hoje: s.hoje + l.hoje, semana: s.semana + l.semana, mes: s.mes + l.mes, total: s.total + l.total }), { hoje: 0, semana: 0, mes: 0, total: 0 });
+    res.json({ linhas, totais });
+  });
+
   // processa a resposta da IA pra um chat (chamado pelo webhook quando o lead responde)
   // mostra "digitando..." no WhatsApp do lead (e marca a última msg como lida)
   async function mostrarDigitando(numeroCfg, ultimaMsgId) {
@@ -3542,6 +3571,18 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
       const bruto = await analisarComIA(sistema, usuario, 2400);
       let analise = null;
       try { analise = JSON.parse(String(bruto).replace(/```json/gi, "").replace(/```/g, "").trim()); } catch (_) {}
+
+      // registra a AUTOAVALIAÇÃO: só conta quando o próprio vendedor analisa as conversas dele
+      // (gerente analisando um vendedor NÃO conta; líder analisando liderado também não).
+      if (alvoId === req.user.id && req.user.role !== "gerente") {
+        if (!Array.isArray(db.oficial.autoavaliacoes)) db.oficial.autoavaliacoes = [];
+        db.oficial.autoavaliacoes.push({ v: alvoId, ts: Date.now() });
+        // poda: mantém só os últimos 180 dias (evita crescer sem fim)
+        const corte = Date.now() - 180 * 24 * 60 * 60 * 1000;
+        if (db.oficial.autoavaliacoes.length > 400) db.oficial.autoavaliacoes = db.oficial.autoavaliacoes.filter((a) => (a.ts || 0) >= corte);
+        salvar();
+      }
+
       res.json({ ok: true, vendedor: alvo.nome, totalConversas, analisadas: convs.length, analise, bruto: analise ? null : bruto });
     } catch (e) { res.status(500).json({ error: e.message || "Falha na análise" }); }
   });

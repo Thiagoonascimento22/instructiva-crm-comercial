@@ -6366,6 +6366,15 @@ function AnaliseIAVendedor({ showToast, isGer = true }) {
   const [res, setRes] = useState(null);
   const [modo, setModo] = useState("vendedor"); // gerente: vendedor | objecoes | abordagem | geral
   const [incluirVend, setIncluirVend] = useState(null); // Set de ids incluídos no relatório geral (null = ainda não definido)
+  const [verUso, setVerUso] = useState(false); // painel "quem se autoavaliou" (gerente)
+  const [uso, setUso] = useState(null);
+  const [usoCarreg, setUsoCarreg] = useState(false);
+  async function carregarUso() {
+    setUsoCarreg(true);
+    try { const r = await api.ofAutoavaliacoes(); setUso(r || { linhas: [], totais: {} }); } catch (_) { setUso({ linhas: [], totais: {} }); }
+    finally { setUsoCarreg(false); }
+  }
+  function toggleUso() { const n = !verUso; setVerUso(n); if (n && !uso) carregarUso(); }
 
   useEffect(() => { if (isGer) api.ofVendedoresLista().then((r) => setVendedores((r && r.vendedores) || r || [])).catch(() => {}); }, [isGer]);
 
@@ -6487,10 +6496,72 @@ function AnaliseIAVendedor({ showToast, isGer = true }) {
 
   return (
     <div style={{ maxWidth: 860, margin: "0 auto" }}>
-      <div style={{ marginBottom: 20 }}>
-        <div style={{ fontSize: 22, fontWeight: 700, color: DES.ink, letterSpacing: "-.01em" }}>Análise IA</div>
-        <div style={{ fontSize: 13, color: DES.mut, marginTop: 2 }}>A IA lê as conversas {isGer ? "do vendedor" : "suas"} no período e aponta o que está bom, o que melhorar, e alertas.</div>
+      <div style={{ marginBottom: 20, display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12, flexWrap: "wrap" }}>
+        <div>
+          <div style={{ fontSize: 22, fontWeight: 700, color: DES.ink, letterSpacing: "-.01em" }}>Análise IA</div>
+          <div style={{ fontSize: 13, color: DES.mut, marginTop: 2 }}>A IA lê as conversas {isGer ? "do vendedor" : "suas"} no período e aponta o que está bom, o que melhorar, e alertas.</div>
+        </div>
+        {isGer && (
+          <button className="btn" onClick={toggleUso} style={{ height: 38, whiteSpace: "nowrap", fontWeight: 600, border: "1px solid " + (verUso ? DES.green : DES.line), background: verUso ? "rgba(37,160,107,.08)" : "var(--card)", color: verUso ? DES.green : DES.ink }}>
+            📊 Quem se autoavaliou
+          </button>
+        )}
       </div>
+
+      {isGer && verUso && (
+        <div style={{ background: "var(--card)", border: "1px solid " + DES.line, borderRadius: 16, padding: 18, marginBottom: 20, boxShadow: "0 1px 2px rgba(15,23,42,.04)" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 12 }}>
+            <div>
+              <div style={{ fontSize: 14, fontWeight: 700, color: DES.ink }}>Uso da autoavaliação pela equipe</div>
+              <div style={{ fontSize: 12, color: DES.mut, marginTop: 2 }}>Quantas vezes cada vendedor rodou a análise das próprias conversas.</div>
+            </div>
+            <button className="btn" onClick={carregarUso} disabled={usoCarreg} style={{ fontSize: 12, padding: "6px 11px", border: "1px solid " + DES.line, background: "var(--surface-2)", color: DES.ink }}>{usoCarreg ? "Atualizando…" : "↻ Atualizar"}</button>
+          </div>
+          {uso && uso.totais && (
+            <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 14 }}>
+              {[["Hoje", uso.totais.hoje], ["7 dias", uso.totais.semana], ["30 dias", uso.totais.mes], ["Total", uso.totais.total]].map(([lb, n], i) => (
+                <div key={i} style={{ flex: "1 1 90px", background: "var(--surface-2)", border: "1px solid " + DES.line, borderRadius: 12, padding: "10px 14px", textAlign: "center" }}>
+                  <div style={{ fontSize: 22, fontWeight: 800, color: DES.ink }}>{n || 0}</div>
+                  <div style={{ fontSize: 11, color: DES.mut2, fontWeight: 600, textTransform: "uppercase", letterSpacing: ".04em" }}>{lb}</div>
+                </div>
+              ))}
+            </div>
+          )}
+          {usoCarreg && !uso ? (
+            <div style={{ padding: 20, textAlign: "center", color: DES.mut }}>Carregando…</div>
+          ) : uso && uso.linhas && uso.linhas.length > 0 ? (
+            <div style={{ overflowX: "auto" }}>
+              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+                <thead>
+                  <tr style={{ borderBottom: "2px solid " + DES.line }}>
+                    <th style={{ textAlign: "left", padding: "8px 10px", fontSize: 11, color: DES.mut2, fontWeight: 700, textTransform: "uppercase", letterSpacing: ".04em" }}>Vendedor</th>
+                    <th style={{ textAlign: "center", padding: "8px 10px", fontSize: 11, color: DES.mut2, fontWeight: 700 }}>Hoje</th>
+                    <th style={{ textAlign: "center", padding: "8px 10px", fontSize: 11, color: DES.mut2, fontWeight: 700 }}>7 dias</th>
+                    <th style={{ textAlign: "center", padding: "8px 10px", fontSize: 11, color: DES.mut2, fontWeight: 700 }}>30 dias</th>
+                    <th style={{ textAlign: "center", padding: "8px 10px", fontSize: 11, color: DES.mut2, fontWeight: 700 }}>Total</th>
+                    <th style={{ textAlign: "right", padding: "8px 10px", fontSize: 11, color: DES.mut2, fontWeight: 700 }}>Última vez</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {uso.linhas.map((l) => (
+                    <tr key={l.vendedorId} style={{ borderBottom: "1px solid " + DES.line, opacity: l.total === 0 ? .55 : 1 }}>
+                      <td style={{ padding: "9px 10px", display: "flex", alignItems: "center", gap: 8 }}><Avatar nome={l.nome} foto={l.foto} size={26} /><span style={{ fontWeight: 600, color: DES.ink }}>{l.nome}</span></td>
+                      <td style={{ textAlign: "center", padding: "9px 10px", fontWeight: 700, color: l.hoje > 0 ? DES.green : DES.mut2 }}>{l.hoje}</td>
+                      <td style={{ textAlign: "center", padding: "9px 10px", color: DES.ink }}>{l.semana}</td>
+                      <td style={{ textAlign: "center", padding: "9px 10px", color: DES.ink }}>{l.mes}</td>
+                      <td style={{ textAlign: "center", padding: "9px 10px", fontWeight: 700, color: DES.ink }}>{l.total}</td>
+                      <td style={{ textAlign: "right", padding: "9px 10px", color: DES.mut, fontSize: 12 }}>{l.ultima ? tempoDesde(l.ultima) : "nunca"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              <div style={{ fontSize: 11.5, color: DES.mut2, marginTop: 10 }}>Conta só quando o próprio vendedor analisa as conversas dele. Quem aparece esmaecido ainda não se autoavaliou.</div>
+            </div>
+          ) : (
+            <div style={{ padding: 20, textAlign: "center", color: DES.mut }}>Ninguém se autoavaliou ainda.</div>
+          )}
+        </div>
+      )}
 
       <div style={{ background: "var(--card)", border: "1px solid " + DES.line, borderRadius: 16, padding: 18, marginBottom: 20, display: "flex", gap: 12, alignItems: "flex-end", flexWrap: "wrap", boxShadow: "0 1px 2px rgba(15,23,42,.04)" }}>
         {isGer && (
