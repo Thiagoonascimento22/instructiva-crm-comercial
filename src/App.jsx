@@ -7134,6 +7134,15 @@ function OficialCRM({ showToast, isGer = true, onAbrirWhats, onDisparar }) {
   }, []);
   const [etapas, setEtapas] = useState([]);
   const [leads, setLeads] = useState([]);
+  const [verTudoCol, setVerTudoCol] = useState({}); // colunas que o usuário pediu "ver mais"
+  const LIMITE_COL_CRM = 60; // desenha só os 60 mais recentes por coluna (deixa o Pipeline leve)
+  // ao abrir um lead, busca o completo (histórico/notas não vêm na lista, pra ela ser leve)
+  async function abrirLead(id) {
+    try {
+      const r = await api.ofCrmLead(id);
+      if (r && r.lead) setLeads((ls) => ls.map((x) => x.id === id ? { ...x, historico: r.lead.historico, notas: r.lead.notas, respostasFormulario: r.lead.respostasFormulario, email: r.lead.email } : x));
+    } catch (_) {}
+  }
   const [vendedores, setVendedores] = useState([]);
   const [crmVend, setCrmVend] = useState([]);
   const [sel, setSel] = useState(null);
@@ -7385,8 +7394,8 @@ function OficialCRM({ showToast, isGer = true, onAbrirWhats, onDisparar }) {
                 </div>
               )}
               <div className="crm-col-body">
-                {doEt.map((l) => (
-                  <div key={l.id} className={"crm-card" + (marcados[l.id] ? " marcado" : "")} draggable onDragStart={() => setDragId(l.id)} onDragEnd={() => setDragId(null)} onClick={() => { setSel(l.id); setNovaNota(""); }}>
+                {(verTudoCol[et.k] ? doEt : doEt.slice(0, LIMITE_COL_CRM)).map((l) => (
+                  <div key={l.id} className={"crm-card" + (marcados[l.id] ? " marcado" : "")} draggable onDragStart={() => setDragId(l.id)} onDragEnd={() => setDragId(null)} onClick={() => { setSel(l.id); setNovaNota(""); abrirLead(l.id); }}>
                     <div className="crm-card-top">
                       <label className="crm-check" onClick={(e) => e.stopPropagation()}><input type="checkbox" checked={!!marcados[l.id]} onChange={() => toggleMarcado(l.id)} /></label>
                       <div className="crm-card-nome">{l.nome}</div>
@@ -7426,6 +7435,12 @@ function OficialCRM({ showToast, isGer = true, onAbrirWhats, onDisparar }) {
                     </div>
                   </div>
                 ))}
+                {!verTudoCol[et.k] && doEt.length > LIMITE_COL_CRM && (
+                  <button type="button" className="crm-vermais" onClick={() => setVerTudoCol((v) => ({ ...v, [et.k]: true }))}
+                    style={{ width: "100%", padding: "10px", marginTop: 4, border: "1px dashed var(--line)", borderRadius: 11, background: "var(--card)", color: "var(--muted)", fontWeight: 600, fontSize: 13, cursor: "pointer" }}>
+                    ↓ Ver mais {doEt.length - LIMITE_COL_CRM} {doEt.length - LIMITE_COL_CRM === 1 ? "lead" : "leads"}
+                  </button>
+                )}
                 {doEt.length === 0 && <div className="crm-col-vazio">Nenhum lead aqui</div>}
               </div>
             </div>

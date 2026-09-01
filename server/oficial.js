@@ -1877,6 +1877,12 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
     const v = l.vendedorId ? (db.users || []).find((u) => u.id === l.vendedorId) : null;
     return { id: l.id, nome: l.nome, telefone: l.telefone, email: l.email || "", curso: l.curso || "", etapa: l.etapa, vendedorId: l.vendedorId || null, vendedorNome: v ? v.nome : "", vendedorFoto: v ? (v.foto || "") : "", valor: l.valor || 0, formaPagamento: l.formaPagamento || "", tags: l.tags || [], tarefa: l.tarefa || null, reservaNome: l.reservaNome || "", origem: l.origem || "manual", respostasFormulario: l.respostasFormulario || null, notas: l.notas || [], historico: l.historico || [], recorrente: !!l.recorrente, ultimaCaptacaoEm: l.ultimaCaptacaoEm || null, criadoEm: l.criadoEm, atualizadoEm: l.atualizadoEm };
   }
+  // versão LEVE pro Pipeline (lista com milhares de cards): SEM histórico/notas/respostas
+  // — esses só carregam quando o lead é aberto. Isso deixa o Pipeline abrir MUITO mais rápido.
+  function crmLeadLista(l) {
+    const v = l.vendedorId ? (db.users || []).find((u) => u.id === l.vendedorId) : null;
+    return { id: l.id, nome: l.nome, telefone: l.telefone, email: l.email || "", curso: l.curso || "", etapa: l.etapa, vendedorId: l.vendedorId || null, vendedorNome: v ? v.nome : "", vendedorFoto: v ? (v.foto || "") : "", valor: l.valor || 0, formaPagamento: l.formaPagamento || "", tags: l.tags || [], tarefa: l.tarefa || null, reservaNome: l.reservaNome || "", origem: l.origem || "manual", recorrente: !!l.recorrente, criadoEm: l.criadoEm, atualizadoEm: l.atualizadoEm };
+  }
   function proximoVendedorCRM() {
     garantirCRM();
     let pool = (db.oficial.crmVendedores || []).filter((id) => db.users.some((u) => u.id === id && (u.role === "vendedor" || u.role === "gerente") && u.ativo));
@@ -1938,7 +1944,7 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
     if (ehVend) leads = leads.filter((l) => podeVerVend(req.user, l.vendedorId)); // vendedor só vê os leads dele
     res.json({
       etapas: etapasCRM(),
-      leads: leads.map(crmLeadPublico),
+      leads: leads.map(crmLeadLista),
       // donos possíveis do lead: vendedores + gerentes (gerente que também vende
       // pode receber/assumir lead). ehGerente deixa a tela marcar quem é gerente.
       vendedores: (db.users || []).filter((u) => (u.role === "vendedor" || u.role === "gerente") && u.ativo).map((u) => ({ id: u.id, nome: u.nome, foto: u.foto || "", ehGerente: u.role === "gerente" })),
@@ -2021,6 +2027,15 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
     salvar();
     res.json({ ok: true, lead: crmLeadPublico(lead) });
   });
+  // busca UM lead completo (com histórico/notas) — usado ao ABRIR o lead no Pipeline
+  app.get("/api/oficial/crm/lead/:id", auth, permiteVend("crm"), (req, res) => {
+    garantirCRM();
+    const l = (db.oficial.crmLeads || []).find((x) => x.id === req.params.id);
+    if (!l) return res.status(404).json({ error: "Lead não encontrado" });
+    if (req.user.role === "vendedor" && !podeVerVend(req.user, l.vendedorId)) return res.status(403).json({ error: "Sem acesso a esse lead" });
+    res.json({ lead: crmLeadPublico(l) });
+  });
+
   app.put("/api/oficial/crm/lead/:id", auth, permiteVend("crm"), (req, res) => {
     garantirCRM();
     const l = (db.oficial.crmLeads || []).find((x) => x.id === req.params.id);

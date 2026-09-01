@@ -190,6 +190,7 @@ export const api = {
   ofCRM: () => req("GET", "/api/oficial/crm"),
   ofCrmCriar: (dados) => req("POST", "/api/oficial/crm/lead", dados),
   ofCrmEditar: (id, dados) => req("PUT", "/api/oficial/crm/lead/" + id, dados),
+  ofCrmLead: (id) => req("GET", "/api/oficial/crm/lead/" + id),
   ofCrmNota: (id, texto) => req("POST", "/api/oficial/crm/lead/" + id + "/nota", { texto }),
   ofCrmExcluir: (id) => req("DELETE", "/api/oficial/crm/lead/" + id),
   ofCrmVendedores: (ids) => req("POST", "/api/oficial/crm/vendedores", { ids }),
