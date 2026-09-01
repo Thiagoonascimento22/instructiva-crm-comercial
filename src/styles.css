@@ -82,35 +82,35 @@
 
 /* ===== ESCURO ===== */
 :root[data-theme="dark"] {
-  --brand: #10b981;
-  --brand-2: #34d399;
-  --grad: linear-gradient(135deg, #34d399 0%, #10b981 100%);
-  --indigo: #34d399;
-  --indigo-600: #34d399;
-  --violet: #6ee7b7;
+  --brand: #3b82f6;
+  --brand-2: #60a5fa;
+  --grad: linear-gradient(135deg, #60a5fa 0%, #3b82f6 100%);
+  --indigo: #3b82f6;
+  --indigo-600: #2563eb;
+  --violet: #60a5fa;
   --mint: #34e3b0;
   --coral: #ff5d73;
   --amber: #ffb547;
   --cyan: #4dd4ff;
 
-  --bg: #08080f;
-  --card: #14141f;
-  --surface-2: #1a1a26;
+  --bg: #0a0e17;
+  --card: #141a24;
+  --surface-2: #1a212d;
   --line: rgba(255, 255, 255, 0.09);
   --line-2: rgba(255, 255, 255, 0.06);
-  --text: #edeef6;
-  --muted: #9b9fb5;
-  --faint: #6c7088;
+  --text: #eaeef6;
+  --muted: #97a1b5;
+  --faint: #6c7488;
 
-  --side-1: #101019;
-  --side-2: #0b0b12;
+  --side-1: #121824;
+  --side-2: #0c111a;
   --side-line: rgba(255, 255, 255, 0.07);
-  --side-text: #d6d8ec;
-  --side-muted: #82869d;
+  --side-text: #d6dbec;
+  --side-muted: #828da3;
   --side-shadow: 24px 0 70px -34px rgba(0, 0, 0, 0.85);
 
   --lead: #8b90a6;
-  --contato: #34d399;
+  --contato: #3b82f6;
   --negociando: #ffb547;
   --fechou: #34e3b0;
   --perdeu: #ff5d73;
@@ -138,7 +138,7 @@
 
   --nav-hover: rgba(255, 255, 255, 0.06);
   --input-bg: rgba(255, 255, 255, 0.04);
-  --input-focus-ring: rgba(16, 185, 129, 0.35);
+  --input-focus-ring: rgba(59, 130, 246, 0.35);
   --bubble-them: rgba(255, 255, 255, 0.06);
   --th-bg: rgba(255, 255, 255, 0.03);
   --row-hover: rgba(255, 255, 255, 0.035);
@@ -3212,7 +3212,7 @@ h1, h2, h3, h4, .topbar .greet, .panel-h h3, .login-card .ttl, .login-card h2, .
 [data-theme="dark"] .onum-modal-foot { background: var(--card); }
 
 /* verde do oficial mais vivo no dark */
-[data-theme="dark"] { --of-green-d: #34d399; --of-green-soft: rgba(16,185,129,.18); }
+[data-theme="dark"] { --of-green: #3b82f6; --of-green-d: #60a5fa; --of-green-soft: rgba(59,130,246,.18); }
 
 /* janela de atendimento 24h */
 .of-janela { font-size: 11.5px; font-weight: 700; padding: 4px 11px; border-radius: 20px; background: rgba(16,185,129,.12); color: #059669; white-space: nowrap; }
@@ -4472,3 +4472,67 @@ select.input:disabled, .input:disabled { color: var(--muted); opacity: 1; -webki
 ::selection { background: var(--selection); }
 /* garante o subtítulo do logo legível no menu escuro */
 .brand .tag { color: var(--side-muted); }
+
+/* ============================================================
+   REPAGINADA v230 — moderno & caprichado (só visual, leve)
+   ============================================================ */
+
+/* Cabeçalhos de tela: maiores, mais firmes, com hierarquia clara */
+.panel-h h3, .content h1 { letter-spacing: -.02em; }
+.panel-h { padding: 20px 22px; }
+.panel-h h3 { font-size: 17px; font-weight: 750; }
+.panel-h .panel-sub { color: var(--muted); font-weight: 500; }
+
+/* Cards e superfícies: borda suave, cantos generosos, sombra macia, hover que "levanta" */
+.panel, .stat, .onum-card, .mon-card, .disp-camp-card, .sol-row {
+  border-radius: var(--r);
+  border-color: var(--line);
+  box-shadow: var(--shadow-sm);
+  transition: box-shadow .22s cubic-bezier(.4,0,.2,1), transform .22s cubic-bezier(.4,0,.2,1), border-color .18s;
+}
+.panel:hover, .stat:hover, .onum-card:hover, .mon-card:hover {
+  box-shadow: var(--card-hover-shadow);
+  transform: translateY(-2px);
+}
+
+/* Botões: pill suave, transição fluida, primário com leve elevação */
+.btn, button.btn { border-radius: 12px; transition: all .18s cubic-bezier(.4,0,.2,1); }
+.btn:hover { border-color: var(--brand); }
+.btn-primary { background: var(--grad); border: none; color: #fff; box-shadow: var(--glow-brand); }
+.btn-primary:hover { filter: brightness(1.06); transform: translateY(-1px); box-shadow: var(--shadow-lg); }
+.btn-primary:active { transform: translateY(0); }
+
+/* Abas (of-tab, cfg-tab) mais modernas */
+.of-tab, .cfg-tab { border-radius: 11px; transition: all .16s ease; }
+
+/* Inputs/selects: cantos maiores e foco com anel suave da marca */
+.input, .select, .textarea, input, select, textarea {
+  border-radius: 11px;
+  transition: border-color .16s ease, box-shadow .16s ease;
+}
+.input:focus, .select:focus, .textarea:focus, input:focus-visible, select:focus-visible, textarea:focus-visible {
+  border-color: var(--brand);
+  box-shadow: 0 0 0 3px var(--input-focus-ring);
+  outline: none;
+}
+
+/* Menu lateral: item ativo com leve realce + hover que desliza */
+.nav button { border-radius: 12px; font-weight: 550; }
+.nav button.active { background: var(--grad); color: #fff; box-shadow: var(--glow-brand); }
+.nav button:not(.active):hover { transform: translateX(2px); }
+
+/* Colunas do Pipeline: cantos e cabeçalho mais respirados */
+.crm-col { border-radius: 16px; }
+.crm-card { border-radius: 12px; transition: box-shadow .18s ease, transform .12s ease, border-color .16s; }
+.crm-card:hover { transform: translateY(-1px); box-shadow: var(--card-hover-shadow); border-color: var(--brand); }
+
+/* Conversa (Caixa): itens e balões mais suaves */
+.of-chat-item { border-radius: 12px; transition: background .14s, box-shadow .16s; }
+.of-msg-bubble { border-radius: 14px; }
+
+/* Barra de rolagem discreta na cor da marca */
+*::-webkit-scrollbar-thumb { background: var(--brand); opacity:.3; border-radius: 10px; }
+::selection { background: var(--selection); }
+
+/* Micro-tipografia: números de destaque com mais peso */
+.stat .n, .mon-card .n, .kpi .v { letter-spacing: -.02em; font-weight: 800; }
