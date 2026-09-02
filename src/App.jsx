@@ -8825,6 +8825,53 @@ function InboxOficial({ isGer, ehLider, showToast, onIrParaEvolution, target, on
   const [enviandoTpl, setEnviandoTpl] = useState(false);
   const [sel, setSel] = useState(null);
   const [conversa, setConversa] = useState(null);
+  const [baixandoConvPdf, setBaixandoConvPdf] = useState(false);
+  async function exportarConversaPDF() {
+    if (!conversa) return;
+    setBaixandoConvPdf(true);
+    try {
+      const html2pdf = (await import("html2pdf.js")).default;
+      const msgs = conversa.mensagens || [];
+      const esc = (s) => String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+      const fData = (ts) => { try { return new Date(ts).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" }); } catch (_) { return ""; } };
+      const fDia = (ts) => { try { return new Date(ts).toLocaleDateString("pt-BR", { day: "2-digit", month: "long", year: "numeric" }); } catch (_) { return ""; } };
+      const rotMidia = (t) => t === "image" ? "🖼️ Imagem" : t === "audio" ? "🎧 Áudio" : t === "video" ? "🎬 Vídeo" : t === "document" ? "📎 Documento" : t === "sticker" ? "Figurinha" : "Mídia";
+      let corpo = "", diaAtual = "";
+      msgs.forEach((m) => {
+        const dia = fDia(m.ts);
+        if (dia && dia !== diaAtual) { diaAtual = dia; corpo += `<div style="text-align:center;margin:18px 0 10px"><span style="background:#e7ebef;color:#5f6b7a;font-size:11px;font-weight:600;padding:4px 13px;border-radius:20px">${esc(dia)}</span></div>`; }
+        const eu = m.role === "me";
+        let txt;
+        if (m.tipo && m.tipo !== "text" && m.arquivo) txt = `<i style="opacity:.7">${rotMidia(m.tipo)}</i>` + (m.content ? "<br>" + esc(m.content) : "");
+        else txt = esc(m.content) || `<i style="opacity:.55">(sem texto)</i>`;
+        const tpl = m.template ? `<div style="font-size:10px;font-weight:700;color:${eu ? "#0a6b4a" : "#5f6b7a"};margin-bottom:3px">📤 Template</div>` : "";
+        corpo += `<div style="display:flex;justify-content:${eu ? "flex-end" : "flex-start"};margin:5px 0">
+          <div style="max-width:74%;background:${eu ? "#d7f5e6" : "#ffffff"};border:1px solid ${eu ? "#b6ead2" : "#e6e8ee"};border-radius:14px;${eu ? "border-top-right-radius:4px" : "border-top-left-radius:4px"};padding:9px 13px;font-size:13px;color:#0b1220;line-height:1.5">
+            ${tpl}${txt}<div style="font-size:9.5px;color:#8a94a2;margin-top:5px;text-align:right">${esc(fData(m.ts))}</div>
+          </div></div>`;
+      });
+      if (!msgs.length) corpo = `<div style="text-align:center;color:#8a94a2;padding:34px">Nenhuma mensagem nesta conversa.</div>`;
+      const canal = conversa.canal === "instagram" ? "Instagram Direct" : "WhatsApp";
+      const html = `<div style="width:720px;padding:28px;font-family:Inter,Arial,sans-serif;background:#fff;color:#0b1220">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid #0d9f6e;padding-bottom:14px;margin-bottom:16px">
+          <div><div style="font-size:22px;font-weight:800;letter-spacing:-.02em">instruct<span style="color:#0d9f6e">iva</span></div>
+          <div style="font-size:15px;font-weight:700;margin-top:8px">Conversa de atendimento</div></div>
+          <div style="font-size:11px;color:#5f6b7a;text-align:right">Exportado em<br>${esc(new Date().toLocaleString("pt-BR"))}</div></div>
+        <div style="background:#f4f6f8;border:1px solid #e6e8ee;border-radius:12px;padding:13px 16px;margin-bottom:16px">
+          <div style="font-weight:700;font-size:15px">${esc(conversa.nome || "Contato")}</div>
+          <div style="color:#5f6b7a;margin-top:3px;font-size:12.5px">${esc(conversa.numero || "")} · ${canal}${conversa.vendedorNome ? " · Atendente: " + esc(conversa.vendedorNome) : ""} · ${msgs.length} mensagem(ns)</div></div>
+        ${corpo}
+        <div style="text-align:center;color:#aab2bd;font-size:10px;margin-top:22px;border-top:1px solid #eee;padding-top:10px">Instructiva · Sistema Comercial — documento gerado automaticamente</div></div>`;
+      const holder = document.createElement("div");
+      holder.style.position = "fixed"; holder.style.left = "-9999px"; holder.style.top = "0";
+      holder.innerHTML = html; document.body.appendChild(holder);
+      const nomeArq = "conversa-" + String(conversa.nome || "contato").replace(/[^\w]+/g, "_").slice(0, 30) + "-" + new Date().toISOString().slice(0, 10) + ".pdf";
+      await html2pdf().set({ margin: [8, 8, 10, 8], filename: nomeArq, image: { type: "jpeg", quality: 0.96 }, html2canvas: { scale: 2, backgroundColor: "#ffffff", logging: false }, jsPDF: { unit: "mm", format: "a4", orientation: "portrait" }, pagebreak: { mode: ["css", "legacy"] } }).from(holder.firstElementChild).save();
+      holder.remove();
+      showToast("✅ Conversa exportada em PDF!");
+    } catch (e) { showToast("❌ Não consegui gerar o PDF: " + e.message); }
+    finally { setBaixandoConvPdf(false); }
+  }
   const [etapas, setEtapas] = useState([]);
   const [texto, setTexto] = useState("");
   const [busca, setBusca] = useState("");
@@ -9359,6 +9406,9 @@ function InboxOficial({ isGer, ehLider, showToast, onIrParaEvolution, target, on
                 )}
                 <button className="of-acao-btn venda" title="Registrar uma venda deste cliente" onClick={() => setRegVenda(true)}>
                   <I.gauge className="ico" /> Registrar venda
+                </button>
+                <button className="of-acao-btn" title="Exportar esta conversa em PDF" disabled={baixandoConvPdf} onClick={exportarConversaPDF}>
+                  {baixandoConvPdf ? <span className="spin" /> : "⬇"} Exportar PDF
                 </button>
                 <button className="of-acao-btn fim" title="Encerrar atendimento" onClick={() => encerrar()}>
                   <I.check className="ico" /> Encerrar
