@@ -19,8 +19,38 @@ app.use(express.urlencoded({ extended: false, limit: "10mb" })); // Twilio manda
 // Versão do sistema — pra CONFIRMAR qual código está no ar (abra /api/versao no navegador).
 // Se aqui aparecer a versão nova mas o bug continuar, o problema é outro; se aparecer
 // uma versão antiga (ou 404), o deploy não subiu de verdade.
-const VERSAO_SISTEMA = "v237-instagram-ok";
-app.get("/api/versao", (req, res) => res.json({ versao: VERSAO_SISTEMA, quando: new Date().toISOString() }));
+const VERSAO_SISTEMA = "v238-unidade";
+
+/* ============================================================
+   IDENTIFICAÇÃO DA UNIDADE (mesmo código, deploys separados)
+   Vem SÓ da variável de ambiente UNIDADE (configurada por serviço no Railway).
+   Nada fixo no código. Aceita qualquer unidade futura, não só jesuitas/toledo.
+   ============================================================ */
+function detectarUnidade() {
+  const env = String(process.env.UNIDADE || "").trim().toLowerCase();
+  if (env) return { unidade: env, origem: "env", configurada: true };
+  // fallback TEMPORÁRIO só pra não ficar sem rótulo: deduz pela URL pública, se houver.
+  const url = String(process.env.CRM_URL || process.env.PUBLIC_URL || process.env.RAILWAY_PUBLIC_DOMAIN || "").toLowerCase();
+  if (url.includes("66e3")) return { unidade: "toledo", origem: "url(fallback)", configurada: false };
+  if (url.includes("instructiva-crm-comercial-production")) return { unidade: "jesuitas", origem: "url(fallback)", configurada: false };
+  return { unidade: "nao-configurada", origem: "nenhuma", configurada: false };
+}
+const UNIDADE_INFO = detectarUnidade();
+if (!UNIDADE_INFO.configurada) {
+  console.warn("⚠️  [CONFIG] Variável de ambiente UNIDADE não está definida neste serviço!");
+  console.warn("⚠️  [CONFIG] Configure UNIDADE (ex: UNIDADE=jesuitas ou UNIDADE=toledo) nas variáveis do serviço no Railway.");
+  console.warn("⚠️  [CONFIG] Usando por ora: '" + UNIDADE_INFO.unidade + "' (origem: " + UNIDADE_INFO.origem + ")");
+} else {
+  console.log("==> Unidade:", UNIDADE_INFO.unidade, "(via variável de ambiente)");
+}
+
+app.get("/api/versao", (req, res) => res.json({
+  versao: VERSAO_SISTEMA,
+  unidade: UNIDADE_INFO.unidade,
+  unidadeConfigurada: UNIDADE_INFO.configurada,
+  unidadeOrigem: UNIDADE_INFO.origem,
+  quando: new Date().toISOString(),
+}));
 console.log("==> Instructiva CRM versão:", VERSAO_SISTEMA);
 
 
