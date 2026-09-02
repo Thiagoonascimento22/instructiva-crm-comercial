@@ -7056,6 +7056,45 @@ function Desempenho({ showToast, isGer = true, ehLider = false }) {
     } catch (e) { showToast("❌ Erro ao gerar PDF: " + e.message); }
     finally { setPdfId(null); }
   }
+  async function exportarTodosPDF(lista) {
+    setPdfId("__todos__");
+    try {
+      const html2pdf = (await import("html2pdf.js")).default;
+      const esc = (s) => String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+      const money = (n) => "R$ " + (Number(n) || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      const pctf = (n) => (Number(n) || 0).toLocaleString("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + "%";
+      const mesLabel = (dados && dados.mes) ? dados.mes.split("-").reverse().join("/") : "";
+      const totReceita = lista.reduce((s, v) => s + (v.receita || 0), 0);
+      const totComissao = lista.reduce((s, v) => s + ((v.comissao && v.comissao.valor) || 0), 0);
+      const totVendas = lista.reduce((s, v) => s + (v.vendas || 0), 0);
+      const th = (t, r) => `<th style="padding:9px 8px;text-align:${r ? "right" : "left"};font-size:11px;color:#5f6b7a;text-transform:uppercase;letter-spacing:.03em;border-bottom:2px solid #e6e8ee">${t}</th>`;
+      const td = (t, r, b) => `<td style="padding:9px 8px;text-align:${r ? "right" : "left"};font-size:12.5px;color:#0b1220;${b ? "font-weight:700;" : ""}border-bottom:1px solid #eef1f3">${t}</td>`;
+      const linhas = lista.map((v) => {
+        const c = v.comissao || { pct: 0, valor: 0 };
+        return `<tr>${td(esc(v.nome))}${td(money(v.receita), true)}${td(pctf(v.conversao), true)}${td(String(v.vendas || 0), true)}${td(pctf(c.pct), true)}${td(money(c.valor), true, true)}</tr>`;
+      }).join("");
+      const html = `<div style="width:760px;padding:30px;font-family:Inter,Arial,sans-serif;background:#fff;color:#0b1220">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid #F26522;padding-bottom:14px;margin-bottom:18px">
+          <div><div style="font-size:22px;font-weight:800;letter-spacing:-.02em">instruct<span style="color:#16a34a">iva</span></div>
+          <div style="font-size:15px;font-weight:700;margin-top:8px">Desempenho e comissões do time</div></div>
+          <div style="font-size:11px;color:#5f6b7a;text-align:right">Mês ${esc(mesLabel)}<br>Emitido em ${esc(new Date().toLocaleString("pt-BR"))}</div></div>
+        <table style="width:100%;border-collapse:collapse;margin-bottom:16px">
+          <thead><tr>${th("Vendedor")}${th("Receita", true)}${th("Conversão", true)}${th("Vendas", true)}${th("Comissão %", true)}${th("A receber", true)}</tr></thead>
+          <tbody>${linhas}</tbody>
+          <tfoot><tr style="border-top:2px solid #e6e8ee">${td("<b>TOTAL</b>")}${td("<b>" + money(totReceita) + "</b>", true)}${td("", true)}${td("<b>" + totVendas + "</b>", true)}${td("", true)}${td("<b style='color:#16a34a'>" + money(totComissao) + "</b>", true)}</tr></tfoot>
+        </table>
+        <div style="text-align:center;color:#aab2bd;font-size:10px;margin-top:20px;border-top:1px solid #eee;padding-top:10px">Instructiva · Sistema Comercial — comissão pela Política Comercial (faturamento + conversão) · gerência não incluída no ranking</div>
+      </div>`;
+      const holder = document.createElement("div");
+      holder.style.position = "fixed"; holder.style.left = "-9999px"; holder.style.top = "0";
+      holder.innerHTML = html; document.body.appendChild(holder);
+      const nomeArq = "desempenho-time-" + ((dados && dados.mes) || "") + ".pdf";
+      await html2pdf().set({ margin: [8, 8, 10, 8], filename: nomeArq, image: { type: "jpeg", quality: 0.96 }, html2canvas: { scale: 2, backgroundColor: "#ffffff", logging: false }, jsPDF: { unit: "mm", format: "a4", orientation: "portrait" }, pagebreak: { mode: ["css", "legacy"] } }).from(holder.firstElementChild).save();
+      holder.remove();
+      showToast("✅ PDF de todos baixado!");
+    } catch (e) { showToast("❌ Erro ao gerar PDF: " + e.message); }
+    finally { setPdfId(null); }
+  }
   const [vendVe, setVendVe] = useState(true); // vendedores veem o desempenho?
   useEffect(() => { api.ofAcessoVend().then((r) => setVendVe(!(r.acessoVend && r.acessoVend.desempenhoOculto))).catch(() => {}); }, []);
   async function alternarVendVe(ve) {
@@ -7113,6 +7152,12 @@ function Desempenho({ showToast, isGer = true, ehLider = false }) {
           <select className="input" value={mes} onChange={(e) => carregar(e.target.value)} style={{ minWidth: 150, fontWeight: 600 }}>
             {mesesOpcoes.map((m) => <option key={m} value={m}>{nomeMes(m)}</option>)}
           </select>
+          {dados.souGerente && rankVends.length > 0 && (
+            <button onClick={() => exportarTodosPDF(rankVends)} disabled={pdfId === "__todos__"}
+              style={{ border: "1px solid " + DES.line, background: "var(--card)", color: DES.ink, borderRadius: 10, padding: "9px 14px", fontSize: 13, fontWeight: 600, cursor: "pointer", whiteSpace: "nowrap", display: "flex", alignItems: "center", gap: 6 }}>
+              {pdfId === "__todos__" ? "Gerando…" : "⬇ Exportar todos"}
+            </button>
+          )}
         </div>
       </div>
 
