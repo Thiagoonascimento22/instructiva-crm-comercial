@@ -4461,7 +4461,23 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
     const qtdOcultos = souGerente ? desempenhoDoMes(mes).filter((x) => x.oculto).length : 0;
     // lista de "pessoas" das Vendas, pro gerente ligar cada vendedor à pessoa certa
     const pessoasVendas = souGerente ? (lerVendasArquivo().pessoas || []).map((p) => ({ id: p.id, nome: p.nome })) : [];
-    res.json({ mes, cargos: CARGOS, faixas: FAIXAS, proxCargo: PROX_CARGO, semanasNoMes: semanasDoMes(mes).length, vendedores: lista, souGerente, qtdOcultos, pessoasVendas });
+    // Comissão de GESTÃO: 1% de tudo que os vendedores da unidade venderam, pra gestora da unidade.
+    // Jesuítas → Thalia · Toledo → Maeli (definido pela unidade em process.env.UNIDADE).
+    const unidade = String(process.env.UNIDADE || "").trim().toLowerCase();
+    const GESTORA_POR_UNIDADE = { jesuitas: "thalia", toledo: "maeli" };
+    const primeiroNomeGestora = GESTORA_POR_UNIDADE[unidade];
+    let gestao = null;
+    if (primeiroNomeGestora) {
+      const totalVendedores = lista.filter((v) => v.role !== "gerente").reduce((s, v) => s + (v.receita || 0), 0);
+      const uGest = (db.users || []).find((x) => (x.role === "vendedor" || x.role === "gerente") && x.ativo && chaveNomeDes(x.nome).startsWith(primeiroNomeGestora));
+      gestao = {
+        nome: uGest ? uGest.nome : (primeiroNomeGestora.charAt(0).toUpperCase() + primeiroNomeGestora.slice(1)),
+        unidade, pct: 1.0,
+        baseVendas: Math.round(totalVendedores * 100) / 100,
+        valor: Math.round(totalVendedores * 0.01 * 100) / 100,
+      };
+    }
+    res.json({ mes, cargos: CARGOS, faixas: FAIXAS, proxCargo: PROX_CARGO, semanasNoMes: semanasDoMes(mes).length, vendedores: lista, souGerente, qtdOcultos, pessoasVendas, unidade, gestao });
   });
 
   // gerente liga um usuário à "pessoa" das Vendas (resolve quando o nome do login é diferente do das vendas)
