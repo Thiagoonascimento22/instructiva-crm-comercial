@@ -201,6 +201,7 @@ export const api = {
   ofReservaCriar: (dados) => req("POST", "/api/oficial/reserva", dados),
   ofReservaEditar: (id, dados) => req("PUT", "/api/oficial/reserva/" + id, dados),
   ofReservaExcluir: (id) => req("DELETE", "/api/oficial/reserva/" + id),
+  ofReservaHistorico: (id) => req("GET", "/api/oficial/reserva/" + id + "/historico"),
   ofCrmEtapaCriar: (dados) => req("POST", "/api/oficial/crm/etapa", dados),
   ofCrmEtapaEditar: (k, dados) => req("PUT", "/api/oficial/crm/etapa/" + k, dados),
   ofCrmEtapaExcluir: (k) => req("DELETE", "/api/oficial/crm/etapa/" + k),

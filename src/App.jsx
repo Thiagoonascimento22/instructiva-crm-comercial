@@ -4186,6 +4186,11 @@ function ModalReservaListas({ onClose, showToast, etapas = [], vendedores = [] }
   const [destino, setDestino] = useState("reserva");
   const [distribuir, setDistribuir] = useState("auto");
   const [vendedorFixo, setVendedorFixo] = useState("");
+  const [recebedores, setRecebedores] = useState([]); // ids selecionados (modo equipe)
+  const [responsavel, setResponsavel] = useState("");
+  const [editando, setEditando] = useState(null); // lista sendo editada
+  const [histLista, setHistLista] = useState(null); // lista do "ver histórico"
+  const toggleRec = (id) => setRecebedores((a) => a.includes(id) ? a.filter((x) => x !== id) : [...a, id]);
   const [opcoes, setOpcoes] = useState([{ forma: "", preco: "" }]);
   const [criando, setCriando] = useState(false);
   const setOpc = (i, k, v) => setOpcoes((a) => a.map((o, j) => (j === i ? { ...o, [k]: v } : o)));
@@ -4200,9 +4205,10 @@ function ModalReservaListas({ onClose, showToast, etapas = [], vendedores = [] }
   async function criar() {
     if (!nome.trim()) { showToast("Dê um nome à lista"); return; }
     if (distribuir === "fixo" && !vendedorFixo) { showToast("Escolha o vendedor que vai receber os leads desta lista"); return; }
+    if (distribuir === "equipe" && recebedores.length === 0) { showToast("Escolha pelo menos uma pessoa para a equipe desta lista"); return; }
     const ops = opcoes.map((o) => ({ forma: o.forma.trim(), preco: parseFloat(o.preco) || 0 })).filter((o) => o.forma || o.preco > 0);
     setCriando(true);
-    try { await api.ofReservaCriar({ nome, curso, tag, opcoes: ops, destino, distribuir, vendedorFixoId: vendedorFixo }); setNome(""); setCurso(""); setTag(""); setOpcoes([{ forma: "", preco: "" }]); setDestino("reserva"); setDistribuir("auto"); setVendedorFixo(""); showToast("✓ Lista criada"); carregar(); }
+    try { await api.ofReservaCriar({ nome, curso, tag, opcoes: ops, destino, distribuir, vendedorFixoId: vendedorFixo, recebedoresIds: recebedores, responsavelId: responsavel }); setNome(""); setCurso(""); setTag(""); setOpcoes([{ forma: "", preco: "" }]); setDestino("reserva"); setDistribuir("auto"); setVendedorFixo(""); setRecebedores([]); setResponsavel(""); showToast("✓ Lista criada"); carregar(); }
     catch (e) { showToast("✗ " + e.message); } finally { setCriando(false); }
   }
   async function toggle(l) { try { await api.ofReservaEditar(l.id, { ativa: !l.ativa }); carregar(); } catch (e) { showToast("✗ " + e.message); } }
@@ -4242,10 +4248,27 @@ function ModalReservaListas({ onClose, showToast, etapas = [], vendedores = [] }
                 <select className="input" value={distribuir} onChange={(e) => setDistribuir(e.target.value)}>
                   <option value="auto">Automática (divide entre os vendedores)</option>
                   <option value="fixo">Vendedor específico (só ele recebe)</option>
+                  <option value="equipe">Equipe da lista (rodízio entre os escolhidos)</option>
                   <option value="manual">Sem dono (eu distribuo na mão)</option>
                 </select>
               </div>
             </div>
+            {distribuir === "equipe" && (
+              <div className="rsv-campo">
+                <label>Quem recebe (rodízio só entre eles)</label>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(150px, 1fr))", gap: 6, maxHeight: 160, overflowY: "auto", border: "1px solid var(--line)", borderRadius: 10, padding: 8 }}>
+                  {vendedores.filter((v) => v.ativo !== false).map((v) => {
+                    const on = recebedores.includes(v.id);
+                    return (
+                      <label key={v.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 8px", borderRadius: 8, border: "1px solid " + (on ? "var(--brand)" : "var(--line)"), background: on ? "var(--nav-hover)" : "var(--card)", cursor: "pointer", fontSize: 13 }}>
+                        <input type="checkbox" checked={on} onChange={() => toggleRec(v.id)} style={{ accentColor: "var(--brand)" }} />
+                        <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{v.nome}</span>
+                      </label>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
             {distribuir === "fixo" && (
               <div style={{ marginTop: 10 }}>
                 <label className="lbl-mini">Vendedor que vai receber TODOS os leads desta lista</label>
@@ -4269,7 +4292,7 @@ function ModalReservaListas({ onClose, showToast, etapas = [], vendedores = [] }
                     <div className="rsv-nome">{l.nome} {!l.ativa && <span className="rsv-off-tag">pausada</span>}</div>
                     <div className="rsv-meta">{l.curso || "sem curso"}{l.tag ? " · 🏷 " + l.tag : ""} · <b>{l.leads}</b> {l.leads === 1 ? "lead" : "leads"}</div>
                     {(l.opcoes || []).length > 0 && <div className="rsv-opcs-mini">{l.opcoes.map((o, i) => <span key={i} className="rsv-opc-chip">{o.forma} · R$ {Number(o.preco || 0).toLocaleString("pt-BR")}</span>)}</div>}
-                    <div className="rsv-dest">→ cai em <b>{nomeCol(l.destino)}</b> · {l.distribuir === "manual" ? "sem dono (você distribui)" : l.distribuir === "fixo" ? <>só pra <b>{l.vendedorFixoNome || "vendedor"}</b></> : "distribuição automática"}</div>
+                    <div className="rsv-dest">→ cai em <b>{nomeCol(l.destino)}</b> · {l.distribuir === "manual" ? "sem dono (você distribui)" : l.distribuir === "fixo" ? <>só pra <b>{l.vendedorFixoNome || "vendedor"}</b></> : l.distribuir === "equipe" ? <>rodízio entre <b>{(l.recebedores || []).map((r) => r.nome).join(", ") || "equipe"}</b></> : "distribuição automática"}{l.responsavelNome ? <> · resp.: {l.responsavelNome}</> : null}</div>
                     <div className="rsv-link api" onClick={() => copiarUrl(origin + "/api/reserva/" + l.slug, "Endpoint")} title="Clique pra copiar — é o endpoint que o time usa pra cair lead no CRM">
                       <span className="rsv-link-tag">Endpoint · POST</span>
                       <span className="rsv-link-url">{origin}/api/reserva/{l.slug}</span>
@@ -4278,12 +4301,159 @@ function ModalReservaListas({ onClose, showToast, etapas = [], vendedores = [] }
                   </div>
                   <div className="rsv-acoes">
                     <button className={"sw" + (l.ativa ? " on" : "")} onClick={() => toggle(l)} title={l.ativa ? "Pausar (fecha o link)" : "Reabrir a lista"}><span className="sw-dot" /></button>
-                    <button className="onum-acao del" onClick={() => excluir(l)} title="Excluir lista"><I.trash className="ico" /></button>
+                    <button className="onum-acao" onClick={() => setEditando(l)} title="Editar lista"><I.cog className="ico" /></button>
+                    <button className="onum-acao" onClick={() => setHistLista(l)} title="Ver histórico de alterações"><I.clock className="ico" /></button>
+                    <button className="onum-acao del" onClick={() => excluir(l)} title="Arquivar lista"><I.trash className="ico" /></button>
                   </div>
                 </div>
               ))}
             </div>
           )}
+        </div>
+      </div>
+      {editando && <EditarListaModal lista={editando} etapas={cols} vendedores={vendedores} onClose={() => setEditando(null)} onSaved={() => { setEditando(null); carregar(); }} showToast={showToast} />}
+      {histLista && <HistoricoListaModal lista={histLista} onClose={() => setHistLista(null)} showToast={showToast} />}
+    </div>
+  );
+}
+
+// Modal de EDITAR lista de captação (reusa os mesmos campos da criação + equipe/responsável)
+function EditarListaModal({ lista, etapas = [], vendedores = [], onClose, onSaved, showToast }) {
+  const [nome, setNome] = useState(lista.nome || "");
+  const [curso, setCurso] = useState(lista.curso || "");
+  const [tag, setTag] = useState(lista.tag || "");
+  const [destino, setDestino] = useState(lista.destino || "reserva");
+  const [distribuir, setDistribuir] = useState(lista.distribuir || "auto");
+  const [vendedorFixo, setVendedorFixo] = useState(lista.vendedorFixoId || "");
+  const [recebedores, setRecebedores] = useState(Array.isArray(lista.recebedoresIds) ? lista.recebedoresIds : []);
+  const [responsavel, setResponsavel] = useState(lista.responsavelId || "");
+  const [opcoes, setOpcoes] = useState((lista.opcoes && lista.opcoes.length) ? lista.opcoes.map((o) => ({ forma: o.forma || "", preco: String(o.preco || "") })) : [{ forma: "", preco: "" }]);
+  const [salvando, setSalvando] = useState(false);
+  const cols = etapas.length ? etapas : [{ k: "reserva", lb: "Lista de reserva" }];
+  const setOpc = (i, k, v) => setOpcoes((a) => a.map((o, j) => (j === i ? { ...o, [k]: v } : o)));
+  const addOpc = () => setOpcoes((a) => (a.length < 3 ? [...a, { forma: "", preco: "" }] : a));
+  const delOpc = (i) => setOpcoes((a) => (a.length > 1 ? a.filter((_, j) => j !== i) : a));
+  const toggleRec = (id) => setRecebedores((a) => a.includes(id) ? a.filter((x) => x !== id) : [...a, id]);
+
+  async function salvar() {
+    if (!nome.trim()) { showToast("O nome não pode ficar vazio"); return; }
+    if (distribuir === "fixo" && !vendedorFixo) { showToast("Escolha o vendedor fixo"); return; }
+    if (distribuir === "equipe" && recebedores.length === 0) { showToast("Escolha pelo menos uma pessoa para a equipe"); return; }
+    // avisa que só vale pros próximos leads quando muda algo que afeta distribuição/tag/coluna
+    const mudouSensivel = tag !== (lista.tag || "") || destino !== (lista.destino || "reserva") || distribuir !== (lista.distribuir || "auto") || vendedorFixo !== (lista.vendedorFixoId || "") || JSON.stringify(recebedores) !== JSON.stringify(lista.recebedoresIds || []);
+    if (mudouSensivel && !window.confirm("As alterações serão aplicadas somente aos PRÓXIMOS leads. Os leads que já entraram no Pipeline não serão modificados.\n\nConfirmar?")) return;
+    const ops = opcoes.map((o) => ({ forma: (o.forma || "").trim(), preco: parseFloat(o.preco) || 0 })).filter((o) => o.forma || o.preco > 0);
+    setSalvando(true);
+    try {
+      const r = await api.ofReservaEditar(lista.id, { nome, curso, tag, opcoes: ops, destino, distribuir, vendedorFixoId: vendedorFixo, recebedoresIds: recebedores, responsavelId: responsavel, atualizadoEm: lista.atualizadoEm });
+      showToast(r && r.semMudanca ? "Nada mudou" : "✓ Lista atualizada");
+      onSaved();
+    } catch (e) {
+      if (String(e.message || "").includes("alterada por outra")) showToast("⚠ " + e.message);
+      else showToast("✗ " + e.message);
+      setSalvando(false);
+    }
+  }
+
+  return (
+    <div className="pop-bg" onClick={(e) => e.target === e.currentTarget && onClose()}>
+      <div className="pop-sheet" style={{ maxWidth: 560 }}>
+        <div className="pop-head"><b>Editar lista</b><button className="crm-x" onClick={onClose}>✕</button></div>
+        <div style={{ padding: 18, overflowY: "auto" }}>
+          <div className="rsv-campo"><label>Nome da lista</label><input className="input" value={nome} onChange={(e) => setNome(e.target.value)} maxLength={80} /></div>
+          <div className="rsv-campo"><label>Curso / interesse</label><input className="input" value={curso} onChange={(e) => setCurso(e.target.value)} maxLength={120} /></div>
+          <div className="rsv-campo"><label>Tag aplicada aos novos leads</label><input className="input" value={tag} onChange={(e) => setTag(e.target.value)} maxLength={40} /></div>
+          <div className="rsv-campo"><label>Coluna de destino no Pipeline</label>
+            <select className="input" value={destino} onChange={(e) => setDestino(e.target.value)}>{cols.map((e) => <option key={e.k} value={e.k}>{e.lb}</option>)}</select>
+          </div>
+          <div className="rsv-campo"><label>Opções de pagamento</label>
+            {opcoes.map((o, i) => (
+              <div key={i} style={{ display: "flex", gap: 6, marginBottom: 6 }}>
+                <input className="input" placeholder="Forma (ex: à vista)" value={o.forma} onChange={(e) => setOpc(i, "forma", e.target.value)} style={{ flex: 2 }} />
+                <input className="input" placeholder="Preço" value={o.preco} onChange={(e) => setOpc(i, "preco", e.target.value)} style={{ flex: 1 }} />
+                {opcoes.length > 1 && <button className="onum-acao del" onClick={() => delOpc(i)}><I.trash className="ico" /></button>}
+              </div>
+            ))}
+            {opcoes.length < 3 && <button className="btn btn-sm" onClick={addOpc}>+ opção</button>}
+          </div>
+          <div className="rsv-campo"><label>Distribuição</label>
+            <select className="input" value={distribuir} onChange={(e) => setDistribuir(e.target.value)}>
+              <option value="auto">Automática (divide entre os vendedores)</option>
+              <option value="fixo">Vendedor específico (só ele recebe)</option>
+              <option value="equipe">Equipe da lista (rodízio entre os escolhidos)</option>
+              <option value="manual">Sem dono (eu distribuo na mão)</option>
+            </select>
+          </div>
+          {distribuir === "fixo" && (
+            <div className="rsv-campo"><label>Vendedor que recebe TODOS os leads</label>
+              <select className="input" value={vendedorFixo} onChange={(e) => setVendedorFixo(e.target.value)}>
+                <option value="">Escolha…</option>
+                {vendedores.filter((v) => v.ativo !== false).map((v) => <option key={v.id} value={v.id}>{v.nome}</option>)}
+              </select>
+            </div>
+          )}
+          {distribuir === "equipe" && (
+            <div className="rsv-campo"><label>Quem recebe (rodízio só entre eles)</label>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(150px, 1fr))", gap: 6, maxHeight: 160, overflowY: "auto", border: "1px solid var(--line)", borderRadius: 10, padding: 8 }}>
+                {vendedores.filter((v) => v.ativo !== false).map((v) => {
+                  const on = recebedores.includes(v.id);
+                  return (
+                    <label key={v.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 8px", borderRadius: 8, border: "1px solid " + (on ? "var(--brand)" : "var(--line)"), background: on ? "var(--nav-hover)" : "var(--card)", cursor: "pointer", fontSize: 13 }}>
+                      <input type="checkbox" checked={on} onChange={() => toggleRec(v.id)} style={{ accentColor: "var(--brand)" }} />
+                      <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{v.nome}</span>
+                    </label>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+          <div className="rsv-campo"><label>Responsável pela lista (opcional, só administrativo)</label>
+            <select className="input" value={responsavel} onChange={(e) => setResponsavel(e.target.value)}>
+              <option value="">Ninguém</option>
+              {vendedores.filter((v) => v.ativo !== false).map((v) => <option key={v.id} value={v.id}>{v.nome}</option>)}
+            </select>
+          </div>
+          <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 10 }}>
+            <button className="btn" onClick={onClose} disabled={salvando}>Cancelar</button>
+            <button className="btn btn-primary" onClick={salvar} disabled={salvando}>{salvando ? "Salvando…" : "Salvar alterações"}</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Modal do HISTÓRICO de alterações da lista (só leitura)
+function HistoricoListaModal({ lista, onClose, showToast }) {
+  const [hist, setHist] = useState(null);
+  useEffect(() => { api.ofReservaHistorico(lista.id).then((r) => setHist(r.historico || [])).catch((e) => { showToast("✗ " + e.message); setHist([]); }); /* eslint-disable-next-line */ }, []);
+  const rotAcao = (a) => ({ lista_criada: "Lista criada", lista_editada: "Editada", lista_pausada: "Pausada", lista_reativada: "Reativada", lista_arquivada: "Arquivada" }[a] || a);
+  const quando = (ts) => { try { return new Date(ts).toLocaleString("pt-BR"); } catch (_) { return ""; } };
+  return (
+    <div className="pop-bg" onClick={(e) => e.target === e.currentTarget && onClose()}>
+      <div className="pop-sheet" style={{ maxWidth: 560 }}>
+        <div className="pop-head"><b>Histórico — {lista.nome}</b><button className="crm-x" onClick={onClose}>✕</button></div>
+        <div style={{ padding: 18, overflowY: "auto", maxHeight: "70vh" }}>
+          {hist === null ? <div style={{ color: "var(--muted)", textAlign: "center", padding: 20 }}>Carregando…</div>
+            : hist.length === 0 ? <div style={{ color: "var(--muted)", textAlign: "center", padding: 20 }}>Nenhuma alteração registrada.</div>
+              : hist.map((h) => (
+                <div key={h.id} style={{ borderLeft: "3px solid var(--brand)", background: "var(--surface-2)", borderRadius: 10, padding: "12px 14px", marginBottom: 10 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
+                    <b style={{ fontSize: 13.5 }}>{rotAcao(h.acao)}</b>
+                    <span style={{ fontSize: 12, color: "var(--muted)" }}>{quando(h.ts)}</span>
+                  </div>
+                  <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 2 }}>por {h.usuarioNome || "—"}</div>
+                  {h.alteracoes && Object.keys(h.alteracoes).length > 0 && (
+                    <div style={{ marginTop: 8, display: "flex", flexDirection: "column", gap: 4 }}>
+                      {Object.entries(h.alteracoes).map(([campo, v]) => (
+                        <div key={campo} style={{ fontSize: 12.5, color: "var(--ink)" }}>
+                          <b>{({ nome: "Nome", curso: "Curso", tag: "Tag", destino: "Coluna", distribuir: "Distribuição", vendedorFixoId: "Vendedor fixo", recebedoresIds: "Equipe", responsavelId: "Responsável", ativa: "Status", opcoes: "Pagamento" }[campo]) || campo}:</b> <span style={{ color: "var(--muted)", textDecoration: "line-through" }}>{String(v.antes)}</span> → <span style={{ color: "var(--brand)", fontWeight: 600 }}>{String(v.depois)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ))}
         </div>
       </div>
     </div>

@@ -2275,9 +2275,12 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
   }
   function reservaPublica(l) {
     const qtd = (db.oficial.crmLeads || []).filter((x) => x.reservaId === l.id || (Array.isArray(x.reservaIds) && x.reservaIds.includes(l.id))).length;
-    const modo = l.distribuir === "manual" ? "manual" : (l.distribuir === "fixo" ? "fixo" : "auto");
+    const modo = ["manual", "fixo", "equipe"].includes(l.distribuir) ? l.distribuir : "auto";
     const vf = (modo === "fixo" && l.vendedorFixoId) ? (db.users || []).find((u) => u.id === l.vendedorFixoId) : null;
-    return { id: l.id, nome: l.nome, curso: l.curso, tag: l.tag || "", opcoes: Array.isArray(l.opcoes) ? l.opcoes : [], destino: l.destino || "reserva", distribuir: modo, vendedorFixoId: l.vendedorFixoId || "", vendedorFixoNome: vf ? vf.nome : "", slug: l.slug, ativa: l.ativa !== false, leads: qtd, criadoEm: l.criadoEm };
+    const recIds = Array.isArray(l.recebedoresIds) ? l.recebedoresIds : [];
+    const recebedores = recIds.map((id) => { const u = (db.users || []).find((x) => x.id === id); return u ? { id: u.id, nome: u.nome } : null; }).filter(Boolean);
+    const resp = l.responsavelId ? (db.users || []).find((u) => u.id === l.responsavelId) : null;
+    return { id: l.id, nome: l.nome, curso: l.curso, tag: l.tag || "", opcoes: Array.isArray(l.opcoes) ? l.opcoes : [], destino: l.destino || "reserva", distribuir: modo, vendedorFixoId: l.vendedorFixoId || "", vendedorFixoNome: vf ? vf.nome : "", recebedoresIds: recIds, recebedores, responsavelId: l.responsavelId || "", responsavelNome: resp ? resp.nome : "", slug: l.slug, ativa: l.ativa !== false, arquivada: !!l.arquivada, leads: qtd, criadoEm: l.criadoEm, atualizadoEm: l.atualizadoEm || l.criadoEm || 0 };
   }
   // Sanitiza as opções de pagamento (forma + preço), no máx 3
   function limparOpcoes(arr) {
@@ -2303,28 +2306,99 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
       return v ? { vendedorId: v.id, vendedorNome: v.nome } : { vendedorId: null, vendedorNome: "" };
     }
     if (lista.distribuir === "manual") return { vendedorId: null, vendedorNome: "" };
+    if (lista.distribuir === "equipe") {
+      // rodízio SÓ entre os recebedores válidos DESTA lista (não usa a lista global)
+      const validos = (Array.isArray(lista.recebedoresIds) ? lista.recebedoresIds : [])
+        .map((id) => (db.users || []).find((u) => u.id === id && (u.role === "vendedor" || u.role === "gerente") && u.ativo))
+        .filter(Boolean);
+      if (!validos.length) return { vendedorId: null, vendedorNome: "" }; // ninguém válido -> lead sem dono (não bloqueia)
+      let cur = Number.isInteger(lista.rrCursor) ? lista.rrCursor : 0;
+      if (cur < 0 || cur >= validos.length) cur = 0;
+      const v = validos[cur];
+      lista.rrCursor = (cur + 1) % validos.length; // avança o cursor DESTA lista (persistido no salvar do fluxo)
+      v.oficialLeadsRecebidos = (v.oficialLeadsRecebidos || 0) + 1;
+      return { vendedorId: v.id, vendedorNome: v.nome };
+    }
     return distribuirReserva();
   }
-  // valida o modo vindo do front e, no "fixo", exige um vendedor válido (vendedor ou gerente ativo)
-  function normalizarDistrib(distribuir, vendedorFixoId) {
-    const modo = distribuir === "manual" ? "manual" : (distribuir === "fixo" ? "fixo" : "auto");
-    let vf = "";
+  // sanitiza a lista de recebedores: só usuários ativos (vendedor/gerente), sem duplicados
+  function limparRecebedores(ids) {
+    if (!Array.isArray(ids)) return [];
+    const vistos = new Set(), out = [];
+    for (const raw of ids) {
+      const id = String(raw || "").trim();
+      if (!id || vistos.has(id)) continue;
+      const ok = (db.users || []).some((u) => u.id === id && (u.role === "vendedor" || u.role === "gerente") && u.ativo);
+      if (ok) { vistos.add(id); out.push(id); }
+      if (out.length >= 50) break;
+    }
+    return out;
+  }
+  // valida o modo vindo do front (auto/fixo/manual/equipe) e exige os dados de cada um
+  function normalizarDistrib(distribuir, vendedorFixoId, recebedoresIds) {
+    const modo = ["manual", "fixo", "equipe"].includes(distribuir) ? distribuir : "auto";
+    let vf = "", rec = [];
     if (modo === "fixo") {
       const vid = String(vendedorFixoId || "").trim();
       const ok = vid && (db.users || []).some((u) => u.id === vid && (u.role === "vendedor" || u.role === "gerente") && u.ativo);
       if (!ok) return { erro: "Escolha o vendedor que vai receber os leads desta lista" };
       vf = vid;
     }
-    return { modo, vendedorFixoId: vf };
+    if (modo === "equipe") {
+      rec = limparRecebedores(recebedoresIds);
+      if (!rec.length) return { erro: "Escolha pelo menos uma pessoa para receber os leads desta lista" };
+    }
+    return { modo, vendedorFixoId: vf, recebedoresIds: rec };
   }
   function escHtml(s) {
     return String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
   }
 
+  // ---- Auditoria das listas (histórico persistente, à prova de adulteração pelo front) ----
+  const _rotuloEtapa = (k) => { const e = etapasCRM().find((x) => x.k === k); return e ? (e.lb || e.k) : k; };
+  const _nomeUser = (id) => { const u = (db.users || []).find((x) => x.id === id); return u ? u.nome : (id || ""); };
+  function _snapshotLista(l) {
+    return {
+      nome: l.nome || "", curso: l.curso || "", tag: l.tag || "",
+      destino: l.destino || "", distribuir: l.distribuir || "auto",
+      vendedorFixoId: l.vendedorFixoId || "", recebedoresIds: Array.isArray(l.recebedoresIds) ? [...l.recebedoresIds] : [],
+      responsavelId: l.responsavelId || "", ativa: l.ativa !== false,
+      opcoes: JSON.stringify(Array.isArray(l.opcoes) ? l.opcoes : []),
+    };
+  }
+  // calcula só o que MUDOU, com valores legíveis (antes/depois)
+  function _diffLista(antes, depois) {
+    const legivel = (campo, v) => {
+      if (campo === "destino") return _rotuloEtapa(v);
+      if (campo === "distribuir") return { auto: "Automática (global)", fixo: "Vendedor fixo", equipe: "Equipe da lista", manual: "Sem dono" }[v] || v;
+      if (campo === "vendedorFixoId" || campo === "responsavelId") return v ? _nomeUser(v) : "—";
+      if (campo === "recebedoresIds") { try { return (JSON.parse(v) || []).map(_nomeUser).join(", ") || "—"; } catch (_) { return "—"; } }
+      if (campo === "ativa") return v ? "Ativa" : "Pausada";
+      if (campo === "opcoes") { try { return (JSON.parse(v) || []).map((o) => (o.forma || "") + (o.preco ? " " + o.preco : "")).join(" · ") || "—"; } catch (_) { return "—"; } }
+      return v === "" || v == null ? "—" : String(v);
+    };
+    const alt = {};
+    for (const k of Object.keys(depois)) {
+      const a = k === "recebedoresIds" ? JSON.stringify(antes[k]) : antes[k];
+      const d = k === "recebedoresIds" ? JSON.stringify(depois[k]) : depois[k];
+      if (a !== d) alt[k] = { antes: legivel(k, a), depois: legivel(k, d) };
+    }
+    return alt;
+  }
+  function _auditarLista(l, req, acao, alteracoes) {
+    if (!Array.isArray(l.historicoAlteracoes)) l.historicoAlteracoes = [];
+    l.historicoAlteracoes.push({
+      id: proximoId("audit"), ts: Date.now(),
+      usuarioId: (req.user && req.user.id) || "", usuarioNome: (req.user && req.user.nome) || "",
+      acao, alteracoes: alteracoes || {},
+    });
+    if (l.historicoAlteracoes.length > 200) l.historicoAlteracoes = l.historicoAlteracoes.slice(-200);
+  }
+
   // ---- Admin (gerente) ----
   app.get("/api/oficial/reserva", auth, gerenteOnly, (req, res) => {
     garantirEstrutura();
-    res.json({ listas: (db.oficial.reservaListas || []).map(reservaPublica) });
+    res.json({ listas: (db.oficial.reservaListas || []).filter((l) => !l.arquivada).map(reservaPublica) });
   });
   app.post("/api/oficial/reserva", auth, gerenteOnly, (req, res) => {
     garantirEstrutura();
@@ -2333,9 +2407,11 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
     if (!nome) return res.status(400).json({ error: "Dê um nome à lista" });
     let slug; do { slug = slugReserva(); } while ((db.oficial.reservaListas || []).some((x) => x.slug === slug));
     const destino = etapasCRM().some((e) => e.k === b.destino) ? b.destino : (etapasCRM().some((e) => e.k === "reserva") ? "reserva" : (etapasCRM()[0] || {}).k);
-    const nd = normalizarDistrib(b.distribuir, b.vendedorFixoId);
+    const nd = normalizarDistrib(b.distribuir, b.vendedorFixoId, b.recebedoresIds);
     if (nd.erro) return res.status(400).json({ error: nd.erro });
-    const lista = { id: proximoId("rsv"), nome, curso: String(b.curso || "").trim().slice(0, 120), tag: String(b.tag || "").trim().slice(0, 40), opcoes: limparOpcoes(b.opcoes), destino, distribuir: nd.modo, vendedorFixoId: nd.vendedorFixoId, slug, ativa: true, criadoEm: Date.now() };
+    const respId = b.responsavelId && (db.users || []).some((u) => u.id === b.responsavelId && u.ativo) ? b.responsavelId : "";
+    const lista = { id: proximoId("rsv"), nome, curso: String(b.curso || "").trim().slice(0, 120), tag: String(b.tag || "").trim().slice(0, 40), opcoes: limparOpcoes(b.opcoes), destino, distribuir: nd.modo, vendedorFixoId: nd.vendedorFixoId, recebedoresIds: nd.recebedoresIds, rrCursor: 0, responsavelId: respId, slug, ativa: true, historicoAlteracoes: [], criadoEm: Date.now(), atualizadoEm: Date.now(), atualizadoPor: (req.user && req.user.id) || "" };
+    _auditarLista(lista, req, "lista_criada", {});
     db.oficial.reservaListas.push(lista);
     salvar();
     res.json({ ok: true, lista: reservaPublica(lista) });
@@ -2344,26 +2420,66 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
     garantirEstrutura();
     const l = (db.oficial.reservaListas || []).find((x) => x.id === req.params.id);
     if (!l) return res.status(404).json({ error: "Lista não encontrada" });
+    if (l.arquivada) return res.status(400).json({ error: "Lista arquivada" });
     const b = req.body || {};
-    if (b.nome !== undefined) l.nome = String(b.nome).trim().slice(0, 80);
-    if (b.curso !== undefined) l.curso = String(b.curso).trim().slice(0, 120);
-    if (b.tag !== undefined) l.tag = String(b.tag).trim().slice(0, 40);
-    if (b.opcoes !== undefined) l.opcoes = limparOpcoes(b.opcoes);
-    if (b.destino !== undefined && etapasCRM().some((e) => e.k === b.destino)) l.destino = b.destino;
-    if (b.distribuir !== undefined || b.vendedorFixoId !== undefined) {
-      const nd = normalizarDistrib(b.distribuir !== undefined ? b.distribuir : l.distribuir, b.vendedorFixoId !== undefined ? b.vendedorFixoId : l.vendedorFixoId);
-      if (nd.erro) return res.status(400).json({ error: nd.erro });
-      l.distribuir = nd.modo; l.vendedorFixoId = nd.vendedorFixoId;
+    // trava otimista: se o cliente editou uma versão antiga, recusa (evita perda silenciosa)
+    if (b.atualizadoEm !== undefined && Number(b.atualizadoEm) && Number(b.atualizadoEm) !== Number(l.atualizadoEm || l.criadoEm || 0)) {
+      return res.status(409).json({ error: "Esta lista foi alterada por outra pessoa. Recarregue e tente de novo." });
     }
-    if (b.ativa !== undefined) l.ativa = !!b.ativa;
-    salvar();
-    res.json({ ok: true, lista: reservaPublica(l) });
+    const antes = _snapshotLista(l);
+    // monta a versão nova validada EM MEMÓRIA (só aplica se tudo passar)
+    const novo = {};
+    if (b.nome !== undefined) { const n = String(b.nome).trim().slice(0, 80); if (!n) return res.status(400).json({ error: "O nome não pode ficar vazio" }); novo.nome = n; }
+    if (b.curso !== undefined) novo.curso = String(b.curso).trim().slice(0, 120);
+    if (b.tag !== undefined) novo.tag = String(b.tag).trim().slice(0, 40);
+    if (b.opcoes !== undefined) novo.opcoes = limparOpcoes(b.opcoes);
+    if (b.destino !== undefined) { if (!etapasCRM().some((e) => e.k === b.destino)) return res.status(400).json({ error: "Coluna de destino inválida" }); novo.destino = b.destino; }
+    if (b.distribuir !== undefined || b.vendedorFixoId !== undefined || b.recebedoresIds !== undefined) {
+      const nd = normalizarDistrib(
+        b.distribuir !== undefined ? b.distribuir : l.distribuir,
+        b.vendedorFixoId !== undefined ? b.vendedorFixoId : l.vendedorFixoId,
+        b.recebedoresIds !== undefined ? b.recebedoresIds : l.recebedoresIds
+      );
+      if (nd.erro) return res.status(400).json({ error: nd.erro });
+      novo.distribuir = nd.modo; novo.vendedorFixoId = nd.vendedorFixoId; novo.recebedoresIds = nd.recebedoresIds;
+      if (nd.modo === "equipe") { const antigos = new Set(Array.isArray(l.recebedoresIds) ? l.recebedoresIds : []); const mudou = nd.recebedoresIds.length !== antigos.size || nd.recebedoresIds.some((id) => !antigos.has(id)); if (mudou) novo.rrCursor = 0; }
+    }
+    if (b.responsavelId !== undefined) novo.responsavelId = (b.responsavelId && (db.users || []).some((u) => u.id === b.responsavelId && u.ativo)) ? b.responsavelId : "";
+    if (b.ativa !== undefined) novo.ativa = !!b.ativa;
+
+    // aplica
+    Object.assign(l, novo);
+    const depois = _snapshotLista(l);
+    const alt = _diffLista(antes, depois);
+    // pausa/reativação vira ação legível própria
+    let acao = "lista_editada";
+    if (Object.keys(alt).length === 1 && alt.ativa) acao = alt.ativa.depois === "Ativa" ? "lista_reativada" : "lista_pausada";
+    if (Object.keys(alt).length > 0) {
+      l.atualizadoEm = Date.now(); l.atualizadoPor = (req.user && req.user.id) || "";
+      _auditarLista(l, req, acao, alt);
+      salvar();
+    }
+    const pub = reservaPublica(l);
+    res.json({ ok: true, lista: pub, semMudanca: Object.keys(alt).length === 0, auditoria: Object.keys(alt).length > 0 ? l.historicoAlteracoes[l.historicoAlteracoes.length - 1] : null });
+  });
+  // histórico de alterações da lista (gerente) — só leitura, mais recente primeiro
+  app.get("/api/oficial/reserva/:id/historico", auth, gerenteOnly, (req, res) => {
+    garantirEstrutura();
+    const l = (db.oficial.reservaListas || []).find((x) => x.id === req.params.id);
+    if (!l) return res.status(404).json({ error: "Lista não encontrada" });
+    const hist = (Array.isArray(l.historicoAlteracoes) ? l.historicoAlteracoes : []).slice().reverse();
+    res.json({ historico: hist });
   });
   app.delete("/api/oficial/reserva/:id", auth, gerenteOnly, (req, res) => {
     garantirEstrutura();
-    db.oficial.reservaListas = (db.oficial.reservaListas || []).filter((x) => x.id !== req.params.id);
+    const l = (db.oficial.reservaListas || []).find((x) => x.id === req.params.id);
+    if (!l) return res.status(404).json({ error: "Lista não encontrada" });
+    // soft delete: arquiva (não perde a lista nem o histórico)
+    l.arquivada = true; l.arquivadaEm = Date.now(); l.arquivadaPor = (req.user && req.user.id) || "";
+    l.ativa = false;
+    _auditarLista(l, req, "lista_arquivada", {});
     salvar();
-    res.json({ ok: true });
+    res.json({ ok: true, arquivada: true });
   });
 
   // ---- Público: recebe o lead (SEM login) ----
