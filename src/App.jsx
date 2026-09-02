@@ -7012,6 +7012,50 @@ function Desempenho({ showToast, isGer = true, ehLider = false }) {
   const [carregando, setCarregando] = useState(true);
   const [verOcultos, setVerOcultos] = useState(false);
   const [detalheId, setDetalheId] = useState(null);
+  const [pdfId, setPdfId] = useState(null); // vendedor sendo exportado
+  async function exportarVendedorPDF(v, cargoNome, faixaNome) {
+    setPdfId(v.id);
+    try {
+      const html2pdf = (await import("html2pdf.js")).default;
+      const esc = (s) => String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+      const money = (n) => "R$ " + (Number(n) || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      const pct = (n) => (Number(n) || 0).toLocaleString("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + "%";
+      const mesLabel = (dados && dados.mes) ? dados.mes.split("-").reverse().join("/") : "";
+      const com = v.comissao || { pct: 0, valor: 0, regra: "vendedor" };
+      const linha = (rot, val) => `<tr><td style="padding:9px 4px;color:#5f6b7a;font-size:13px;border-bottom:1px solid #eef1f3">${rot}</td><td style="padding:9px 4px;text-align:right;font-weight:700;color:#0b1220;font-size:13px;border-bottom:1px solid #eef1f3">${val}</td></tr>`;
+      const html = `<div style="width:720px;padding:30px;font-family:Inter,Arial,sans-serif;background:#fff;color:#0b1220">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid #F26522;padding-bottom:14px;margin-bottom:18px">
+          <div><div style="font-size:22px;font-weight:800;letter-spacing:-.02em">instruct<span style="color:#16a34a">iva</span></div>
+          <div style="font-size:15px;font-weight:700;margin-top:8px">Relatório de Desempenho</div></div>
+          <div style="font-size:11px;color:#5f6b7a;text-align:right">Mês ${esc(mesLabel)}<br>Emitido em ${esc(new Date().toLocaleString("pt-BR"))}</div></div>
+        <div style="background:#f4f6f8;border:1px solid #e6e8ee;border-radius:12px;padding:14px 16px;margin-bottom:18px">
+          <div style="font-weight:700;font-size:17px">${esc(v.nome)}</div>
+          <div style="color:#5f6b7a;margin-top:3px;font-size:13px">${esc(cargoNome || "")}${faixaNome ? " · Faixa " + esc(faixaNome) : ""}</div>
+        </div>
+        <table style="width:100%;border-collapse:collapse;margin-bottom:18px">
+          ${linha("Faturamento (receita)", money(v.receita))}
+          ${linha("Taxa de conversão", pct(v.conversao))}
+          ${linha("Vendas no mês", String(v.vendas || 0))}
+          ${linha("Ticket médio", money(v.ticket))}
+          ${linha("Pontos no mês", String(v.pontos || 0))}
+        </table>
+        <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:14px;padding:18px 20px;display:flex;justify-content:space-between;align-items:center">
+          <div><div style="font-size:12px;color:#5f6b7a;font-weight:700;text-transform:uppercase;letter-spacing:.04em">Comissão a receber</div>
+          <div style="font-size:12px;color:#5f6b7a;margin-top:3px">${pct(com.pct)} sobre ${money(v.receita)}${com.regra === "gerente" ? " · gerente (1% fixo)" : ""}</div></div>
+          <div style="font-size:30px;font-weight:850;color:#16a34a;letter-spacing:-.02em">${money(com.valor)}</div>
+        </div>
+        <div style="text-align:center;color:#aab2bd;font-size:10px;margin-top:24px;border-top:1px solid #eee;padding-top:10px">Instructiva · Sistema Comercial — comissão calculada pela Política Comercial (faturamento + conversão)</div>
+      </div>`;
+      const holder = document.createElement("div");
+      holder.style.position = "fixed"; holder.style.left = "-9999px"; holder.style.top = "0";
+      holder.innerHTML = html; document.body.appendChild(holder);
+      const nomeArq = "desempenho-" + String(v.nome || "vendedor").replace(/[^\w]+/g, "_").slice(0, 30) + "-" + ((dados && dados.mes) || "") + ".pdf";
+      await html2pdf().set({ margin: [8, 8, 10, 8], filename: nomeArq, image: { type: "jpeg", quality: 0.96 }, html2canvas: { scale: 2, backgroundColor: "#ffffff", logging: false }, jsPDF: { unit: "mm", format: "a4", orientation: "portrait" } }).from(holder.firstElementChild).save();
+      holder.remove();
+      showToast("✅ PDF de " + v.nome + " baixado!");
+    } catch (e) { showToast("❌ Erro ao gerar PDF: " + e.message); }
+    finally { setPdfId(null); }
+  }
   const [vendVe, setVendVe] = useState(true); // vendedores veem o desempenho?
   useEffect(() => { api.ofAcessoVend().then((r) => setVendVe(!(r.acessoVend && r.acessoVend.desempenhoOculto))).catch(() => {}); }, []);
   async function alternarVendVe(ve) {
@@ -7035,14 +7079,13 @@ function Desempenho({ showToast, isGer = true, ehLider = false }) {
   const cargoDe = (k) => cargos.find((c) => c.k === k) || { nome: k, salario: 0 };
   const faixaDe = (k) => faixas.find((f) => f.k === k) || { k, nome: k, cor: "#e5e7eb", texto: "#374151" };
   const vends = dados.vendedores || [];
-  const totReceita = vends.reduce((s, v) => s + v.receita, 0);
-  const totVendas = vends.reduce((s, v) => s + v.vendas, 0);
-  const totLeads = vends.reduce((s, v) => s + v.leads, 0);
+  // ranking mostra só os vendedores; o gerente fica FORA do Desempenho (removido da visão e dos totais)
+  const rankVends = vends.filter((v) => v.role !== "gerente");
+  const totReceita = rankVends.reduce((s, v) => s + v.receita, 0);
+  const totVendas = rankVends.reduce((s, v) => s + v.vendas, 0);
+  const totLeads = rankVends.reduce((s, v) => s + v.leads, 0);
   const convMedia = totLeads ? (totVendas / totLeads) * 100 : 0;
   const ticketMedio = totVendas ? totReceita / totVendas : 0;
-  // ranking mostra só os vendedores; gerentes ficam fora do ranking (mas contam nos totais acima)
-  const rankVends = vends.filter((v) => v.role !== "gerente");
-  const foraRanking = vends.filter((v) => v.role === "gerente");
 
   const mesesOpcoes = [];
   { const now = new Date(); for (let i = 0; i < 6; i++) { const d = new Date(now.getFullYear(), now.getMonth() - i, 1); mesesOpcoes.push(d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0")); } }
@@ -7137,36 +7180,16 @@ function Desempenho({ showToast, isGer = true, ehLider = false }) {
                   </div>
                 )}
 
-                <div style={{ marginTop: 16, fontSize: 12.5, color: DES.orange, fontWeight: 600, textAlign: "center" }}>Ver desempenho completo →</div>
+                <div style={{ marginTop: 16, display: "flex", gap: 8, alignItems: "center" }}>
+                  <button onClick={(e) => { e.stopPropagation(); exportarVendedorPDF(v, cargo.nome, faixa.nome); }} disabled={pdfId === v.id}
+                    style={{ flex: "0 0 auto", border: "1px solid " + DES.line, background: "var(--card)", color: DES.ink, borderRadius: 10, padding: "8px 12px", fontSize: 12.5, fontWeight: 600, cursor: "pointer", display: "flex", alignItems: "center", gap: 6 }}>
+                    {pdfId === v.id ? "Gerando…" : "⬇ Exportar PDF"}
+                  </button>
+                  <div style={{ flex: 1, fontSize: 12.5, color: DES.orange, fontWeight: 600, textAlign: "right" }}>Ver desempenho completo →</div>
+                </div>
               </div>
             );
           })}
-        </div>
-      )}
-
-      {dados.souGerente && foraRanking.length > 0 && (
-        <div style={{ marginTop: 26 }}>
-          <div style={{ fontSize: 13, fontWeight: 700, color: DES.mut, marginBottom: 12, display: "flex", alignItems: "center", gap: 7, textTransform: "uppercase", letterSpacing: ".04em" }}>Fora do ranking (gerência)</div>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(300px,1fr))", gap: 14 }}>
-            {foraRanking.map((g) => (
-              <div key={g.id} onClick={() => setDetalheId(g.id)} style={{ background: "var(--card)", border: "1px solid " + DES.line, borderRadius: 16, padding: 18, cursor: "pointer", boxShadow: "0 1px 2px rgba(15,23,42,.04)", transition: "box-shadow .18s, transform .18s" }}
-                onMouseEnter={(e) => { e.currentTarget.style.boxShadow = "0 10px 24px rgba(15,23,42,.10)"; e.currentTarget.style.transform = "translateY(-2px)"; }}
-                onMouseLeave={(e) => { e.currentTarget.style.boxShadow = "0 1px 2px rgba(15,23,42,.04)"; e.currentTarget.style.transform = "none"; }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 14 }}>
-                  {g.foto ? <img src={g.foto} alt="" style={{ width: 42, height: 42, borderRadius: "50%", objectFit: "cover" }} /> : <div style={{ width: 42, height: 42, borderRadius: "50%", background: "linear-gradient(135deg,#F26522,#16a34a)", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700, fontSize: 16 }}>{(g.nome || "?").slice(0, 1).toUpperCase()}</div>}
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontWeight: 700, fontSize: 15.5, color: DES.ink, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{g.nome}</div>
-                    <div style={{ fontSize: 12, color: DES.mut2, marginTop: 1 }}>Gerência · fora do ranking</div>
-                  </div>
-                </div>
-                <div style={{ display: "flex", gap: 0, background: DES.bg, borderRadius: 12, padding: "12px 4px" }}>
-                  <Stat label="Receita" valor={fmtMoneyD(g.receita)} />
-                  <Stat label="Vendas" valor={String(g.vendas)} borda />
-                  <Stat label="Conversão" valor={fmtPctD(g.conversao)} cor={DES.green} borda />
-                </div>
-              </div>
-            ))}
-          </div>
         </div>
       )}
 
