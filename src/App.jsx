@@ -7127,6 +7127,21 @@ function Desempenho({ showToast, isGer = true, ehLider = false }) {
                   <Stat label="Ticket" valor={fmtMoneyD(v.ticket)} borda />
                 </div>
 
+                {(v.totalReceber !== undefined) && (
+                  <div style={{ marginTop: 16, background: "var(--surface-2)", border: "1px solid " + DES.line, borderRadius: 14, padding: "14px 16px" }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+                      <div style={{ fontSize: 12, color: DES.mut2, fontWeight: 700, textTransform: "uppercase", letterSpacing: ".04em" }}>Vai receber esse mês</div>
+                      <div style={{ fontSize: 26, fontWeight: 850, color: DES.green, letterSpacing: "-.02em" }}>{fmtMoneyD(v.totalReceber)}</div>
+                    </div>
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: "4px 14px", marginTop: 8, fontSize: 12.5, color: DES.mut }}>
+                      <span>Salário: <b style={{ color: DES.ink }}>{fmtMoneyD(v.salarioBase || 0)}</b></span>
+                      <span>Comissão ({fmtPctD(v.comissaoPct || 0)}): <b style={{ color: DES.ink }}>{fmtMoneyD(v.comissao || 0)}</b></span>
+                      {v.comissaoBonusDinheiro > 0 && <span>Bônus pontos: <b style={{ color: DES.ink }}>{fmtMoneyD(v.comissaoBonusDinheiro)}</b></span>}
+                      {v.comissaoRegra === "gerente" && <span style={{ color: DES.orange, fontWeight: 600 }}>(gerente: 1% fixo)</span>}
+                    </div>
+                  </div>
+                )}
+
                 <div style={{ marginTop: 16, fontSize: 12.5, color: DES.orange, fontWeight: 600, textAlign: "center" }}>Ver desempenho completo →</div>
               </div>
             );

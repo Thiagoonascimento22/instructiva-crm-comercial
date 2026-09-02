@@ -4335,6 +4335,38 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
     if (total > 28) return { rotulo: "acima de 28", adicional: 0.5, dinheiro: 300 };
     return { rotulo: "abaixo de 28", adicional: 0, dinheiro: 0 };
   }
+  // ---- COMISSÃO (Política Comercial Instructiva) ----
+  // Decisão da direção: SEM corte de mínimo — todo mundo recebe (mesmo < 50k ou < 1,5%).
+  function _basePorFaturamento(receita) {
+    if (receita >= 200000) return 4.0;
+    if (receita >= 150000) return 3.0;
+    if (receita >= 120000) return 2.5;
+    if (receita >= 100000) return 2.0;
+    if (receita >= 75000) return 1.5;
+    return 1.0; // < 75k (inclui < 50k): recebe a base mínima, sem corte
+  }
+  function _adicionalConversao(c) {
+    if (c >= 6) return 1.5;
+    if (c >= 5) return 1.0;
+    if (c >= 4) return 0.8;
+    if (c >= 3) return 0.6;
+    if (c >= 2) return 0.4;
+    if (c >= 1.5) return 0.2;
+    return 0; // < 1,5%: sem bônus de conversão, mas mantém a base (sem corte)
+  }
+  function calcularComissao(role, receita, conversao, pontosTotal) {
+    receita = Number(receita) || 0;
+    if (role === "gerente") {
+      // Gerente: 1% fixo sobre o que vendeu, sem política de faixas/pontuação
+      const comissao = receita * 0.01;
+      return { regra: "gerente", base: 1.0, adicConv: 0, adicPontos: 0, pctFinal: 1.0, comissao, bonusDinheiro: 0 };
+    }
+    const base = _basePorFaturamento(receita);
+    const adicConv = _adicionalConversao(Number(conversao) || 0);
+    const bp = bonusPontos(pontosTotal);
+    const pctFinal = Math.round((base + adicConv + bp.adicional) * 100) / 100;
+    return { regra: "vendedor", base, adicConv, adicPontos: bp.adicional, pctFinal, comissao: receita * pctFinal / 100, bonusDinheiro: bp.dinheiro };
+  }
   // semanas do mês (cortes fixos por dia — "semana comercial" provisória)
   function semanasDoMes(mes) {
     const p = mes.split("-").map(Number), a = p[0], m = p[1];
@@ -4399,6 +4431,9 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
       const pontos = pontosMes(u.id, pes, mes, vendas, leads);
       const faixa = u.faixa || "branca";
       const mf = metaFaixa(faixa);
+      const salarioBase = (CARGOS.find((c) => c.k === (u.cargo || "trainee")) || { salario: 0 }).salario;
+      const com = calcularComissao(u.role, receita, conversao, pontos.total);
+      const totalReceber = salarioBase + com.comissao + com.bonusDinheiro;
       let mesesSeguidos = 0;
       if (mf) {
         for (let k = 0; k < 6; k++) {
@@ -4414,6 +4449,12 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
         conversao: Math.round(conversao * 100) / 100,
         meta: metaVendedorMes(pes, mes, metasMes),
         pontos: pontos.total, semanas: pontos.semanas, bonus: bonusPontos(pontos.total),
+        salarioBase,
+        comissao: Math.round(com.comissao * 100) / 100,
+        comissaoPct: com.pctFinal,
+        comissaoBase: com.base, comissaoAdicConv: com.adicConv, comissaoAdicPontos: com.adicPontos,
+        comissaoBonusDinheiro: com.bonusDinheiro, comissaoRegra: com.regra,
+        totalReceber: Math.round(totalReceber * 100) / 100,
         faixaMeta: mf ? { proxima: mf.proxima, pontos: mf.pontos, meses: mf.meses, mesesSeguidos } : null,
       };
     });
