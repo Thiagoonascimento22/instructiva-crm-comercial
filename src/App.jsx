@@ -7068,7 +7068,6 @@ function Desempenho({ showToast, isGer = true, ehLider = false }) {
       const totComissao = lista.reduce((s, v) => s + ((v.comissao && v.comissao.valor) || 0), 0);
       const totVendas = lista.reduce((s, v) => s + (v.vendas || 0), 0);
       const gestao = dados && dados.gestao ? dados.gestao : null;
-      const totalGeral = totComissao + (gestao ? gestao.valor : 0);
       const th = (t, r) => `<th style="padding:9px 8px;text-align:${r ? "right" : "left"};font-size:11px;color:#5f6b7a;text-transform:uppercase;letter-spacing:.03em;border-bottom:2px solid #e6e8ee">${t}</th>`;
       const td = (t, r, b) => `<td style="padding:9px 8px;text-align:${r ? "right" : "left"};font-size:12.5px;color:#0b1220;${b ? "font-weight:700;" : ""}border-bottom:1px solid #eef1f3">${t}</td>`;
       const linhas = lista.map((v) => {
@@ -7080,20 +7079,16 @@ function Desempenho({ showToast, isGer = true, ehLider = false }) {
           <div><div style="font-size:22px;font-weight:800;letter-spacing:-.02em">instruct<span style="color:#16a34a">iva</span></div>
           <div style="font-size:15px;font-weight:700;margin-top:8px">Desempenho e comissões do time${gestao && gestao.unidade ? " · " + esc(gestao.unidade.charAt(0).toUpperCase() + gestao.unidade.slice(1)) : ""}</div></div>
           <div style="font-size:11px;color:#5f6b7a;text-align:right">Mês ${esc(mesLabel)}<br>Emitido em ${esc(new Date().toLocaleString("pt-BR"))}</div></div>
-        <table style="width:100%;border-collapse:collapse;margin-bottom:14px">
+        <table style="width:100%;border-collapse:collapse;margin-bottom:16px">
           <thead><tr>${th("Vendedor")}${th("Receita", true)}${th("Conversão", true)}${th("Vendas", true)}${th("Comissão %", true)}${th("A receber", true)}</tr></thead>
           <tbody>${linhas}</tbody>
-          <tfoot><tr style="border-top:2px solid #e6e8ee">${td("<b>Subtotal vendedores</b>")}${td("<b>" + money(totReceita) + "</b>", true)}${td("", true)}${td("<b>" + totVendas + "</b>", true)}${td("", true)}${td("<b>" + money(totComissao) + "</b>", true)}</tr></tfoot>
+          <tfoot><tr style="border-top:2px solid #e6e8ee">${td("<b>TOTAL</b>")}${td("<b>" + money(totReceita) + "</b>", true)}${td("", true)}${td("<b>" + totVendas + "</b>", true)}${td("", true)}${td("<b style='color:#16a34a'>" + money(totComissao) + "</b>", true)}</tr></tfoot>
         </table>
-        ${gestao ? `<div style="background:#fff7ed;border:1px solid #fed7aa;border-radius:12px;padding:14px 18px;margin-bottom:12px;display:flex;justify-content:space-between;align-items:center;text-transform:uppercase">
-          <div style="font-weight:800;font-size:14px;letter-spacing:.02em;color:#9a3412">${esc(gestao.nome)} · GESTÃO (1% DE ${money(gestao.baseVendas)})</div>
-          <div style="font-weight:800;font-size:18px;color:#9a3412">${money(gestao.valor)}</div>
+        ${gestao ? `<div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:14px;padding:18px 20px;display:flex;justify-content:space-between;align-items:center;text-transform:uppercase">
+          <div style="font-weight:800;font-size:15px;letter-spacing:.02em;color:#0b1220">${esc(gestao.nome)} · 1% DAS VENDAS DA UNIDADE<div style="font-size:11px;font-weight:600;color:#5f6b7a;text-transform:none;margin-top:3px">1% de ${money(gestao.baseVendas)} vendidos${gestao.unidade ? " em " + esc(gestao.unidade.charAt(0).toUpperCase() + gestao.unidade.slice(1)) : ""}</div></div>
+          <div style="font-weight:850;font-size:24px;color:#16a34a;letter-spacing:-.01em">${money(gestao.valor)}</div>
         </div>` : ""}
-        <div style="background:#0b1220;border-radius:12px;padding:16px 20px;display:flex;justify-content:space-between;align-items:center;text-transform:uppercase">
-          <div style="font-weight:800;font-size:15px;letter-spacing:.03em;color:#fff">TOTAL GERAL A PAGAR</div>
-          <div style="font-weight:850;font-size:22px;color:#34d399;letter-spacing:-.01em">${money(totalGeral)}</div>
-        </div>
-        <div style="text-align:center;color:#aab2bd;font-size:10px;margin-top:20px;border-top:1px solid #eee;padding-top:10px">Instructiva · Sistema Comercial — comissão pela Política Comercial (faturamento + conversão) · gerência não incluída no ranking${gestao ? " · gestão = 1% do total vendido pela unidade" : ""}</div>
+        <div style="text-align:center;color:#aab2bd;font-size:10px;margin-top:20px;border-top:1px solid #eee;padding-top:10px">Instructiva · Sistema Comercial — comissão pela Política Comercial (faturamento + conversão)${gestao ? " · gestão = 1% do total vendido pela unidade" : ""}</div>
       </div>`;
       const holder = document.createElement("div");
       holder.style.position = "fixed"; holder.style.left = "-9999px"; holder.style.top = "0";
