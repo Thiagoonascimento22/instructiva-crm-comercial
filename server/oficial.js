@@ -408,7 +408,7 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
   function cfgInstagram() {
     garantirEstrutura();
     const ig = db.oficial.instagram || {};
-    return { igId: ig.igId || "", token: ig.token || db.oficial.tokenGlobal || "", usuario: ig.usuario || "", ativo: !!ig.ativo };
+    return { igId: ig.igId || "", token: ig.token || db.oficial.tokenGlobal || "", usuario: ig.usuario || "", ativo: !!ig.ativo, vendedorId: ig.vendedorId || null };
   }
   function chaveChatIG(remetenteId) { return `instagram::${remetenteId}`; }
   function acharOuCriarChatIG(remetenteId, nome) {
