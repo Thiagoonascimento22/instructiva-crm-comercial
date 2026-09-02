@@ -4442,7 +4442,7 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
         conversao: Math.round(conversao * 100) / 100,
         meta: metaVendedorMes(pes, mes, metasMes),
         pontos: pontos.total, semanas: pontos.semanas, bonus: bonusPontos(pontos.total),
-        comissao: (() => { const c = calcularComissao(u.role, receita, conversao); return { pct: c.pct, valor: Math.round(c.valor * 100) / 100, regra: c.regra }; })(),
+        comissao: (() => { const convExib = Math.round(conversao * 10) / 10; const c = calcularComissao(u.role, receita, convExib); return { pct: c.pct, valor: Math.round(c.valor * 100) / 100, regra: c.regra }; })(),
         faixaMeta: mf ? { proxima: mf.proxima, pontos: mf.pontos, meses: mf.meses, mesesSeguidos } : null,
       };
     });
