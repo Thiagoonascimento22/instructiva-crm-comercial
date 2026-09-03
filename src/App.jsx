@@ -6663,6 +6663,31 @@ function AnaliseIAVendedor({ showToast, isGer = true }) {
       </ul>
     </div>
   );
+  // Recomendação final de coaching: Comece / Pare / Continue
+  const BlocoCPC = ({ cpc }) => {
+    if (!cpc || (!cpc.comece && !cpc.pare && !cpc.continue)) return null;
+    const cols = [
+      { k: "comece", tit: "COMECE", ico: "🟢", cor: "#16a34a", bg: "rgba(22,163,74,.06)", itens: cpc.comece },
+      { k: "pare", tit: "PARE", ico: "🔴", cor: "#dc2626", bg: "rgba(220,38,38,.06)", itens: cpc.pare },
+      { k: "continue", tit: "CONTINUE", ico: "🔵", cor: "#2563eb", bg: "rgba(37,99,235,.06)", itens: cpc.continue },
+    ];
+    return (
+      <div style={{ background: "var(--card)", border: "1px solid " + DES.line, borderRadius: 16, padding: 18, marginBottom: 14 }}>
+        <div style={{ fontSize: 14, fontWeight: 800, color: DES.ink, marginBottom: 4, display: "flex", alignItems: "center", gap: 7, letterSpacing: "-.01em" }}>🎯 Recomendação final — Comece · Pare · Continue</div>
+        <div style={{ fontSize: 12, color: DES.mut, marginBottom: 14 }}>O resumo prático pra evoluir a partir de agora.</div>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 12 }}>
+          {cols.map((c) => (
+            <div key={c.k} style={{ background: c.bg, border: "1px solid " + c.cor + "33", borderRadius: 12, padding: "14px 15px" }}>
+              <div style={{ fontSize: 12.5, fontWeight: 800, color: c.cor, letterSpacing: ".04em", marginBottom: 9, display: "flex", alignItems: "center", gap: 6 }}>{c.ico} {c.tit}</div>
+              {Array.isArray(c.itens) && c.itens.length > 0
+                ? <ul style={{ margin: 0, paddingLeft: 17, display: "flex", flexDirection: "column", gap: 6 }}>{c.itens.map((t, i) => <li key={i} style={{ fontSize: 12.5, color: DES.ink, lineHeight: 1.45 }}>{t}</li>)}</ul>
+                : <div style={{ fontSize: 12, color: DES.mut2, fontStyle: "italic" }}>—</div>}
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  };
 
   return (
     <div style={{ maxWidth: 860, margin: "0 auto" }}>
@@ -6908,6 +6933,7 @@ function AnaliseIAVendedor({ showToast, isGer = true }) {
               </ul>
             </div>
           )}
+          <BlocoCPC cpc={GERAL.cpc} />
           {!GERAL && res.bruto && <div style={{ background: "var(--card)", border: "1px solid " + DES.line, borderRadius: 16, padding: 20, fontSize: 14, color: DES.ink, whiteSpace: "pre-wrap", lineHeight: 1.6 }}>{res.bruto}</div>}
         </div>
       )}
@@ -6996,6 +7022,7 @@ function AnaliseIAVendedor({ showToast, isGer = true }) {
                 </ul>
               </div>
             )}
+            <BlocoCPC cpc={A.cpc} />
           </> : (
             <div style={{ background: "var(--card)", border: "1px solid " + DES.line, borderRadius: 16, padding: 20, fontSize: 14, color: DES.ink, whiteSpace: "pre-wrap", lineHeight: 1.6 }}>{res.bruto}</div>
           )}
