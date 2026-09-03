@@ -4907,5 +4907,179 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
   setInterval(() => { atualizarQualidadeTodos().catch(() => {}); }, 3 * 3600000);
 
   // devolve a função de init pro index chamar DEPOIS do loadDB()
+  // ============================================================
+  // INTEGRAÇÃO INTELLIGENCE — API SÓ-LEITURA pro Dashboard
+  // Não altera NADA do CRM; apenas EXPÕE os dados existentes.
+  // Unidade sempre de process.env.UNIDADE (identificação da v238).
+  // Auth por token dedicado (INTELLIGENCE_API_TOKEN), nunca o login do CRM.
+  // ============================================================
+  const _uni = () => String(process.env.UNIDADE || "").trim().toLowerCase() || "nao-configurada";
+  const _iso = (ts) => { if (ts === null || ts === undefined || ts === "") return null; const n = Number(ts); const d = new Date(isNaN(n) ? ts : n); return isNaN(d.getTime()) ? null : d.toISOString(); };
+  function authIntel(req, res, next) {
+    const tk = String(process.env.INTELLIGENCE_API_TOKEN || "");
+    if (!tk) return res.status(503).json({ error: "INTELLIGENCE_API_TOKEN não configurado neste serviço" });
+    const h = String(req.headers.authorization || "");
+    const bearer = h.startsWith("Bearer ") ? h.slice(7).trim() : "";
+    if (!bearer || bearer !== tk) return res.status(401).json({ error: "Token inválido ou ausente" });
+    next();
+  }
+  // marcos derivados do histórico do lead (só o que EXISTE; senão null)
+  function _marcosLead(l) {
+    let qualified = null, lost = null, won = null, assigned = null;
+    for (const h of (Array.isArray(l.historico) ? l.historico : [])) {
+      const t = (h.texto || "").toLowerCase(), ts = h.ts || null;
+      if (h.tipo === "atribuido" && assigned === null && !/removid/.test(t)) assigned = ts;
+      if (h.tipo === "etapa") {
+        if (/qualificad/.test(t) && qualified === null) qualified = ts;
+        if (/perdid/.test(t) && lost === null) lost = ts;
+        if (/matriculad/.test(t) && won === null) won = ts;
+      }
+    }
+    return { qualified, lost, won, assigned };
+  }
+  function _utmsLead(l) {
+    for (let i = (l.historico || []).length - 1; i >= 0; i--) {
+      const h = l.historico[i];
+      if (h && h.dados && h.dados.utms && typeof h.dados.utms === "object") return h.dados.utms;
+    }
+    return null;
+  }
+  // índice telefone(8 díg) -> conversa, pra derivar 1ª interação/resposta
+  function _idxTelefone() {
+    const idx = {};
+    for (const c of Object.values(db.waChats || {})) {
+      const tel = String(c.numero || c.telefone || "").replace(/\D/g, "").slice(-8);
+      if (tel && tel.length >= 8 && !idx[tel]) idx[tel] = c;
+    }
+    return idx;
+  }
+  function _interacoes(chat) {
+    if (!chat || !Array.isArray(chat.mensagens) || !chat.mensagens.length) return { humano: null, cliente: null, ultima: null };
+    let humano = null, cliente = null;
+    for (const m of chat.mensagens) {
+      if (!m || !m.ts) continue;
+      if (m.role === "them" && cliente === null) cliente = m.ts; // cliente respondeu
+      if (m.role === "me" && humano === null && !m.template && !m.origemDisparo) humano = m.ts; // vendedor humano (não automação/disparo)
+    }
+    const ultima = chat.mensagens[chat.mensagens.length - 1].ts || null;
+    return { humano, cliente, ultima };
+  }
+  // paginação incremental estável: ordena por _ord (ts) asc, cursor = "ts:id"
+  function _paginar(itens, req) {
+    const limit = Math.max(1, Math.min(1000, parseInt(req.query.limit, 10) || 500));
+    const since = req.query.updated_since ? Date.parse(req.query.updated_since) : null;
+    let arr = itens.slice().sort((a, b) => (a._ord - b._ord) || String(a._id).localeCompare(String(b._id)));
+    if (since !== null && !isNaN(since)) arr = arr.filter((x) => (x._ord || 0) >= since);
+    if (req.query.cursor) { const i = arr.findIndex((x) => x._cursor === req.query.cursor); arr = i >= 0 ? arr.slice(i + 1) : arr; }
+    const pagina = arr.slice(0, limit);
+    const next = pagina.length === limit ? pagina[pagina.length - 1]._cursor : null;
+    return { items: pagina.map(({ _id, _ord, _cursor, ...r }) => r), next_cursor: next };
+  }
+
+  // --- Endpoint 2: listas ---
+  app.get("/api/integrations/intelligence/lists", authIntel, (req, res) => {
+    garantirEstrutura();
+    const items = (db.oficial.reservaListas || []).filter((l) => !l.arquivada).map((l) => ({
+      id: String(l.id), nome: l.nome, tag: l.tag || null, ativo: l.ativa !== false,
+      curso: l.curso || null, destino_etapa_id: l.destino || null, distribuir: l.distribuir || "auto",
+      created_at: _iso(l.criadoEm), updated_at: _iso(l.atualizadoEm || l.criadoEm),
+    }));
+    res.json({ unidade: _uni(), total: items.length, items });
+  });
+
+  // --- Endpoint 3: vendedores ---
+  app.get("/api/integrations/intelligence/sellers", authIntel, (req, res) => {
+    const items = (db.users || []).filter((u) => u.role === "vendedor" || u.role === "gerente").map((u) => ({
+      id: String(u.id), nome: u.nome, email: u.email || null, ativo: u.ativo !== false, papel: u.role,
+    }));
+    res.json({ unidade: _uni(), total: items.length, items });
+  });
+
+  // --- Endpoint 4: leads/oportunidades ---
+  app.get("/api/integrations/intelligence/opportunities", authIntel, (req, res) => {
+    garantirCRM();
+    const idx = _idxTelefone();
+    const preparados = (db.oficial.crmLeads || []).map((l) => {
+      const tel8 = String(l.telefone || "").replace(/\D/g, "").slice(-8);
+      const chat = tel8 && tel8.length >= 8 ? idx[tel8] : null;
+      const it = _interacoes(chat);
+      const mk = _marcosLead(l);
+      const v = l.vendedorId ? (db.users || []).find((u) => u.id === l.vendedorId) : null;
+      const eName = (etapasCRM().find((e) => e.k === l.etapa) || {}).lb || null;
+      const utms = _utmsLead(l) || {};
+      return {
+        _id: l.id, _ord: l.atualizadoEm || l.criadoEm || 0, _cursor: (l.atualizadoEm || l.criadoEm || 0) + ":" + l.id,
+        unidade: _uni(),
+        lead_id: String(l.id),
+        nome: l.nome || null, email: l.email || null, telefone: l.telefone || null,
+        lista_id: l.reservaId ? String(l.reservaId) : (Array.isArray(l.reservaIds) && l.reservaIds[0] ? String(l.reservaIds[0]) : null),
+        lista_ids: Array.isArray(l.reservaIds) && l.reservaIds.length ? l.reservaIds.map(String) : (l.reservaId ? [String(l.reservaId)] : []),
+        vendedor_id: l.vendedorId ? String(l.vendedorId) : null,
+        vendedor_nome: v ? v.nome : null,
+        etapa_id: l.etapa || null, etapa_nome: eName,
+        created_at: _iso(l.criadoEm), updated_at: _iso(l.atualizadoEm),
+        assigned_at: _iso(mk.assigned || (chat && chat.atribuidoEm) || null),
+        first_human_interaction_at: _iso(it.humano),
+        first_customer_reply_at: _iso(it.cliente),
+        last_interaction_at: _iso(it.ultima),
+        qualified_at: _iso(mk.qualified),
+        lost_at: _iso(mk.lost),
+        loss_reason: l.motivoPerda || null,
+        crm_won_at: _iso(mk.won),
+        recorrente: !!l.recorrente,
+        ultima_captacao_at: _iso(l.ultimaCaptacaoEm),
+        origem: l.origem || null,
+        utm_source: utms.utm_source || null, utm_medium: utms.utm_medium || null,
+        utm_campaign: utms.utm_campaign || null, utm_content: utms.utm_content || null, utm_term: utms.utm_term || null,
+      };
+    });
+    const { items, next_cursor } = _paginar(preparados, req);
+    res.json({ unidade: _uni(), count: items.length, next_cursor, items });
+  });
+
+  // --- Endpoint 5: histórico das etapas ---
+  app.get("/api/integrations/intelligence/stage-events", authIntel, (req, res) => {
+    garantirCRM();
+    const eventos = [];
+    for (const l of (db.oficial.crmLeads || [])) {
+      for (const h of (Array.isArray(l.historico) ? l.historico : [])) {
+        if (h.tipo !== "etapa" || !h.ts) continue;
+        const lbl = (h.texto || "").replace(/^movido para\s+/i, "").split(" pela lista ")[0].trim();
+        const to = etapasCRM().find((e) => (e.lb || "").toLowerCase() === lbl.toLowerCase());
+        eventos.push({
+          _id: h.id || (l.id + ":" + h.ts), _ord: h.ts, _cursor: h.ts + ":" + l.id,
+          unidade: _uni(), event_id: String(h.id || (l.id + "_" + h.ts)),
+          lead_id: String(l.id), from_stage_id: null, to_stage_id: to ? to.k : null, to_stage_nome: to ? to.lb : (lbl || null),
+          changed_at: _iso(h.ts), changed_by_id: null,
+        });
+      }
+    }
+    const { items, next_cursor } = _paginar(eventos, req);
+    res.json({ unidade: _uni(), count: items.length, next_cursor, items });
+  });
+
+  // --- Endpoint 6: distribuição/redistribuição ---
+  app.get("/api/integrations/intelligence/assignment-events", authIntel, (req, res) => {
+    garantirCRM();
+    const eventos = [];
+    for (const l of (db.oficial.crmLeads || [])) {
+      for (const h of (Array.isArray(l.historico) ? l.historico : [])) {
+        if (h.tipo !== "atribuido" || !h.ts) continue;
+        const redistribuido = /redistribu/i.test(h.texto || "");
+        const m = (h.texto || "").match(/(?:para|a)\s+(.+?)(?:\s+\(|$)/i);
+        const nome = m ? m[1].trim() : null;
+        const u = nome ? (db.users || []).find((x) => x.nome && x.nome.toLowerCase() === nome.toLowerCase()) : null;
+        eventos.push({
+          _id: h.id || (l.id + ":" + h.ts), _ord: h.ts, _cursor: h.ts + ":" + l.id,
+          unidade: _uni(), event_id: String(h.id || (l.id + "_" + h.ts)),
+          lead_id: String(l.id), to_seller_id: u ? String(u.id) : null, to_seller_nome: nome,
+          redistribuido, assigned_at: _iso(h.ts), changed_by_id: null,
+        });
+      }
+    }
+    const { items, next_cursor } = _paginar(eventos, req);
+    res.json({ unidade: _uni(), count: items.length, next_cursor, items });
+  });
+
   return { garantirEstrutura };
 }
