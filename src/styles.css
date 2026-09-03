@@ -2586,7 +2586,16 @@ h1, h2, h3, h4, .topbar .greet, .panel-h h3, .login-card .ttl, .login-card h2, .
 
 /* INBOX oficial */
 .of-inbox { display: grid; grid-template-columns: 340px 1fr; gap: 0; border: 1px solid var(--line); border-radius: 14px; overflow: hidden; flex: 1; min-height: 420px; background: var(--card); }
-@media (max-width: 860px) { .of-inbox { grid-template-columns: 1fr; } .of-inbox-conv { display: none; } }
+@media (max-width: 860px) {
+  .of-inbox { grid-template-columns: 1fr; }
+  /* No celular mostra SÓ a lista OU SÓ a conversa (não as duas). */
+  .of-inbox .of-inbox-conv { display: none; }
+  .of-inbox.tem-conversa .of-inbox-list { display: none; }
+  .of-inbox.tem-conversa .of-inbox-conv { display: flex; }
+  .of-conv-voltar { display: flex !important; }
+}
+.of-conv-voltar { display: none; align-items: center; justify-content: center; width: 34px; height: 34px; flex: 0 0 auto; margin-right: 2px; border: 1px solid var(--line); background: var(--card); color: var(--text); border-radius: 10px; font-size: 22px; line-height: 1; cursor: pointer; }
+.of-conv-voltar:hover { border-color: var(--brand); }
 .of-inbox-list { border-right: 1px solid var(--line); display: flex; flex-direction: column; overflow: hidden; }
 .of-inbox-items { flex: 1; overflow-y: auto; min-height: 0; }
 .of-inbox-search { flex: none; display: flex; align-items: center; gap: 8px; padding: 12px 14px; border-bottom: 1px solid var(--line); }
@@ -4551,3 +4560,23 @@ select.input:disabled, .input:disabled { color: var(--muted); opacity: 1; -webki
 /* detalhes finos */
 *::-webkit-scrollbar-thumb { background: var(--brand); opacity:.28; border-radius: 10px; }
 ::selection { background: var(--selection); }
+
+/* ===== Mobile: Caixa de entrada usável no celular (v248) ===== */
+@media (max-width: 860px) {
+  .of-inbox { min-height: 72vh; }
+  .of-inbox.tem-conversa .of-inbox-conv { height: 72vh; }
+  .of-inbox-list { max-height: 72vh; }
+  /* barra de digitar e ações da conversa acessíveis no dedo */
+  .of-conv-input textarea { font-size: 16px; } /* evita zoom automático do iOS */
+  .of-conv-input { padding: 10px; gap: 8px; }
+  .of-acoes { flex-wrap: wrap; gap: 6px; }
+  .of-acao-btn { font-size: 12.5px; padding: 8px 10px; }
+  .of-inbox-item { padding: 12px 12px; }
+  .of-origem-bar { flex-wrap: wrap; }
+}
+/* Mobile geral: menu lateral e conteúdo respiram melhor */
+@media (max-width: 760px) {
+  .content, .main, .app-main { padding-left: 12px; padding-right: 12px; }
+  .panel-h { padding: 16px; }
+  .btn { padding: 9px 13px; }
+}

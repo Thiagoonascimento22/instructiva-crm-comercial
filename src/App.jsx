@@ -9493,7 +9493,7 @@ function InboxOficial({ isGer, ehLider, showToast, onIrParaEvolution, target, on
   }
 
   return (
-    <div className="of-inbox">
+    <div className={"of-inbox" + (sel || novaConv ? " tem-conversa" : "")}>
       <div className="of-inbox-list">
         <div className="of-inbox-search">
           <I.search className="ico" />
@@ -9630,6 +9630,7 @@ function InboxOficial({ isGer, ehLider, showToast, onIrParaEvolution, target, on
         ) : (
           <>
             <div className="of-conv-head">
+              <button className="of-conv-voltar" onClick={() => { setSel(null); setNovaConv(null); }} title="Voltar para a lista" aria-label="Voltar">‹</button>
               <div className="of-chat-av">{iniciais(conversa.nome)}</div>
               <div className="of-conv-info">
                 <b>{conversa.nome}</b>
