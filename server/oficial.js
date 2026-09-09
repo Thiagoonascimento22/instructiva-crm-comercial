@@ -2002,7 +2002,7 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
         }
         if (dec.redistribuido && antes !== existente.vendedorId) {
           const v = existente.vendedorId ? db.users.find((u) => u.id === existente.vendedorId) : null;
-          existente.historico.push({ tipo: "atribuido", texto: "Redistribuído" + (v ? " para " + v.nome : "") + " (lead recorrente)", ts: Date.now() });
+          existente.historico.push({ tipo: "atribuido", texto: "Redistribuído" + (v ? " para " + v.nome : "") + " (lead recorrente)", ts: Date.now(), dados: { de: null, para: (v ? v.id : null), por: null, auto: true, lote: false, redistribuido: true } });
         }
         salvar();
         return res.json({ ok: true, atualizado: true, lead: crmLeadPublico(existente) });
@@ -2060,7 +2060,7 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
       return res.status(403).json({ error: "Esse lead não é seu" });
     }
     if (b.etapa !== undefined && etapasCRM().some((e) => e.k === b.etapa)) {
-      if (l.etapa !== b.etapa) l.historico.push({ tipo: "etapa", texto: "Movido para " + etapasCRM().find((e) => e.k === b.etapa).lb, ts: Date.now() });
+      if (l.etapa !== b.etapa) l.historico.push({ tipo: "etapa", texto: "Movido para " + etapasCRM().find((e) => e.k === b.etapa).lb, ts: Date.now(), dados: { de: l.etapa || null, para: b.etapa, por: (req.user && req.user.id) || null, auto: false } });
       l.etapa = b.etapa;
     }
     if (b.nome !== undefined) l.nome = String(b.nome).slice(0, 80);
@@ -2071,7 +2071,7 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
     if (b.vendedorId !== undefined) {
       const vid = b.vendedorId || null;
       if (vid && !db.users.some((u) => u.id === vid)) return res.status(400).json({ error: "Vendedor inválido" });
-      if (l.vendedorId !== vid) { const v = vid ? db.users.find((u) => u.id === vid) : null; l.historico.push({ tipo: "atribuido", texto: v ? "Atribuído a " + v.nome : "Atribuição removida", ts: Date.now() }); }
+      if (l.vendedorId !== vid) { const v = vid ? db.users.find((u) => u.id === vid) : null; l.historico.push({ tipo: "atribuido", texto: v ? "Atribuído a " + v.nome : "Atribuição removida", ts: Date.now(), dados: { de: l.vendedorId || null, para: vid, por: (req.user && req.user.id) || null, auto: false, lote: false, redistribuido: !!(l.vendedorId && vid) } }); }
       l.vendedorId = vid;
     }
     if (b.tarefa !== undefined) {
@@ -2159,7 +2159,7 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
     if (!etapasCRM().some((e) => e.k === etapa)) return res.status(400).json({ error: "Etapa inválida" });
     const lead = leadDoChat(chat, true);
     if (!lead.vendedorId) lead.vendedorId = chat.vendedorId || req.user.id;
-    if (lead.etapa !== etapa) { lead.historico = lead.historico || []; lead.historico.push({ tipo: "etapa", texto: "Movido para " + etapasCRM().find((e) => e.k === etapa).lb, ts: Date.now() }); }
+    if (lead.etapa !== etapa) { lead.historico = lead.historico || []; lead.historico.push({ tipo: "etapa", texto: "Movido para " + etapasCRM().find((e) => e.k === etapa).lb, ts: Date.now(), dados: { de: lead.etapa || null, para: etapa, por: (req.user && req.user.id) || null, auto: false } }); }
     lead.etapa = etapa; lead.atualizadoEm = Date.now();
     salvar();
     res.json({ ok: true, etapa: lead.etapa });
@@ -2227,6 +2227,12 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
     for (const l of (db.oficial.crmLeads || [])) {
       if (!ids.includes(l.id)) continue;
       if (req.user.role === "vendedor" && !podeVerVend(req.user, l.vendedorId)) continue; // vendedor só mexe nos seus
+      const anteriorId = l.vendedorId || null;
+      if (anteriorId !== vid) {
+        const v = vid ? db.users.find((u) => u.id === vid) : null;
+        l.historico = l.historico || [];
+        l.historico.push({ tipo: "atribuido", texto: (v ? "Atribuído a " + v.nome : "Atribuição removida") + " (em lote)", ts: Date.now(), dados: { de: anteriorId, para: vid || null, por: (req.user && req.user.id) || null, auto: false, lote: true, redistribuido: !!(anteriorId && vid) } });
+      }
       l.vendedorId = vid;
       l.vendedorNome = vid ? ((db.users.find((u) => u.id === vid) || {}).nome || "") : "";
       l.atualizadoEm = Date.now();
@@ -2247,7 +2253,7 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
     for (const l of (db.oficial.crmLeads || [])) {
       if (!ids.includes(l.id)) continue;
       if (req.user.role === "vendedor" && !podeVerVend(req.user, l.vendedorId)) continue; // vendedor só mexe nos seus
-      if (l.etapa !== etapa) { l.historico = l.historico || []; l.historico.push({ tipo: "etapa", texto: "Movido para " + lbEtapa, ts: Date.now() }); }
+      if (l.etapa !== etapa) { l.historico = l.historico || []; l.historico.push({ tipo: "etapa", texto: "Movido para " + lbEtapa, ts: Date.now(), dados: { de: l.etapa || null, para: etapa, por: (req.user && req.user.id) || null, auto: false } }); }
       l.etapa = etapa; l.atualizadoEm = Date.now();
       n++;
     }
@@ -2563,7 +2569,7 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
       const iNova = etapas.findIndex((e) => e.k === etapaDestino);
       if (iNova > -1 && (iAtual === -1 || iNova >= iAtual) && existente.etapa !== etapaDestino) {
         existente.etapa = etapaDestino;
-        existente.historico.push({ tipo: "etapa", texto: "Movido para " + (etapas[iNova] ? etapas[iNova].lb : etapaDestino) + " pela lista " + lista.nome, ts: Date.now() });
+        existente.historico.push({ tipo: "etapa", texto: "Movido para " + (etapas[iNova] ? etapas[iNova].lb : etapaDestino) + " pela lista " + lista.nome, ts: Date.now(), dados: { de: existente.etapa || null, para: etapaDestino, por: null, auto: true } });
       }
       // atualiza o interesse pra refletir a nova lista (curso/valor/forma) — sem apagar dado bom com vazio
       if (lista.curso) existente.curso = lista.curso;
@@ -2575,7 +2581,11 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
       // se ainda não tinha dono e a lista distribui automático, distribui agora
       if (!existente.vendedorId && lista.distribuir !== "manual") {
         const d = donoDaLista(lista); existente.vendedorId = d.vendedorId; existente.vendedorNome = d.vendedorNome;
+        if (existente.vendedorId) existente.historico.push({ tipo: "atribuido", texto: "Atribuído a " + (existente.vendedorNome || existente.vendedorId) + " (distribuição da lista)", ts: Date.now(), dados: { de: null, para: existente.vendedorId, por: null, auto: true, lote: false, redistribuido: false } });
       }
+      // marca como lead recorrente (Dashboard usa isso pra saber que é recontato, não gente nova)
+      existente.recorrente = true;
+      existente.ultimaCaptacaoEm = Date.now();
       existente.historico.push({ tipo: "lista", texto: "Entrou também pela lista: " + lista.nome + (opc ? (" — " + opc.forma) : ""), ts: Date.now() });
       existente.atualizadoEm = Date.now();
       salvar();
@@ -2599,6 +2609,11 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
       historico: [{ tipo: "criado", texto: "Entrou pela lista de reserva: " + lista.nome + (opc ? (" — " + opc.forma) : ""), ts: Date.now() }],
       criadoEm: Date.now(), atualizadoEm: Date.now(),
     };
+    if (dist.vendedorId) lead.historico.push({ tipo: "atribuido", texto: "Atribuído a " + (dist.vendedorNome || dist.vendedorId) + " (distribuição da lista)", ts: Date.now(), dados: { de: null, para: dist.vendedorId, por: null, auto: true, lote: false, redistribuido: false } });
+    // registra a atribuição AUTOMÁTICA de entrada (pro Dashboard reconstruir carteira/histórico)
+    if (dist.vendedorId) {
+      lead.historico.push({ tipo: "atribuido", texto: "Atribuído a " + (dist.vendedorNome || "") + " (automático, entrada da lista)", ts: Date.now(), dados: { de: null, para: dist.vendedorId, por: null, auto: true, lote: false, redistribuido: false } });
+    }
     db.oficial.crmLeads.unshift(lead);
     salvar();
     res.json({ ok: true });
@@ -4970,17 +4985,25 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
     const since = req.query.updated_since ? Date.parse(req.query.updated_since) : null;
     let arr = itens.slice().sort((a, b) => (a._ord - b._ord) || String(a._id).localeCompare(String(b._id)));
     if (since !== null && !isNaN(since)) arr = arr.filter((x) => (x._ord || 0) >= since);
-    if (req.query.cursor) { const i = arr.findIndex((x) => x._cursor === req.query.cursor); arr = i >= 0 ? arr.slice(i + 1) : arr; }
+    if (req.query.cursor) {
+      const i = arr.findIndex((x) => x._cursor === req.query.cursor);
+      if (i < 0) return { erro: "cursor_invalido" }; // cursor desconhecido: erro explícito (não recomeça do zero)
+      arr = arr.slice(i + 1);
+    }
     const pagina = arr.slice(0, limit);
     const next = pagina.length === limit ? pagina[pagina.length - 1]._cursor : null;
     return { items: pagina.map(({ _id, _ord, _cursor, ...r }) => r), next_cursor: next };
   }
+  const _respPag = (res, r, extra) => r.erro ? res.status(400).json({ error: "Cursor inválido ou expirado. Reinicie a sincronização sem cursor." }) : res.json({ ...extra, count: r.items.length, next_cursor: r.next_cursor, items: r.items });
 
   // --- Endpoint 2: listas ---
   app.get("/api/integrations/intelligence/lists", authIntel, (req, res) => {
     garantirEstrutura();
-    const items = (db.oficial.reservaListas || []).filter((l) => !l.arquivada).map((l) => ({
+    const incluirInativos = String(req.query.incluir_inativos || "") === "true";
+    const fonte = (db.oficial.reservaListas || []).filter((l) => incluirInativos || !l.arquivada);
+    const items = fonte.map((l) => ({
       id: String(l.id), nome: l.nome, tag: l.tag || null, ativo: l.ativa !== false,
+      arquivada: !!l.arquivada, arquivada_em: _iso(l.arquivadaEm),
       curso: l.curso || null, destino_etapa_id: l.destino || null, distribuir: l.distribuir || "auto",
       created_at: _iso(l.criadoEm), updated_at: _iso(l.atualizadoEm || l.criadoEm),
     }));
@@ -4989,9 +5012,22 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
 
   // --- Endpoint 3: vendedores ---
   app.get("/api/integrations/intelligence/sellers", authIntel, (req, res) => {
-    const items = (db.users || []).filter((u) => u.role === "vendedor" || u.role === "gerente").map((u) => ({
+    const incluirInativos = String(req.query.incluir_inativos || "") === "true";
+    const fonte = (db.users || []).filter((u) => {
+      const ehVendedor = u.role === "vendedor" || u.role === "gerente";
+      if (ehVendedor) return true;
+      return incluirInativos && u._foiVendedor; // ex-vendedores só se pedir e se marcados
+    });
+    const items = fonte.map((u) => ({
       id: String(u.id), nome: u.nome, email: u.email || null, ativo: u.ativo !== false, papel: u.role,
+      created_at: _iso(u.criadoEm),
     }));
+    res.json({ unidade: _uni(), total: items.length, items });
+  });
+
+  // --- Endpoint 7: etapas do funil (lista completa, com ordem) ---
+  app.get("/api/integrations/intelligence/stages", authIntel, (req, res) => {
+    const items = etapasCRM().map((e, i) => ({ id: e.k, nome: e.lb || e.k, ordem: i + 1, cor: e.cor || null }));
     res.json({ unidade: _uni(), total: items.length, items });
   });
 
@@ -5007,11 +5043,15 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
       const v = l.vendedorId ? (db.users || []).find((u) => u.id === l.vendedorId) : null;
       const eName = (etapasCRM().find((e) => e.k === l.etapa) || {}).lb || null;
       const utms = _utmsLead(l) || {};
+      const telDig = String(l.telefone || "").replace(/\D/g, "");
+      const ddi = (telDig.length >= 12 && telDig.startsWith("55")) ? "55" : null; // derivado do próprio número, sem inventar
+      const temLigacao = (Array.isArray(l.historico) ? l.historico : []).some((h) => h.tipo === "ligacao");
+      const canalAtend = chat ? (chat.canal === "instagram" ? "instagram" : "whatsapp") : (temLigacao ? "ligacao" : null);
       return {
         _id: l.id, _ord: l.atualizadoEm || l.criadoEm || 0, _cursor: (l.atualizadoEm || l.criadoEm || 0) + ":" + l.id,
         unidade: _uni(),
         lead_id: String(l.id),
-        nome: l.nome || null, email: l.email || null, telefone: l.telefone || null,
+        nome: l.nome || null, email: l.email || null, telefone: l.telefone || null, telefone_ddi: ddi,
         lista_id: l.reservaId ? String(l.reservaId) : (Array.isArray(l.reservaIds) && l.reservaIds[0] ? String(l.reservaIds[0]) : null),
         lista_ids: Array.isArray(l.reservaIds) && l.reservaIds.length ? l.reservaIds.map(String) : (l.reservaId ? [String(l.reservaId)] : []),
         vendedor_id: l.vendedorId ? String(l.vendedorId) : null,
@@ -5022,6 +5062,8 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
         first_human_interaction_at: _iso(it.humano),
         first_customer_reply_at: _iso(it.cliente),
         last_interaction_at: _iso(it.ultima),
+        atendimento_chat_id: chat ? String(chat.id || chat.chaveId || "") || null : null,
+        primeiro_atendimento_canal: canalAtend,
         qualified_at: _iso(mk.qualified),
         lost_at: _iso(mk.lost),
         loss_reason: l.motivoPerda || null,
@@ -5033,8 +5075,7 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
         utm_campaign: utms.utm_campaign || null, utm_content: utms.utm_content || null, utm_term: utms.utm_term || null,
       };
     });
-    const { items, next_cursor } = _paginar(preparados, req);
-    res.json({ unidade: _uni(), count: items.length, next_cursor, items });
+    const _r = _paginar(preparados, req); return _respPag(res, _r, { unidade: _uni() });
   });
 
   // --- Endpoint 5: histórico das etapas ---
@@ -5042,20 +5083,29 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
     garantirCRM();
     const eventos = [];
     for (const l of (db.oficial.crmLeads || [])) {
+      let n = 0;
       for (const h of (Array.isArray(l.historico) ? l.historico : [])) {
         if (h.tipo !== "etapa" || !h.ts) continue;
-        const lbl = (h.texto || "").replace(/^movido para\s+/i, "").split(" pela lista ")[0].trim();
-        const to = etapasCRM().find((e) => (e.lb || "").toLowerCase() === lbl.toLowerCase());
+        const d = h.dados || {};
+        n++;
+        // prefere os dados estruturados; se não houver (registro antigo), cai pro texto
+        let toKey = d.para || null, fromKey = d.de || null, porId = d.por || null;
+        let toNome = toKey ? ((etapasCRM().find((e) => e.k === toKey) || {}).lb || toKey) : null;
+        if (!toKey) {
+          const lbl = (h.texto || "").replace(/^movido para\s+/i, "").split(" pela lista ")[0].trim();
+          const to = etapasCRM().find((e) => (e.lb || "").toLowerCase() === lbl.toLowerCase());
+          toKey = to ? to.k : null; toNome = to ? to.lb : (lbl || null);
+        }
         eventos.push({
-          _id: h.id || (l.id + ":" + h.ts), _ord: h.ts, _cursor: h.ts + ":" + l.id,
-          unidade: _uni(), event_id: String(h.id || (l.id + "_" + h.ts)),
-          lead_id: String(l.id), from_stage_id: null, to_stage_id: to ? to.k : null, to_stage_nome: to ? to.lb : (lbl || null),
-          changed_at: _iso(h.ts), changed_by_id: null,
+          _id: h.id || (l.id + ":" + h.ts + ":" + n), _ord: h.ts, _cursor: h.ts + ":" + l.id + ":" + n,
+          unidade: _uni(), event_id: String(h.id || (l.id + "_" + h.ts + "_" + n)),
+          lead_id: String(l.id), from_stage_id: fromKey, to_stage_id: toKey, to_stage_nome: toNome,
+          changed_at: _iso(h.ts), changed_by_id: porId ? String(porId) : null,
+          automatico: d.auto !== undefined ? !!d.auto : null,
         });
       }
     }
-    const { items, next_cursor } = _paginar(eventos, req);
-    res.json({ unidade: _uni(), count: items.length, next_cursor, items });
+    const _r = _paginar(eventos, req); return _respPag(res, _r, { unidade: _uni() });
   });
 
   // --- Endpoint 6: distribuição/redistribuição ---
@@ -5063,22 +5113,36 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
     garantirCRM();
     const eventos = [];
     for (const l of (db.oficial.crmLeads || [])) {
+      let n = 0;
       for (const h of (Array.isArray(l.historico) ? l.historico : [])) {
         if (h.tipo !== "atribuido" || !h.ts) continue;
-        const redistribuido = /redistribu/i.test(h.texto || "");
-        const m = (h.texto || "").match(/(?:para|a)\s+(.+?)(?:\s+\(|$)/i);
-        const nome = m ? m[1].trim() : null;
-        const u = nome ? (db.users || []).find((x) => x.nome && x.nome.toLowerCase() === nome.toLowerCase()) : null;
+        n++;
+        const d = h.dados || {};
+        let toId = d.para || null, deId = d.de || null, porId = d.por || null;
+        let redistribuido = d.redistribuido !== undefined ? !!d.redistribuido : /redistribu/i.test(h.texto || "");
+        const auto = d.auto !== undefined ? !!d.auto : false;
+        const lote = d.lote !== undefined ? !!d.lote : false;
+        let toNome = toId ? ((db.users || []).find((x) => x.id === toId) || {}).nome || null : null;
+        if (!toId) { // registro antigo: acha pelo nome citado no texto
+          const m = (h.texto || "").match(/(?:para|a)\s+(.+?)(?:\s+\(|$)/i);
+          const nome = m ? m[1].trim() : null;
+          const u = nome ? (db.users || []).find((x) => x.nome && x.nome.toLowerCase() === nome.toLowerCase()) : null;
+          toId = u ? u.id : null; toNome = nome;
+        }
+        const deNome = deId ? (((db.users || []).find((x) => x.id === deId) || {}).nome || null) : null;
         eventos.push({
-          _id: h.id || (l.id + ":" + h.ts), _ord: h.ts, _cursor: h.ts + ":" + l.id,
-          unidade: _uni(), event_id: String(h.id || (l.id + "_" + h.ts)),
-          lead_id: String(l.id), to_seller_id: u ? String(u.id) : null, to_seller_nome: nome,
-          redistribuido, assigned_at: _iso(h.ts), changed_by_id: null,
+          _id: h.id || (l.id + ":" + h.ts + ":" + n), _ord: h.ts, _cursor: h.ts + ":" + l.id + ":" + n,
+          unidade: _uni(), event_id: String(h.id || (l.id + "_" + h.ts + "_" + n)),
+          lead_id: String(l.id),
+          to_seller_id: toId ? String(toId) : null, to_seller_nome: toNome,
+          from_seller_id: deId ? String(deId) : null, from_seller_nome: deNome,
+          changed_by_id: porId ? String(porId) : null,
+          automatico: auto, em_lote: lote, redistribuido,
+          assigned_at: _iso(h.ts),
         });
       }
     }
-    const { items, next_cursor } = _paginar(eventos, req);
-    res.json({ unidade: _uni(), count: items.length, next_cursor, items });
+    const _r = _paginar(eventos, req); return _respPag(res, _r, { unidade: _uni() });
   });
 
   return { garantirEstrutura };
