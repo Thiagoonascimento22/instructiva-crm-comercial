@@ -3723,12 +3723,12 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
       const totalConversas = convs.length;
       if (!totalConversas) return res.json({ ok: true, vazio: true, totalConversas: 0, vendedor: alvo.nome });
       convs.sort((a, c) => c.ult - a.ult);
-      convs = convs.slice(0, 40); // cap de conversas (controla custo/token)
+      convs = convs.slice(0, 150); // cap de conversas (controla custo/token) — subiu de 40 p/ 150
       // monta o transcript (com limites)
       const linhas = [];
       for (const c of convs) {
         linhas.push("=== Conversa com " + c.nome + " ===");
-        for (const m of c.msgs.slice(-30)) {
+        for (const m of c.msgs.slice(-25)) {
           const quem = m.role === "them" ? "CLIENTE" : "VENDEDOR";
           let txt = m.transcricao ? "[áudio] " + m.transcricao
             : (m.content || (m.template ? "[enviou template: " + m.template + "]" : (m.tipo === "audio" ? "[áudio sem transcrição]" : (m.tipo && m.tipo !== "text" ? "[" + m.tipo + "]" : ""))));
@@ -3738,7 +3738,7 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
         linhas.push("");
       }
       let transcript = linhas.join("\n");
-      if (transcript.length > 60000) transcript = transcript.slice(0, 60000) + "\n...(cortado por tamanho)";
+      if (transcript.length > 300000) transcript = transcript.slice(0, 300000) + "\n...(cortado por tamanho)";
 
       const sistema = "Você é um analista de vendas sênior da Instructiva, especialista no método dos 7 Passos da Venda (padrão Conquer). Analise as conversas de WhatsApp de um vendedor e faça uma avaliação PROFUNDA, honesta e específica, sempre citando situações reais que viu nas conversas (nunca invente). Seja detalhado e direto — nada de análise genérica ou rasa.\n\n"
         + "OS 7 PASSOS DA VENDA (avalie o vendedor em CADA um):\n"
