@@ -8509,7 +8509,7 @@ function PainelAtende({ showToast }) {
           : <p className="onum-webhook-intro">Conecte o Atende Simples pra <b>ligar de dentro da conversa</b> e registrar as ligações no histórico do lead.</p>}
         <p className="onum-webhook-fim">Pegue as chaves no Atende: a <b>x-api-key</b> em Opções da conta → Configuração de Acesso à API; e o <b>user-id / queue-id / token</b> em Discador → Discador por Fila → Importar fichas.</p>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-          <button className="onum-btn-save" onClick={() => setForm({ apiKey: (cfg && cfg.apiKey) || "", userId: (cfg && cfg.userId) || "", queueId: (cfg && cfg.queueId) || "", queueToken: (cfg && cfg.queueToken) || "", voipToken: (cfg && cfg.voipToken) || "", ativo: cfg ? !!cfg.ativo : true, vendedores: (cfg && cfg.vendedores) ? cfg.vendedores.map((v) => ({ ...v })) : [] })}>
+          <button className="onum-btn-save" onClick={() => setForm({ apiKey: (cfg && cfg.apiKey) || "", dialerToken: (cfg && cfg.dialerToken) || "", userId: (cfg && cfg.userId) || "", queueId: (cfg && cfg.queueId) || "", queueToken: (cfg && cfg.queueToken) || "", voipToken: (cfg && cfg.voipToken) || "", ativo: cfg ? !!cfg.ativo : true, vendedores: (cfg && cfg.vendedores) ? cfg.vendedores.map((v) => ({ ...v })) : [] })}>
             {configurado ? "Editar Atende Simples" : "Configurar Atende Simples"}
           </button>
           {configurado && cfg.ativo && <button className="btn" onClick={sincronizar} disabled={sincronizando}>{sincronizando ? "Sincronizando…" : "↻ Sincronizar ligações agora"}</button>}
@@ -8522,16 +8522,23 @@ function PainelAtende({ showToast }) {
             <button className="onum-modal-x" onClick={() => setForm(null)}><I.x /></button>
             <h3>📞 Atende Simples</h3>
             <p className="onum-webhook-intro" style={{ marginTop: 4 }}>Cole as credenciais da API do Atende Simples.</p>
-            <label className="lbl-mini">x-api-key (chave da API)</label>
-            <input className="input" value={form.apiKey} onChange={(e) => setForm({ ...form, apiKey: e.target.value })} placeholder="sua x-api-key" />
-            <label className="lbl-mini">user-id (Id da conta)</label>
-            <input className="input" value={form.userId} onChange={(e) => setForm({ ...form, userId: e.target.value })} placeholder="ex: 10551" />
-            <label className="lbl-mini">queue-id (Id do discador por fila)</label>
-            <input className="input" value={form.queueId} onChange={(e) => setForm({ ...form, queueId: e.target.value })} placeholder="queue|..." />
-            <label className="lbl-mini">token (token do discador por fila)</label>
-            <input className="input" value={form.queueToken} onChange={(e) => setForm({ ...form, queueToken: e.target.value })} placeholder="token do discador" />
-            <label className="lbl-mini">token do VoIP (opcional — pra abrir a ficha quando toca)</label>
-            <input className="input" value={form.voipToken} onChange={(e) => setForm({ ...form, voipToken: e.target.value })} placeholder="token do VoIP" />
+            <label className="lbl-mini">x-api-key (chave da API de Clientes)</label>
+            <input className="input" value={form.apiKey} onChange={(e) => setForm({ ...form, apiKey: e.target.value })} placeholder="token da API de Clientes" />
+            <label className="lbl-mini">token do discador (pro botão "Ligar agora")</label>
+            <input className="input" value={form.dialerToken} onChange={(e) => setForm({ ...form, dialerToken: e.target.value })} placeholder="token do discador (API Discador)" />
+            <details style={{ margin: "10px 0" }}>
+              <summary style={{ cursor: "pointer", fontSize: 12.5, color: "var(--muted)", fontWeight: 600 }}>Campos avançados (discador por fila — opcional)</summary>
+              <div style={{ marginTop: 8 }}>
+                <label className="lbl-mini">user-id (Id da conta)</label>
+                <input className="input" value={form.userId} onChange={(e) => setForm({ ...form, userId: e.target.value })} placeholder="ex: 10551" />
+                <label className="lbl-mini">queue-id (Id do discador por fila)</label>
+                <input className="input" value={form.queueId} onChange={(e) => setForm({ ...form, queueId: e.target.value })} placeholder="queue|..." />
+                <label className="lbl-mini">token do discador por fila</label>
+                <input className="input" value={form.queueToken} onChange={(e) => setForm({ ...form, queueToken: e.target.value })} placeholder="token do discador por fila" />
+                <label className="lbl-mini">token do VoIP (opcional)</label>
+                <input className="input" value={form.voipToken} onChange={(e) => setForm({ ...form, voipToken: e.target.value })} placeholder="token do VoIP" />
+              </div>
+            </details>
             <label style={{ display: "flex", alignItems: "center", gap: 8, margin: "12px 0", fontSize: 14 }}>
               <input type="checkbox" checked={form.ativo} onChange={(e) => setForm({ ...form, ativo: e.target.checked })} /> Integração ativa
             </label>

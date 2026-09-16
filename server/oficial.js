@@ -110,8 +110,9 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
     }
     // Integração Atende Simples (ligação): chaves globais + controle de sync
     if (!db.oficial.atende || typeof db.oficial.atende !== "object") {
-      db.oficial.atende = { apiKey: "", userId: "", queueId: "", queueToken: "", voipToken: "", ativo: false, ultimoSync: 0, callsVistas: [] };
+      db.oficial.atende = { apiKey: "", userId: "", queueId: "", queueToken: "", dialerToken: "", voipToken: "", ativo: false, ultimoSync: 0, callsVistas: [] };
     }
+    if (typeof db.oficial.atende.dialerToken !== "string") db.oficial.atende.dialerToken = "";
     if (!Array.isArray(db.oficial.atende.callsVistas)) db.oficial.atende.callsVistas = [];
   }
 
@@ -5182,7 +5183,7 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
   app.get("/api/oficial/atende", auth, gerenteOnly, (req, res) => {
     const a = cfgAtende();
     res.json({
-      apiKey: a.apiKey || "", userId: a.userId || "", queueId: a.queueId || "", queueToken: a.queueToken || "", voipToken: a.voipToken || "",
+      apiKey: a.apiKey || "", userId: a.userId || "", queueId: a.queueId || "", queueToken: a.queueToken || "", dialerToken: a.dialerToken || "", voipToken: a.voipToken || "",
       ativo: !!a.ativo, ultimoSync: a.ultimoSync || 0,
       // ramais/emails por vendedor, pra tela de config
       vendedores: (db.users || []).filter((u) => u.role === "vendedor" || u.role === "gerente").map((u) => ({ id: u.id, nome: u.nome, atendeEmail: u.atendeEmail || "", atendeRamal: u.atendeRamal || "" })),
@@ -5196,6 +5197,7 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
     if (b.userId !== undefined) a.userId = String(b.userId).trim();
     if (b.queueId !== undefined) a.queueId = String(b.queueId).trim();
     if (b.queueToken !== undefined) a.queueToken = String(b.queueToken).trim();
+    if (b.dialerToken !== undefined) a.dialerToken = String(b.dialerToken).trim();
     if (b.voipToken !== undefined) a.voipToken = String(b.voipToken).trim();
     if (b.ativo !== undefined) a.ativo = !!b.ativo;
     // ramais/emails por vendedor
@@ -5209,26 +5211,34 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
     res.json({ ok: true });
   });
 
-  // Botão "Ligar" na conversa: coloca o número na FILA do discador (Discador por Fila)
+  // Botão "Ligar agora": chama DIRETO o ramal do vendedor e liga pro cliente (API Discador).
+  // Toca no ramal do próprio vendedor logado e disca pro número do lead.
   app.post("/api/oficial/atende/ligar", auth, permiteVend("crm"), async (req, res) => {
     const a = cfgAtende();
     if (!a.ativo) return res.status(400).json({ error: "Integração do Atende Simples está desligada" });
-    if (!a.apiKey || !a.userId || !a.queueId || !a.queueToken) return res.status(400).json({ error: "Configure as credenciais do discador (chave, user-id, queue-id e token) em Configurações" });
+    if (!a.dialerToken) return res.status(400).json({ error: "Configure o token do discador (na tela do Atende Simples) em Configurações" });
+    // acha o vendedor que está ligando (o usuário logado) e o email/ramal dele no Atende
+    const u = (db.users || []).find((x) => x.id === req.user.id) || {};
+    const email = (u.atendeEmail || "").trim();
+    const ramal = (u.atendeRamal || "").trim();
+    if (!email && !ramal) return res.status(400).json({ error: "Seu ramal/e-mail no Atende Simples não está configurado. Peça pro gerente preencher em Configurações → Atende Simples." });
     const telefone = _soDig(req.body && req.body.telefone);
     if (telefone.length < 10) return res.status(400).json({ error: "Telefone inválido" });
-    // a API do discador quer DDD+Número (sem o 55). Se vier com 55 na frente e 12+ díg, tira.
-    const numeroFila = (telefone.length >= 12 && telefone.startsWith("55")) ? telefone.slice(2) : telefone;
+    // formato preferido: 55 + DDD + número
+    const numeroCliente = (telefone.length >= 12 && telefone.startsWith("55")) ? telefone : ("55" + telefone);
+    const dial = { attendant_email: email || undefined, customer_info: (req.body && req.body.leadId) ? ("Lead " + req.body.leadId) : "CRM", client: { phones: [{ name: (req.body && req.body.nome) || "", number: numeroCliente, type: "2" }] } };
+    if (ramal) dial.extension_number = Number(ramal) || ramal;
     try {
-      const r = await fetch(ATENDE_BASE + "/v1/cards", {
+      const r = await fetch("https://dialer.atendesimples.com/", {
         method: "POST",
-        headers: { "Content-Type": "application/json", "x-api-key": a.apiKey, "user-id": a.userId, "queue-id": a.queueId, "token": a.queueToken },
-        body: JSON.stringify([{ number: numeroFila, card_info_1: (req.body && req.body.nome) || "", card_info_2: (req.body && req.body.leadId) || "", card_info_3: "CRM", schedule: "" }]),
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ dialer: { dials: [dial] }, token: a.dialerToken }),
       });
       if (!r.ok) { const t = await r.text().catch(() => ""); return res.status(502).json({ error: "Atende Simples recusou (" + r.status + "): " + t.slice(0, 200) }); }
       // registra no histórico do lead
       const leadId = req.body && req.body.leadId;
-      if (leadId) { const l = (db.oficial.crmLeads || []).find((x) => x.id === leadId); if (l) { l.historico = l.historico || []; l.historico.push({ tipo: "ligacao", texto: "📞 Ligação solicitada (fila do discador)", ts: Date.now(), dados: { direcao: "saida", porId: (req.user && req.user.id) || null, viaFila: true } }); l.atualizadoEm = Date.now(); salvar(); } }
-      res.json({ ok: true, mensagem: "Número colocado na fila de ligação" });
+      if (leadId) { const l = (db.oficial.crmLeads || []).find((x) => x.id === leadId); if (l) { l.historico = l.historico || []; l.historico.push({ tipo: "ligacao", texto: "📞 Ligação iniciada" + (u.nome ? " por " + u.nome : ""), ts: Date.now(), dados: { direcao: "saida", porId: (req.user && req.user.id) || null } }); l.atualizadoEm = Date.now(); salvar(); } }
+      res.json({ ok: true, mensagem: "Ligação sendo realizada — atenda no seu ramal do Atende" });
     } catch (e) { res.status(502).json({ error: "Falha ao falar com o Atende Simples: " + e.message }); }
   });
 
@@ -5289,6 +5299,38 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
       // responde no formato do Atende (sem prompt/option = segue o fluxo normal configurado)
       res.json({ incoming_call: { action: {} } });
     } catch (e) { res.json({ incoming_call: { action: {} } }); }
+  });
+
+  // Webhook do Atende: recebe eventos de chamada (call.finished etc.) e registra no histórico do lead.
+  // Configure no Atende (Integrações → Webhooks) apontando pra: <URL do CRM>/api/oficial/atende/webhook
+  app.post("/api/oficial/atende/webhook", async (req, res) => {
+    try {
+      garantirEstrutura();
+      const b = req.body || {};
+      const ev = b.event_code || "";
+      const call = b.call || {};
+      // só registramos quando a chamada TERMINA (tem duração/resultado)
+      if (ev === "call.finished" || ev === "call.b_leg_answered" || ev === "call.a_leg_answered") {
+        const numero = _soDig(call.from_number || call.client_number || call.dnis).slice(-8);
+        const lead = numero.length >= 8 ? (db.oficial.crmLeads || []).find((l) => _soDig(l.telefone).slice(-8) === numero) : null;
+        if (lead && ev === "call.finished") {
+          const callid = String(call.call_id || "");
+          const a = cfgAtende(); const vistas = new Set(a.callsVistas || []);
+          if (!callid || !vistas.has(callid)) { // idempotente
+            const dur = call.inbound_duration || call.billed_duration || 0;
+            const dir = call.direction === "outbound" ? "saída" : "entrante";
+            const atendida = call.status === "answered" || (call.outbound_calls && call.outbound_calls.length);
+            const vendedor = (call.outbound_calls && call.outbound_calls[0] && call.outbound_calls[0].name) || call.attendant_name || null;
+            lead.historico = lead.historico || [];
+            lead.historico.push({ tipo: "ligacao", texto: "📞 Ligação " + dir + " · " + (atendida ? "atendida" : "não atendida") + (dur ? " · " + Math.round(Number(dur)) + "s" : ""), ts: call.started_at ? Date.parse(call.started_at) : Date.now(), dados: { direcao: dir, status: call.status || null, duracao: dur, callid, vendedorNome: vendedor, audioUrl: call.audio_url || null } });
+            lead.atualizadoEm = Date.now();
+            if (callid) { vistas.add(callid); a.callsVistas = Array.from(vistas).slice(-5000); }
+            salvar();
+          }
+        }
+      }
+      res.json({ ok: true });
+    } catch (e) { res.json({ ok: true }); }
   });
 
   return { garantirEstrutura };
