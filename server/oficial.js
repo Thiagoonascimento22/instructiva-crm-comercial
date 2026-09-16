@@ -5276,6 +5276,38 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
     }
   });
 
+  // acha qualquer conversa oficial pelo telefone (núcleo de 8 dígitos)
+  function acharChatPorTelefone(telefone) {
+    const nucleo = _soDig(telefone).slice(-8);
+    if (nucleo.length < 8) return null;
+    for (const c of Object.values(db.waChats || {})) {
+      if (c.canal !== "oficial") continue;
+      if (_soDig(c.numero).slice(-8) === nucleo) return c;
+    }
+    return null;
+  }
+
+  // baixa a gravação da ligação, transcreve (Groq) e resume (IA) — estilo "resumo da chamada"
+  async function gerarResumoLigacao(audioUrl) {
+    if (!audioUrl) return null;
+    try {
+      const r = await fetch(audioUrl);
+      if (!r.ok) return null;
+      const ct = r.headers.get("content-type") || "";
+      if (!/audio|octet-stream|mpeg|ogg|wav|mp4/i.test(ct)) return null; // ainda não é áudio (processando)
+      const buf = Buffer.from(await r.arrayBuffer());
+      if (!buf || buf.length < 2000) return null; // muito pequeno = provavelmente não pronto
+      const transcricao = await transcreverAudio(buf, ct || "audio/mpeg");
+      if (!transcricao) return null;
+      let resumo = null;
+      try {
+        const sis = "Você resume ligações de vendas de uma escola técnica. Faça um resumo objetivo em tópicos curtos (com '- ' no início de cada), do ponto de vista de quem precisa acompanhar o lead. Só os fatos e próximos passos. Sem introdução nem conclusão.";
+        resumo = await analisarComIA(sis, "Transcrição da ligação:\n" + transcricao, 700, 0.3);
+      } catch (_) { resumo = null; }
+      return { transcricao, resumo };
+    } catch (_) { return null; }
+  }
+
   // Sincroniza as ligações (CDRs) do Atende e grava no histórico do lead certo
   async function sincronizarLigacoesAtende(desdeMs) {
     const a = cfgAtende();
@@ -5293,27 +5325,51 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
     for (const l of (db.oficial.crmLeads || [])) { const t = _soDig(l.telefone).slice(-8); if (t.length >= 8 && !idx[t]) idx[t] = l; }
     let gravadas = 0;
     const vistas = new Set(a.callsVistas || []);
+    const paraResumir = []; // { msg, audioUrl } — gera o resumo depois, fora do loop
     for (const it of itens) {
       const callid = String(it.callid || it.call_id || "");
       if (!callid || vistas.has(callid)) continue;
-      const numero = _soDig(it.ani || it.customer_phone || it.alt_dnis).slice(-8);
+      const numTel = _soDig(it.ani || it.customer_phone || it.alt_dnis);
+      const numero = numTel.slice(-8);
       const lead = numero.length >= 8 ? idx[numero] : null;
+      const dur = Math.round(Number(it.duration_call || it.ori_billing_time || it.uraduration || 0)) || 0;
+      const status = it.call_status || "";
+      const dir = it.direction === "outbound" ? "saída" : "entrante";
+      const stMap = { answered: "atendida", failed: "falhou", missed: "perdida", handled: "atendida", abandoned: "abandonada" };
+      const quando = it.ori_start_time ? Date.parse(it.ori_start_time) : Date.now();
+      const audioUrl = it.public_audio_url || null;
+      const vendedorNome = (it.redirects && it.redirects[0] && it.redirects[0].user_name) || null;
+      const dados = { direcao: dir, status, duracao: dur, callid, vendedorNome, audioUrl };
+      // 1) grava no histórico do lead (pro Pipeline/Dashboard)
       if (lead) {
-        const dur = it.duration_call || it.ori_billing_time || it.uraduration || 0;
-        const status = it.call_status || "";
-        const dir = it.direction === "outbound" ? "saída" : "entrante";
-        const stMap = { answered: "atendida", failed: "falhou", missed: "perdida", handled: "atendida", abandoned: "abandonada" };
-        const quando = it.ori_start_time ? Date.parse(it.ori_start_time) : Date.now();
         lead.historico = lead.historico || [];
-        lead.historico.push({ tipo: "ligacao", texto: "📞 Ligação " + dir + " · " + (stMap[status] || status || "—") + (dur ? " · " + dur + "s" : ""), ts: quando || Date.now(), dados: { direcao: dir, status, duracao: dur, callid, vendedorNome: (it.redirects && it.redirects[0] && it.redirects[0].user_name) || null, audioUrl: it.public_audio_url || null } });
+        lead.historico.push({ tipo: "ligacao", texto: "📞 Ligação " + dir + " · " + (stMap[status] || status || "—") + (dur ? " · " + dur + "s" : ""), ts: quando || Date.now(), dados });
         lead.atualizadoEm = Date.now();
         gravadas++;
+      }
+      // 2) grava NA CONVERSA (Caixa de entrada) — é onde o vendedor olha
+      const chat = acharChatPorTelefone(numTel);
+      if (chat) {
+        chat.mensagens = chat.mensagens || [];
+        const msg = { role: "me", tipo: "ligacao", ligacao: { ...dados, atendida: status === "answered" || status === "handled" }, ts: quando || Date.now() };
+        chat.mensagens.push(msg);
+        chat.atualizadoEm = Date.now();
+        if (audioUrl) paraResumir.push({ msg, audioUrl });
       }
       vistas.add(callid);
     }
     a.callsVistas = Array.from(vistas).slice(-5000); // não crescer pra sempre
     a.ultimoSync = Date.now();
     salvar();
+    // gera os resumos (transcrição + IA) das gravações disponíveis, sem travar o retorno
+    if (paraResumir.length) {
+      (async () => {
+        for (const { msg, audioUrl } of paraResumir) {
+          try { const rz = await gerarResumoLigacao(audioUrl); if (rz) { msg.ligacao.transcricao = rz.transcricao || null; msg.ligacao.resumo = rz.resumo || null; msg.ligacao.resumoPronto = true; } else { msg.ligacao.resumoPendente = true; } } catch (_) { msg.ligacao.resumoPendente = true; }
+        }
+        salvar();
+      })();
+    }
     return { ok: true, total: itens.length, gravadas };
   }
   // botão "sincronizar agora" (gerente)
@@ -5327,6 +5383,25 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
   app.post("/api/oficial/atende/sincronizar-auto", auth, permiteVend("crm"), async (req, res) => {
     try { const desde = Date.now() - 2 * 3600 * 1000; const r = await sincronizarLigacoesAtende(desde); if (r.erro) return res.status(200).json({ ok: false, erro: r.erro }); res.json(r); }
     catch (e) { res.status(200).json({ ok: false, erro: e.message }); }
+  });
+
+  // Gera (ou tenta de novo) o resumo de UMA ligação de uma conversa — pra quando a gravação ainda não estava pronta.
+  app.post("/api/oficial/atende/resumo-ligacao", auth, permiteVend("crm"), async (req, res) => {
+    try {
+      const { chatId, callid } = req.body || {};
+      const chat = db.waChats[chatId];
+      if (!chat) return res.json({ ok: false, erro: "conversa não encontrada" });
+      if (req.user.role === "vendedor" && !podeVerVend(req.user, chat.vendedorId)) return res.status(403).json({ error: "não autorizado" });
+      const msg = (chat.mensagens || []).find((m) => m.tipo === "ligacao" && m.ligacao && String(m.ligacao.callid) === String(callid));
+      if (!msg) return res.json({ ok: false, erro: "ligação não encontrada" });
+      if (msg.ligacao.resumoPronto && msg.ligacao.resumo) return res.json({ ok: true, resumo: msg.ligacao.resumo, transcricao: msg.ligacao.transcricao || null });
+      if (!msg.ligacao.audioUrl) return res.json({ ok: false, erro: "sem gravação disponível" });
+      const rz = await gerarResumoLigacao(msg.ligacao.audioUrl);
+      if (!rz) { msg.ligacao.resumoPendente = true; salvar(); return res.json({ ok: false, erro: "gravação ainda não está pronta — tente de novo em alguns minutos" }); }
+      msg.ligacao.transcricao = rz.transcricao || null; msg.ligacao.resumo = rz.resumo || null; msg.ligacao.resumoPronto = true; msg.ligacao.resumoPendente = false;
+      salvar();
+      res.json({ ok: true, resumo: msg.ligacao.resumo, transcricao: msg.ligacao.transcricao });
+    } catch (e) { res.json({ ok: false, erro: e.message }); }
   });
 
   // Pré-chamada: o Atende chama ISSO quando entra uma ligação. Identifica o lead pelo número.
@@ -5350,24 +5425,33 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
       const b = req.body || {};
       const ev = b.event_code || "";
       const call = b.call || {};
-      // só registramos quando a chamada TERMINA (tem duração/resultado)
-      if (ev === "call.finished" || ev === "call.b_leg_answered" || ev === "call.a_leg_answered") {
-        const numero = _soDig(call.from_number || call.client_number || call.dnis).slice(-8);
+      if (ev === "call.finished") {
+        const telNum = _soDig(call.from_number || call.client_number || call.dnis);
+        const numero = telNum.slice(-8);
         const lead = numero.length >= 8 ? (db.oficial.crmLeads || []).find((l) => _soDig(l.telefone).slice(-8) === numero) : null;
-        if (lead && ev === "call.finished") {
-          const callid = String(call.call_id || "");
-          const a = cfgAtende(); const vistas = new Set(a.callsVistas || []);
-          if (!callid || !vistas.has(callid)) { // idempotente
-            const dur = call.inbound_duration || call.billed_duration || 0;
-            const dir = call.direction === "outbound" ? "saída" : "entrante";
-            const atendida = call.status === "answered" || (call.outbound_calls && call.outbound_calls.length);
-            const vendedor = (call.outbound_calls && call.outbound_calls[0] && call.outbound_calls[0].name) || call.attendant_name || null;
+        const callid = String(call.call_id || "");
+        const a = cfgAtende(); const vistas = new Set(a.callsVistas || []);
+        if (!callid || !vistas.has(callid)) { // idempotente
+          const dur = Math.round(Number(call.inbound_duration || call.billed_duration || 0)) || 0;
+          const dir = call.direction === "outbound" ? "saída" : "entrante";
+          const atendida = call.status === "answered" || (call.outbound_calls && call.outbound_calls.length);
+          const vendedor = (call.outbound_calls && call.outbound_calls[0] && call.outbound_calls[0].name) || call.attendant_name || null;
+          const quando = call.started_at ? Date.parse(call.started_at) : Date.now();
+          const audioUrl = call.audio_url || null;
+          const dados = { direcao: dir, status: call.status || null, duracao: dur, callid, vendedorNome: vendedor, audioUrl, atendida: !!atendida };
+          if (lead) {
             lead.historico = lead.historico || [];
-            lead.historico.push({ tipo: "ligacao", texto: "📞 Ligação " + dir + " · " + (atendida ? "atendida" : "não atendida") + (dur ? " · " + Math.round(Number(dur)) + "s" : ""), ts: call.started_at ? Date.parse(call.started_at) : Date.now(), dados: { direcao: dir, status: call.status || null, duracao: dur, callid, vendedorNome: vendedor, audioUrl: call.audio_url || null } });
+            lead.historico.push({ tipo: "ligacao", texto: "📞 Ligação " + dir + " · " + (atendida ? "atendida" : "não atendida") + (dur ? " · " + dur + "s" : ""), ts: quando, dados });
             lead.atualizadoEm = Date.now();
-            if (callid) { vistas.add(callid); a.callsVistas = Array.from(vistas).slice(-5000); }
-            salvar();
           }
+          // grava na conversa (é onde o vendedor olha)
+          const chat = acharChatPorTelefone(telNum);
+          let msgRef = null;
+          if (chat) { chat.mensagens = chat.mensagens || []; msgRef = { role: "me", tipo: "ligacao", ligacao: { ...dados }, ts: quando }; chat.mensagens.push(msgRef); chat.atualizadoEm = Date.now(); }
+          if (callid) { vistas.add(callid); a.callsVistas = Array.from(vistas).slice(-5000); }
+          salvar();
+          // resumo em background (webhook dá a audio_url já pronta na maioria das vezes)
+          if (audioUrl && msgRef) { (async () => { try { const rz = await gerarResumoLigacao(audioUrl); if (rz) { msgRef.ligacao.transcricao = rz.transcricao || null; msgRef.ligacao.resumo = rz.resumo || null; msgRef.ligacao.resumoPronto = true; } else { msgRef.ligacao.resumoPendente = true; } salvar(); } catch (_) {} })(); }
         }
       }
       res.json({ ok: true });

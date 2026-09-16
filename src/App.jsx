@@ -450,7 +450,7 @@ export default function App() {
             <span>{theme === "dark" ? "Modo claro" : "Modo escuro"}</span>
           </button>
           <button className="logout" onClick={logout}>Sair</button>
-          <div style={{ textAlign: "center", fontSize: 10, color: "var(--muted)", marginTop: 8, opacity: 0.7 }}>v257 · 16/09 12h40</div>
+          <div style={{ textAlign: "center", fontSize: 10, color: "var(--muted)", marginTop: 8, opacity: 0.7 }}>v258 · 16/09 13h10</div>
         </div>
       </aside>
 
@@ -9252,6 +9252,20 @@ function InboxOficial({ isGer, ehLider, showToast, onIrParaEvolution, target, on
   const [ligando, setLigando] = useState(false);
   const [chamada, setChamada] = useState(null); // {nome, numero, inicio} quando o Atende aceitou
   const [cronometro, setCronometro] = useState(0);
+  const [ligDetalhe, setLigDetalhe] = useState(null); // ligação aberta no painel de resumo
+  const [ligResumoLoading, setLigResumoLoading] = useState(false);
+  async function abrirResumoLigacao(lig) {
+    setLigDetalhe(lig);
+    if (lig && lig.callid && !lig.resumoPronto) {
+      setLigResumoLoading(true);
+      try {
+        const r = await api.ofAtendeResumoLigacao(conversa.id, lig.callid);
+        if (r && r.ok) setLigDetalhe({ ...lig, resumo: r.resumo, transcricao: r.transcricao, resumoPronto: true });
+        else setLigDetalhe({ ...lig, _erro: (r && r.erro) || "não deu pra gerar o resumo agora" });
+      } catch (e) { setLigDetalhe({ ...lig, _erro: e.message }); }
+      finally { setLigResumoLoading(false); }
+    }
+  }
   useEffect(() => {
     if (!chamada) return;
     setCronometro(0);
@@ -9877,6 +9891,56 @@ function InboxOficial({ isGer, ehLider, showToast, onIrParaEvolution, target, on
                     </div>
                   </Portal>
                 )}
+                {ligDetalhe && (
+                  <Portal>
+                    <div className="modal" onClick={(e) => e.target === e.currentTarget && setLigDetalhe(null)}>
+                      <div className="onum-modal" style={{ maxWidth: 440, maxHeight: "85vh", overflowY: "auto", padding: 0 }}>
+                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "16px 20px", borderBottom: "1px solid var(--line)" }}>
+                          <b style={{ fontSize: 15 }}>Informações da ligação</b>
+                          <button className="crm-x" onClick={() => setLigDetalhe(null)}>✕</button>
+                        </div>
+                        <div style={{ padding: 20, display: "flex", flexDirection: "column", gap: 12 }}>
+                          {ligDetalhe.vendedorNome && (
+                            <div style={{ background: "#eff6ff", borderRadius: 12, padding: "12px 14px" }}>
+                              <div style={{ fontSize: 11.5, color: "#2563eb", fontWeight: 600 }}>Realizada por</div>
+                              <div style={{ fontSize: 15, fontWeight: 700, color: "#1e3a8a" }}>{ligDetalhe.vendedorNome}</div>
+                            </div>
+                          )}
+                          <div style={{ display: "flex", gap: 12 }}>
+                            <div style={{ flex: 1, background: "var(--surface-2)", borderRadius: 12, padding: "12px 14px" }}>
+                              <div style={{ fontSize: 11.5, color: "var(--muted)", fontWeight: 600 }}>Direção</div>
+                              <div style={{ fontSize: 14, fontWeight: 700 }}>{ligDetalhe.direcao === "entrante" ? "Recebida" : "Realizada"}</div>
+                            </div>
+                            <div style={{ flex: 1, background: "var(--surface-2)", borderRadius: 12, padding: "12px 14px" }}>
+                              <div style={{ fontSize: 11.5, color: "var(--muted)", fontWeight: 600 }}>Duração</div>
+                              <div style={{ fontSize: 14, fontWeight: 700 }}>{ligDetalhe.duracao ? fmtTempo(ligDetalhe.duracao) : "—"}</div>
+                            </div>
+                          </div>
+                          <div style={{ borderTop: "1px solid var(--line)", paddingTop: 14 }}>
+                            <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 8, display: "flex", alignItems: "center", gap: 6 }}>📝 Resumo da chamada</div>
+                            {ligResumoLoading ? (
+                              <div style={{ display: "flex", alignItems: "center", gap: 8, color: "var(--muted)", fontSize: 13 }}><span className="spin" /> Transcrevendo e resumindo a gravação…</div>
+                            ) : ligDetalhe.resumo ? (
+                              <div style={{ fontSize: 13.5, lineHeight: 1.6, whiteSpace: "pre-wrap", color: "var(--txt)" }}>{ligDetalhe.resumo}</div>
+                            ) : ligDetalhe._erro ? (
+                              <div style={{ fontSize: 13, color: "var(--muted)", background: "#fffbeb", border: "1px solid #fde68a", borderRadius: 8, padding: "10px 12px" }}>
+                                {ligDetalhe._erro}. A gravação do Atende pode levar alguns minutos pra ficar pronta — feche e abra de novo mais tarde.
+                              </div>
+                            ) : (
+                              <div style={{ fontSize: 13, color: "var(--muted)" }}>Sem gravação disponível pra esta ligação.</div>
+                            )}
+                            {ligDetalhe.transcricao && (
+                              <details style={{ marginTop: 12 }}>
+                                <summary style={{ cursor: "pointer", fontSize: 12.5, color: "var(--brand)" }}>Ver transcrição completa</summary>
+                                <div style={{ marginTop: 8, fontSize: 12.5, lineHeight: 1.6, whiteSpace: "pre-wrap", color: "var(--muted)" }}>{ligDetalhe.transcricao}</div>
+                              </details>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </Portal>
+                )}
                 <button className="of-acao-btn venda" title="Registrar uma venda deste cliente" onClick={() => setRegVenda(true)}>
                   <I.gauge className="ico" /> Registrar venda
                 </button>
@@ -9926,6 +9990,22 @@ function InboxOficial({ isGer, ehLider, showToast, onIrParaEvolution, target, on
                   <div key={i} className="of-nota">
                     <I.refresh className="ico" /> {item.n.texto}
                     <span className="of-nota-hora">{horaCurta(item.n.ts)}</span>
+                  </div>
+                ) : item.m.tipo === "ligacao" && item.m.ligacao ? (
+                  <div key={i} className={"of-msg " + (item.m.role === "me" ? "me" : "them")}>
+                    <button onClick={() => abrirResumoLigacao(item.m.ligacao)} title="Ver detalhes da ligação" style={{ display: "flex", alignItems: "center", gap: 10, background: "#ecfdf3", border: "1px solid #b7e4c7", borderRadius: 12, padding: "10px 14px", cursor: "pointer", textAlign: "left", maxWidth: 300 }}>
+                      <div style={{ width: 34, height: 34, borderRadius: "50%", background: "#d1fae5", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                        <span style={{ fontSize: 16 }}>{item.m.ligacao.atendida === false ? "📵" : "📞"}</span>
+                      </div>
+                      <div style={{ minWidth: 0 }}>
+                        <div style={{ fontSize: 13.5, fontWeight: 700, color: "#065f46" }}>Ligação de voz {item.m.ligacao.direcao === "entrante" ? "recebida" : ""}</div>
+                        <div style={{ fontSize: 12, color: "#047857" }}>
+                          {item.m.ligacao.duracao ? "Duração: " + fmtTempo(item.m.ligacao.duracao) : (item.m.ligacao.atendida === false ? "Não atendida" : "—")}
+                          {" · "}{horaCurta(item.m.ts)}
+                          {item.m.ligacao.resumoPronto ? " · 📝 resumo" : (item.m.ligacao.audioUrl ? " · toque p/ resumo" : "")}
+                        </div>
+                      </div>
+                    </button>
                   </div>
                 ) : (
                   <div key={i} className={"of-msg " + (item.m.role === "me" ? "me" : "them")}>
