@@ -5288,16 +5288,42 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
   }
 
   // baixa a gravação da ligação, transcreve (Groq) e resume (IA) — estilo "resumo da chamada"
-  async function gerarResumoLigacao(audioUrl) {
-    if (!audioUrl) return null;
+  // baixa um áudio de uma URL e valida que parece áudio (não uma página de erro). Retorna {buf, ct} ou null.
+  async function _baixarAudio(url) {
     try {
-      const r = await fetch(audioUrl);
+      const r = await fetch(url, { redirect: "follow" });
       if (!r.ok) return null;
-      const ct = r.headers.get("content-type") || "";
-      if (!/audio|octet-stream|mpeg|ogg|wav|mp4/i.test(ct)) return null; // ainda não é áudio (processando)
+      const ct = (r.headers.get("content-type") || "").toLowerCase();
+      if (/html|json|xml|text\/plain/.test(ct)) return null; // é página/erro, não áudio
       const buf = Buffer.from(await r.arrayBuffer());
-      if (!buf || buf.length < 2000) return null; // muito pequeno = provavelmente não pronto
-      const transcricao = await transcreverAudio(buf, ct || "audio/mpeg");
+      if (!buf || buf.length < 2000) return null; // muito pequeno = não pronto
+      return { buf, ct: ct || "audio/mpeg" };
+    } catch (_) { return null; }
+  }
+
+  async function gerarResumoLigacao(audioUrl, callid) {
+    try {
+      let audio = null;
+      // 1) tenta a URL pública direto
+      if (audioUrl) audio = await _baixarAudio(audioUrl);
+      // 2) fallback: API de Download de Áudio do Atende (POST callid + x-api-key → 301 com Location)
+      if (!audio && callid) {
+        try {
+          const a = cfgAtende();
+          if (a.apiKey) {
+            const r = await fetch(ATENDE_BASE + "/customers/audio/download", {
+              method: "POST", redirect: "manual",
+              headers: { "x-api-key": a.apiKey, "Content-Type": "application/json" },
+              body: JSON.stringify({ callid: String(callid) }),
+            });
+            const loc = r.headers.get("location");
+            if (loc) audio = await _baixarAudio(loc);
+            else if (r.ok) { const t = await r.text().catch(() => ""); try { const j = JSON.parse(t); if (j && j.url) audio = await _baixarAudio(j.url); } catch (_) {} }
+          }
+        } catch (_) {}
+      }
+      if (!audio) return null;
+      const transcricao = await transcreverAudio(audio.buf, audio.ct);
       if (!transcricao) return null;
       let resumo = null;
       try {
@@ -5360,7 +5386,7 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
         const msg = { role: "me", tipo: "ligacao", ligacao: { ...dados, atendida: status === "answered" || status === "handled" }, ts: quando || Date.now() };
         chat.mensagens.push(msg);
         chat.atualizadoEm = Date.now();
-        if (audioUrl) paraResumir.push({ msg, audioUrl });
+        paraResumir.push({ msg }); // sempre tenta (via callid, mesmo sem url pública)
       }
       // só marca como "vista" se realmente registrou em algum lugar — senão dá nova chance no próximo sync
       if (lead || chat) vistas.add(callid);
@@ -5371,8 +5397,8 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
     // gera os resumos (transcrição + IA) das gravações disponíveis, sem travar o retorno
     if (paraResumir.length) {
       (async () => {
-        for (const { msg, audioUrl } of paraResumir) {
-          try { const rz = await gerarResumoLigacao(audioUrl); if (rz) { msg.ligacao.transcricao = rz.transcricao || null; msg.ligacao.resumo = rz.resumo || null; msg.ligacao.resumoPronto = true; } else { msg.ligacao.resumoPendente = true; } } catch (_) { msg.ligacao.resumoPendente = true; }
+        for (const { msg } of paraResumir) {
+          try { const rz = await gerarResumoLigacao(msg.ligacao.audioUrl, msg.ligacao.callid); if (rz) { msg.ligacao.transcricao = rz.transcricao || null; msg.ligacao.resumo = rz.resumo || null; msg.ligacao.resumoPronto = true; } else { msg.ligacao.resumoPendente = true; } } catch (_) { msg.ligacao.resumoPendente = true; }
         }
         salvar();
       })();
@@ -5404,11 +5430,27 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
         callid: it.callid || it.call_id, direction: it.direction, status: it.call_status,
         dur: it.duration_call || it.ori_billing_time, quando: it.ori_start_time,
         ani: it.ani, dnis: it.dnis, alt_dnis: it.alt_dnis, client_number: it.client_number, customer_phone: it.customer_phone,
-        temAudio: !!it.public_audio_url,
+        has_audio: it.has_audio, audio_state: it.audio_processing_state, public_audio_url: it.public_audio_url || null,
       }));
+      // TESTA baixar a gravação da 1ª ligação com áudio, pra ver o que o Atende devolve
+      let testeGravacao = null;
+      const comAudio = itens.find((it) => it.public_audio_url || it.has_audio);
+      if (comAudio) {
+        const cid = String(comAudio.callid || comAudio.call_id || "");
+        const info = { callid: cid, has_audio: comAudio.has_audio, audio_state: comAudio.audio_processing_state, public_audio_url: comAudio.public_audio_url || null };
+        try {
+          if (comAudio.public_audio_url) {
+            const ra = await fetch(comAudio.public_audio_url, { redirect: "follow" });
+            info.urlPublica_http = ra.status; info.urlPublica_contentType = ra.headers.get("content-type");
+          }
+          const rd = await fetch(ATENDE_BASE + "/customers/audio/download", { method: "POST", redirect: "manual", headers: { "x-api-key": a.apiKey, "Content-Type": "application/json" }, body: JSON.stringify({ callid: cid }) });
+          info.downloadApi_http = rd.status; info.downloadApi_location = rd.headers.get("location") ? "(tem link)" : null;
+        } catch (e) { info.erro = e.message; }
+        testeGravacao = info;
+      }
       // quantas conversas oficiais existem (pra ver se há com que casar)
       const numsChats = Object.values(db.waChats || {}).filter((c) => c.canal === "oficial").map((c) => _soDig(c.numero).slice(-8)).slice(0, 30);
-      res.json({ ok: true, httpAtende: r.status, ativo: !!a.ativo, temDialerToken: !!a.dialerToken, totalCDRs: itens.length, amostraCDRs: amostra, telefonesDasConversas: numsChats });
+      res.json({ ok: true, httpAtende: r.status, ativo: !!a.ativo, temDialerToken: !!a.dialerToken, totalCDRs: itens.length, amostraCDRs: amostra, testeGravacao, telefonesDasConversas: numsChats });
     } catch (e) { res.json({ ok: false, erro: e.message }); }
   });
 
@@ -5427,8 +5469,8 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
       const msg = (chat.mensagens || []).find((m) => m.tipo === "ligacao" && m.ligacao && String(m.ligacao.callid) === String(callid));
       if (!msg) return res.json({ ok: false, erro: "ligação não encontrada" });
       if (msg.ligacao.resumoPronto && msg.ligacao.resumo) return res.json({ ok: true, resumo: msg.ligacao.resumo, transcricao: msg.ligacao.transcricao || null });
-      if (!msg.ligacao.audioUrl) return res.json({ ok: false, erro: "sem gravação disponível" });
-      const rz = await gerarResumoLigacao(msg.ligacao.audioUrl);
+      if (!msg.ligacao.audioUrl && !msg.ligacao.callid) return res.json({ ok: false, erro: "sem gravação disponível" });
+      const rz = await gerarResumoLigacao(msg.ligacao.audioUrl, msg.ligacao.callid);
       if (!rz) { msg.ligacao.resumoPendente = true; salvar(); return res.json({ ok: false, erro: "gravação ainda não está pronta — tente de novo em alguns minutos" }); }
       msg.ligacao.transcricao = rz.transcricao || null; msg.ligacao.resumo = rz.resumo || null; msg.ligacao.resumoPronto = true; msg.ligacao.resumoPendente = false;
       salvar();
@@ -5487,7 +5529,7 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
           if (callid) { vistas.add(callid); a.callsVistas = Array.from(vistas).slice(-5000); }
           salvar();
           // resumo em background (webhook dá a audio_url já pronta na maioria das vezes)
-          if (audioUrl && msgRef) { (async () => { try { const rz = await gerarResumoLigacao(audioUrl); if (rz) { msgRef.ligacao.transcricao = rz.transcricao || null; msgRef.ligacao.resumo = rz.resumo || null; msgRef.ligacao.resumoPronto = true; } else { msgRef.ligacao.resumoPendente = true; } salvar(); } catch (_) {} })(); }
+          if (audioUrl && msgRef) { (async () => { try { const rz = await gerarResumoLigacao(audioUrl, callid); if (rz) { msgRef.ligacao.transcricao = rz.transcricao || null; msgRef.ligacao.resumo = rz.resumo || null; msgRef.ligacao.resumoPronto = true; } else { msgRef.ligacao.resumoPendente = true; } salvar(); } catch (_) {} })(); }
         }
       }
       res.json({ ok: true });
@@ -5508,8 +5550,8 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
         const recentes = Object.values(db.waChats || {}).filter((c) => c.canal === "oficial" && (Date.now() - (c.atualizadoEm || 0)) < 20 * 60 * 1000);
         outer: for (const c of recentes) {
           for (const m of (c.mensagens || [])) {
-            if (m.tipo === "ligacao" && m.ligacao && m.ligacao.audioUrl && !m.ligacao.resumoPronto) {
-              const rz = await gerarResumoLigacao(m.ligacao.audioUrl);
+            if (m.tipo === "ligacao" && m.ligacao && !m.ligacao.resumoPronto && (m.ligacao.audioUrl || m.ligacao.callid)) {
+              const rz = await gerarResumoLigacao(m.ligacao.audioUrl, m.ligacao.callid);
               if (rz) { m.ligacao.transcricao = rz.transcricao || null; m.ligacao.resumo = rz.resumo || null; m.ligacao.resumoPronto = true; m.ligacao.resumoPendente = false; salvar(); }
               break outer; // só 1 por ciclo
             }
