@@ -5329,9 +5329,16 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
     for (const it of itens) {
       const callid = String(it.callid || it.call_id || "");
       if (!callid || vistas.has(callid)) continue;
-      const numTel = _soDig(it.ani || it.customer_phone || it.alt_dnis);
-      const numero = numTel.slice(-8);
-      const lead = numero.length >= 8 ? idx[numero] : null;
+      // Numa ligação de SAÍDA, o cliente NÃO está no "ani" (que é o atendente) — está no dnis/alt_dnis/client_number.
+      // Então juntamos TODOS os telefones do CDR e casamos com o lead/conversa pelo que bater.
+      const candidatos = [it.ani, it.customer_phone, it.alt_dnis, it.dnis, it.client_number, it.number, it.customer_number]
+        .map((x) => _soDig(x).slice(-8)).filter((x) => x.length >= 8);
+      let lead = null, chat = null, numeroCasado = "";
+      for (const nu of candidatos) {
+        if (!lead && idx[nu]) { lead = idx[nu]; numeroCasado = nu; }
+        if (!chat) { const c = acharChatPorTelefone(nu); if (c) { chat = c; numeroCasado = nu; } }
+        if (lead && chat) break;
+      }
       const dur = Math.round(Number(it.duration_call || it.ori_billing_time || it.uraduration || 0)) || 0;
       const status = it.call_status || "";
       const dir = it.direction === "outbound" ? "saída" : "entrante";
@@ -5348,7 +5355,6 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
         gravadas++;
       }
       // 2) grava NA CONVERSA (Caixa de entrada) — é onde o vendedor olha
-      const chat = acharChatPorTelefone(numTel);
       if (chat) {
         chat.mensagens = chat.mensagens || [];
         const msg = { role: "me", tipo: "ligacao", ligacao: { ...dados, atendida: status === "answered" || status === "handled" }, ts: quando || Date.now() };
@@ -5356,7 +5362,8 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
         chat.atualizadoEm = Date.now();
         if (audioUrl) paraResumir.push({ msg, audioUrl });
       }
-      vistas.add(callid);
+      // só marca como "vista" se realmente registrou em algum lugar — senão dá nova chance no próximo sync
+      if (lead || chat) vistas.add(callid);
     }
     a.callsVistas = Array.from(vistas).slice(-5000); // não crescer pra sempre
     a.ultimoSync = Date.now();
@@ -5374,7 +5381,7 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
   }
   // botão "sincronizar agora" (gerente)
   app.post("/api/oficial/atende/sincronizar", auth, gerenteOnly, async (req, res) => {
-    try { const desde = req.body && req.body.desde ? Number(req.body.desde) : null; const r = await sincronizarLigacoesAtende(desde); if (r.erro) return res.status(502).json({ error: r.erro }); res.json(r); }
+    try { const desde = (req.body && req.body.desde) ? Number(req.body.desde) : (Date.now() - 24 * 3600 * 1000); const r = await sincronizarLigacoesAtende(desde); if (r.erro) return res.status(502).json({ error: r.erro }); res.json(r); }
     catch (e) { res.status(502).json({ error: e.message }); }
   });
 
@@ -5426,9 +5433,14 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
       const ev = b.event_code || "";
       const call = b.call || {};
       if (ev === "call.finished") {
-        const telNum = _soDig(call.from_number || call.client_number || call.dnis);
-        const numero = telNum.slice(-8);
-        const lead = numero.length >= 8 ? (db.oficial.crmLeads || []).find((l) => _soDig(l.telefone).slice(-8) === numero) : null;
+        const candidatos = [call.from_number, call.client_number, call.dnis, call.alt_dnis, call.number]
+          .map((x) => _soDig(x).slice(-8)).filter((x) => x.length >= 8);
+        let lead = null, chat = null;
+        for (const nu of candidatos) {
+          if (!lead) lead = (db.oficial.crmLeads || []).find((l) => _soDig(l.telefone).slice(-8) === nu) || null;
+          if (!chat) chat = acharChatPorTelefone(nu);
+          if (lead && chat) break;
+        }
         const callid = String(call.call_id || "");
         const a = cfgAtende(); const vistas = new Set(a.callsVistas || []);
         if (!callid || !vistas.has(callid)) { // idempotente
@@ -5445,7 +5457,6 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
             lead.atualizadoEm = Date.now();
           }
           // grava na conversa (é onde o vendedor olha)
-          const chat = acharChatPorTelefone(telNum);
           let msgRef = null;
           if (chat) { chat.mensagens = chat.mensagens || []; msgRef = { role: "me", tipo: "ligacao", ligacao: { ...dados }, ts: quando }; chat.mensagens.push(msgRef); chat.atualizadoEm = Date.now(); }
           if (callid) { vistas.add(callid); a.callsVistas = Array.from(vistas).slice(-5000); }
