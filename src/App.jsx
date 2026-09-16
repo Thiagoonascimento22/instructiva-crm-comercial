@@ -8482,6 +8482,9 @@ function PainelAtende({ showToast }) {
   const [form, setForm] = useState(null);
   const [salvando, setSalvando] = useState(false);
   const [sincronizando, setSincronizando] = useState(false);
+  const [testeTel, setTesteTel] = useState("");
+  const [testando, setTestando] = useState(false);
+  const [testeRes, setTesteRes] = useState(null);
   const carregar = () => api.ofAtendeCfg().then(setCfg).catch(() => {});
   useEffect(() => { carregar(); }, []);
   const configurado = cfg && cfg.apiKey && cfg.userId && cfg.queueId && cfg.queueToken;
@@ -8489,6 +8492,18 @@ function PainelAtende({ showToast }) {
     setSalvando(true);
     try { await api.ofAtendeSalvar(form); showToast("✓ Atende Simples salvo"); setForm(null); carregar(); }
     catch (e) { showToast("✗ " + e.message); } finally { setSalvando(false); }
+  }
+  async function testarLigacao() {
+    // usa o e-mail/ramal do PRIMEIRO vendedor preenchido na modal (ou pede pra preencher)
+    const v = (form.vendedores || []).find((x) => (x.atendeEmail || "").trim() || (x.atendeRamal || "").trim());
+    if (!v) { setTesteRes({ ok: false, diagnostico: "Preencha o e-mail e/ou ramal de pelo menos um vendedor acima (o do atendente que vai receber a ligação de teste)." }); return; }
+    if (soDigitos(testeTel).length < 10) { setTesteRes({ ok: false, diagnostico: "Digite um telefone de teste com DDD (ex.: seu celular)." }); return; }
+    setTestando(true); setTesteRes(null);
+    try {
+      const r = await api.ofAtendeTestar({ dialerToken: form.dialerToken, email: v.atendeEmail, ramal: v.atendeRamal, telefone: testeTel });
+      setTesteRes(r);
+    } catch (e) { setTesteRes({ ok: false, diagnostico: "Erro: " + e.message }); }
+    finally { setTestando(false); }
   }
   async function sincronizar() {
     setSincronizando(true);
@@ -8556,6 +8571,31 @@ function PainelAtende({ showToast }) {
                 </div>
               </div>
             )}
+            <div style={{ marginTop: 14, padding: 12, border: "1px dashed var(--line)", borderRadius: 10, background: "var(--card2, #f9fafb)" }}>
+              <label className="lbl-mini" style={{ fontWeight: 700 }}>🧪 Testar ligação</label>
+              <p style={{ fontSize: 12, color: "var(--muted)", margin: "2px 0 8px" }}>
+                Dispara uma chamada de teste com o token e o 1º vendedor preenchido acima. Faça login no <b>voip.atendesimples.com</b> com o e-mail desse vendedor antes de testar.
+              </p>
+              <div style={{ display: "flex", gap: 8 }}>
+                <input className="input" style={{ flex: 1 }} value={testeTel} placeholder="telefone de teste (com DDD)" onChange={(e) => setTesteTel(e.target.value)} />
+                <button className="btn" onClick={testarLigacao} disabled={testando}>{testando ? "Testando…" : "Testar"}</button>
+              </div>
+              {testeRes && (
+                <div style={{ marginTop: 10, padding: 10, borderRadius: 8, fontSize: 12.5, background: testeRes.ok ? "#ecfdf5" : "#fef2f2", border: "1px solid " + (testeRes.ok ? "#a7f3d0" : "#fecaca"), color: testeRes.ok ? "#065f46" : "#991b1b" }}>
+                  <div style={{ fontWeight: 700, marginBottom: testeRes.resposta || testeRes.status ? 6 : 0 }}>{testeRes.diagnostico}</div>
+                  {(testeRes.status || testeRes.resposta) && (
+                    <details>
+                      <summary style={{ cursor: "pointer", fontSize: 12 }}>Detalhes técnicos</summary>
+                      <div style={{ marginTop: 6, fontFamily: "monospace", fontSize: 11.5, wordBreak: "break-all" }}>
+                        {testeRes.status != null && <div>HTTP {testeRes.status}</div>}
+                        {testeRes.resposta && <div>Resposta: {testeRes.resposta}</div>}
+                        {testeRes.enviado && <div>Enviado: {JSON.stringify(testeRes.enviado)}</div>}
+                      </div>
+                    </details>
+                  )}
+                </div>
+              )}
+            </div>
             <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 14 }}>
               <button className="btn" onClick={() => setForm(null)} disabled={salvando}>Cancelar</button>
               <button className="btn btn-primary" onClick={salvar} disabled={salvando}>{salvando ? "Salvando…" : "Salvar"}</button>

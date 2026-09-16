@@ -206,6 +206,7 @@ export const api = {
   ofAtendeSalvar: (dados) => req("PUT", "/api/oficial/atende", dados),
   ofAtendeLigar: (dados) => req("POST", "/api/oficial/atende/ligar", dados),
   ofAtendeSincronizar: (desde) => req("POST", "/api/oficial/atende/sincronizar", { desde }),
+  ofAtendeTestar: (dados) => req("POST", "/api/oficial/atende/testar", dados),
   ofCrmEtapaCriar: (dados) => req("POST", "/api/oficial/crm/etapa", dados),
   ofCrmEtapaEditar: (k, dados) => req("PUT", "/api/oficial/crm/etapa/" + k, dados),
   ofCrmEtapaExcluir: (k) => req("DELETE", "/api/oficial/crm/etapa/" + k),

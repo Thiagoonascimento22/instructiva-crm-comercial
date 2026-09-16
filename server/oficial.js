@@ -5242,6 +5242,40 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
     } catch (e) { res.status(502).json({ error: "Falha ao falar com o Atende Simples: " + e.message }); }
   });
 
+  // TESTE de ligação (gerente): usa os dados enviados no corpo (o que está DIGITADO na modal,
+  // mesmo antes de salvar) e faz a chamada crua ao Discador, devolvendo status + resposta do Atende
+  // pra diagnosticar token/ramal/email/bloqueio sem precisar de lead nem de curl.
+  app.post("/api/oficial/atende/testar", auth, gerenteOnly, async (req, res) => {
+    const b = req.body || {};
+    const dialerToken = String((b.dialerToken != null ? b.dialerToken : (cfgAtende().dialerToken || ""))).trim();
+    const email = String(b.email || "").trim();
+    const ramal = String(b.ramal || "").trim();
+    const telefone = _soDig(b.telefone);
+    if (!dialerToken) return res.json({ ok: false, etapa: "config", diagnostico: "Sem token do discador. Cole o token (API Discador) no campo e teste de novo." });
+    if (!email && !ramal) return res.json({ ok: false, etapa: "config", diagnostico: "Informe o e-mail e/ou o ramal do atendente no Atende pra testar." });
+    if (telefone.length < 10) return res.json({ ok: false, etapa: "config", diagnostico: "Informe um telefone de teste válido (com DDD)." });
+    const numeroCliente = (telefone.length >= 12 && telefone.startsWith("55")) ? telefone : ("55" + telefone);
+    const dial = { attendant_email: email || undefined, customer_info: "Teste CRM", client: { phones: [{ name: "Teste CRM", number: numeroCliente, type: "2" }] } };
+    if (ramal) dial.extension_number = Number(ramal) || ramal;
+    const payloadEnviado = { dialer: { dials: [dial] }, token: dialerToken.slice(0, 6) + "…(" + dialerToken.length + " chars)" };
+    try {
+      const r = await fetch("https://dialer.atendesimples.com/", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ dialer: { dials: [dial] }, token: dialerToken }),
+      });
+      const corpo = await r.text().catch(() => "");
+      let diagnostico = "";
+      if (r.ok) diagnostico = "✅ O Atende ACEITOU a chamada. Atenda no ramal/softphone (voip.atendesimples.com precisa estar logado com este e-mail).";
+      else if (r.status === 401) diagnostico = "❌ 401 — token do discador incorreto ou não pertence a esta conta/usuário. Confirme o token (API Discador) com o suporte do Atende.";
+      else if (r.status === 402 || /bloquead|mensalidade|pagamento|vencid/i.test(corpo)) diagnostico = "❌ Conta bloqueada / pagamento pendente no Atende.";
+      else if (r.status === 403) diagnostico = "❌ 403 — sem permissão. A API do Discador pode não estar habilitada nesta conta.";
+      else diagnostico = "❌ O Atende recusou (HTTP " + r.status + ").";
+      res.json({ ok: r.ok, status: r.status, resposta: (corpo || "").slice(0, 500), enviado: payloadEnviado, diagnostico });
+    } catch (e) {
+      res.json({ ok: false, etapa: "rede", diagnostico: "Falha de rede ao falar com o Atende: " + e.message });
+    }
+  });
+
   // Sincroniza as ligações (CDRs) do Atende e grava no histórico do lead certo
   async function sincronizarLigacoesAtende(desdeMs) {
     const a = cfgAtende();
