@@ -108,6 +108,11 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
     if (!db.oficial.instagram || typeof db.oficial.instagram !== "object") {
       db.oficial.instagram = { igId: "", token: "", usuario: "", ativo: false, vendedorId: null };
     }
+    // Integração Atende Simples (ligação): chaves globais + controle de sync
+    if (!db.oficial.atende || typeof db.oficial.atende !== "object") {
+      db.oficial.atende = { apiKey: "", userId: "", queueId: "", queueToken: "", voipToken: "", ativo: false, ultimoSync: 0, callsVistas: [] };
+    }
+    if (!Array.isArray(db.oficial.atende.callsVistas)) db.oficial.atende.callsVistas = [];
   }
 
   function salvar() { saveDB(); }
@@ -1365,15 +1370,35 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
   }
 
   // chamada única (system + user) pra análises — devolve o texto
+  // Remove caracteres que quebram o JSON enviado pra OpenAI (emoji cortado pela metade =
+  // surrogate órfão, e caracteres de controle inválidos). Sem isso, UMA conversa com um
+  // caractere bugado faz a IA recusar a requisição inteira ("failed to parse JSON value").
+  function _limparTextoIA(s) {
+    s = String(s == null ? "" : s);
+    let out = "";
+    for (let i = 0; i < s.length; i++) {
+      const c = s.charCodeAt(i);
+      if (c >= 0xD800 && c <= 0xDBFF) { // metade "alta" de um par (emoji)
+        const n = s.charCodeAt(i + 1);
+        if (n >= 0xDC00 && n <= 0xDFFF) { out += s[i] + s[i + 1]; i++; continue; } // par completo: mantém
+        continue; // órfão: descarta
+      }
+      if (c >= 0xDC00 && c <= 0xDFFF) continue; // metade "baixa" órfã: descarta
+      if (c < 0x20 && c !== 0x09 && c !== 0x0A && c !== 0x0D) continue; // controle inválido (mantém tab/enter)
+      out += s[i];
+    }
+    return out;
+  }
   async function analisarComIA(sistema, usuario, maxTokens, temp) {
     const key = process.env.OPENAI_API_KEY;
     if (!key) throw new Error("OPENAI_API_KEY não configurada");
+    const sis = _limparTextoIA(sistema), usr = _limparTextoIA(usuario);
     const r = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
       headers: { "Content-Type": "application/json", "Authorization": "Bearer " + key },
       // temperatura baixa + seed fixo = análise mais CONSISTENTE (nota varia pouco entre gerações
       // quando as conversas são as mesmas). Se as conversas mudarem, a nota muda — o que é correto.
-      body: JSON.stringify({ model: "gpt-4o-mini", max_tokens: maxTokens || 1200, temperature: (temp !== undefined ? temp : 0.2), seed: 7, messages: [{ role: "system", content: sistema }, { role: "user", content: usuario }] }),
+      body: JSON.stringify({ model: "gpt-4o-mini", max_tokens: maxTokens || 1200, temperature: (temp !== undefined ? temp : 0.2), seed: 7, messages: [{ role: "system", content: sis }, { role: "user", content: usr }] }),
     });
     const data = await r.json().catch(() => ({}));
     if (!r.ok) throw new Error((data.error && data.error.message) || "Erro OpenAI " + r.status);
@@ -5143,6 +5168,127 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
       }
     }
     const _r = _paginar(eventos, req); return _respPag(res, _r, { unidade: _uni() });
+  });
+
+  // ============================================================
+  // INTEGRAÇÃO ATENDE SIMPLES (ligação): config, botão ligar (fila),
+  // sincronizar ligações (CDRs -> histórico do lead) e pré-chamada.
+  // ============================================================
+  const ATENDE_BASE = "https://api.atendesimples.com";
+  function cfgAtende() { garantirEstrutura(); return db.oficial.atende || {}; }
+  const _soDig = (t) => String(t || "").replace(/\D/g, "");
+
+  // config (gerente) — lê e grava as chaves globais
+  app.get("/api/oficial/atende", auth, gerenteOnly, (req, res) => {
+    const a = cfgAtende();
+    res.json({
+      apiKey: a.apiKey || "", userId: a.userId || "", queueId: a.queueId || "", queueToken: a.queueToken || "", voipToken: a.voipToken || "",
+      ativo: !!a.ativo, ultimoSync: a.ultimoSync || 0,
+      // ramais/emails por vendedor, pra tela de config
+      vendedores: (db.users || []).filter((u) => u.role === "vendedor" || u.role === "gerente").map((u) => ({ id: u.id, nome: u.nome, atendeEmail: u.atendeEmail || "", atendeRamal: u.atendeRamal || "" })),
+    });
+  });
+  app.put("/api/oficial/atende", auth, gerenteOnly, (req, res) => {
+    garantirEstrutura();
+    const b = req.body || {};
+    const a = db.oficial.atende;
+    if (b.apiKey !== undefined) a.apiKey = String(b.apiKey).trim();
+    if (b.userId !== undefined) a.userId = String(b.userId).trim();
+    if (b.queueId !== undefined) a.queueId = String(b.queueId).trim();
+    if (b.queueToken !== undefined) a.queueToken = String(b.queueToken).trim();
+    if (b.voipToken !== undefined) a.voipToken = String(b.voipToken).trim();
+    if (b.ativo !== undefined) a.ativo = !!b.ativo;
+    // ramais/emails por vendedor
+    if (Array.isArray(b.vendedores)) {
+      for (const v of b.vendedores) {
+        const u = (db.users || []).find((x) => x.id === v.id);
+        if (u) { if (v.atendeEmail !== undefined) u.atendeEmail = String(v.atendeEmail || "").trim(); if (v.atendeRamal !== undefined) u.atendeRamal = String(v.atendeRamal || "").trim(); }
+      }
+    }
+    salvar();
+    res.json({ ok: true });
+  });
+
+  // Botão "Ligar" na conversa: coloca o número na FILA do discador (Discador por Fila)
+  app.post("/api/oficial/atende/ligar", auth, permiteVend("crm"), async (req, res) => {
+    const a = cfgAtende();
+    if (!a.ativo) return res.status(400).json({ error: "Integração do Atende Simples está desligada" });
+    if (!a.apiKey || !a.userId || !a.queueId || !a.queueToken) return res.status(400).json({ error: "Configure as credenciais do discador (chave, user-id, queue-id e token) em Configurações" });
+    const telefone = _soDig(req.body && req.body.telefone);
+    if (telefone.length < 10) return res.status(400).json({ error: "Telefone inválido" });
+    // a API do discador quer DDD+Número (sem o 55). Se vier com 55 na frente e 12+ díg, tira.
+    const numeroFila = (telefone.length >= 12 && telefone.startsWith("55")) ? telefone.slice(2) : telefone;
+    try {
+      const r = await fetch(ATENDE_BASE + "/v1/cards", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-api-key": a.apiKey, "user-id": a.userId, "queue-id": a.queueId, "token": a.queueToken },
+        body: JSON.stringify([{ number: numeroFila, card_info_1: (req.body && req.body.nome) || "", card_info_2: (req.body && req.body.leadId) || "", card_info_3: "CRM", schedule: "" }]),
+      });
+      if (!r.ok) { const t = await r.text().catch(() => ""); return res.status(502).json({ error: "Atende Simples recusou (" + r.status + "): " + t.slice(0, 200) }); }
+      // registra no histórico do lead
+      const leadId = req.body && req.body.leadId;
+      if (leadId) { const l = (db.oficial.crmLeads || []).find((x) => x.id === leadId); if (l) { l.historico = l.historico || []; l.historico.push({ tipo: "ligacao", texto: "📞 Ligação solicitada (fila do discador)", ts: Date.now(), dados: { direcao: "saida", porId: (req.user && req.user.id) || null, viaFila: true } }); l.atualizadoEm = Date.now(); salvar(); } }
+      res.json({ ok: true, mensagem: "Número colocado na fila de ligação" });
+    } catch (e) { res.status(502).json({ error: "Falha ao falar com o Atende Simples: " + e.message }); }
+  });
+
+  // Sincroniza as ligações (CDRs) do Atende e grava no histórico do lead certo
+  async function sincronizarLigacoesAtende(desdeMs) {
+    const a = cfgAtende();
+    if (!a.ativo || !a.apiKey) return { erro: "integração desligada ou sem chave" };
+    const ini = new Date(desdeMs || (a.ultimoSync || (Date.now() - 24 * 3600 * 1000)));
+    const fim = new Date();
+    const fmt = (d) => d.toISOString().slice(0, 16); // YYYY-MM-DDTHH:mm
+    const url = ATENDE_BASE + "/customers/cdrs/logs?start_at=" + encodeURIComponent(fmt(ini)) + "&end_at=" + encodeURIComponent(fmt(fim)) + "&size=1000";
+    const r = await fetch(url, { headers: { "x-api-key": a.apiKey } });
+    if (!r.ok) return { erro: "CDR " + r.status };
+    const data = await r.json().catch(() => ({}));
+    const itens = Array.isArray(data.items) ? data.items : [];
+    // índice telefone(8) -> lead
+    const idx = {};
+    for (const l of (db.oficial.crmLeads || [])) { const t = _soDig(l.telefone).slice(-8); if (t.length >= 8 && !idx[t]) idx[t] = l; }
+    let gravadas = 0;
+    const vistas = new Set(a.callsVistas || []);
+    for (const it of itens) {
+      const callid = String(it.callid || it.call_id || "");
+      if (!callid || vistas.has(callid)) continue;
+      const numero = _soDig(it.ani || it.customer_phone || it.alt_dnis).slice(-8);
+      const lead = numero.length >= 8 ? idx[numero] : null;
+      if (lead) {
+        const dur = it.duration_call || it.ori_billing_time || it.uraduration || 0;
+        const status = it.call_status || "";
+        const dir = it.direction === "outbound" ? "saída" : "entrante";
+        const stMap = { answered: "atendida", failed: "falhou", missed: "perdida", handled: "atendida", abandoned: "abandonada" };
+        const quando = it.ori_start_time ? Date.parse(it.ori_start_time) : Date.now();
+        lead.historico = lead.historico || [];
+        lead.historico.push({ tipo: "ligacao", texto: "📞 Ligação " + dir + " · " + (stMap[status] || status || "—") + (dur ? " · " + dur + "s" : ""), ts: quando || Date.now(), dados: { direcao: dir, status, duracao: dur, callid, vendedorNome: (it.redirects && it.redirects[0] && it.redirects[0].user_name) || null, audioUrl: it.public_audio_url || null } });
+        lead.atualizadoEm = Date.now();
+        gravadas++;
+      }
+      vistas.add(callid);
+    }
+    a.callsVistas = Array.from(vistas).slice(-5000); // não crescer pra sempre
+    a.ultimoSync = Date.now();
+    salvar();
+    return { ok: true, total: itens.length, gravadas };
+  }
+  // botão "sincronizar agora" (gerente)
+  app.post("/api/oficial/atende/sincronizar", auth, gerenteOnly, async (req, res) => {
+    try { const desde = req.body && req.body.desde ? Number(req.body.desde) : null; const r = await sincronizarLigacoesAtende(desde); if (r.erro) return res.status(502).json({ error: r.erro }); res.json(r); }
+    catch (e) { res.status(502).json({ error: e.message }); }
+  });
+
+  // Pré-chamada: o Atende chama ISSO quando entra uma ligação. Identifica o lead pelo número.
+  app.post("/api/oficial/atende/pre-chamada", async (req, res) => {
+    try {
+      garantirEstrutura();
+      const ic = (req.body && req.body.incoming_call) || {};
+      const ani = _soDig(ic.ani).slice(-8);
+      const lead = ani.length >= 8 ? (db.oficial.crmLeads || []).find((l) => _soDig(l.telefone).slice(-8) === ani) : null;
+      if (lead) { lead.historico = lead.historico || []; lead.historico.push({ tipo: "ligacao", texto: "📞 Ligação recebida (tocando)", ts: Date.now(), dados: { direcao: "entrante", callid: String(ic.call_id || ""), tocando: true } }); lead.atualizadoEm = Date.now(); salvar(); }
+      // responde no formato do Atende (sem prompt/option = segue o fluxo normal configurado)
+      res.json({ incoming_call: { action: {} } });
+    } catch (e) { res.json({ incoming_call: { action: {} } }); }
   });
 
   return { garantirEstrutura };

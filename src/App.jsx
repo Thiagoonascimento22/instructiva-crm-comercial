@@ -8476,6 +8476,91 @@ function badgeQualidade(q) {
   );
 }
 
+// Painel de configuração da integração Atende Simples (ligações)
+function PainelAtende({ showToast }) {
+  const [cfg, setCfg] = useState(null);
+  const [form, setForm] = useState(null);
+  const [salvando, setSalvando] = useState(false);
+  const [sincronizando, setSincronizando] = useState(false);
+  const carregar = () => api.ofAtendeCfg().then(setCfg).catch(() => {});
+  useEffect(() => { carregar(); }, []);
+  const configurado = cfg && cfg.apiKey && cfg.userId && cfg.queueId && cfg.queueToken;
+  async function salvar() {
+    setSalvando(true);
+    try { await api.ofAtendeSalvar(form); showToast("✓ Atende Simples salvo"); setForm(null); carregar(); }
+    catch (e) { showToast("✗ " + e.message); } finally { setSalvando(false); }
+  }
+  async function sincronizar() {
+    setSincronizando(true);
+    try { const r = await api.ofAtendeSincronizar(null); showToast("✓ " + (r.gravadas || 0) + " ligação(ões) registrada(s) de " + (r.total || 0) + " no período"); carregar(); }
+    catch (e) { showToast("✗ " + e.message); } finally { setSincronizando(false); }
+  }
+  return (
+    <div className="onum-webhook" style={{ marginTop: 12 }}>
+      <div className="onum-webhook-body">
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginBottom: 6 }}>
+          <b>📞 Atende Simples (ligações)</b>
+          <span style={{ background: cfg && cfg.ativo && configurado ? "#25A06B" : "#e5e7eb", color: cfg && cfg.ativo && configurado ? "#fff" : "#6b7280", borderRadius: 20, padding: "2px 12px", fontSize: 12, fontWeight: 700 }}>
+            {cfg && cfg.ativo && configurado ? "Ativo" : "Desligado"}
+          </span>
+        </div>
+        {configurado
+          ? <p className="onum-webhook-intro">Credenciais salvas ✅ — o botão <b>📞 Ligar</b> aparece nas conversas e as ligações entram no <b>histórico do lead</b>.</p>
+          : <p className="onum-webhook-intro">Conecte o Atende Simples pra <b>ligar de dentro da conversa</b> e registrar as ligações no histórico do lead.</p>}
+        <p className="onum-webhook-fim">Pegue as chaves no Atende: a <b>x-api-key</b> em Opções da conta → Configuração de Acesso à API; e o <b>user-id / queue-id / token</b> em Discador → Discador por Fila → Importar fichas.</p>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          <button className="onum-btn-save" onClick={() => setForm({ apiKey: (cfg && cfg.apiKey) || "", userId: (cfg && cfg.userId) || "", queueId: (cfg && cfg.queueId) || "", queueToken: (cfg && cfg.queueToken) || "", voipToken: (cfg && cfg.voipToken) || "", ativo: cfg ? !!cfg.ativo : true, vendedores: (cfg && cfg.vendedores) ? cfg.vendedores.map((v) => ({ ...v })) : [] })}>
+            {configurado ? "Editar Atende Simples" : "Configurar Atende Simples"}
+          </button>
+          {configurado && cfg.ativo && <button className="btn" onClick={sincronizar} disabled={sincronizando}>{sincronizando ? "Sincronizando…" : "↻ Sincronizar ligações agora"}</button>}
+        </div>
+      </div>
+      {form && (
+        <Portal>
+        <div className="modal" onClick={(e) => e.target === e.currentTarget && setForm(null)}>
+          <div className="onum-modal" style={{ maxWidth: 560 }}>
+            <button className="onum-modal-x" onClick={() => setForm(null)}><I.x /></button>
+            <h3>📞 Atende Simples</h3>
+            <p className="onum-webhook-intro" style={{ marginTop: 4 }}>Cole as credenciais da API do Atende Simples.</p>
+            <label className="lbl-mini">x-api-key (chave da API)</label>
+            <input className="input" value={form.apiKey} onChange={(e) => setForm({ ...form, apiKey: e.target.value })} placeholder="sua x-api-key" />
+            <label className="lbl-mini">user-id (Id da conta)</label>
+            <input className="input" value={form.userId} onChange={(e) => setForm({ ...form, userId: e.target.value })} placeholder="ex: 10551" />
+            <label className="lbl-mini">queue-id (Id do discador por fila)</label>
+            <input className="input" value={form.queueId} onChange={(e) => setForm({ ...form, queueId: e.target.value })} placeholder="queue|..." />
+            <label className="lbl-mini">token (token do discador por fila)</label>
+            <input className="input" value={form.queueToken} onChange={(e) => setForm({ ...form, queueToken: e.target.value })} placeholder="token do discador" />
+            <label className="lbl-mini">token do VoIP (opcional — pra abrir a ficha quando toca)</label>
+            <input className="input" value={form.voipToken} onChange={(e) => setForm({ ...form, voipToken: e.target.value })} placeholder="token do VoIP" />
+            <label style={{ display: "flex", alignItems: "center", gap: 8, margin: "12px 0", fontSize: 14 }}>
+              <input type="checkbox" checked={form.ativo} onChange={(e) => setForm({ ...form, ativo: e.target.checked })} /> Integração ativa
+            </label>
+            {form.vendedores && form.vendedores.length > 0 && (
+              <div style={{ marginTop: 6 }}>
+                <label className="lbl-mini">Ramal / e-mail de cada vendedor no Atende (opcional)</label>
+                <div style={{ maxHeight: 200, overflowY: "auto", border: "1px solid var(--line)", borderRadius: 10, padding: 8, display: "flex", flexDirection: "column", gap: 8 }}>
+                  {form.vendedores.map((v, i) => (
+                    <div key={v.id} style={{ display: "grid", gridTemplateColumns: "1fr 1.4fr 70px", gap: 6, alignItems: "center" }}>
+                      <span style={{ fontSize: 12.5, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{v.nome}</span>
+                      <input className="input" style={{ padding: "6px 8px", fontSize: 12.5 }} value={v.atendeEmail} placeholder="email no Atende" onChange={(e) => { const arr = form.vendedores.slice(); arr[i] = { ...v, atendeEmail: e.target.value }; setForm({ ...form, vendedores: arr }); }} />
+                      <input className="input" style={{ padding: "6px 8px", fontSize: 12.5 }} value={v.atendeRamal} placeholder="ramal" onChange={(e) => { const arr = form.vendedores.slice(); arr[i] = { ...v, atendeRamal: e.target.value }; setForm({ ...form, vendedores: arr }); }} />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+            <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 14 }}>
+              <button className="btn" onClick={() => setForm(null)} disabled={salvando}>Cancelar</button>
+              <button className="btn btn-primary" onClick={salvar} disabled={salvando}>{salvando ? "Salvando…" : "Salvar"}</button>
+            </div>
+          </div>
+        </div>
+        </Portal>
+      )}
+    </div>
+  );
+}
+
 function OficialNumeros({ showToast }) {
   const [numeros, setNumeros] = useState([]);
   const [form, setForm] = useState(null);
@@ -8840,6 +8925,8 @@ function OficialNumeros({ showToast }) {
         </div>
       </div>
 
+      <PainelAtende showToast={showToast} />
+
       {/* modal: token global da Meta */}
       {tokenForm && (
         <Portal>
@@ -9106,6 +9193,17 @@ function InboxOficial({ isGer, ehLider, showToast, onIrParaEvolution, target, on
   const [sel, setSel] = useState(null);
   const [conversa, setConversa] = useState(null);
   const [baixandoConvPdf, setBaixandoConvPdf] = useState(false);
+  const [ligando, setLigando] = useState(false);
+  async function ligarAtende() {
+    if (!conversa || ligando) return;
+    setLigando(true);
+    try {
+      const r = await api.ofAtendeLigar({ telefone: conversa.numero, nome: conversa.nome, leadId: conversa.leadId || conversa.id });
+      showToast("📞 " + (r.mensagem || "Número colocado na fila de ligação"));
+    } catch (e) {
+      showToast("✗ " + e.message);
+    } finally { setLigando(false); }
+  }
   async function exportarConversaPDF() {
     if (!conversa) return;
     setBaixandoConvPdf(true);
@@ -9685,6 +9783,9 @@ function InboxOficial({ isGer, ehLider, showToast, onIrParaEvolution, target, on
                     <I.pipe className="ico" /> Pipeline
                   </button>
                 )}
+                <button className="of-acao-btn" title="Ligar para este lead (coloca na fila do discador)" disabled={ligando} onClick={ligarAtende}>
+                  {ligando ? <span className="spin" /> : "📞"} Ligar
+                </button>
                 <button className="of-acao-btn venda" title="Registrar uma venda deste cliente" onClick={() => setRegVenda(true)}>
                   <I.gauge className="ico" /> Registrar venda
                 </button>
