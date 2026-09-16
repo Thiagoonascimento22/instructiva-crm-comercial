@@ -5494,8 +5494,7 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
     } catch (e) { res.json({ ok: true }); }
   });
 
-  // ROBÔ: sincroniza as ligações do Atende SOZINHO a cada 60s, sem ninguém precisar clicar.
-  // Assim a ligação aparece na conversa do vendedor automaticamente, poucos minutos depois de terminar.
+  // ROBÔ (leve): sincroniza as ligações do Atende sozinho a cada 3 min, sem ninguém clicar.
   let _sincronizandoAtende = false;
   setInterval(async () => {
     try {
@@ -5503,26 +5502,23 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
       if (!a || !a.ativo || !a.apiKey) return; // só roda se a integração estiver ligada nesta unidade
       if (_sincronizandoAtende) return; // não sobrepõe
       _sincronizandoAtende = true;
-      try { await sincronizarLigacoesAtende(Date.now() - 3 * 3600 * 1000); } catch (_) {}
-      // tenta preencher resumos que ficaram pendentes (gravação que ainda não estava pronta) — no máx 3 por ciclo
+      try { await sincronizarLigacoesAtende(Date.now() - 60 * 60 * 1000); } catch (_) {} // janela de 1h (leve)
+      // preenche no MÁXIMO 1 resumo pendente por ciclo, só de conversas mexidas nos últimos 20 min
       try {
-        let feitos = 0;
-        const chats = Object.values(db.waChats || {}).filter((c) => c.canal === "oficial" && (Date.now() - (c.atualizadoEm || 0)) < 6 * 3600 * 1000);
-        for (const c of chats) {
+        const recentes = Object.values(db.waChats || {}).filter((c) => c.canal === "oficial" && (Date.now() - (c.atualizadoEm || 0)) < 20 * 60 * 1000);
+        outer: for (const c of recentes) {
           for (const m of (c.mensagens || [])) {
-            if (feitos >= 3) break;
             if (m.tipo === "ligacao" && m.ligacao && m.ligacao.audioUrl && !m.ligacao.resumoPronto) {
               const rz = await gerarResumoLigacao(m.ligacao.audioUrl);
-              if (rz) { m.ligacao.transcricao = rz.transcricao || null; m.ligacao.resumo = rz.resumo || null; m.ligacao.resumoPronto = true; m.ligacao.resumoPendente = false; feitos++; }
+              if (rz) { m.ligacao.transcricao = rz.transcricao || null; m.ligacao.resumo = rz.resumo || null; m.ligacao.resumoPronto = true; m.ligacao.resumoPendente = false; salvar(); }
+              break outer; // só 1 por ciclo
             }
           }
-          if (feitos >= 3) break;
         }
-        if (feitos > 0) salvar();
       } catch (_) {}
       _sincronizandoAtende = false;
     } catch (_) { _sincronizandoAtende = false; }
-  }, 60 * 1000);
+  }, 3 * 60 * 1000);
 
   return { garantirEstrutura };
 }

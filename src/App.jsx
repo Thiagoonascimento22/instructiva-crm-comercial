@@ -450,7 +450,7 @@ export default function App() {
             <span>{theme === "dark" ? "Modo claro" : "Modo escuro"}</span>
           </button>
           <button className="logout" onClick={logout}>Sair</button>
-          <div style={{ textAlign: "center", fontSize: 10, color: "var(--muted)", marginTop: 8, opacity: 0.7 }}>v262 · 16/09 14h20</div>
+          <div style={{ textAlign: "center", fontSize: 10, color: "var(--muted)", marginTop: 8, opacity: 0.7 }}>v263 · 16/09 14h40</div>
         </div>
       </aside>
 
@@ -9287,22 +9287,9 @@ function InboxOficial({ isGer, ehLider, showToast, onIrParaEvolution, target, on
     } finally { setLigando(false); }
   }
   async function encerrarChamada() {
-    const chatIdAtual = conversa && conversa.id;
-    const antes = conversa ? (conversa.mensagens || []).filter((m) => m.tipo === "ligacao").length : 0;
     setChamada(null);
-    // O Atende leva de 30s a alguns minutos pra gerar o CDR da ligação. Então tentamos
-    // sincronizar VÁRIAS vezes (não só uma) até a ligação aparecer na conversa.
-    const tentativas = [8000, 20000, 40000, 70000, 120000, 180000]; // 8s, 20s, 40s, 1min10, 2min, 3min
-    tentativas.forEach((ms) => {
-      setTimeout(async () => {
-        // se já apareceu uma ligação nova nesta conversa, para de tentar
-        if (chatIdAtual && conversaRef.current && conversaRef.current.id === chatIdAtual) {
-          const agora = (conversaRef.current.mensagens || []).filter((m) => m.tipo === "ligacao").length;
-          if (agora > antes) return;
-        }
-        try { await api.ofAtendeSincronizarAuto(); } catch (_) {}
-      }, ms);
-    });
+    // uma única sincronização rápida ~15s depois (o robô do servidor, a cada 3 min, cuida do resto sozinho).
+    setTimeout(async () => { try { await api.ofAtendeSincronizarAuto(); } catch (_) {} }, 15000);
   }
   async function exportarConversaPDF() {
     if (!conversa) return;
@@ -10240,7 +10227,7 @@ function WhatsApp({ user, showToast, target, onTargetUsed, recarregarSol }) {
       if (selRef.current) {
         try { setChat(await api.waChat(selRef.current)); } catch (_) {}
       }
-    }, 6000);
+    }, 10000);
     return () => clearInterval(t);
     // eslint-disable-next-line
   }, []);
