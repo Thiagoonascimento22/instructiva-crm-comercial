@@ -5387,6 +5387,31 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
 
   // Sincronização automática disparada ao DESLIGAR uma ligação (qualquer vendedor com CRM pode chamar).
   // Puxa só as ligações das últimas ~2h pra achar a que acabou de terminar e gravar no histórico do lead.
+  // DIAGNÓSTICO: mostra os CDRs crus que o Atende devolve nas últimas 24h — pra ver o que está vindo (ou se não vem nada)
+  app.get("/api/oficial/atende/diagnostico", auth, gerenteOnly, async (req, res) => {
+    try {
+      const a = cfgAtende();
+      if (!a.apiKey) return res.json({ ok: false, motivo: "sem x-api-key salva", ativo: !!a.ativo, temDialerToken: !!a.dialerToken });
+      const ini = new Date(Date.now() - 24 * 3600 * 1000), fim = new Date();
+      const fmt = (d) => d.toISOString().slice(0, 16);
+      const url = ATENDE_BASE + "/customers/cdrs/logs?start_at=" + encodeURIComponent(fmt(ini)) + "&end_at=" + encodeURIComponent(fmt(fim)) + "&size=1000";
+      const r = await fetch(url, { headers: { "x-api-key": a.apiKey } });
+      const txt = await r.text().catch(() => "");
+      let data = {}; try { data = JSON.parse(txt); } catch (_) {}
+      const itens = Array.isArray(data.items) ? data.items : [];
+      // mostra os telefones de cada CDR pra ver qual campo tem o número do cliente
+      const amostra = itens.slice(0, 15).map((it) => ({
+        callid: it.callid || it.call_id, direction: it.direction, status: it.call_status,
+        dur: it.duration_call || it.ori_billing_time, quando: it.ori_start_time,
+        ani: it.ani, dnis: it.dnis, alt_dnis: it.alt_dnis, client_number: it.client_number, customer_phone: it.customer_phone,
+        temAudio: !!it.public_audio_url,
+      }));
+      // quantas conversas oficiais existem (pra ver se há com que casar)
+      const numsChats = Object.values(db.waChats || {}).filter((c) => c.canal === "oficial").map((c) => _soDig(c.numero).slice(-8)).slice(0, 30);
+      res.json({ ok: true, httpAtende: r.status, ativo: !!a.ativo, temDialerToken: !!a.dialerToken, totalCDRs: itens.length, amostraCDRs: amostra, telefonesDasConversas: numsChats });
+    } catch (e) { res.json({ ok: false, erro: e.message }); }
+  });
+
   app.post("/api/oficial/atende/sincronizar-auto", auth, permiteVend("crm"), async (req, res) => {
     try { const desde = Date.now() - 2 * 3600 * 1000; const r = await sincronizarLigacoesAtende(desde); if (r.erro) return res.status(200).json({ ok: false, erro: r.erro }); res.json(r); }
     catch (e) { res.status(200).json({ ok: false, erro: e.message }); }
@@ -5468,6 +5493,36 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
       res.json({ ok: true });
     } catch (e) { res.json({ ok: true }); }
   });
+
+  // ROBÔ: sincroniza as ligações do Atende SOZINHO a cada 60s, sem ninguém precisar clicar.
+  // Assim a ligação aparece na conversa do vendedor automaticamente, poucos minutos depois de terminar.
+  let _sincronizandoAtende = false;
+  setInterval(async () => {
+    try {
+      const a = cfgAtende();
+      if (!a || !a.ativo || !a.apiKey) return; // só roda se a integração estiver ligada nesta unidade
+      if (_sincronizandoAtende) return; // não sobrepõe
+      _sincronizandoAtende = true;
+      try { await sincronizarLigacoesAtende(Date.now() - 3 * 3600 * 1000); } catch (_) {}
+      // tenta preencher resumos que ficaram pendentes (gravação que ainda não estava pronta) — no máx 3 por ciclo
+      try {
+        let feitos = 0;
+        const chats = Object.values(db.waChats || {}).filter((c) => c.canal === "oficial" && (Date.now() - (c.atualizadoEm || 0)) < 6 * 3600 * 1000);
+        for (const c of chats) {
+          for (const m of (c.mensagens || [])) {
+            if (feitos >= 3) break;
+            if (m.tipo === "ligacao" && m.ligacao && m.ligacao.audioUrl && !m.ligacao.resumoPronto) {
+              const rz = await gerarResumoLigacao(m.ligacao.audioUrl);
+              if (rz) { m.ligacao.transcricao = rz.transcricao || null; m.ligacao.resumo = rz.resumo || null; m.ligacao.resumoPronto = true; m.ligacao.resumoPendente = false; feitos++; }
+            }
+          }
+          if (feitos >= 3) break;
+        }
+        if (feitos > 0) salvar();
+      } catch (_) {}
+      _sincronizandoAtende = false;
+    } catch (_) { _sincronizandoAtende = false; }
+  }, 60 * 1000);
 
   return { garantirEstrutura };
 }
