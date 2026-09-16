@@ -450,7 +450,7 @@ export default function App() {
             <span>{theme === "dark" ? "Modo claro" : "Modo escuro"}</span>
           </button>
           <button className="logout" onClick={logout}>Sair</button>
-          <div style={{ textAlign: "center", fontSize: 10, color: "var(--muted)", marginTop: 8, opacity: 0.7 }}>v258 · 16/09 13h10</div>
+          <div style={{ textAlign: "center", fontSize: 10, color: "var(--muted)", marginTop: 8, opacity: 0.7 }}>v259 · 16/09 13h25</div>
         </div>
       </aside>
 
@@ -9248,6 +9248,8 @@ function InboxOficial({ isGer, ehLider, showToast, onIrParaEvolution, target, on
   const [enviandoTpl, setEnviandoTpl] = useState(false);
   const [sel, setSel] = useState(null);
   const [conversa, setConversa] = useState(null);
+  const conversaRef = useRef(null);
+  useEffect(() => { conversaRef.current = conversa; }, [conversa]);
   const [baixandoConvPdf, setBaixandoConvPdf] = useState(false);
   const [ligando, setLigando] = useState(false);
   const [chamada, setChamada] = useState(null); // {nome, numero, inicio} quando o Atende aceitou
@@ -9285,10 +9287,22 @@ function InboxOficial({ isGer, ehLider, showToast, onIrParaEvolution, target, on
     } finally { setLigando(false); }
   }
   async function encerrarChamada() {
+    const chatIdAtual = conversa && conversa.id;
+    const antes = conversa ? (conversa.mensagens || []).filter((m) => m.tipo === "ligacao").length : 0;
     setChamada(null);
-    // ao desligar, puxa a ligação recém-feita do Atende pro histórico do lead (sem precisar clicar em sincronizar).
-    // aguarda uns segundos pro CDR ficar disponível no Atende; o auto-refresh da conversa (6s) mostra a ligação.
-    setTimeout(async () => { try { await api.ofAtendeSincronizarAuto(); } catch (_) {} }, 5000);
+    // O Atende leva de 30s a alguns minutos pra gerar o CDR da ligação. Então tentamos
+    // sincronizar VÁRIAS vezes (não só uma) até a ligação aparecer na conversa.
+    const tentativas = [8000, 20000, 40000, 70000, 120000, 180000]; // 8s, 20s, 40s, 1min10, 2min, 3min
+    tentativas.forEach((ms) => {
+      setTimeout(async () => {
+        // se já apareceu uma ligação nova nesta conversa, para de tentar
+        if (chatIdAtual && conversaRef.current && conversaRef.current.id === chatIdAtual) {
+          const agora = (conversaRef.current.mensagens || []).filter((m) => m.tipo === "ligacao").length;
+          if (agora > antes) return;
+        }
+        try { await api.ofAtendeSincronizarAuto(); } catch (_) {}
+      }, ms);
+    });
   }
   async function exportarConversaPDF() {
     if (!conversa) return;
