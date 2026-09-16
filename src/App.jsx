@@ -450,7 +450,7 @@ export default function App() {
             <span>{theme === "dark" ? "Modo claro" : "Modo escuro"}</span>
           </button>
           <button className="logout" onClick={logout}>Sair</button>
-          <div style={{ textAlign: "center", fontSize: 10, color: "var(--muted)", marginTop: 8, opacity: 0.7 }}>v265 · 16/09 15h20</div>
+          <div style={{ textAlign: "center", fontSize: 10, color: "var(--muted)", marginTop: 8, opacity: 0.7 }}>v266 · 16/09 15h40</div>
         </div>
       </aside>
 
@@ -8483,6 +8483,14 @@ function PainelAtende({ showToast }) {
   const [form, setForm] = useState(null);
   const [salvando, setSalvando] = useState(false);
   const [sincronizando, setSincronizando] = useState(false);
+  const [diag, setDiag] = useState(null);
+  const [diagLoading, setDiagLoading] = useState(false);
+  async function rodarDiagnostico() {
+    setDiagLoading(true); setDiag(null);
+    try { const r = await api.ofAtendeDiagnostico(); setDiag(r); }
+    catch (e) { setDiag({ ok: false, erro: e.message }); }
+    finally { setDiagLoading(false); }
+  }
   const [testeTel, setTesteTel] = useState("");
   const [testando, setTestando] = useState(false);
   const [testeRes, setTesteRes] = useState(null);
@@ -8534,7 +8542,42 @@ function PainelAtende({ showToast }) {
             {configurado ? "Editar Atende Simples" : "Configurar Atende Simples"}
           </button>
           {cfg && cfg.dialerToken && <button className="btn" onClick={sincronizar} disabled={sincronizando}>{sincronizando ? "Sincronizando…" : "↻ Sincronizar ligações agora"}</button>}
+          {cfg && cfg.apiKey && <button className="btn" onClick={rodarDiagnostico} disabled={diagLoading}>{diagLoading ? "Verificando…" : "🔍 Diagnóstico"}</button>}
         </div>
+        {diag && (
+          <div style={{ marginTop: 12, padding: 14, borderRadius: 10, background: "#0f172a", color: "#e2e8f0", fontSize: 12, fontFamily: "monospace", maxHeight: 400, overflow: "auto" }}>
+            <div style={{ marginBottom: 8, fontWeight: 700, color: "#38bdf8" }}>Diagnóstico Atende Simples</div>
+            {!diag.ok ? (
+              <div style={{ color: "#fca5a5" }}>Erro: {diag.erro || diag.motivo || "desconhecido"}</div>
+            ) : (
+              <div style={{ lineHeight: 1.7 }}>
+                <div>Integração ativa: <b style={{ color: diag.ativo ? "#4ade80" : "#fca5a5" }}>{String(diag.ativo)}</b> · token discador: <b>{String(diag.temDialerToken)}</b></div>
+                <div>Conexão com Atende (HTTP): <b style={{ color: diag.httpAtende === 200 ? "#4ade80" : "#fca5a5" }}>{diag.httpAtende}</b></div>
+                <div>Ligações encontradas (24h): <b style={{ color: diag.totalCDRs > 0 ? "#4ade80" : "#fca5a5" }}>{diag.totalCDRs}</b></div>
+                {diag.testeGravacao && (
+                  <div style={{ marginTop: 8, paddingTop: 8, borderTop: "1px solid #334155" }}>
+                    <div style={{ color: "#38bdf8", fontWeight: 700 }}>Teste da gravação (callid {diag.testeGravacao.callid}):</div>
+                    <div>has_audio: <b style={{ color: diag.testeGravacao.has_audio ? "#4ade80" : "#fca5a5" }}>{String(diag.testeGravacao.has_audio)}</b> · estado: <b>{String(diag.testeGravacao.audio_state)}</b></div>
+                    <div>tem URL pública: <b>{diag.testeGravacao.public_audio_url ? "sim" : "não"}</b></div>
+                    {diag.testeGravacao.urlPublica_http && <div>baixar URL pública → HTTP <b>{diag.testeGravacao.urlPublica_http}</b>, tipo: <b>{diag.testeGravacao.urlPublica_contentType || "?"}</b></div>}
+                    <div>API download → HTTP <b>{diag.testeGravacao.downloadApi_http}</b>, link: <b>{diag.testeGravacao.downloadApi_location || "não veio"}</b></div>
+                    {diag.testeGravacao.erro && <div style={{ color: "#fca5a5" }}>erro: {diag.testeGravacao.erro}</div>}
+                  </div>
+                )}
+                {!diag.testeGravacao && diag.totalCDRs > 0 && <div style={{ marginTop: 8, color: "#fbbf24" }}>Nenhuma ligação com gravação encontrada — provável que a gravação de chamadas não esteja ativada na conta do Atende.</div>}
+                {diag.amostraCDRs && diag.amostraCDRs.length > 0 && (
+                  <details style={{ marginTop: 8 }}>
+                    <summary style={{ cursor: "pointer", color: "#94a3b8" }}>Ver telefones das ligações (comparar com as conversas)</summary>
+                    <div style={{ marginTop: 6 }}>
+                      <div style={{ color: "#94a3b8" }}>Telefones das conversas: {(diag.telefonesDasConversas || []).join(", ") || "nenhuma"}</div>
+                      {diag.amostraCDRs.map((c, i) => <div key={i} style={{ marginTop: 4 }}>#{i + 1} dir:{c.direction} dur:{c.dur}s · ani:{c.ani} dnis:{c.dnis} alt:{c.alt_dnis} client:{c.client_number || "—"} · audio:{String(c.has_audio)}</div>)}
+                    </div>
+                  </details>
+                )}
+              </div>
+            )}
+          </div>
+        )}
       </div>
       {form && (
         <Portal>
