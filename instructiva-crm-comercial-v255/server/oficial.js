@@ -1,0 +1,5371 @@
+/* ============================================================
+   CANAL OFICIAL (WhatsApp Cloud API / Meta) + DISTRIBUIÇÃO
+   ------------------------------------------------------------
+   Módulo isolado: recebe { app, db, saveDB, proximoId, auth,
+   gerenteOnly } do index.js e registra suas próprias rotas.
+   Não altera nada do fluxo Evolution já existente.
+   ============================================================ */
+
+import { execFile } from "child_process";
+import os from "os";
+import { createRequire } from "module";
+// lógica central do "Lead Atualizado" (recorrente), pura e testada (server/leadRecorrente.js)
+import { decidirResponsavel, mesclarDados, registrarCaptacao } from "./leadRecorrente.js";
+
+const require = createRequire(import.meta.url);
+const GRAPH = "https://graph.facebook.com/v21.0";
+
+// Descobre o binário do ffmpeg de forma robusta, feito UMA vez.
+// 1) ffmpeg-static: binário embutido via npm — NÃO depende do PATH do servidor
+//    (no Railway/nixpacks o "ffmpeg" some do PATH em runtime e todo áudio falha).
+// 2) fallback: "ffmpeg" do PATH / caminhos comuns do sistema.
+const FFMPEG_BIN = (() => {
+  try {
+    const est = require("ffmpeg-static");
+    if (est && typeof est === "string") {
+      try { const f = require("fs"); if (f.existsSync(est)) return est; } catch (_) { return est; }
+    }
+  } catch (_) {}
+  try {
+    const f = require("fs");
+    for (const c of ["/usr/bin/ffmpeg", "/usr/local/bin/ffmpeg", "/opt/homebrew/bin/ffmpeg", "/bin/ffmpeg"]) {
+      if (f.existsSync(c)) return c;
+    }
+  } catch (_) {}
+  return "ffmpeg"; // último recurso: procura no PATH
+})();
+
+export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gerenteOnly, MEDIA_DIR, fs, path }) {
+  // O index.js REATRIBUI o objeto db dentro de loadDB(). Por isso resolvemos
+  // o db dinamicamente via Proxy: todo acesso db.x lê/escreve no objeto atual.
+  const db = new Proxy({}, {
+    get: (_t, k) => getDb()[k],
+    set: (_t, k, v) => { getDb()[k] = v; return true; },
+    has: (_t, k) => k in getDb(),
+  });
+
+  /* ---- estrutura no banco (criada sob demanda) ---- */
+  function garantirEstrutura() {
+    if (!db.oficial || typeof db.oficial !== "object") db.oficial = {};
+    if (!Array.isArray(db.oficial.numeros)) db.oficial.numeros = [];
+    // numeros: [{ id, apelido, numero, phoneNumberId, wabaId, token, vendedorId, ativo }]
+    //   vendedorId: dono do número (vendedor). Quando setado, os leads que
+    //   responderem caem DIRETO nele e ele pode disparar/criar templates nesse número.
+    // token GLOBAL da Meta (mesma BM/conta da empresa) — cada número usa este token
+    // se não tiver um token próprio. Assim não precisa colar o token em cada número.
+    if (typeof db.oficial.tokenGlobal !== "string") db.oficial.tokenGlobal = "";
+    if (!Array.isArray(db.oficial.campanhas)) db.oficial.campanhas = [];
+    // campanhas: [{ id, nome, numeroId, template, enviados, falhas, total, criadoEm }]
+    if (typeof db.oficial.rrCursor !== "number") db.oficial.rrCursor = 0;
+    if (!Array.isArray(db.oficial.reservaListas)) db.oficial.reservaListas = []; // listas de reserva (captação)
+    if (!Array.isArray(db.oficial.webhookReenvio)) db.oficial.webhookReenvio = []; // URLs de outros sistemas (mesmo app da Meta) pra repassar eventos
+    if (!Array.isArray(db.oficial.ias)) db.oficial.ias = [];
+    // ias: [{ id, nome, ativa, modo, persona, playbook, gatilhoHandoff, criadoEm }]
+    //   modo: "fecha" (IA vende sozinha) | "qualifica" (IA conversa e passa pro vendedor)
+    if (db.oficial.iaGlobalAtiva === undefined) db.oficial.iaGlobalAtiva = true; // botão de pânico geral
+    // v63: pedido do dono — sobe com a IA GERAL desligada, UMA única vez.
+    // Depois disso respeita o botão "Parar/Religar IAs" normalmente (não desliga de novo).
+    if (!db.oficial._iaOffV63) {
+      db.oficial.iaGlobalAtiva = false;
+      db.oficial._iaOffV63 = true;
+      saveDB();
+    }
+    // Recuperação única: conversas de DISPARO que já eram de um vendedor mas foram
+    // "sequestradas" pela IA padrão do número (bug antigo) ficavam invisíveis pra ele.
+    // Pausa a IA nessas conversas pra elas reaparecerem na Caixa de entrada do vendedor.
+    if (!db.oficial._migDisparoIADono) {
+      db.oficial._migDisparoIADono = true;
+      let devolvidas = 0;
+      for (const c of Object.values(db.waChats || {})) {
+        if (c && c.canal === "oficial" && c.origemDisparo && c.vendedorId && c.iaId && !c.iaPausada) {
+          c.iaPausada = true; // IA sai; o vendedor assume e a conversa volta a aparecer
+          devolvidas++;
+        }
+      }
+      if (devolvidas) console.log(`[recuperação] ${devolvidas} conversa(s) de disparo devolvida(s) ao vendedor (IA pausada)`);
+      saveDB();
+    }
+    // Limpeza definitiva: tira a IA de TODA conversa de disparo (mesmo sem dono definido)
+    // pra IA nunca mais assumir/esconder disparo. Roda de novo (flag própria).
+    if (!db.oficial._migDisparoSemIAv2) {
+      db.oficial._migDisparoSemIAv2 = true;
+      let limpas = 0;
+      for (const c of Object.values(db.waChats || {})) {
+        if (c && c.canal === "oficial" && c.origemDisparo && c.iaId && !c.iaPausada) {
+          c.iaPausada = true;
+          limpas++;
+        }
+      }
+      if (limpas) console.log(`[recuperação v2] ${limpas} conversa(s) de disparo liberada(s) da IA`);
+      saveDB();
+    }
+    if (!db.oficial.verifyToken) {
+      db.oficial.verifyToken = "instructiva_" + Math.random().toString(36).slice(2, 10);
+    }
+    // Instagram (DM/Direct) — mesma infra da Meta. { igId, token, usuario, ativo }
+    //   igId: id da conta Instagram profissional (usado no envio e pra casar o webhook)
+    //   token: Page access token com instagram_manage_messages (usa o tokenGlobal se vazio)
+    if (!db.oficial.instagram || typeof db.oficial.instagram !== "object") {
+      db.oficial.instagram = { igId: "", token: "", usuario: "", ativo: false, vendedorId: null };
+    }
+    // Integração Atende Simples (ligação): chaves globais + controle de sync
+    if (!db.oficial.atende || typeof db.oficial.atende !== "object") {
+      db.oficial.atende = { apiKey: "", userId: "", queueId: "", queueToken: "", dialerToken: "", voipToken: "", ativo: false, ultimoSync: 0, callsVistas: [] };
+    }
+    if (typeof db.oficial.atende.dialerToken !== "string") db.oficial.atende.dialerToken = "";
+    if (!Array.isArray(db.oficial.atende.callsVistas)) db.oficial.atende.callsVistas = [];
+  }
+
+  function salvar() { saveDB(); }
+
+  /* ---- helpers de número do pool ---- */
+  function acharNumero(id) {
+    return (db.oficial.numeros || []).find((n) => n.id === id) || null;
+  }
+  // token efetivo do número: o próprio (se tiver) ou o token global da empresa
+  function tokenDe(n) {
+    return (n && n.token) || (db.oficial && db.oficial.tokenGlobal) || "";
+  }
+  // Vendedores que este usuário enxerga/mexe:
+  //  gerente -> null (todos, sem filtro)
+  //  líder   -> ele mesmo + os vendedores que ele lidera (lideradosIds)
+  //  vendedor comum -> só ele
+  function idsVisiveis(user) {
+    if (!user || user.role === "gerente") return null;
+    const ids = [user.id];
+    if (Array.isArray(user.lideradosIds)) user.lideradosIds.forEach((i) => { if (i && !ids.includes(i)) ids.push(i); });
+    return ids;
+  }
+  function podeVerVend(user, vendedorId) {
+    const ids = idsVisiveis(user);
+    return ids === null || (vendedorId != null && ids.includes(vendedorId));
+  }
+  function numeroPublico(n) {
+    const dono = n.vendedorId ? (db.users || []).find((u) => u.id === n.vendedorId) : null;
+    return {
+      id: n.id, apelido: n.apelido, numero: n.numero,
+      phoneNumberId: n.phoneNumberId, wabaId: n.wabaId, ativo: n.ativo,
+      temToken: !!tokenDe(n),
+      vendedorId: n.vendedorId || null,
+      vendedorNome: dono ? dono.nome : "",
+      quality: n.quality || null, // { rating, tier, atualizadoEm, anterior, mudouEm }
+      temFoto: !!n.fotoArquivo,
+      fotoAtualizadaEm: n.fotoAtualizadaEm || 0,
+      iaId: n.iaId || null, // IA padrão que atende os leads desse número (null = sem IA)
+    };
+  }
+  // busca a URL da foto de perfil do WhatsApp Business do número
+  async function buscarFotoPerfilUrl(n) {
+    if (!n.phoneNumberId || !tokenDe(n)) return { url: null, erro: "número sem Phone Number ID ou token" };
+    try {
+      const r = await fetch(`${GRAPH}/${n.phoneNumberId}/whatsapp_business_profile?fields=profile_picture_url`, {
+        headers: { Authorization: "Bearer " + tokenDe(n) },
+      });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) return { url: null, erro: (d.error && d.error.message) || ("HTTP " + r.status) };
+      const url = (d.data && d.data[0] && d.data[0].profile_picture_url) || null;
+      return { url, erro: url ? null : "a Meta não retornou foto — esse número provavelmente não tem foto de perfil definida no WhatsApp Business" };
+    } catch (e) { return { url: null, erro: e.message }; }
+  }
+  // baixa a foto e salva no volume (pra servir depois, sem depender da URL da Meta que expira)
+  async function baixarFotoPerfil(n) {
+    const { url, erro } = await buscarFotoPerfilUrl(n);
+    if (!url) { if (erro) console.log(`[oficial] foto de ${n.apelido}: ${erro}`); return { ok: false, erro }; }
+    try {
+      const r = await fetch(url);
+      if (!r.ok) return { ok: false, erro: "erro ao baixar a imagem (HTTP " + r.status + ")" };
+      const buf = Buffer.from(await r.arrayBuffer());
+      const mime = r.headers.get("content-type") || "image/jpeg";
+      const ext = mime.includes("png") ? "png" : "jpg";
+      const arquivo = `perfil_${n.id}.${ext}`;
+      if (MEDIA_DIR && fs && path) fs.writeFileSync(path.join(MEDIA_DIR, arquivo), buf);
+      n.fotoArquivo = arquivo;
+      n.fotoAtualizadaEm = Date.now();
+      return { ok: true };
+    } catch (e) { return { ok: false, erro: e.message }; }
+  }
+  // puxa da Meta a qualidade e o limite de envio do número
+  async function buscarQualidade(n) {
+    if (!n.phoneNumberId || !tokenDe(n)) return null;
+    try {
+      const r = await fetch(`${GRAPH}/${n.phoneNumberId}?fields=quality_rating,messaging_limit_tier,display_phone_number,verified_name,name_status`, {
+        headers: { Authorization: "Bearer " + tokenDe(n) },
+      });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) return null;
+      return {
+        rating: d.quality_rating || "UNKNOWN", // GREEN | YELLOW | RED | UNKNOWN
+        tier: d.messaging_limit_tier || "",     // TIER_250 | TIER_1K | TIER_10K | ...
+        nome: d.verified_name || "",
+        nameStatus: d.name_status || "",
+      };
+    } catch (e) { return null; }
+  }
+  // aplica a qualidade no número, guardando a anterior (pra mostrar se subiu/caiu)
+  function aplicarQualidade(n, q) {
+    if (!q) return false;
+    const antigo = n.quality || {};
+    const mudou = !!antigo.rating && antigo.rating !== q.rating;
+    n.quality = {
+      rating: q.rating, tier: q.tier, nome: q.nome, nameStatus: q.nameStatus,
+      atualizadoEm: Date.now(),
+      anterior: mudou ? antigo.rating : (antigo.anterior || null),
+      mudouEm: mudou ? Date.now() : (antigo.mudouEm || null),
+    };
+    if (mudou) console.log(`[oficial] QUALIDADE ${n.apelido}: ${antigo.rating} -> ${q.rating}`);
+    return mudou;
+  }
+  async function atualizarQualidadeTodos() {
+    let algum = false;
+    for (const n of db.oficial.numeros || []) {
+      if (!n.phoneNumberId || !tokenDe(n)) continue;
+      try { const q = await buscarQualidade(n); if (q && aplicarQualidade(n, q)) algum = true; } catch (_) {}
+      try { await baixarFotoPerfil(n); } catch (_) {} // aproveita e atualiza a foto de perfil
+      await new Promise((r) => setTimeout(r, 400));
+    }
+    salvar();
+    return algum;
+  }
+  // número que o usuário logado pode ver/usar:
+  //  - gerente: qualquer número
+  //  - vendedor: só os números vinculados a ele (n.vendedorId === user.id)
+  function numeroPermitido(req, id) {
+    const n = acharNumero(id);
+    if (!n) return null;
+    if (req.user.role === "gerente") return n;
+    if (req.user.role === "vendedor" && n.vendedorId === req.user.id) return n;
+    return null;
+  }
+
+  /* ---- só dígitos no telefone ---- */
+  function soDigitos(s) { return String(s || "").replace(/\D/g, ""); }
+  // normaliza pra padrão BR com 55 na frente
+  function normalizaTelefone(s) {
+    let d = soDigitos(s);
+    if (!d) return "";
+    if (!d.startsWith("55")) d = "55" + d;
+    return d;
+  }
+
+  /* ============================================================
+     MOTOR DE DISTRIBUIÇÃO PONDERADA (só vendedores ATIVOS)
+     ------------------------------------------------------------
+     Lê db.users (role=vendedor). Usa flag .oficialAtivo e o peso
+     .oficialPercentual. Distribui respeitando o percentual entre
+     os ativos, dando o lead a quem está mais abaixo da própria
+     cota (déficit). Empate -> menor contador absoluto.
+     ============================================================ */
+  function vendedoresElegiveis() {
+    return db.users.filter(
+      (u) => u.role === "vendedor" && u.ativo && u.oficialAtivo
+    );
+  }
+
+  // peso = quantos leads a pessoa recebe por rodada (padrão 1)
+  function pesoDe(v) { const n = Number(v.oficialPercentual); return n > 0 ? n : 1; }
+
+  /* RODÍZIO INTERCALADO (não olha histórico!)
+     Cada ligado tem um "crédito" que sobe pelo peso dele a cada lead. Quem tiver
+     o maior crédito leva o lead e devolve a soma dos pesos. Resultado: numa rodada
+     completa cada um recebe exatamente o peso dele, mas os leads ficam INTERCALADOS
+     (todo mundo aparece logo no começo, ninguém espera a rodada inteira).
+     Se alguém for ligado/desligado ou mudar de peso, o rodízio é refeito NA HORA. */
+  function estadoRodada(ativos) {
+    const chave = ativos.map((v) => v.id + ":" + pesoDe(v)).sort().join("|");
+    let r = db.oficial.rodada;
+    if (!r || r.chave !== chave || !r.credito) {
+      r = db.oficial.rodada = { chave, credito: {} };
+      ativos.forEach((v) => { r.credito[v.id] = 0; });
+    }
+    return r;
+  }
+
+  // escolhe o maior crédito; empate -> quem recebeu menos no total
+  function maiorCredito(ativos, credito) {
+    let escolhido = null;
+    for (const v of ativos) {
+      if (!escolhido) { escolhido = v; continue; }
+      const a = credito[v.id] || 0, b = credito[escolhido.id] || 0;
+      if (a > b || (a === b && (v.oficialLeadsRecebidos || 0) < (escolhido.oficialLeadsRecebidos || 0))) escolhido = v;
+    }
+    return escolhido;
+  }
+
+  // quem recebe o PRÓXIMO lead (sem consumir) — usado pra mostrar na tela
+  function proximoDaVez() {
+    const ativos = vendedoresElegiveis();
+    if (ativos.length === 0) return null;
+    const r = estadoRodada(ativos);
+    const simulado = {};
+    ativos.forEach((v) => { simulado[v.id] = (r.credito[v.id] || 0) + pesoDe(v); });
+    return maiorCredito(ativos, simulado);
+  }
+
+  function escolherVendedor() {
+    const ativos = vendedoresElegiveis();
+    if (ativos.length === 0) return null;
+    const r = estadoRodada(ativos);
+    const total = ativos.reduce((s, v) => s + pesoDe(v), 0);
+    ativos.forEach((v) => { r.credito[v.id] = (r.credito[v.id] || 0) + pesoDe(v); });
+    const escolhido = maiorCredito(ativos, r.credito);
+    if (!escolhido) return null;
+    r.credito[escolhido.id] = (r.credito[escolhido.id] || 0) - total;
+    return escolhido;
+  }
+
+  function atribuirLead(chat) {
+    // já tem dono? mantém
+    if (chat.vendedorId) return chat.vendedorId;
+    // MODELO "1 número por vendedor": se o número tem dono, o lead vai DIRETO pra ele
+    const numeroCfg = acharNumero(chat.numeroOficialId);
+    if (numeroCfg && numeroCfg.vendedorId) {
+      const dono = db.users.find(
+        (u) => u.id === numeroCfg.vendedorId && u.role === "vendedor" && u.ativo
+      );
+      if (dono) {
+        chat.vendedorId = dono.id;
+        chat.vendedorNome = dono.nome;
+        chat.atribuidoEm = Date.now();
+        dono.oficialLeadsRecebidos = (dono.oficialLeadsRecebidos || 0) + 1;
+        return dono.id;
+      }
+    }
+    // número sem dono (pool antigo) -> cai na distribuição ponderada de sempre
+    const v = escolherVendedor();
+    if (!v) return null; // ninguém ativo -> fica na fila sem dono
+    chat.vendedorId = v.id;
+    chat.vendedorNome = v.nome;
+    chat.atribuidoEm = Date.now();
+    v.oficialLeadsRecebidos = (v.oficialLeadsRecebidos || 0) + 1;
+    return v.id;
+  }
+
+  /* ============================================================
+     CHAVE / CHAT do canal oficial
+     ============================================================ */
+  function chaveChat(numeroId, telefone) {
+    return `oficial::${numeroId}::${telefone}`;
+  }
+  function acharOuCriarChat(numeroId, telefone, nome) {
+    const id = chaveChat(numeroId, telefone);
+    let chat = db.waChats[id];
+    if (!chat) {
+      chat = {
+        id,
+        canal: "oficial",
+        numeroOficialId: numeroId,
+        instance: id, // mantém compat com telas que leem .instance
+        numero: telefone,
+        nome: nome || telefone,
+        mensagens: [],
+        naoLidas: 0,
+        atualizadoEm: Date.now(),
+        vendedorId: null,
+      };
+      db.waChats[id] = chat;
+    }
+    return chat;
+  }
+
+  /* tenta achar um chat existente do mesmo lead, tolerando variação do 9º dígito */
+  function acharChatTolerante(numeroId, telefone) {
+    const exato = db.waChats[chaveChat(numeroId, telefone)];
+    if (exato) return exato;
+    // normaliza pra comparar só os últimos 8 dígitos (núcleo do número)
+    const nucleo = (t) => String(t || "").replace(/\D/g, "").slice(-8);
+    const alvo = nucleo(telefone);
+    if (!alvo) return null;
+    for (const c of Object.values(db.waChats)) {
+      if (c.canal !== "oficial" || c.numeroOficialId !== numeroId) continue;
+      if (nucleo(c.numero) === alvo) return c;
+    }
+    return null;
+  }
+  async function graphPost(numeroCfg, payload) {
+    const r = await fetch(`${GRAPH}/${numeroCfg.phoneNumberId}/messages`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: "Bearer " + tokenDe(numeroCfg),
+      },
+      body: JSON.stringify(payload),
+    });
+    let data = null;
+    try { data = await r.json(); } catch (_) {}
+    if (!r.ok) {
+      const msg = (data && data.error && data.error.message) || ("Erro Graph " + r.status);
+      throw new Error(msg);
+    }
+    return data;
+  }
+
+  async function enviarTextoOficial(numeroCfg, telefone, texto) {
+    return graphPost(numeroCfg, {
+      messaging_product: "whatsapp",
+      to: telefone,
+      type: "text",
+      text: { body: texto },
+    });
+  }
+
+  /* ============================================================
+     INSTAGRAM (DM / Direct) — mesma Graph API da Meta
+     ============================================================ */
+  function cfgInstagram() {
+    garantirEstrutura();
+    const ig = db.oficial.instagram || {};
+    return { igId: ig.igId || "", token: ig.token || db.oficial.tokenGlobal || "", usuario: ig.usuario || "", ativo: !!ig.ativo, vendedorId: ig.vendedorId || null };
+  }
+  function chaveChatIG(remetenteId) { return `instagram::${remetenteId}`; }
+  function acharOuCriarChatIG(remetenteId, nome) {
+    const id = chaveChatIG(remetenteId);
+    let chat = db.waChats[id];
+    if (!chat) {
+      const cfgIG = (db.oficial && db.oficial.instagram) || {};
+      chat = {
+        id, canal: "instagram", instance: id,
+        igUserId: remetenteId,   // IGSID do cliente (é pra ele que respondemos)
+        numero: remetenteId,     // compat com telas que leem .numero
+        nome: nome || "Instagram",
+        mensagens: [], naoLidas: 0, atualizadoEm: Date.now(),
+        vendedorId: cfgIG.vendedorId || null,   // já entra pro vendedor responsável pelo Insta
+      };
+      db.waChats[id] = chat;
+    }
+    return chat;
+  }
+  async function enviarTextoInstagram(destinatarioId, texto) {
+    const cfg = cfgInstagram();
+    if (!cfg.igId || !cfg.token) throw new Error("Instagram não configurado (falta a conta ou o token).");
+    const r = await fetch(`${GRAPH}/${cfg.igId}/messages`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: "Bearer " + cfg.token },
+      body: JSON.stringify({ recipient: { id: destinatarioId }, message: { text: texto } }),
+    });
+    let data = null; try { data = await r.json(); } catch (_) {}
+    if (!r.ok) {
+      const e = (data && data.error) || {};
+      const err = new Error(e.message || ("Falha ao enviar (HTTP " + r.status + ")"));
+      err.code = e.code; err.subcode = e.error_subcode; throw err;
+    }
+    return data;
+  }
+  async function buscarPerfilIG(igsid) {
+    const cfg = cfgInstagram();
+    if (!cfg.token || !igsid) return null;
+    try {
+      const r = await fetch(`${GRAPH}/${igsid}?fields=name,username&access_token=${encodeURIComponent(cfg.token)}`);
+      const d = await r.json();
+      if (r.ok && d) return { nome: d.name || "", usuario: d.username || "" };
+    } catch (_) {}
+    return null;
+  }
+  // Webhook do Instagram: formato Messenger (entry[].messaging[] com sender/recipient/message)
+  async function processarWebhookIG(body) {
+    const cfg = cfgInstagram();
+    for (const entry of body.entry || []) {
+      for (const ev of entry.messaging || []) {
+        const msg = ev.message;
+        if (!msg) continue;              // ignora read/reaction/postback etc.
+        if (msg.is_echo) continue;       // ignora eco das mensagens que NÓS enviamos
+        const remetente = ev.sender && ev.sender.id;
+        if (!remetente) continue;
+        if (cfg.igId && remetente === cfg.igId) continue; // segurança: não trata nós como cliente
+
+        let content = "";
+        let anexoTipo = null, anexoUrl = null;
+        if (typeof msg.text === "string" && msg.text) content = msg.text;
+        else if (Array.isArray(msg.attachments) && msg.attachments.length) {
+          const at = msg.attachments[0]; const t = at.type;
+          anexoTipo = t === "image" ? "image" : (t || "anexo");
+          anexoUrl = at.payload && at.payload.url ? at.payload.url : null;
+          content = t === "image" ? "📷 Foto" : t === "video" ? "🎬 Vídeo" : t === "audio" ? "🎤 Áudio"
+            : t === "story_mention" ? "📸 Mencionou você no story" : t === "share" ? "🔗 Compartilhou um post" : "[" + (t || "anexo") + "]";
+        } else if (msg.reaction) {
+          content = msg.reaction.emoji ? ("reagiu com " + msg.reaction.emoji) : "reação";
+        } else content = "[mensagem]";
+
+        const chat = acharOuCriarChatIG(remetente);
+        // pega o nome/@ do cliente uma única vez
+        if (!chat.igPerfilBuscado) {
+          chat.igPerfilBuscado = true;
+          const p = await buscarPerfilIG(remetente);
+          if (p && (p.nome || p.usuario)) { chat.nome = p.nome || ("@" + p.usuario); if (p.usuario) chat.igUsuario = p.usuario; }
+        }
+        const ts = ev.timestamp ? Number(ev.timestamp) : Date.now();
+        const msgObj = { role: "them", content, ts };
+        if (anexoTipo) { msgObj.tipo = anexoTipo; if (anexoUrl) msgObj.igUrl = anexoUrl; }
+        chat.mensagens.push(msgObj);
+        if (chat.mensagens.length > 300) chat.mensagens = chat.mensagens.slice(-300);
+        chat.naoLidas = (chat.naoLidas || 0) + 1;
+        chat.atualizadoEm = ts;
+      }
+    }
+    salvar();
+  }
+
+  // faz upload de um arquivo (Buffer) pro Meta e devolve o media_id
+  /* ------------------------------------------------------------
+     ÁUDIO PRA META
+     O navegador (Chrome/Android) grava em WebM/Opus, e a Cloud API
+     NÃO aceita WebM — ela olha o conteúdo do arquivo, não o rótulo.
+     Aqui trocamos o container pra OGG (mesmo codec Opus, sem
+     reencodar: é instantâneo e não perde qualidade).
+     Safari já grava em MP4, que a Meta aceita: passa direto.
+     ------------------------------------------------------------ */
+  function ffmpegOk() {
+    return new Promise((resolve) => {
+      execFile(FFMPEG_BIN, ["-version"], (err) => resolve(!err));
+    });
+  }
+  async function audioParaMeta(buffer, mime) {
+    const m = String(mime || "").toLowerCase();
+    if (!m.startsWith("audio/")) return { buffer, mime: m, filename: null, ok: true };
+
+    // A Meta valida o CONTEÚDO do arquivo e é RÍGIDA: só aceita um OGG/Opus limpo.
+    // Por isso convertemos SEMPRE (sem atalho "-c:a copy" e sem confiar no OGG do
+    // navegador) — reencoda pra Opus mono 48k, o padrão de voz do WhatsApp.
+    // Isso evita o erro #131053 (arquivo vira application/octet-stream pra Meta).
+    const temFF = fs && path && (await ffmpegOk());
+    console.log("[audio] recebido mime=" + m + " bytes=" + (buffer ? buffer.length : 0) + " ffmpeg=" + (temFF ? "sim" : "NÃO"));
+    if (!temFF) {
+      return { buffer, mime: m, filename: null, ok: false,
+               motivo: "O servidor está sem ffmpeg, então não dá pra converter o áudio pro formato do WhatsApp." };
+    }
+    const tmp = os.tmpdir();
+    const marca = Date.now() + "_" + Math.random().toString(36).slice(2, 8);
+    const entrada = path.join(tmp, "in_" + marca);
+    const saida = path.join(tmp, "out_" + marca + ".ogg");
+    try {
+      fs.writeFileSync(entrada, buffer);
+      const rodar = (args) => new Promise((resolve) => execFile(FFMPEG_BIN, args, (err, so, se) => resolve({ ok: !err, err: err ? (se || err.message || "").toString().slice(0, 200) : "" })));
+      const validar = () => fs.existsSync(saida) && fs.statSync(saida).size > 200 && fs.readFileSync(saida).slice(0, 4).toString("ascii") === "OggS";
+      // 1) opus mono 48k (padrão de voz do WhatsApp) via libopus
+      let r = await rodar(["-y", "-i", entrada, "-vn", "-ac", "1", "-ar", "48000", "-c:a", "libopus", "-b:a", "32k", "-f", "ogg", saida]);
+      let bom = r.ok && validar();
+      if (!bom) {
+        console.log("[audio] libopus falhou (" + r.err + "). Tentando encoder 'opus' nativo...");
+        try { fs.existsSync(saida) && fs.unlinkSync(saida); } catch (_) {}
+        // 2) fallback: encoder opus nativo do ffmpeg (caso o build não tenha libopus)
+        r = await rodar(["-y", "-i", entrada, "-vn", "-ac", "1", "-ar", "48000", "-c:a", "opus", "-strict", "-2", "-b:a", "32k", "-f", "ogg", saida]);
+        bom = r.ok && validar();
+      }
+      if (bom) {
+        console.log("[audio] convertido OK -> audio/ogg (opus mono 48k), " + fs.statSync(saida).size + " bytes");
+        return { buffer: fs.readFileSync(saida), mime: "audio/ogg", filename: "audio.ogg", ok: true };
+      }
+      console.log("[audio] NÃO consegui converter (" + r.err + ")");
+      return { buffer, mime: m, filename: null, ok: false, motivo: "Não consegui converter esse áudio pro formato do WhatsApp." };
+    } catch (e) {
+      console.log("[audio] erro na conversão:", e.message);
+      return { buffer, mime: m, filename: null, ok: false, motivo: "Erro ao converter o áudio." };
+    } finally {
+      try { fs.existsSync(entrada) && fs.unlinkSync(entrada); } catch (_) {}
+      try { fs.existsSync(saida) && fs.unlinkSync(saida); } catch (_) {}
+    }
+  }
+
+  async function uploadMidiaMeta(numeroCfg, buffer, mimeType, filename) {
+    const form = new FormData();
+    form.append("messaging_product", "whatsapp");
+    const blob = new Blob([buffer], { type: mimeType });
+    form.append("file", blob, filename || "arquivo");
+    console.log("[audio] enviando pra Meta: mime=" + mimeType + " arquivo=" + (filename || "arquivo") + " bytes=" + (buffer ? buffer.length : 0));
+    const r = await fetch(`${GRAPH}/${numeroCfg.phoneNumberId}/media`, {
+      method: "POST",
+      headers: { Authorization: "Bearer " + tokenDe(numeroCfg) },
+      body: form,
+    });
+    let data = null;
+    try { data = await r.json(); } catch (_) {}
+    if (!r.ok || !data || !data.id) {
+      const msg = (data && data.error && data.error.message) || ("Erro upload mídia " + r.status);
+      throw new Error(msg);
+    }
+    return data.id;
+  }
+
+  // envia mídia (imagem/áudio/vídeo/documento) já com media_id
+  async function enviarMidiaOficial(numeroCfg, telefone, tipo, mediaId, caption, filename) {
+    const payload = { messaging_product: "whatsapp", to: telefone, type: tipo };
+    const obj = { id: mediaId };
+    if (caption && (tipo === "image" || tipo === "video" || tipo === "document")) obj.caption = caption;
+    if (tipo === "document" && filename) obj.filename = filename;
+    payload[tipo] = obj;
+    return graphPost(numeroCfg, payload);
+  }
+
+  // descobre o "type" do WhatsApp a partir do mime
+  function tipoPorMime(mime) {
+    const m = String(mime || "").toLowerCase();
+    if (m.startsWith("image/")) return "image";
+    if (m.startsWith("video/")) return "video";
+    if (m.startsWith("audio/")) return "audio";
+    return "document";
+  }
+
+  // extensão a partir do mime (pra salvar com nome certo)
+  function extPorMime(mime) {
+    const map = {
+      "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp", "image/gif": "gif",
+      "audio/ogg": "ogg", "audio/mpeg": "mp3", "audio/mp4": "m4a", "audio/amr": "amr", "audio/wav": "wav",
+      "video/mp4": "mp4", "video/3gpp": "3gp",
+      "application/pdf": "pdf",
+    };
+    return map[String(mime || "").toLowerCase().split(";")[0]] || "bin";
+  }
+
+  // baixa a mídia recebida do Meta (2 passos: pega a URL pelo id, depois baixa os bytes)
+  async function baixarMidiaMeta(numeroCfg, mediaId) {
+    if (!MEDIA_DIR || !fs || !path || !mediaId) return null;
+    try {
+      // passo 1: pega a URL temporária do arquivo
+      const r1 = await fetch(`${GRAPH}/${mediaId}`, {
+        headers: { Authorization: "Bearer " + tokenDe(numeroCfg) },
+      });
+      if (!r1.ok) return null;
+      const meta = await r1.json();
+      if (!meta || !meta.url) return null;
+      // passo 2: baixa os bytes (precisa do token também)
+      const r2 = await fetch(meta.url, {
+        headers: { Authorization: "Bearer " + tokenDe(numeroCfg) },
+      });
+      if (!r2.ok) return null;
+      const ab = await r2.arrayBuffer();
+      const buf = Buffer.from(ab);
+      const mime = meta.mime_type || "application/octet-stream";
+      const ext = extPorMime(mime);
+      const fname = "of_" + mediaId + "." + ext;
+      fs.writeFileSync(path.join(MEDIA_DIR, fname), buf);
+      return { arquivo: fname, mimetype: mime, buffer: buf, tamanho: buf.length };
+    } catch (e) {
+      console.log("[oficial] erro ao baixar mídia:", e.message);
+      return null;
+    }
+  }
+
+  // transcreve áudio com Groq Whisper (pra IA "ouvir"); retorna o texto ou null
+  async function transcreverAudio(buffer, mimetype) {
+    const key = process.env.GROQ_API_KEY;
+    if (!key || !buffer) return null;
+    try {
+      const ext = extPorMime(mimetype) || "ogg";
+      const fd = new FormData();
+      const blob = new Blob([buffer], { type: mimetype || "audio/ogg" });
+      fd.append("file", blob, "audio." + ext);
+      fd.append("model", "whisper-large-v3-turbo");
+      fd.append("language", "pt");
+      fd.append("response_format", "text");
+      const r = await fetch("https://api.groq.com/openai/v1/audio/transcriptions", {
+        method: "POST",
+        headers: { Authorization: "Bearer " + key },
+        body: fd,
+      });
+      if (!r.ok) {
+        console.log("[oficial] Groq transcrição falhou:", r.status);
+        return null;
+      }
+      const txt = await r.text();
+      return (txt || "").trim() || null;
+    } catch (e) {
+      console.log("[oficial] erro ao transcrever:", e.message);
+      return null;
+    }
+  }
+
+  /* monta os components do template a partir das variáveis do lead */
+  function montarComponents(template, variaveis) {
+    // variaveis: array de strings pro corpo ({{1}}, {{2}}...)
+    if (!variaveis || !variaveis.length) return undefined;
+    return [
+      {
+        type: "body",
+        parameters: variaveis.map((v) => ({ type: "text", text: String(v) })),
+      },
+    ];
+  }
+
+  async function enviarTemplate(numeroCfg, telefone, templateName, idioma, variaveis) {
+    const template = {
+      name: templateName,
+      language: { code: idioma || "pt_BR" },
+    };
+    const comps = montarComponents(templateName, variaveis);
+    if (comps) template.components = comps;
+    return graphPost(numeroCfg, {
+      messaging_product: "whatsapp",
+      to: telefone,
+      type: "template",
+      template,
+    });
+  }
+
+  /* ============================================================
+     ROTAS — POOL DE NÚMEROS (gerente)
+     ============================================================ */
+  app.get("/api/oficial/numeros", auth, (req, res) => {
+    let lista = db.oficial.numeros || [];
+    // vendedor só enxerga os números vinculados a ele
+    if (req.user.role !== "gerente") {
+      lista = lista.filter((n) => podeVerVend(req.user, n.vendedorId));
+    }
+    res.json(lista.map(numeroPublico));
+  });
+
+  /* ---- TOKEN GLOBAL da Meta (mesma BM da empresa) — só gerente ---- */
+  // devolve só se está definido (nunca devolve o token em si)
+  app.get("/api/oficial/token-global", auth, gerenteOnly, (req, res) => {
+    res.json({ definido: !!db.oficial.tokenGlobal });
+  });
+  app.post("/api/oficial/token-global", auth, gerenteOnly, async (req, res) => {
+    const t = String((req.body && req.body.token) || "").trim();
+    if (!t) return res.status(400).json({ error: "Cole o token permanente da Meta" });
+    db.oficial.tokenGlobal = t;
+    salvar();
+    // com o token novo, re-assina todas as WABAs no webhook (silencioso)
+    for (const n of db.oficial.numeros || []) { try { await assinarWebhook(n); } catch (_) {} }
+    res.json({ ok: true, definido: true });
+  });
+
+  /* assina a WABA no webhook (silencioso, não quebra se falhar) */
+  async function assinarWebhook(n) {
+    if (!n || !n.wabaId || !tokenDe(n)) return false;
+    try {
+      const r = await fetch(`${GRAPH}/${n.wabaId}/subscribed_apps`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${tokenDe(n)}`, "Content-Type": "application/json" },
+      });
+      if (r.ok) { n.webhookAssinado = true; n.webhookAssinadoEm = Date.now(); return true; }
+    } catch (e) {}
+    return false;
+  }
+
+  app.post("/api/oficial/numeros", auth, gerenteOnly, async (req, res) => {
+    const b = req.body || {};
+    const apelido = String(b.apelido || "").trim();
+    const numero = String(b.numero || "").trim();
+    const phoneNumberId = String(b.phoneNumberId || "").trim();
+    const wabaId = String(b.wabaId || "").trim();
+    const token = String(b.token || "").trim();
+    const vendedorId = String(b.vendedorId || "").trim() || null;
+    if (!apelido || !phoneNumberId) {
+      return res.status(400).json({ error: "Informe apelido e Phone Number ID" });
+    }
+    // token pode vir vazio SE já houver token global configurado
+    if (!token && !db.oficial.tokenGlobal) {
+      return res.status(400).json({ error: "Configure o Token da Meta (botão no topo) ou informe um token para este número" });
+    }
+    if (vendedorId && !db.users.some((u) => u.id === vendedorId && u.role === "vendedor")) {
+      return res.status(400).json({ error: "Vendedor inválido" });
+    }
+    const novo = {
+      id: proximoId("num"),
+      apelido, numero, phoneNumberId, wabaId, token,
+      vendedorId,
+      iaId: String(b.iaId || "").trim() || null,
+      ativo: true,
+    };
+    db.oficial.numeros.push(novo);
+    await assinarWebhook(novo); // já deixa o webhook recebendo respostas
+    salvar();
+    res.json(numeroPublico(novo));
+  });
+
+  app.put("/api/oficial/numeros/:id", auth, gerenteOnly, async (req, res) => {
+    const n = acharNumero(req.params.id);
+    if (!n) return res.status(404).json({ error: "Número não encontrado" });
+    const b = req.body || {};
+    if (b.apelido !== undefined) n.apelido = String(b.apelido).trim();
+    if (b.numero !== undefined) n.numero = String(b.numero).trim();
+    if (b.phoneNumberId !== undefined) n.phoneNumberId = String(b.phoneNumberId).trim();
+    if (b.wabaId !== undefined) n.wabaId = String(b.wabaId).trim();
+    if (b.token !== undefined && b.token) n.token = String(b.token).trim();
+    if (b.iaId !== undefined) {
+      const iid = String(b.iaId || "").trim() || null;
+      // Se a IA não existe mais (foi excluída/desativada), LIMPA a referência em vez de
+      // travar o salvamento. Antes isso devolvia "IA inválida" e bloqueava editar o número
+      // (inclusive definir o vendedor dono). Agora um iaId fantasma vira "sem IA".
+      n.iaId = (iid && (db.oficial.ias || []).some((x) => x.id === iid)) ? iid : null;
+    }
+    if (b.ativo !== undefined) n.ativo = !!b.ativo;
+    if (b.vendedorId !== undefined) {
+      const vid = String(b.vendedorId || "").trim() || null;
+      if (vid && !db.users.some((u) => u.id === vid && u.role === "vendedor")) {
+        return res.status(400).json({ error: "Vendedor inválido" });
+      }
+      n.vendedorId = vid;      // RELIGA conversas travadas: ao definir o dono, joga as respostas que ficaram
+      // "sem dono" (aguardando distribuição) desse número direto pra esse vendedor.
+      if (vid) {
+        const dono = db.users.find((u) => u.id === vid);
+        let religadas = 0;
+        for (const ch of Object.values(db.waChats || {})) {
+          if (ch && ch.canal === "oficial" && ch.numeroOficialId === n.id && !ch.vendedorId && !(ch.iaId && !ch.iaPausada)) {
+            ch.vendedorId = vid;
+            ch.vendedorNome = dono ? dono.nome : "";
+            ch.atribuidoEm = Date.now();
+            religadas++;
+          }
+        }
+        if (religadas) console.log(`[oficial] número ${n.apelido}: ${religadas} conversa(s) sem dono religadas p/ ${dono ? dono.nome : vid}`);
+      }
+    }
+    await assinarWebhook(n); // re-assina ao editar (caso token tenha mudado)
+    salvar();
+    res.json(numeroPublico(n));
+  });
+
+  app.delete("/api/oficial/numeros/:id", auth, gerenteOnly, (req, res) => {
+    const i = (db.oficial.numeros || []).findIndex((n) => n.id === req.params.id);
+    if (i < 0) return res.status(404).json({ error: "Número não encontrado" });
+    db.oficial.numeros.splice(i, 1);
+    salvar();
+    res.json({ ok: true });
+  });
+
+  /* ---- TEMPERATURA: em que horário os leads mais respondem ---- */
+  app.get("/api/oficial/temperatura", auth, (req, res) => {
+    const souGerente = req.user.role === "gerente";
+    const dias = Math.max(0, parseInt(req.query.dias) || 0); // 0 = tudo
+    const cutoff = dias > 0 ? Date.now() - dias * 86400000 : 0;
+    // hora/dia no fuso do Brasil (-3)
+    const horaBR = (ts) => { const d = new Date((ts || 0) - 3 * 3600000); return { hora: d.getUTCHours(), dia: d.getUTCDay() }; };
+    const byHour = new Array(24).fill(0);
+    const grid = Array.from({ length: 7 }, () => new Array(24).fill(0)); // [dia][hora]
+    let total = 0;
+    const chats = Object.values(db.waChats || {}).filter(
+      (c) => c.canal === "oficial" && (souGerente || podeVerVend(req.user, c.vendedorId))
+    );
+    for (const c of chats) {
+      for (const m of (c.mensagens || [])) {
+        if (m.role !== "them") continue; // conta só as respostas do lead
+        const ts = m.ts || 0;
+        if (!ts || (cutoff && ts < cutoff)) continue;
+        const { hora, dia } = horaBR(ts);
+        byHour[hora]++; grid[dia][hora]++; total++;
+      }
+    }
+    let picoHora = 0; for (let h = 1; h < 24; h++) if (byHour[h] > byHour[picoHora]) picoHora = h;
+    const byDia = grid.map((r) => r.reduce((a, b) => a + b, 0));
+    let picoDia = 0; for (let d = 1; d < 7; d++) if (byDia[d] > byDia[picoDia]) picoDia = d;
+    res.json({ byHour, grid, byDia, total, picoHora, picoDia });
+  });
+
+  /* ---- LIMITE DIÁRIO de disparos por vendedor ---- */
+  // gerente vê todos os vendedores com o uso de hoje
+  app.get("/api/oficial/limites", auth, gerenteOnly, (req, res) => {
+    const vends = (db.users || []).filter((u) => u.role === "vendedor" && u.ativo);
+    res.json(vends.map((v) => ({ id: v.id, nome: v.nome, ...limiteInfo(v) })));
+  });
+  // gerente define o limite diário e/ou libera um extra só pra hoje
+  app.post("/api/oficial/vendedores/:id/limite", auth, gerenteOnly, (req, res) => {
+    const v = (db.users || []).find((u) => u.id === req.params.id && u.role === "vendedor");
+    if (!v) return res.status(404).json({ error: "Vendedor não encontrado" });
+    const b = req.body || {};
+    if (b.limiteDia !== undefined) v.limiteDisparoDia = Math.max(0, parseInt(b.limiteDia) || 0);
+    if (b.bonusHoje !== undefined) {
+      const q = Math.max(0, parseInt(b.bonusHoje) || 0);
+      // soma ao bônus de hoje (se já tinha) em vez de sobrescrever
+      const hoje = diaBR(Date.now());
+      const atual = (v.disparoBonus && v.disparoBonus.data === hoje) ? (v.disparoBonus.qtd || 0) : 0;
+      v.disparoBonus = { data: hoje, qtd: atual + q };
+    }
+    salvar();
+    res.json({ ok: true, id: v.id, nome: v.nome, ...limiteInfo(v) });
+  });
+  // vendedor vê o próprio limite/uso de hoje
+  app.get("/api/oficial/meu-limite", auth, (req, res) => {
+    if (req.user.role !== "vendedor") return res.json({ ilimitado: true });
+    res.json(limiteInfo(req.user));
+  });
+
+  /* ---- QUALIDADE do número (Alta/Média/Baixa + limite de envio, direto da Meta) ---- */
+  app.post("/api/oficial/numeros/:id/qualidade", auth, async (req, res) => {
+    const n = numeroPermitido(req, req.params.id);
+    if (!n) return res.status(404).json({ error: "Número não encontrado (ou sem acesso)" });
+    if (!n.phoneNumberId) return res.status(400).json({ error: "Número sem Phone Number ID" });
+    if (!tokenDe(n)) return res.status(400).json({ error: "Número sem token (configure o Token da Meta)" });
+    const q = await buscarQualidade(n);
+    if (!q) return res.status(400).json({ error: "Não consegui puxar a qualidade da Meta agora — tente de novo em instantes" });
+    aplicarQualidade(n, q);
+    let fotoErro = null;
+    try { const f = await baixarFotoPerfil(n); if (!f.ok) fotoErro = f.erro; } catch (_) {}
+    salvar();
+    res.json({ ok: true, quality: n.quality, temFoto: !!n.fotoArquivo, fotoErro });
+  });
+  // serve a foto de perfil salva (pública — é a foto pública do WhatsApp Business)
+  app.get("/api/oficial/numeros/:id/foto", (req, res) => {
+    const n = acharNumero(req.params.id);
+    if (!n || !n.fotoArquivo || !MEDIA_DIR) return res.status(404).send("sem foto");
+    const p = path.join(MEDIA_DIR, n.fotoArquivo);
+    if (!fs.existsSync(p)) return res.status(404).send("sem foto");
+    res.setHeader("Cache-Control", "public, max-age=3600");
+    res.sendFile(p);
+  });
+  // puxa/atualiza a foto de perfil na hora (só a foto)
+  app.post("/api/oficial/numeros/:id/foto", auth, async (req, res) => {
+    const n = numeroPermitido(req, req.params.id);
+    if (!n) return res.status(404).json({ error: "Número não encontrado (ou sem acesso)" });
+    const f = await baixarFotoPerfil(n);
+    salvar();
+    if (!f.ok) return res.status(400).json({ error: f.erro || "Não consegui puxar a foto de perfil" });
+    res.json({ ok: true, fotoAtualizadaEm: n.fotoAtualizadaEm });
+  });
+  app.post("/api/oficial/qualidade-todos", auth, gerenteOnly, async (req, res) => {
+    await atualizarQualidadeTodos();
+    res.json({ ok: true, numeros: (db.oficial.numeros || []).map(numeroPublico) });
+  });
+
+  // salva faturamento e/ou gasto na mão (sem re-assinar webhook, é só valor)
+  app.post("/api/oficial/numeros/:id/metricas", auth, (req, res) => {
+    const n = numeroPermitido(req, req.params.id);    if (!n) return res.status(404).json({ error: "Número não encontrado (ou sem acesso)" });
+    const b = req.body || {};
+    if (b.faturamento !== undefined) n.faturamento = Math.max(0, Number(b.faturamento) || 0);
+    if (b.gasto !== undefined) n.gasto = Math.max(0, Number(b.gasto) || 0);
+    salvar();
+    res.json({ ok: true, faturamento: n.faturamento || 0, gasto: n.gasto || 0 });
+  });
+
+  // painel de métricas: junta o que o sistema sabe (disparos/conversas) + gasto/faturamento
+  // ?dias=N filtra disparos/conversas pelo período (0 ou vazio = tudo)
+  app.get("/api/oficial/metricas", auth, (req, res) => {
+    const souGerente = req.user.role === "gerente";
+    let numerosBase = db.oficial.numeros || [];
+    if (!souGerente) numerosBase = numerosBase.filter((n) => podeVerVend(req.user, n.vendedorId));
+    const dias = Math.max(0, parseInt(req.query.dias) || 0); // 0 = tudo
+    const cutoff = dias > 0 ? Date.now() - dias * 86400000 : 0;
+    const dentro = (ts) => !cutoff || (ts || 0) >= cutoff;
+    const chats = Object.values(db.waChats || {}).filter((c) => c.canal === "oficial" && dentro(c.atualizadoEm));
+    const lista = numerosBase.map((n) => {
+      const camps = (db.oficial.campanhas || []).filter((c) => c.numeroId === n.id && dentro(c.criadoEm));
+      let enviados = 0, entregues = 0, falhas = 0;
+      for (const c of camps) { enviados += c.enviados || 0; entregues += c.entregues || 0; falhas += c.falhas || 0; }
+      const meus = chats.filter((c) => c.numeroOficialId === n.id);
+      const conversas = meus.length;
+      const responderam = meus.filter((c) => c.respondeu || c.vendedorId).length;
+      const faturamento = Number(n.faturamento) || 0;
+      const gasto = Number(n.gasto) || 0;
+      const lucro = faturamento - gasto;
+      const roi = gasto > 0 ? lucro / gasto : null; // razão: 1 = 100% de retorno
+      const dono = n.vendedorId ? (db.users || []).find((u) => u.id === n.vendedorId) : null;
+      return {
+        id: n.id, apelido: n.apelido, numero: n.numero,
+        vendedorNome: dono ? dono.nome : "",
+        gasto, faturamento, lucro, roi,
+        enviados, entregues, falhas, campanhas: camps.length,
+        conversas, responderam,
+      };
+    });
+    // totais
+    const tot = lista.reduce((a, m) => ({
+      gasto: a.gasto + m.gasto, faturamento: a.faturamento + m.faturamento,
+      enviados: a.enviados + m.enviados, entregues: a.entregues + m.entregues,
+      conversas: a.conversas + m.conversas, responderam: a.responderam + m.responderam,
+    }), { gasto: 0, faturamento: 0, enviados: 0, entregues: 0, conversas: 0, responderam: 0 });
+    tot.lucro = tot.faturamento - tot.gasto;
+    tot.roi = tot.gasto > 0 ? tot.lucro / tot.gasto : null;
+    res.json({ numeros: lista, total: tot });
+  });
+
+  // tenta puxar o GASTO da Meta (melhor esforço — depende da conta/plano; se falhar, digita na mão)
+  app.post("/api/oficial/numeros/:id/gasto-meta", auth, async (req, res) => {
+    const n = numeroPermitido(req, req.params.id);
+    if (!n) return res.status(404).json({ error: "Número não encontrado (ou sem acesso)" });
+    if (!n.wabaId) return res.status(400).json({ error: "Número sem WABA ID" });
+    if (!tokenDe(n)) return res.status(400).json({ error: "Número sem token (configure o Token da Meta)" });
+    const dias = Math.min(90, Math.max(1, parseInt((req.body && req.body.dias)) || 30));
+    const end = Math.floor(Date.now() / 1000);
+    const start = end - dias * 86400;
+    try {
+      // consulta no nível da WABA (sem filtro de telefone -> bem mais robusto).
+      // se a WABA tem 1 número (teu caso), esse custo já é o custo dele.
+      const fields = `conversation_analytics.start(${start}).end(${end}).granularity(DAILY).dimensions(["CONVERSATION_CATEGORY"])`;
+      const r = await fetch(`${GRAPH}/${n.wabaId}?fields=${encodeURIComponent(fields)}`, {
+        headers: { Authorization: "Bearer " + tokenDe(n) },
+      });
+      const data = await r.json().catch(() => ({}));
+      if (!r.ok) {
+        const msg = (data && data.error && data.error.message) || "A Meta não retornou o gasto";
+        return res.status(400).json({ error: msg });
+      }
+      let gasto = 0, conversas = 0;
+      const pts = ((((data.conversation_analytics || {}).data) || [])[0] || {}).data_points || [];
+      for (const p of pts) { gasto += Number(p.cost) || 0; conversas += Number(p.conversation) || 0; }
+      gasto = Math.round(gasto * 100) / 100;
+      // NÃO sobrescreve um valor digitado na mão com 0
+      let salvou = false;
+      if (gasto > 0) { n.gasto = gasto; salvar(); salvou = true; }
+      const aviso = gasto > 0 ? null : (conversas > 0
+        ? `A Meta achou ${conversas} conversa(s) no período, mas devolveu custo R$ 0. O custo por API costuma atrasar 1 a 3 dias (ou essa conta não expõe custo via API). Confira no painel de cobrança e, se precisar, digite na mão.`
+        : "A Meta não retornou conversas/custo nesse período — pode ser atraso de agregação (1 a 3 dias) ou a conta não libera custo por API. Digite o gasto na mão.");
+      res.json({ ok: true, gasto, conversas, dias, salvou, aviso });
+    } catch (e) {
+      res.status(400).json({ error: "Erro ao consultar a Meta: " + (e.message || e) });
+    }
+  });
+
+  /* ---- inscreve a WABA no webhook (faz a Meta enviar as respostas desse número) ---- */
+  app.post("/api/oficial/numeros/:id/assinar-webhook", auth, gerenteOnly, async (req, res) => {
+    const n = acharNumero(req.params.id);
+    if (!n) return res.status(404).json({ error: "Número não encontrado" });
+    if (!n.wabaId) return res.status(400).json({ error: "Esse número não tem WABA ID configurado" });
+    if (!tokenDe(n)) return res.status(400).json({ error: "Sem token: configure o Token da Meta (topo) ou o token deste número" });
+    try {
+      const r = await fetch(`${GRAPH}/${n.wabaId}/subscribed_apps`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${tokenDe(n)}`, "Content-Type": "application/json" },
+      });
+      const data = await r.json().catch(() => ({}));
+      if (!r.ok) {
+        const msg = (data && data.error && data.error.message) || "Falha ao assinar webhook";
+        return res.status(400).json({ error: msg });
+      }
+      n.webhookAssinado = true;
+      n.webhookAssinadoEm = Date.now();
+      salvar();
+      res.json({ ok: true, resultado: data });
+    } catch (e) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  /* ---- assina TODAS as WABAs de uma vez (pra não clicar número por número) ---- */
+  app.post("/api/oficial/assinar-todos", auth, gerenteOnly, async (req, res) => {
+    garantirEstrutura();
+    const resultados = [];
+    for (const n of db.oficial.numeros || []) {
+      if (!n.wabaId) { resultados.push({ apelido: n.apelido, ok: false, erro: "sem WABA ID" }); continue; }
+      if (!tokenDe(n)) { resultados.push({ apelido: n.apelido, ok: false, erro: "sem token" }); continue; }
+      try {
+        const r = await fetch(`${GRAPH}/${n.wabaId}/subscribed_apps`, {
+          method: "POST",
+          headers: { Authorization: `Bearer ${tokenDe(n)}`, "Content-Type": "application/json" },
+        });
+        const data = await r.json().catch(() => ({}));
+        if (r.ok) {
+          n.webhookAssinado = true; n.webhookAssinadoEm = Date.now();
+          resultados.push({ apelido: n.apelido, ok: true });
+        } else {
+          resultados.push({ apelido: n.apelido, ok: false, erro: (data.error && data.error.message) || ("HTTP " + r.status) });
+        }
+      } catch (e) { resultados.push({ apelido: n.apelido, ok: false, erro: e.message }); }
+    }
+    salvar();
+    const ok = resultados.filter((x) => x.ok).length;
+    res.json({ ok, total: resultados.length, resultados });
+  });
+
+  /* ---- registra o número na Cloud API (necessário quando a verificação em 2 etapas está ativa) ---- */
+  app.post("/api/oficial/numeros/:id/registrar", auth, gerenteOnly, async (req, res) => {
+    const n = acharNumero(req.params.id);
+    if (!n) return res.status(404).json({ error: "Número não encontrado" });
+    const pin = String((req.body && req.body.pin) || "").replace(/\D/g, "");
+    if (pin.length !== 6) return res.status(400).json({ error: "O PIN precisa ter 6 dígitos" });
+    if (!tokenDe(n)) return res.status(400).json({ error: "Sem token: configure o Token da Meta (topo) ou o token deste número" });
+    try {
+      const r = await fetch(`${GRAPH}/${n.phoneNumberId}/register`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${tokenDe(n)}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ messaging_product: "whatsapp", pin }),
+      });
+      const data = await r.json().catch(() => ({}));
+      if (!r.ok) {
+        const msg = (data && data.error && data.error.message) || "Falha ao registrar";
+        // erro comum: PIN errado
+        if (/pin/i.test(msg) || (data.error && data.error.code === 100)) {
+          return res.status(400).json({ error: "Não foi possível registrar. Confira se o PIN de 6 dígitos está correto (você pode redefinir em 'Alterar PIN' no painel da Meta)." });
+        }
+        return res.status(400).json({ error: msg });
+      }
+      n.registrado = true;
+      n.registradoEm = Date.now();
+      salvar();
+      res.json({ ok: true });
+    } catch (e) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  /* ---- testa um número: lê os templates aprovados da WABA ---- */
+  app.get("/api/oficial/numeros/:id/templates", auth, async (req, res) => {
+    const n = numeroPermitido(req, req.params.id);
+    if (!n) return res.status(404).json({ error: "Número não encontrado" });
+    if (!n.wabaId) return res.status(400).json({ error: "Esse número não tem WABA ID configurado" });
+    try {
+      const r = await fetch(
+        `${GRAPH}/${n.wabaId}/message_templates?fields=name,status,category,language,components&limit=100`,
+        { headers: { Authorization: "Bearer " + tokenDe(n) } }
+      );
+      const data = await r.json();
+      if (!r.ok) {
+        const msg = (data && data.error && data.error.message) || ("Erro Graph " + r.status);
+        return res.status(400).json({ error: msg });
+      }
+      const todos = (data.data || []).map((t) => {
+        const body = (t.components || []).find((c) => c.type === "BODY");
+        const texto = body ? body.text || "" : "";
+        const vars = (texto.match(/\{\{\d+\}\}/g) || []).length;
+        return { name: t.name, language: t.language, category: t.category, status: t.status, vars, texto };
+      });
+      const aprovados = todos.filter((t) => t.status === "APPROVED");
+      res.json({ templates: aprovados, todos });
+    } catch (e) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  /* ---- criar um template novo na Meta (fica pendente até a Meta aprovar) ---- */
+  app.post("/api/oficial/numeros/:id/templates", auth, async (req, res) => {
+    const n = numeroPermitido(req, req.params.id);
+    if (!n) return res.status(404).json({ error: "Número não encontrado" });
+    if (!n.wabaId) return res.status(400).json({ error: "Esse número não tem WABA ID configurado" });
+    const b = req.body || {};
+    const nome = String(b.nome || "").trim().toLowerCase().replace(/[^a-z0-9_]/g, "_");
+    const corpo = String(b.corpo || "").trim();
+    const categoria = String(b.categoria || "MARKETING").toUpperCase(); // MARKETING | UTILITY
+    const idioma = String(b.idioma || "pt_BR").trim();
+    if (!nome || !corpo) return res.status(400).json({ error: "Informe o nome e o texto do template" });
+    try {
+      const r = await fetch(`${GRAPH}/${n.wabaId}/message_templates`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: "Bearer " + tokenDe(n) },
+        body: JSON.stringify({
+          name: nome,
+          language: idioma,
+          category: categoria === "UTILITY" ? "UTILITY" : "MARKETING",
+          components: [{ type: "BODY", text: corpo }],
+        }),
+      });
+      const data = await r.json();
+      if (!r.ok) {
+        const msg = (data && data.error && data.error.message) || ("Erro Graph " + r.status);
+        return res.status(400).json({ error: msg });
+      }
+      res.json({ ok: true, id: data.id, status: data.status || "PENDING", category: data.category || categoria });
+    } catch (e) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+  // estatísticas gerais do canal oficial (pra Monitoria): disparos, IA, atendimento
+  app.get("/api/oficial/stats", auth, gerenteOnly, (req, res) => {
+    const desde = req.query.desde ? Number(req.query.desde) : 0;
+    const ate = req.query.ate ? Number(req.query.ate) : Date.now();
+    const campanhas = (db.oficial.campanhas || []).filter((c) => {
+      const t = c.criadoEm || 0;
+      return t >= desde && t <= ate;
+    });
+    // disparos
+    let enviados = 0, entregues = 0, lidos = 0, responderam = 0, falhas = 0;
+    campanhas.forEach((c) => {
+      enviados += c.enviados || 0;
+      entregues += c.entregues || 0;
+      lidos += c.lidos || 0;
+      responderam += c.responderam || 0;
+      falhas += c.falhas || 0;
+    });
+    // chats do oficial no período
+    const chats = Object.values(db.waChats).filter((c) => c.canal === "oficial");
+    let iaAtendendo = 0, iaPassou = 0, comVendedor = 0, semDono = 0, msgsIA = 0;
+    chats.forEach((c) => {
+      const ult = c.atualizadoEm || 0;
+      if (ult < desde || ult > ate) return;
+      if (c.iaId && !c.iaPausada) iaAtendendo++;
+      // IA passou = tem nota de handoff
+      const passou = (c.notas || []).some((n) => n.tipo === "ia_handoff" && (n.ts || 0) >= desde && (n.ts || 0) <= ate);
+      if (passou) iaPassou++;
+      if (c.vendedorId) comVendedor++;
+      else if (!c.iaId || c.iaPausada) semDono++;
+      msgsIA += (c.mensagens || []).filter((m) => m.porIA && m.ts >= desde && m.ts <= ate).length;
+    });
+    // desempenho por IA
+    const iasMap = {};
+    (db.oficial.ias || []).forEach((ia) => { iasMap[ia.id] = { id: ia.id, nome: ia.nome, modo: ia.modo, atendendo: 0, passou: 0, msgs: 0 }; });
+    chats.forEach((c) => {
+      if (!c.iaId || !iasMap[c.iaId]) return;
+      const ult = c.atualizadoEm || 0;
+      if (ult < desde || ult > ate) return;
+      if (c.iaId && !c.iaPausada) iasMap[c.iaId].atendendo++;
+      if ((c.notas || []).some((n) => n.tipo === "ia_handoff")) iasMap[c.iaId].passou++;
+      iasMap[c.iaId].msgs += (c.mensagens || []).filter((m) => m.porIA).length;
+    });
+    const taxaResp = enviados ? Math.round((responderam / enviados) * 100) : 0;
+    res.json({
+      disparos: { enviados, entregues, lidos, responderam, falhas, taxaResp, campanhas: campanhas.length },
+      atendimento: { iaAtendendo, iaPassou, comVendedor, semDono, msgsIA },
+      ias: Object.values(iasMap),
+      desde, ate,
+    });
+  });
+
+  app.get("/api/oficial/vendedores", auth, gerenteOnly, (req, res) => {
+    const prox = proximoDaVez();
+    const lista = db.users
+      .filter((u) => u.role === "vendedor" && u.ativo)
+      .map((u) => ({
+        id: u.id,
+        nome: u.nome,
+        oficialAtivo: !!u.oficialAtivo,
+        oficialPercentual: Number(u.oficialPercentual) || 0,
+        oficialLeadsRecebidos: u.oficialLeadsRecebidos || 0,
+        // se é quem recebe o próximo lead
+        proximo: !!(prox && prox.id === u.id),
+      }));
+    res.json(lista);
+  });
+
+  app.put("/api/oficial/vendedores/:id", auth, gerenteOnly, (req, res) => {
+    const u = db.users.find((x) => x.id === req.params.id && x.role === "vendedor");
+    if (!u) return res.status(404).json({ error: "Vendedor não encontrado" });
+    const b = req.body || {};
+    if (b.oficialAtivo !== undefined) u.oficialAtivo = !!b.oficialAtivo;
+    if (b.oficialPercentual !== undefined) {
+      let p = Number(b.oficialPercentual);
+      if (isNaN(p) || p < 0) p = 0;
+      if (p > 100) p = 100;
+      u.oficialPercentual = p;
+    }
+    salvar();
+    res.json({
+      id: u.id, nome: u.nome,
+      oficialAtivo: !!u.oficialAtivo,
+      oficialPercentual: Number(u.oficialPercentual) || 0,
+      oficialLeadsRecebidos: u.oficialLeadsRecebidos || 0,
+    });
+  });
+
+  // zera os contadores (recomeça a distribuição do zero)
+  app.post("/api/oficial/vendedores/zerar", auth, gerenteOnly, (req, res) => {
+    db.users.forEach((u) => { if (u.role === "vendedor") u.oficialLeadsRecebidos = 0; });
+    db.oficial.rodada = null; // recomeça a rodada do zero também
+    salvar();
+    res.json({ ok: true });
+  });
+
+  /* ============================================================
+     DISPARO EM MASSA
+     body: { numeroId, template, idioma, contatos:[{telefone,nome,variaveis:[...]}], nomeCampanha }
+     ============================================================ */
+  /* ============================================================
+     IAs DO CANAL OFICIAL (cérebro) — config rica + base de conhecimento
+     ============================================================ */
+  function lim(s, n) { return String(s == null ? "" : s).slice(0, n); }
+
+  const TOM_LABEL = {
+    amigavel: "amigável e próximo", profissional: "profissional",
+    descontraido: "descontraído", consultivo: "consultivo", direto: "direto e objetivo",
+  };
+
+  // monta o prompt-sistema da IA a partir de toda a config + base de conhecimento
+  function montarSystemPrompt(ia, nomeLead) {
+    const c = ia.config || {};
+    const P = [];
+    P.push(`Você é ${ia.nome}, um(a) atendente de vendas que conversa com leads pelo WhatsApp.`);
+    P.push(`Seu tom de voz é ${TOM_LABEL[c.tomVoz] || "amigável e próximo"}.`);
+    if (nomeLead) P.push(`O nome do lead com quem você fala é: ${nomeLead}.`);
+    if (c.objetivo) P.push(`SEU OBJETIVO PRINCIPAL: ${c.objetivo}`);
+
+    if (c.quemEla) P.push(`\nQUEM VOCÊ É:\n${c.quemEla}`);
+    if (c.comoEscreve) P.push(`\nCOMO VOCÊ ESCREVE:\n${c.comoEscreve}`);
+    if (c.sempreFaz) P.push(`\nVOCÊ SEMPRE:\n${c.sempreFaz}`);
+    if (c.nuncaFaz) P.push(`\nVOCÊ NUNCA:\n${c.nuncaFaz}`);
+
+    if (Array.isArray(c.cursos) && c.cursos.length) {
+      P.push(`\nCURSOS E OFERTAS QUE VOCÊ VENDE:`);
+      c.cursos.forEach((cur) => {
+        const linhas = [];
+        if (cur.nome) linhas.push(`Curso: ${cur.nome}`);
+        if (cur.carga) linhas.push(`Carga horária: ${cur.carga}`);
+        if (cur.garantia) linhas.push(`Garantia: ${cur.garantia}`);
+        if (cur.certificado) linhas.push(`Certificado: ${cur.certificado}`);
+        if (cur.paraQuem) linhas.push(`Para quem é: ${cur.paraQuem}`);
+        if (cur.diferencial) linhas.push(`Diferencial: ${cur.diferencial}`);
+        if (cur.descricao) linhas.push(`Descrição: ${cur.descricao}`);
+        (cur.ofertas || []).forEach((o) => {
+          const partes = [o.nome, o.valor, o.obs].filter(Boolean).join(" — ");
+          linhas.push(`Oferta: ${partes}${o.link ? " | Link: " + o.link : ""}`);
+        });
+        P.push("- " + linhas.join("\n  "));
+      });
+    }
+
+    if (Array.isArray(c.objecoes) && c.objecoes.length) {
+      P.push(`\nCOMO RESPONDER OBJEÇÕES:`);
+      c.objecoes.forEach((o) => { if (o.objecao) P.push(`- Se disser "${o.objecao}": ${o.resposta || ""}`); });
+    }
+
+    if (Array.isArray(c.faq) && c.faq.length) {
+      P.push(`\nPERGUNTAS FREQUENTES:`);
+      c.faq.forEach((q) => { if (q.pergunta) P.push(`- P: ${q.pergunta}\n  R: ${q.resposta || ""}`); });
+    }
+
+    const etapas = [
+      ["Abertura (primeira mensagem)", c.pbAbertura],
+      ["Qualificação", c.pbQualificacao],
+      ["Apresentação do curso", c.pbApresentacao],
+      ["Quando soltar o preço", c.pbPreco],
+      ["Fechamento", c.pbFechamento],
+      ["Recuperação (se sumir)", c.pbRecuperacao],
+    ].filter(([, v]) => v);
+    if (etapas.length) {
+      P.push(`\nROTEIRO DA CONVERSA (siga essa ordem):`);
+      etapas.forEach(([t, v], i) => P.push(`${i + 1}. ${t}: ${v}`));
+    }
+
+    // base de conhecimento dos arquivos anexados
+    const kb = (ia.conhecimento || []).filter((k) => k.texto);
+    if (kb.length) {
+      P.push(`\nBASE DE CONHECIMENTO (material de referência — use para responder com precisão, não invente):`);
+      kb.forEach((k) => { P.push(`\n--- ${k.nome} ---\n${lim(k.texto, 40000)}`); });
+    }
+
+    if (ia.modo === "qualifica") {
+      P.push(`\nIMPORTANTE — VOCÊ QUALIFICA E PASSA PRA UM HUMANO DE FORMA INVISÍVEL:`);
+      if (c.escQuando) P.push(`Passe para um vendedor humano quando: ${c.escQuando}`);
+      else P.push(`Passe para um vendedor humano ASSIM QUE o lead demonstrar QUALQUER interesse num curso (ex.: "tenho interesse", "quero saber sobre o curso X", "quero o curso", "me interessa"). Não fique fazendo muitas perguntas nem tente vender — o seu papel é só identificar o interesse e passar. No máximo uma pergunta rápida, e se ele confirmar interesse, passe na hora.`);
+      P.push(`\nSINAIS DE INTERESSE QUE OBRIGAM A PASSAR JÁ (não espere ele dizer "quero comprar"): pergunta sobre preço/valor; pergunta sobre forma de pagamento, parcelas, cartão, boleto ou PIX; pergunta como faz pra entrar/se matricular; diz que vai pensar mas demonstra que quer; pede o link; diz que tem interesse; pergunta sobre o conteúdo do curso com intenção de fazer; ou qualquer pergunta que mostre que ele está considerando adquirir. Em TODOS esses casos, dê uma resposta calorosa curta E passe (coloque a tag no final). NÃO continue conduzindo sozinha, NÃO tente fechar você mesma, NÃO fique dando voltas — o vendedor humano assume daqui.`);
+      P.push(`REGRA CRÍTICA DA PASSAGEM: NUNCA diga que vai passar, transferir, encaminhar, chamar outra pessoa, um especialista, um vendedor ou a equipe. O lead NÃO PODE perceber que houve troca de atendente. Sua última mensagem deve ser uma resposta NATURAL que dá continuidade à conversa (ex.: uma pergunta sobre o que ele procura, ou uma confirmação calorosa), como se VOCÊ mesma fosse continuar atendendo. ${c.escFrase ? 'Pode usar algo como: "' + c.escFrase + '"' : 'Exemplos bons: "Perfeito! Me conta, você já tem alguma experiência na área ou tá começando agora?" ou "Que ótimo! 😊 Esse curso é super completo. Posso te explicar como funciona a matrícula?"'}`);
+      P.push(`Depois dessa mensagem natural, coloque a tag [PASSAR_HUMANO] no FINAL (o sistema detecta e transfere por trás, sem o lead ver). A tag nunca aparece pro lead.`);
+    } else {
+      P.push(`\nVocê conduz a venda sozinho(a) até o fechamento, mandando o link de pagamento quando o lead quiser comprar. Não invente que vai passar pra outra pessoa.`);
+    }
+    if (c.encerrarCriterios) P.push(`\nEncerre/pare de insistir quando: ${c.encerrarCriterios}`);
+
+    P.push(`\nREGRAS GERAIS: Responda como mensagem de WhatsApp (curto, natural, humano). Uma ideia por mensagem. Nunca diga que é uma IA ou robô. Nunca invente preços, links ou informações que não estão acima.`);
+    P.push(`\nNOME DO LEAD — REGRA CRÍTICA: só use o nome do lead se ele REALMENTE disse o nome dele nesta conversa. Se ele ainda não disse o nome, NÃO invente, NÃO chute, NÃO use nenhum nome — fale sem nome. NUNCA use nomes de exemplo. Se não tem certeza do nome, não use nome nenhum. Usar um nome errado é um erro grave.`);
+    P.push(`\nEMOJIS PROIBIDOS (NUNCA use, em hipótese nenhuma): 🚀 🔥 💪 💯 😎 🤩 ❤️ 👏 ⚡. Use no máximo emojis simples e calorosos como 🙂 😊 👍, e só de vez em quando — nunca em toda mensagem.`);
+    P.push(`\nSE O LEAD MANDAR FIGURINHA/STICKER (aparece como "[sticker]"), GIF ou reação: NÃO diga que "adorou o sticker" nem comente a figurinha como se a tivesse visto (você não vê o conteúdo dela). Apenas responda de forma leve e natural dando continuidade à conversa (ex.: "Hahah 😊" ou retome o assunto de antes). Não invente que viu imagem, figurinha ou vídeo.`);
+    P.push(`\nNÃO encerre a conversa cedo demais nem fique se despedindo ("tenha um ótimo dia", "até a próxima") enquanto houver qualquer chance de interesse. Só se despeça se o lead claramente encerrar ou pedir pra parar.`);
+    P.push(`\n⚡ LEAD QUE JÁ CHEGA QUENTE — REGRA PRIORITÁRIA: se o lead PEDIR O LINK ("manda o link", "quero o link"), disser que QUER COMPRAR ("quero comprar", "quero fechar", "como pago", "quero me inscrever") ou pedir o preço direto, você ATENDE NA HORA o que ele pediu. NÃO fique perguntando se ele viu as aulas, NÃO enrole com conversa de qualificação, NÃO adie. Mande o link / responda o preço / conduza o pagamento IMEDIATAMENTE, de forma calorosa e curta. A conversa de "criar conexão" é só pra lead que chega frio ou curioso — quem já chega pedindo pra comprar, você vai direto ao ponto e fecha. Fazer o lead quente esperar é o pior erro que você pode cometer.`);
+    return P.join("\n");
+  }
+
+  // chama a API da Anthropic e devolve o texto da resposta
+  async function chamarClaude(systemPrompt, historico) {
+    const key = process.env.OPENAI_API_KEY;
+    if (!key) throw new Error("OPENAI_API_KEY não configurada");
+    // monta as mensagens no formato da OpenAI (system + histórico)
+    const msgsHist = historico.map((m) => ({
+      role: m.role === "them" ? "user" : "assistant",
+      // se for áudio do lead, usa a transcrição (a IA "ouve" o áudio)
+      content: (m.role === "them" && m.transcricao) ? m.transcricao : (m.content || ""),
+    })).filter((m) => m.content);
+    // garante que começa com user
+    while (msgsHist.length && msgsHist[0].role !== "user") msgsHist.shift();
+    if (!msgsHist.length) return "";
+    const messages = [{ role: "system", content: systemPrompt }, ...msgsHist];
+    const r = await fetch("https://api.openai.com/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": "Bearer " + key,
+      },
+      body: JSON.stringify({
+        model: "gpt-4o-mini",
+        max_tokens: 1024,
+        messages,
+      }),
+    });
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error((data.error && data.error.message) || "Erro OpenAI " + r.status);
+    const txt = ((data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content) || "").trim();
+    return txt;
+  }
+
+  // chamada única (system + user) pra análises — devolve o texto
+  // Remove caracteres que quebram o JSON enviado pra OpenAI (emoji cortado pela metade =
+  // surrogate órfão, e caracteres de controle inválidos). Sem isso, UMA conversa com um
+  // caractere bugado faz a IA recusar a requisição inteira ("failed to parse JSON value").
+  function _limparTextoIA(s) {
+    s = String(s == null ? "" : s);
+    let out = "";
+    for (let i = 0; i < s.length; i++) {
+      const c = s.charCodeAt(i);
+      if (c >= 0xD800 && c <= 0xDBFF) { // metade "alta" de um par (emoji)
+        const n = s.charCodeAt(i + 1);
+        if (n >= 0xDC00 && n <= 0xDFFF) { out += s[i] + s[i + 1]; i++; continue; } // par completo: mantém
+        continue; // órfão: descarta
+      }
+      if (c >= 0xDC00 && c <= 0xDFFF) continue; // metade "baixa" órfã: descarta
+      if (c < 0x20 && c !== 0x09 && c !== 0x0A && c !== 0x0D) continue; // controle inválido (mantém tab/enter)
+      out += s[i];
+    }
+    return out;
+  }
+  async function analisarComIA(sistema, usuario, maxTokens, temp) {
+    const key = process.env.OPENAI_API_KEY;
+    if (!key) throw new Error("OPENAI_API_KEY não configurada");
+    const sis = _limparTextoIA(sistema), usr = _limparTextoIA(usuario);
+    const r = await fetch("https://api.openai.com/v1/chat/completions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Authorization": "Bearer " + key },
+      // temperatura baixa + seed fixo = análise mais CONSISTENTE (nota varia pouco entre gerações
+      // quando as conversas são as mesmas). Se as conversas mudarem, a nota muda — o que é correto.
+      body: JSON.stringify({ model: "gpt-4o-mini", max_tokens: maxTokens || 1200, temperature: (temp !== undefined ? temp : 0.2), seed: 7, messages: [{ role: "system", content: sis }, { role: "user", content: usr }] }),
+    });
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error((data.error && data.error.message) || "Erro OpenAI " + r.status);
+    return ((data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content) || "").trim();
+  }
+
+  // Painel do gerente: quem se autoavaliou na IA e quantas vezes (hoje / 7 dias / 30 dias / total)
+  app.get("/api/oficial/autoavaliacoes", auth, gerenteOnly, (req, res) => {
+    garantirEstrutura();
+    const eventos = Array.isArray(db.oficial.autoavaliacoes) ? db.oficial.autoavaliacoes : [];
+    const agora = Date.now();
+    const hoje0 = new Date(); hoje0.setHours(0, 0, 0, 0);
+    const inicioHoje = hoje0.getTime();
+    const sem = agora - 7 * 24 * 60 * 60 * 1000;
+    const mes = agora - 30 * 24 * 60 * 60 * 1000;
+    const por = {};
+    for (const e of eventos) {
+      const id = e.v; if (!id) continue;
+      if (!por[id]) por[id] = { hoje: 0, semana: 0, mes: 0, total: 0, ultima: 0 };
+      const ts = e.ts || 0;
+      por[id].total++;
+      if (ts >= inicioHoje) por[id].hoje++;
+      if (ts >= sem) por[id].semana++;
+      if (ts >= mes) por[id].mes++;
+      if (ts > por[id].ultima) por[id].ultima = ts;
+    }
+    // lista todos os vendedores ativos (mesmo os que fizeram 0, pra ver quem NÃO se avalia)
+    const vend = (db.users || []).filter((u) => u.role === "vendedor" && u.ativo);
+    const linhas = vend.map((u) => ({ vendedorId: u.id, nome: u.nome, foto: u.foto || "", ...(por[u.id] || { hoje: 0, semana: 0, mes: 0, total: 0, ultima: 0 }) }));
+    // ordena: quem mais se avaliou (no mês) primeiro
+    linhas.sort((a, b) => b.mes - a.mes || b.total - a.total || a.nome.localeCompare(b.nome));
+    const totais = linhas.reduce((s, l) => ({ hoje: s.hoje + l.hoje, semana: s.semana + l.semana, mes: s.mes + l.mes, total: s.total + l.total }), { hoje: 0, semana: 0, mes: 0, total: 0 });
+    res.json({ linhas, totais });
+  });
+
+  // processa a resposta da IA pra um chat (chamado pelo webhook quando o lead responde)
+  // mostra "digitando..." no WhatsApp do lead (e marca a última msg como lida)
+  async function mostrarDigitando(numeroCfg, ultimaMsgId) {
+    if (!ultimaMsgId) return;
+    try {
+      await graphPost(numeroCfg, {
+        messaging_product: "whatsapp",
+        status: "read",
+        message_id: ultimaMsgId,
+        typing_indicator: { type: "text" },
+      });
+    } catch (e) { /* se a Meta não aceitar, segue sem travar */ }
+  }
+
+  // calcula um tempo "humano" de digitação pelo tamanho da resposta
+  // curta (~até 120 chars) ~8s; longa (~400+ chars) ~14s; escala no meio
+  function tempoDigitacao(texto) {
+    const n = (texto || "").length;
+    const min = 8000, max = 14000;
+    const baixo = 120, alto = 400;
+    if (n <= baixo) return min;
+    if (n >= alto) return max;
+    const frac = (n - baixo) / (alto - baixo);
+    return Math.round(min + frac * (max - min));
+  }
+
+  async function rodarIA(chat, numeroCfg) {
+    const marcarErro = (motivo) => {
+      chat.iaUltimoErro = { motivo, ts: Date.now() };
+      salvar();
+      console.log(`[oficial] IA NÃO respondeu (${chat.numero}): ${motivo}`);
+    };
+    try {
+      if (db.oficial.iaGlobalAtiva === false) return marcarErro("O interruptor GERAL da IA está desligado (ligue na aba Atendente IA).");
+      const ia = (db.oficial.ias || []).find((x) => x.id === chat.iaId);
+      if (!ia) return marcarErro("A IA atribuída a esta conversa não existe mais.");
+      if (!ia.ativa) return marcarErro(`A IA "${ia.nome}" está DESATIVADA — ative ela na aba Atendente IA.`);
+      const system = montarSystemPrompt(ia, chat.nome);
+      const kb = await buscarConhecimento(ia, chat);
+      const systemFinal = kb
+        ? system + "\n\n===== BASE DE CONHECIMENTO (materiais de treinamento) =====\nConsulte os trechos abaixo pra responder com precisão sobre cursos, preços, processo e regras. Use como fonte de verdade. Se a resposta não estiver nos trechos, responda com o que você já sabe, SEM inventar dado que não tem.\n\n" + kb
+        : system;
+      const histDireto = (chat.mensagens || []).slice(-24);
+      let resposta = await chamarClaude(systemFinal, histDireto);
+      if (!resposta) return marcarErro("A OpenAI não retornou nenhuma resposta.");
+
+      // detecta handoff
+      let passar = false;
+      if (resposta.includes("[PASSAR_HUMANO]")) {
+        passar = true;
+        resposta = resposta.replace(/\[PASSAR_HUMANO\]/g, "").trim();
+      }
+
+      // REFORÇO (modo qualifica): se o lead deu sinal claro de compra e a IA não passou sozinha,
+      // o sistema força a passagem pro vendedor humano (GPT-4o-mini às vezes esquece a tag)
+      if (!passar && ia.modo === "qualifica") {
+        const ultLead = [...(chat.mensagens || [])].reverse().find((m) => m.role === "them");
+        const txtLead = ((ultLead && (ultLead.transcricao || ultLead.content)) || "").toLowerCase();
+        const sinaisCompra = [
+          "quero comprar", "quero o curso", "vou comprar", "como pago", "como faço pra pagar",
+          "forma de pagamento", "formas de pagamento", "parcel", "cartão", "cartao", "boleto",
+          "pix", "no débito", "debito", "à vista", "a vista", "quanto custa", "qual o valor",
+          "qual valor", "preço", "preco", "me manda o link", "manda o link", "quero entrar",
+          "quero me inscrever", "quero fazer", "tenho interesse", "me interessei", "fechar",
+          "dinheiro", "pode dividir", "quantas vezes",
+        ];
+        if (sinaisCompra.some((s) => txtLead.includes(s))) passar = true;
+      }
+
+      if (resposta) {
+        // efeito humano: mostra "digitando..." e espera um tempo proporcional ao tamanho
+        const espera = tempoDigitacao(resposta);
+        await mostrarDigitando(numeroCfg, chat.ultimaMsgLeadId);
+        await new Promise((r) => setTimeout(r, espera));
+        await enviarTextoOficial(numeroCfg, chat.numero, resposta);
+        const ts = Date.now();
+        chat.mensagens.push({ role: "me", content: resposta, ts, porIA: true });
+        if (chat.mensagens.length > 300) chat.mensagens = chat.mensagens.slice(-300);
+        chat.atualizadoEm = ts;
+        chat.iaUltimoErro = null; // respondeu com sucesso -> limpa qualquer erro anterior
+      }
+
+      if (passar) {
+        chat.iaPausada = true; // IA para de responder
+        atribuirLead(chat);     // distribui pra um vendedor humano
+        chat.respondeu = true;  // garante visibilidade pro vendedor
+        chat.naoLidas = (chat.naoLidas || 0) + 1; // aparece como novo pra ele
+        chat.atualizadoEm = Date.now(); // sobe pro topo da lista
+        if (!Array.isArray(chat.notas)) chat.notas = [];
+        chat.notas.push({ tipo: "ia_handoff", texto: `${ia.nome} (IA) qualificou e passou pro vendedor${chat.vendedorNome ? " " + chat.vendedorNome : ""}`, ts: Date.now(), por: ia.nome });
+      }
+      salvar();
+    } catch (e) {
+      const msg = e && e.message ? e.message : "erro desconhecido";
+      // erro comum de chave: deixa claro
+      if (/OPENAI_API_KEY/i.test(msg)) marcarErro("Falta configurar a OPENAI_API_KEY no Railway (a IA usa a OpenAI pra responder).");
+      else if (/quota|insufficient|billing|exceeded/i.test(msg)) marcarErro("Erro de cota/crédito na OpenAI: " + msg);
+      else marcarErro("Erro ao gerar resposta: " + msg);
+    }
+  }
+
+  function configVazia() {
+    return {
+      // GERAL
+      tomVoz: "amigavel", objetivo: "", agentePadrao: false, autoResponder: false,
+      // PERSONA
+      quemEla: "", comoEscreve: "", sempreFaz: "", nuncaFaz: "",
+      // CONHECIMENTO
+      cursos: [],        // [{ nome, carga, garantia, certificado, paraQuem, diferencial, descricao, ofertas:[{nome,valor,link,obs}] }]
+      objecoes: [],      // [{ objecao, resposta }]
+      faq: [],           // [{ pergunta, resposta }]
+      // FLUXO (playbook por etapas)
+      pbAbertura: "", pbQualificacao: "", pbApresentacao: "", pbPreco: "", pbFechamento: "", pbRecuperacao: "",
+      // ESCALAÇÃO / ENCERRAMENTO
+      escQuando: "", escFrase: "", escNome: "", escTelefone: "", encerrarCriterios: "",
+    };
+  }
+
+  function sanitizaConfig(raw) {
+    const c = configVazia();
+    const b = raw || {};
+    c.tomVoz = lim(b.tomVoz || "amigavel", 40);
+    c.objetivo = lim(b.objetivo, 2000);
+    c.agentePadrao = !!b.agentePadrao;
+    c.autoResponder = !!b.autoResponder;
+    c.quemEla = lim(b.quemEla, 6000);
+    c.comoEscreve = lim(b.comoEscreve, 3000);
+    c.sempreFaz = lim(b.sempreFaz, 4000);
+    c.nuncaFaz = lim(b.nuncaFaz, 4000);
+    c.cursos = Array.isArray(b.cursos) ? b.cursos.slice(0, 30).map((x) => ({
+      nome: lim(x.nome, 200), carga: lim(x.carga, 100), garantia: lim(x.garantia, 200),
+      certificado: lim(x.certificado, 200), paraQuem: lim(x.paraQuem, 600),
+      diferencial: lim(x.diferencial, 600), descricao: lim(x.descricao, 4000),
+      ofertas: Array.isArray(x.ofertas) ? x.ofertas.slice(0, 20).map((o) => ({
+        nome: lim(o.nome, 200), valor: lim(o.valor, 100), link: lim(o.link, 500), obs: lim(o.obs, 300),
+      })) : [],
+    })) : [];
+    c.objecoes = Array.isArray(b.objecoes) ? b.objecoes.slice(0, 50).map((x) => ({
+      objecao: lim(x.objecao, 300), resposta: lim(x.resposta, 2000),
+    })) : [];
+    c.faq = Array.isArray(b.faq) ? b.faq.slice(0, 80).map((x) => ({
+      pergunta: lim(x.pergunta, 300), resposta: lim(x.resposta, 2000),
+    })) : [];
+    c.pbAbertura = lim(b.pbAbertura, 3000);
+    c.pbQualificacao = lim(b.pbQualificacao, 3000);
+    c.pbApresentacao = lim(b.pbApresentacao, 3000);
+    c.pbPreco = lim(b.pbPreco, 3000);
+    c.pbFechamento = lim(b.pbFechamento, 3000);
+    c.pbRecuperacao = lim(b.pbRecuperacao, 3000);
+    c.escQuando = lim(b.escQuando, 3000);
+    c.escFrase = lim(b.escFrase, 1000);
+    c.escNome = lim(b.escNome, 120);
+    c.escTelefone = lim(b.escTelefone, 40);
+    c.encerrarCriterios = lim(b.encerrarCriterios, 2000);
+    return c;
+  }
+
+  // base de conhecimento extraída de arquivos: [{ id, secao, nome, texto, criadoEm }]
+  function sanitizaConhecimento(arr) {
+    if (!Array.isArray(arr)) return [];
+    return arr.slice(0, 60).map((k) => ({
+      id: k.id || proximoId("kb"),
+      secao: lim(k.secao || "cursos", 30),
+      nome: lim(k.nome, 200),
+      texto: lim(k.texto, 200000),
+      criadoEm: k.criadoEm || Date.now(),
+    }));
+  }
+
+  function iaPublica(ia) {
+    return {
+      id: ia.id, nome: ia.nome, ativa: !!ia.ativa, modo: ia.modo,
+      config: ia.config || configVazia(),
+      conhecimento: (ia.conhecimento || []).map((k) => ({ id: k.id, secao: k.secao, nome: k.nome, chars: (k.texto || "").length, criadoEm: k.criadoEm })),
+      docs: (ia.docs || []).map((d) => ({ id: d.id, nome: d.nome, tamanho: d.tamanho, nChunks: d.nChunks, criadoEm: d.criadoEm })),
+      voiceId: ia.voiceId || null, voiceNome: ia.voiceNome || "",
+      criadoEm: ia.criadoEm,
+    };
+  }
+
+  app.get("/api/oficial/ias", auth, gerenteOnly, (req, res) => {
+    res.json((db.oficial.ias || []).map(iaPublica));
+  });
+
+  app.post("/api/oficial/ias", auth, gerenteOnly, (req, res) => {
+    const b = req.body || {};
+    const nome = String(b.nome || "").trim();
+    if (!nome) return res.status(400).json({ error: "Dê um nome pra IA" });
+    const ia = {
+      id: proximoId("ia"),
+      nome: nome.slice(0, 80),
+      ativa: b.ativa !== false,
+      modo: b.modo === "qualifica" ? "qualifica" : "fecha",
+      config: sanitizaConfig(b.config),
+      conhecimento: sanitizaConhecimento(b.conhecimento),
+      criadoEm: Date.now(),
+    };
+    db.oficial.ias.unshift(ia);
+    salvar();
+    res.json(iaPublica(ia));
+  });
+
+  // duplica uma IA existente (copia toda a base, só muda o nome)
+  app.post("/api/oficial/ias/:id/duplicar", auth, gerenteOnly, (req, res) => {
+    const orig = (db.oficial.ias || []).find((x) => x.id === req.params.id);
+    if (!orig) return res.status(404).json({ error: "IA não encontrada" });
+    const b = req.body || {};
+    const novoNome = String(b.nome || (orig.nome + " (cópia)")).trim().slice(0, 80);
+    const copia = {
+      id: proximoId("ia"),
+      nome: novoNome,
+      ativa: orig.ativa !== false,
+      modo: orig.modo,
+      // cópia profunda da config e do conhecimento (mesma base, nome diferente)
+      config: JSON.parse(JSON.stringify(orig.config || {})),
+      conhecimento: JSON.parse(JSON.stringify(orig.conhecimento || {})),
+      criadoEm: Date.now(),
+    };
+    db.oficial.ias.unshift(copia);
+    salvar();
+    res.json(iaPublica(copia));
+  });
+
+  app.put("/api/oficial/ias/:id", auth, gerenteOnly, (req, res) => {
+    const ia = (db.oficial.ias || []).find((x) => x.id === req.params.id);
+    if (!ia) return res.status(404).json({ error: "IA não encontrada" });
+    const b = req.body || {};
+    if (b.nome !== undefined) { const n = String(b.nome).trim(); if (n) ia.nome = n.slice(0, 80); }
+    if (b.modo !== undefined) ia.modo = b.modo === "qualifica" ? "qualifica" : "fecha";
+    if (b.ativa !== undefined) ia.ativa = !!b.ativa;
+    if (b.config !== undefined) ia.config = sanitizaConfig(b.config);
+    if (b.conhecimento !== undefined) ia.conhecimento = sanitizaConhecimento(b.conhecimento);
+    if (b.voiceId !== undefined) { ia.voiceId = String(b.voiceId || "").trim() || null; ia.voiceNome = String(b.voiceNome || "").slice(0, 60); }
+    salvar();
+    res.json(iaPublica(ia));
+  });
+
+  app.delete("/api/oficial/ias/:id", auth, gerenteOnly, (req, res) => {
+    const antes = (db.oficial.ias || []).length;
+    db.oficial.ias = (db.oficial.ias || []).filter((x) => x.id !== req.params.id);
+    try { const p = kbPath(req.params.id); if (p && fs.existsSync(p)) fs.unlinkSync(p); } catch (_) {}
+    salvar();
+    res.json({ ok: true, removida: antes !== db.oficial.ias.length });
+  });
+
+  // estado e controle GLOBAL da IA (botão de pânico)
+  app.get("/api/oficial/ia-global", auth, gerenteOnly, (req, res) => {
+    res.json({ ativa: db.oficial.iaGlobalAtiva !== false });
+  });
+  app.post("/api/oficial/ia-global", auth, gerenteOnly, (req, res) => {
+    const b = req.body || {};
+    db.oficial.iaGlobalAtiva = !!b.ativa;
+    salvar();
+    res.json({ ok: true, ativa: db.oficial.iaGlobalAtiva });
+  });
+
+  // quantos leads estão esperando resposta da IA (última msg foi do lead, IA ativa)
+  function chatsPendentesIA() {
+    return Object.values(db.waChats).filter((chat) => {
+      if (chat.canal !== "oficial") return false;
+      if (!chat.iaId || chat.iaPausada) return false;       // IA precisa estar ativa nessa conversa
+      if (db.oficial.iaGlobalAtiva === false) return false;  // IA geral ligada
+      const msgs = chat.mensagens || [];
+      if (!msgs.length) return false;
+      // última mensagem foi do lead (them) = está esperando resposta
+      const ult = msgs[msgs.length - 1];
+      return ult && ult.role === "them";
+    });
+  }
+
+  app.get("/api/oficial/ia-pendentes", auth, gerenteOnly, (req, res) => {
+    res.json({ total: chatsPendentesIA().length });
+  });
+
+  // dispara a IA pra TODOS os leads pendentes (ex: depois que o crédito acabou e voltou)
+  app.post("/api/oficial/ia-responder-pendentes", auth, gerenteOnly, async (req, res) => {
+    const pendentes = chatsPendentesIA();
+    res.json({ ok: true, total: pendentes.length, mensagem: pendentes.length + " conversa(s) sendo respondida(s) pela IA" });
+    // processa em segundo plano, com pausa entre cada (não trava e não estoura rate limit)
+    (async () => {
+      let respondidos = 0, semNumero = 0;
+      for (const chat of pendentes) {
+        try {
+          // o número do chat fica em numeroOficialId (fallback p/ numeroId por garantia)
+          const numeroCfg = acharNumero(chat.numeroOficialId) || acharNumero(chat.numeroId);
+          if (!numeroCfg) { semNumero++; continue; }
+          await rodarIA(chat, numeroCfg);
+          respondidos++;
+          salvar();
+          await new Promise((r) => setTimeout(r, 1500)); // respira entre uma e outra
+        } catch (e) {
+          console.error("Erro ao responder pendente:", e.message);
+        }
+      }
+      console.log(`[oficial] IA pendentes: ${respondidos} respondidos, ${semNumero} sem número (de ${pendentes.length})`);
+    })();
+  });
+
+  // pausar/retomar a IA de UMA conversa (gerente assume manual / devolve pra IA)
+  app.post("/api/oficial/chats/:id/ia", auth, gerenteOnly, (req, res) => {
+    const chat = db.waChats[req.params.id];
+    if (!chat || chat.canal !== "oficial") return res.status(404).json({ error: "Conversa não encontrada" });
+    const b = req.body || {};
+    const pausar = !!b.pausar;
+    chat.iaPausada = pausar;
+    if (!Array.isArray(chat.notas)) chat.notas = [];
+    chat.notas.push({
+      tipo: pausar ? "ia_pausada" : "ia_retomada",
+      texto: `${req.user.nome} ${pausar ? "pausou a IA e assumiu o atendimento" : "devolveu o atendimento pra IA"}`,
+      ts: Date.now(), por: req.user.nome,
+    });
+    if (chat.notas.length > 100) chat.notas = chat.notas.slice(-100);
+    salvar();
+    res.json({ ok: true, iaPausada: chat.iaPausada });
+  });
+
+  // ATIVA uma IA nesta conversa (atribui a IA ao chat). Se o lead já mandou a última
+  // mensagem, a IA responde na hora — se não, responde quando o lead falar.
+  app.post("/api/oficial/chats/:id/atribuir-ia", auth, gerenteOnly, async (req, res) => {
+    const chat = db.waChats[req.params.id];
+    if (!chat || chat.canal !== "oficial") return res.status(404).json({ error: "Conversa não encontrada" });
+    const iaId = String((req.body || {}).iaId || "").trim();
+    if (!Array.isArray(chat.notas)) chat.notas = [];
+    if (!iaId) { // desligar a IA da conversa
+      chat.iaId = null; chat.iaPausada = true; salvar();
+      return res.json({ ok: true, temIA: false });
+    }
+    const ia = (db.oficial.ias || []).find((x) => x.id === iaId);
+    if (!ia) return res.status(404).json({ error: "IA não encontrada" });
+    if (!ia.ativa) return res.status(400).json({ error: `A IA "${ia.nome}" está desativada — ative ela na aba Atendente IA.` });
+    chat.iaId = iaId;
+    chat.iaPausada = false;
+    chat.iaUltimoErro = null;
+    chat.notas.push({ tipo: "ia_ativada", texto: `${req.user.nome} ativou a IA "${ia.nome}" nesta conversa`, ts: Date.now(), por: req.user.nome });
+    if (chat.notas.length > 100) chat.notas = chat.notas.slice(-100);
+    salvar();
+    res.json({ ok: true, temIA: true, iaNome: ia.nome });
+    // se a última mensagem foi do lead, já responde (não espera a próxima)
+    const ult = (chat.mensagens || [])[chat.mensagens.length - 1];
+    if (ult && ult.role === "them") {
+      const numeroCfg = acharNumero(chat.numeroOficialId);
+      if (numeroCfg) rodarIA(chat, numeroCfg);
+    }
+  });
+
+  /* ================= IA DE LIGAÇÃO (voz, por turnos via Twilio) =================
+     A IA liga pro lead, conversa por turnos (fala -> escuta a resposta -> responde),
+     qualifica e passa pro vendedor. Reusa a MESMA agente (persona + base RAG).
+     Variáveis no Railway: TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_NUMERO. */
+  function garantirLigacoes() { if (!Array.isArray(db.oficial.ligacoes)) db.oficial.ligacoes = []; }
+  function baseUrlDe(req) {
+    const proto = String(req.headers["x-forwarded-proto"] || "https").split(",")[0];
+    const host = req.headers["x-forwarded-host"] || req.headers.host;
+    return `${proto}://${host}`;
+  }
+  function escXml(s) { return String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&apos;"); }
+  const VOZ_TW = 'voice="Polly.Camila-Neural" language="pt-BR"';
+
+  // gera o áudio da fala na ElevenLabs (voz humana), salva e devolve o nome do arquivo.
+  // Se não tiver chave ou falhar, devolve null (aí cai na voz da Twilio).
+  async function gerarVozEleven(texto, voiceId) {
+    const key = process.env.ELEVENLABS_API_KEY;
+    const voice = voiceId || process.env.ELEVENLABS_VOICE_ID || "EXAVITQu4vr4xnSDxMaL"; // voz padrão (multilíngue)
+    if (!key || !texto || !MEDIA_DIR) return null;
+    try {
+      const r = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voice}?output_format=mp3_44100_128`, {
+        method: "POST",
+        headers: { "xi-api-key": key, "Content-Type": "application/json", Accept: "audio/mpeg" },
+        body: JSON.stringify({ text: texto, model_id: "eleven_turbo_v2_5", voice_settings: { stability: 0.45, similarity_boost: 0.8, style: 0.15, use_speaker_boost: true } }),
+      });
+      if (!r.ok) { console.error("[ligacao] ElevenLabs " + r.status + ":", (await r.text().catch(() => "")).slice(0, 160)); return null; }
+      const buf = Buffer.from(await r.arrayBuffer());
+      const nome = "voz_" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6) + ".mp3";
+      fs.writeFileSync(path.join(MEDIA_DIR, nome), buf);
+      return nome;
+    } catch (e) { console.error("[ligacao] ElevenLabs erro:", e.message); return null; }
+  }
+  // devolve a tag de fala (ElevenLabs <Play> se der certo, senão <Say> da Twilio)
+  async function vozTag(base, texto, voiceId) {
+    const arq = await gerarVozEleven(texto, voiceId);
+    if (arq) return `<Play>${base}/api/oficial/ligacao/audio/${arq}</Play>`;
+    return `<Say ${VOZ_TW}>${escXml(texto)}</Say>`;
+  }
+
+  // gera a próxima fala da IA na ligação (curta, estilo telefone) + detecta classificação
+  async function falaDaIA(lig, ia) {
+    const base = montarSystemPrompt(ia, lig.nome);
+    const chatFake = { id: lig.id, nome: lig.nome, mensagens: lig.transcricao.map((t) => ({ role: t.role === "lead" ? "them" : "me", content: t.content })) };
+    let kb = ""; try { kb = await buscarConhecimento(ia, chatFake); } catch (_) {}
+    const modoVoz = "\n\n===== MODO LIGAÇÃO TELEFÔNICA =====\nVocê está FALANDO ao telefone (não escrevendo). Regras:\n- Fale CURTO e natural, como numa ligação real: no máximo 2 frases por vez, uma ideia de cada vez.\n- NUNCA use listas, emojis, links ou formatação — é voz.\n- Comece se apresentando rápido e vá qualificando com perguntas curtas.\n- Quando o lead demonstrar interesse/perfil (QUALIFICADO), encerre educado dizendo que um consultor vai continuar o atendimento, e escreva a tag [QUALIFICADO] no final.\n- Se claramente não tiver interesse/perfil, encerre educado e escreva [NAO_QUALIFICADO].\n- Se pedir pra falar depois, diga que retorna e escreva [CALLBACK].\nNunca leia as tags em voz alta.";
+    const system = base + (kb ? "\n\n===== BASE DE CONHECIMENTO =====\n" + kb : "") + modoVoz;
+    const hist = lig.transcricao.map((t) => ({ role: t.role === "lead" ? "them" : "me", content: t.content }));
+    if (!hist.length) hist.push({ role: "them", content: "(a ligação foi atendida — comece a conversa)" });
+    let resp = await chamarClaude(system, hist);
+    let classe = null;
+    if (/\[QUALIFICADO\]/i.test(resp)) classe = "qualificado";
+    else if (/\[NAO_QUALIFICADO\]/i.test(resp)) classe = "nao_qualificado";
+    else if (/\[CALLBACK\]/i.test(resp)) classe = "callback";
+    resp = resp.replace(/\[(QUALIFICADO|NAO_QUALIFICADO|CALLBACK|PASSAR_HUMANO)\]/gi, "").trim();
+    return { fala: resp || "Certo!", classe };
+  }
+
+  async function gatherXml(base, ligId, fala, voiceId) {
+    const v = await vozTag(base, fala, voiceId);
+    return `<Response>${v}<Gather input="speech" language="pt-BR" speechTimeout="auto" action="${base}/api/oficial/ligacao/resposta/${ligId}" method="POST"></Gather><Redirect method="POST">${base}/api/oficial/ligacao/resposta/${ligId}?vazio=1</Redirect></Response>`;
+  }
+  // serve o mp3 da ElevenLabs pro Twilio tocar (público — o Twilio precisa acessar)
+  app.get("/api/oficial/ligacao/audio/:file", (req, res) => {
+    const f = String(req.params.file || "").replace(/[^a-z0-9_.]/gi, "");
+    const p = f && MEDIA_DIR ? path.join(MEDIA_DIR, f) : null;
+    if (!p || !fs.existsSync(p)) return res.sendStatus(404);
+    res.set("Content-Type", "audio/mpeg");
+    res.set("Cache-Control", "public, max-age=3600");
+    res.sendFile(p);
+  });
+  // lista as vozes da conta ElevenLabs (pra escolher no sistema)
+  app.get("/api/oficial/vozes", auth, gerenteOnly, async (req, res) => {
+    const key = process.env.ELEVENLABS_API_KEY;
+    if (!key) return res.status(400).json({ error: "Configure a ELEVENLABS_API_KEY no Railway pra listar as vozes." });
+    try {
+      const r = await fetch("https://api.elevenlabs.io/v1/voices", { headers: { "xi-api-key": key } });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) return res.status(400).json({ error: (d && d.detail && d.detail.message) || ("Erro ElevenLabs " + r.status) });
+      const vozes = (d.voices || []).map((v) => ({
+        voiceId: v.voice_id, nome: v.name,
+        preview: v.preview_url || "",
+        idioma: (v.labels && (v.labels.language || v.labels.accent)) || "",
+        genero: (v.labels && v.labels.gender) || "",
+      }));
+      res.json({ vozes });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+  });
+
+  /* ================= CRM (Kanban de leads) ================= */
+  const CRM_ETAPAS_PADRAO = [
+    { k: "reserva", lb: "Lista de reserva", cor: "#8b5cf6" },
+    { k: "novo", lb: "Novo lead", cor: "#64748b" },
+    { k: "contato", lb: "Em contato", cor: "#3b82f6" },
+    { k: "qualificado", lb: "Qualificado", cor: "#059669" },
+    { k: "matriculado", lb: "Matriculado", cor: "#d97706" },
+    { k: "perdido", lb: "Perdido", cor: "#ef4444" },
+  ];
+  // Colunas do Pipeline agora são editáveis pelo gerente (guardadas no banco).
+  function etapasCRM() {
+    if (!Array.isArray(db.oficial.crmEtapas) || !db.oficial.crmEtapas.length) {
+      db.oficial.crmEtapas = CRM_ETAPAS_PADRAO.map((e) => ({ ...e }));
+    }
+    return db.oficial.crmEtapas;
+  }
+  function garantirCRM() {
+    if (!Array.isArray(db.oficial.crmLeads)) db.oficial.crmLeads = [];
+    if (!Array.isArray(db.oficial.crmVendedores)) db.oficial.crmVendedores = [];
+  }
+  // acha (ou cria) o lead do CRM ligado a uma conversa oficial, pelo telefone (últimos 8 dígitos)
+  function leadDoChat(chat, criarSe) {
+    garantirCRM();
+    const nuc = normalizaTelefone(chat.numero || "").replace(/\D/g, "").slice(-8);
+    let lead = nuc.length >= 8 ? (db.oficial.crmLeads || []).find((l) => String(l.telefone || "").replace(/\D/g, "").slice(-8) === nuc) : null;
+    if (!lead && criarSe) {
+      lead = { id: "lead_" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), nome: chat.nome || chat.numero, telefone: normalizaTelefone(chat.numero || ""), etapa: (etapasCRM()[0] || {}).k || "novo", vendedorId: chat.vendedorId || null, valor: 0, origem: "chat", notas: [], historico: [], criadoEm: Date.now(), atualizadoEm: Date.now() };
+      db.oficial.crmLeads.push(lead);
+    }
+    return lead;
+  }
+  function crmLeadPublico(l) {
+    const v = l.vendedorId ? (db.users || []).find((u) => u.id === l.vendedorId) : null;
+    return { id: l.id, nome: l.nome, telefone: l.telefone, email: l.email || "", curso: l.curso || "", etapa: l.etapa, vendedorId: l.vendedorId || null, vendedorNome: v ? v.nome : "", vendedorFoto: v ? (v.foto || "") : "", valor: l.valor || 0, formaPagamento: l.formaPagamento || "", tags: l.tags || [], tarefa: l.tarefa || null, reservaNome: l.reservaNome || "", origem: l.origem || "manual", respostasFormulario: l.respostasFormulario || null, notas: l.notas || [], historico: l.historico || [], recorrente: !!l.recorrente, ultimaCaptacaoEm: l.ultimaCaptacaoEm || null, criadoEm: l.criadoEm, atualizadoEm: l.atualizadoEm };
+  }
+  // versão LEVE pro Pipeline (lista com milhares de cards): SEM histórico/notas/respostas
+  // — esses só carregam quando o lead é aberto. Isso deixa o Pipeline abrir MUITO mais rápido.
+  function crmLeadLista(l) {
+    const v = l.vendedorId ? (db.users || []).find((u) => u.id === l.vendedorId) : null;
+    return { id: l.id, nome: l.nome, telefone: l.telefone, email: l.email || "", curso: l.curso || "", etapa: l.etapa, vendedorId: l.vendedorId || null, vendedorNome: v ? v.nome : "", vendedorFoto: v ? (v.foto || "") : "", valor: l.valor || 0, formaPagamento: l.formaPagamento || "", tags: l.tags || [], tarefa: l.tarefa || null, reservaNome: l.reservaNome || "", origem: l.origem || "manual", recorrente: !!l.recorrente, criadoEm: l.criadoEm, atualizadoEm: l.atualizadoEm };
+  }
+  function proximoVendedorCRM() {
+    garantirCRM();
+    let pool = (db.oficial.crmVendedores || []).filter((id) => db.users.some((u) => u.id === id && (u.role === "vendedor" || u.role === "gerente") && u.ativo));
+    if (!pool.length) pool = (db.users || []).filter((u) => u.role === "vendedor" && u.ativo).map((u) => u.id);
+    if (!pool.length) return null;
+    db.oficial._crmRR = ((db.oficial._crmRR || 0) + 1) % pool.length;
+    return pool[db.oficial._crmRR];
+  }
+  // cria/atualiza um lead no CRM a partir de uma ligação qualificada
+  function criarLeadDaLigacao(lig) {
+    garantirCRM();
+    const resumo = (lig.transcricao || []).map((t) => (t.role === "ia" ? "IA: " : "Lead: ") + t.content).join("\n");
+    let l = (db.oficial.crmLeads || []).find((x) => x.telefone === lig.telefone);
+    if (!l) {
+      l = { id: "lead_" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), nome: lig.nome || lig.telefone, telefone: lig.telefone, etapa: "qualificado", vendedorId: proximoVendedorCRM(), valor: 0, origem: "ligacao", notas: [], historico: [], criadoEm: Date.now(), atualizadoEm: Date.now() };
+      db.oficial.crmLeads.unshift(l);
+    } else { l.etapa = "qualificado"; if (!l.vendedorId) l.vendedorId = proximoVendedorCRM(); }
+    l.notas.push({ texto: "📞 Qualificado pela IA na ligação. Resumo:\n" + resumo, por: "IA", ts: Date.now() });
+    l.historico.push({ tipo: "ligacao", texto: "Qualificado por ligação da IA", ts: Date.now() });
+    l.atualizadoEm = Date.now();
+    salvar();
+  }
+
+  /* ---- ACESSO DOS VENDEDORES (o dono decide o que cada vendedor pode ver) ---- */
+  // Mapa por tela: liga/desliga o acesso do vendedor. Default: tudo desligado
+  // (mantém o comportamento antigo, em que essas telas eram só do gerente).
+  const ACESSO_VEND_CHAVES = ["crm", "temperatura", "vendas", "desempenhoOculto"];
+  function acessoVend() {
+    const a = (db.oficial && db.oficial.acessoVend) || {};
+    const out = {};
+    ACESSO_VEND_CHAVES.forEach((k) => { out[k] = a[k] === true; });
+    return out;
+  }
+  // Middleware: libera se for gerente OU se for vendedor e o dono ligou essa tela.
+  function permiteVend(chave) {
+    return (req, res, next) => {
+      if (req.user.role === "gerente") return next();
+      if (req.user.role === "vendedor" && acessoVend()[chave]) return next();
+      return res.status(403).json({ error: "Acesso restrito" });
+    };
+  }
+  // Qualquer usuário lê (o front usa pra montar o menu). Só o DONO altera.
+  app.get("/api/oficial/acesso-vendedor", auth, (req, res) => {
+    res.json({ acessoVend: acessoVend() });
+  });
+  app.put("/api/oficial/acesso-vendedor", auth, gerenteOnly, (req, res) => {
+    if (!req.user.dono) return res.status(403).json({ error: "Só o dono do sistema pode mudar os acessos." });
+    const b = (req.body && req.body.acessoVend) || {};
+    if (!db.oficial.acessoVend || typeof db.oficial.acessoVend !== "object") db.oficial.acessoVend = {};
+    ACESSO_VEND_CHAVES.forEach((k) => { if (typeof b[k] === "boolean") db.oficial.acessoVend[k] = b[k]; });
+    salvar();
+    res.json({ ok: true, acessoVend: acessoVend() });
+  });
+
+  app.get("/api/oficial/crm", auth, permiteVend("crm"), (req, res) => {
+    garantirCRM();
+    const ehVend = req.user.role === "vendedor";
+    let leads = (db.oficial.crmLeads || []);
+    if (ehVend) leads = leads.filter((l) => podeVerVend(req.user, l.vendedorId)); // vendedor só vê os leads dele
+    res.json({
+      etapas: etapasCRM(),
+      leads: leads.map(crmLeadLista),
+      // donos possíveis do lead: vendedores + gerentes (gerente que também vende
+      // pode receber/assumir lead). ehGerente deixa a tela marcar quem é gerente.
+      vendedores: (db.users || []).filter((u) => (u.role === "vendedor" || u.role === "gerente") && u.ativo).map((u) => ({ id: u.id, nome: u.nome, foto: u.foto || "", ehGerente: u.role === "gerente" })),
+      crmVendedores: ehVend ? [] : (db.oficial.crmVendedores || []),
+      soMeus: ehVend, // o front usa pra esconder as partes que são só do gerente
+    });
+  });
+
+  app.post("/api/oficial/crm/lead", auth, permiteVend("crm"), (req, res) => {
+    garantirCRM();
+    const b = req.body || {};
+    if (req.user.role === "vendedor") b.vendedorId = req.user.id; // vendedor só cria lead pra si
+
+    // É uma CAPTAÇÃO? (veio de lista/formulário/campanha/endpoint de captação).
+    // Genérico — vale pra QUALQUER lista, sem hardcode: basta a entrada trazer uma
+    // `lista`, uma `origem` de captação (≠ "manual"), ou marcar `captacao: true`.
+    // Cadastro manual comum (sem esses sinais) e edição administrativa (que é o PUT)
+    // NÃO passam por aqui — então o comportamento atual fica intacto.
+    const ehCaptacao = b.captacao === true || !!b.lista || (b.origem && b.origem !== "manual");
+    const telDigitos = String(b.telefone || "").replace(/\D/g, "");
+    const chave = telDigitos.slice(-8);
+
+    if (ehCaptacao && chave.length >= 8) {
+      const existente = (db.oficial.crmLeads || []).find((x) => String(x.telefone || "").replace(/\D/g, "").slice(-8) === chave);
+      if (existente) {
+        // ===== CONTATO JÁ EXISTIA → LEAD ATUALIZADO =====
+        // idempotência: se a MESMA submissão já foi registrada, não duplica
+        if (b.submissionId) {
+          const jaTem = (existente.historico || []).some((h) => h && h.dados && h.dados.submissionId === b.submissionId);
+          if (jaTem) return res.json({ ok: true, atualizado: true, duplicada: true, lead: crmLeadPublico(existente) });
+        }
+        // 1) atualiza os dados atuais SEM apagar dado válido (campo vazio não zera o anterior)
+        const merged = mesclarDados(existente, {
+          nome: b.nome, email: b.email, telefone: telDigitos, curso: b.curso,
+          valor: b.valor, origem: b.origem, respostasFormulario: b.respostasFormulario,
+        });
+        Object.assign(existente, merged.lead);
+        // 2) registra a nova captação no histórico (preserva tudo que já existia)
+        const comHist = registrarCaptacao(existente, {
+          lista: b.lista, origem: b.origem, campanha: b.campanha, curso: b.curso,
+          respostas: b.respostasFormulario, utms: b.utms, submissionId: b.submissionId,
+        });
+        existente.historico = comHist.historico;
+        existente.atualizadoEm = comHist.atualizadoEm;
+        // 3) marca como Lead Atualizado (recorrente) — pro card identificar
+        existente.recorrente = true;
+        existente.ultimaCaptacaoEm = Date.now();
+        // 4) decide o responsável: ativo MANTÉM o vendedor; perdido REDISTRIBUI (rodízio existente)
+        const antes = existente.vendedorId;
+        const dec = decidirResponsavel(existente, () => proximoVendedorCRM());
+        existente.vendedorId = dec.vendedorId;
+        // 5) se estava PERDIDO, reativa: volta pro atendimento numa etapa ativa
+        if (existente.etapa === "perdido") {
+          existente.etapa = etapasCRM().some((e) => e.k === "novo") ? "novo" : (etapasCRM()[0] || {}).k;
+        }
+        if (dec.redistribuido && antes !== existente.vendedorId) {
+          const v = existente.vendedorId ? db.users.find((u) => u.id === existente.vendedorId) : null;
+          existente.historico.push({ tipo: "atribuido", texto: "Redistribuído" + (v ? " para " + v.nome : "") + " (lead recorrente)", ts: Date.now(), dados: { de: null, para: (v ? v.id : null), por: null, auto: true, lote: false, redistribuido: true } });
+        }
+        salvar();
+        return res.json({ ok: true, atualizado: true, lead: crmLeadPublico(existente) });
+      }
+      // não existe → cai no fluxo normal abaixo (cria novo), já com origem/etapa da captação
+    }
+
+    const lead = {
+      id: "lead_" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+      nome: String(b.nome || "Sem nome").slice(0, 80),
+      telefone: telDigitos,
+      email: String(b.email || "").trim().slice(0, 120),
+      curso: String(b.curso || "").trim().slice(0, 120),
+      etapa: etapasCRM().some((e) => e.k === b.etapa) ? b.etapa : (etapasCRM()[0] || {}).k,
+      vendedorId: (b.vendedorId && db.users.some((u) => u.id === b.vendedorId)) ? b.vendedorId : null,
+      valor: parseFloat(b.valor) || 0, origem: ehCaptacao ? String(b.origem || b.lista || "captacao").slice(0, 60) : "manual", notas: [],
+      respostasFormulario: b.respostasFormulario || null,
+      historico: [{ tipo: "criado", texto: ehCaptacao ? ("Lead captado" + (b.lista ? " (" + b.lista + ")" : "")) : "Lead criado manualmente", ts: Date.now() }],
+      criadoEm: Date.now(), atualizadoEm: Date.now(),
+    };
+    db.oficial.crmLeads.unshift(lead);
+    salvar();
+    res.json({ ok: true, lead: crmLeadPublico(lead) });
+  });
+  // Carimbo leve do Pipeline: só diz "mudou algo?" (nº de leads + atividade mais recente).
+  // O front pergunta isso a cada 10s e só baixa a lista pesada quando muda. Não mapeia nada.
+  app.get("/api/oficial/crm/versao", auth, permiteVend("crm"), (req, res) => {
+    garantirCRM();
+    const ehVend = req.user.role === "vendedor";
+    let n = 0, maxAt = 0;
+    for (const l of (db.oficial.crmLeads || [])) {
+      if (ehVend && !podeVerVend(req.user, l.vendedorId)) continue;
+      n++;
+      const at = l.atualizadoEm || 0;
+      if (at > maxAt) maxAt = at;
+    }
+    res.json({ v: n + ":" + maxAt });
+  });
+
+  // busca UM lead completo (com histórico/notas) — usado ao ABRIR o lead no Pipeline
+  app.get("/api/oficial/crm/lead/:id", auth, permiteVend("crm"), (req, res) => {
+    garantirCRM();
+    const l = (db.oficial.crmLeads || []).find((x) => x.id === req.params.id);
+    if (!l) return res.status(404).json({ error: "Lead não encontrado" });
+    if (req.user.role === "vendedor" && !podeVerVend(req.user, l.vendedorId)) return res.status(403).json({ error: "Sem acesso a esse lead" });
+    res.json({ lead: crmLeadPublico(l) });
+  });
+
+  app.put("/api/oficial/crm/lead/:id", auth, permiteVend("crm"), (req, res) => {
+    garantirCRM();
+    const l = (db.oficial.crmLeads || []).find((x) => x.id === req.params.id);
+    if (!l) return res.status(404).json({ error: "Lead não encontrado" });
+    const b = req.body || {};
+    if (req.user.role === "vendedor" && !podeVerVend(req.user, l.vendedorId)) {
+      return res.status(403).json({ error: "Esse lead não é seu" });
+    }
+    if (b.etapa !== undefined && etapasCRM().some((e) => e.k === b.etapa)) {
+      if (l.etapa !== b.etapa) l.historico.push({ tipo: "etapa", texto: "Movido para " + etapasCRM().find((e) => e.k === b.etapa).lb, ts: Date.now(), dados: { de: l.etapa || null, para: b.etapa, por: (req.user && req.user.id) || null, auto: false } });
+      l.etapa = b.etapa;
+    }
+    if (b.nome !== undefined) l.nome = String(b.nome).slice(0, 80);
+    if (b.telefone !== undefined) l.telefone = String(b.telefone).replace(/\D/g, "");
+    if (b.email !== undefined) l.email = String(b.email).trim().slice(0, 120);
+    if (b.curso !== undefined) l.curso = String(b.curso).trim().slice(0, 120);
+    if (b.valor !== undefined) l.valor = parseFloat(b.valor) || 0;
+    if (b.vendedorId !== undefined) {
+      const vid = b.vendedorId || null;
+      if (vid && !db.users.some((u) => u.id === vid)) return res.status(400).json({ error: "Vendedor inválido" });
+      if (l.vendedorId !== vid) { const v = vid ? db.users.find((u) => u.id === vid) : null; l.historico.push({ tipo: "atribuido", texto: v ? "Atribuído a " + v.nome : "Atribuição removida", ts: Date.now(), dados: { de: l.vendedorId || null, para: vid, por: (req.user && req.user.id) || null, auto: false, lote: false, redistribuido: !!(l.vendedorId && vid) } }); }
+      l.vendedorId = vid;
+    }
+    if (b.tarefa !== undefined) {
+      if (!b.tarefa) { l.tarefa = null; }
+      else {
+        const tx = String(b.tarefa.texto || "").trim().slice(0, 200);
+        const quando = Number(b.tarefa.quando) || 0;
+        l.tarefa = (tx || quando) ? { texto: tx, quando, feito: !!b.tarefa.feito } : null;
+      }
+    }
+    l.atualizadoEm = Date.now();
+    salvar();
+    res.json({ ok: true, lead: crmLeadPublico(l) });
+  });
+  app.post("/api/oficial/crm/lead/:id/nota", auth, permiteVend("crm"), (req, res) => {
+    garantirCRM();
+    const l = (db.oficial.crmLeads || []).find((x) => x.id === req.params.id);
+    if (!l) return res.status(404).json({ error: "Lead não encontrado" });
+    if (req.user.role === "vendedor" && !podeVerVend(req.user, l.vendedorId)) return res.status(403).json({ error: "Esse lead não é seu" });
+    const texto = String((req.body || {}).texto || "").trim();
+    if (!texto) return res.status(400).json({ error: "Nota vazia" });
+    if (!Array.isArray(l.notas)) l.notas = [];
+    l.notas.push({ texto: texto.slice(0, 2000), por: req.user.nome, ts: Date.now() });
+    l.atualizadoEm = Date.now();
+    salvar();
+    res.json({ ok: true, lead: crmLeadPublico(l) });
+  });
+  app.delete("/api/oficial/crm/lead/:id", auth, permiteVend("crm"), (req, res) => {
+    garantirCRM();
+    if (req.user.role === "vendedor") return res.status(403).json({ error: "Vendedor não pode excluir leads" });
+    db.oficial.crmLeads = (db.oficial.crmLeads || []).filter((x) => x.id !== req.params.id);
+    salvar();
+    res.json({ ok: true });
+  });
+
+  // ---- Colunas do Pipeline: criar / editar / apagar (gerente) ----
+  function slugEtapa() { return "col_" + Date.now().toString(36) + Math.random().toString(36).slice(2, 5); }
+  app.post("/api/oficial/crm/etapa", auth, gerenteOnly, (req, res) => {
+    garantirCRM();
+    const b = req.body || {};
+    const lb = String(b.lb || "").trim().slice(0, 40);
+    if (!lb) return res.status(400).json({ error: "Dê um nome à coluna" });
+    const et = etapasCRM();
+    let k; do { k = slugEtapa(); } while (et.some((e) => e.k === k));
+    const cor = /^#[0-9a-fA-F]{6}$/.test(b.cor) ? b.cor : "#64748b";
+    et.push({ k, lb, cor });
+    salvar();
+    res.json({ ok: true, etapas: etapasCRM() });
+  });
+  app.put("/api/oficial/crm/etapa/:k", auth, gerenteOnly, (req, res) => {
+    garantirCRM();
+    const e = etapasCRM().find((x) => x.k === req.params.k);
+    if (!e) return res.status(404).json({ error: "Coluna não encontrada" });
+    const b = req.body || {};
+    if (b.lb !== undefined) { const lb = String(b.lb).trim().slice(0, 40); if (lb) e.lb = lb; }
+    if (b.cor !== undefined && /^#[0-9a-fA-F]{6}$/.test(b.cor)) e.cor = b.cor;
+    salvar();
+    res.json({ ok: true, etapas: etapasCRM() });
+  });
+  app.delete("/api/oficial/crm/etapa/:k", auth, gerenteOnly, (req, res) => {
+    garantirCRM();
+    const et = etapasCRM();
+    if (et.length <= 1) return res.status(400).json({ error: "Precisa ter pelo menos uma coluna" });
+    const idx = et.findIndex((x) => x.k === req.params.k);
+    if (idx < 0) return res.status(404).json({ error: "Coluna não encontrada" });
+    // move os leads dessa coluna pra primeira coluna que sobrar (não perde ninguém)
+    const destino = et.find((x) => x.k !== req.params.k).k;
+    (db.oficial.crmLeads || []).forEach((l) => { if (l.etapa === req.params.k) l.etapa = destino; });
+    db.oficial.crmEtapas = et.filter((x) => x.k !== req.params.k);
+    salvar();
+    res.json({ ok: true, etapas: etapasCRM(), movidosPara: destino });
+  });
+
+  // lista as etapas (pra popular o seletor na Caixa de entrada) — qualquer usuário logado
+  app.get("/api/oficial/etapas", auth, (req, res) => { garantirCRM(); res.json({ etapas: etapasCRM() }); });
+
+  // muda a etapa (kanban) do lead ligado a uma conversa, direto da Caixa de entrada.
+  // O vendedor mexe só nas conversas dele. Se o lead ainda não existir no Pipeline, cria.
+  app.post("/api/oficial/chats/:id/etapa", auth, (req, res) => {
+    garantirCRM();
+    const chat = db.waChats[req.params.id];
+    if (!chat || (chat.canal !== "oficial" && chat.canal !== "instagram")) return res.status(404).json({ error: "Conversa não encontrada" });
+    if (req.user.role === "vendedor" && !podeVerVend(req.user, chat.vendedorId)) return res.status(403).json({ error: "Essa conversa não é sua" });
+    const etapa = String((req.body && req.body.etapa) || "").trim();
+    if (!etapasCRM().some((e) => e.k === etapa)) return res.status(400).json({ error: "Etapa inválida" });
+    const lead = leadDoChat(chat, true);
+    if (!lead.vendedorId) lead.vendedorId = chat.vendedorId || req.user.id;
+    if (lead.etapa !== etapa) { lead.historico = lead.historico || []; lead.historico.push({ tipo: "etapa", texto: "Movido para " + etapasCRM().find((e) => e.k === etapa).lb, ts: Date.now(), dados: { de: lead.etapa || null, para: etapa, por: (req.user && req.user.id) || null, auto: false } }); }
+    lead.etapa = etapa; lead.atualizadoEm = Date.now();
+    salvar();
+    res.json({ ok: true, etapa: lead.etapa });
+  });
+
+  // reordena as colunas do kanban (gerente) — recebe a nova ordem das chaves
+  app.post("/api/oficial/crm/etapas/ordem", auth, gerenteOnly, (req, res) => {
+    garantirCRM();
+    const ordem = Array.isArray(req.body && req.body.ordem) ? req.body.ordem : [];
+    const atual = etapasCRM();
+    const nova = [];
+    ordem.forEach((k) => { const e = atual.find((x) => x.k === k); if (e && !nova.includes(e)) nova.push(e); });
+    atual.forEach((e) => { if (!nova.includes(e)) nova.push(e); }); // nenhuma coluna some
+    db.oficial.crmEtapas = nova;
+    salvar();
+    res.json({ ok: true, etapas: etapasCRM() });
+  });
+
+  // ---- Importar leads de planilha (CSV) — gerente ----
+  app.post("/api/oficial/crm/importar", auth, gerenteOnly, (req, res) => {
+    garantirEstrutura(); garantirCRM();
+    const b = req.body || {};
+    const destino = etapasCRM().some((e) => e.k === b.destino) ? b.destino : (etapasCRM()[0] || {}).k;
+    const modo = b.distribuir === "manual" ? "manual" : "auto";
+    const tag = String(b.tag || "").trim().slice(0, 40);
+    const linhas = Array.isArray(b.leads) ? b.leads.slice(0, 5000) : [];
+    let criados = 0, pulados = 0, i = 0;
+    for (const row of linhas) {
+      i++;
+      const telefone = String((row && row.telefone) || "").replace(/\D/g, "");
+      if (telefone.length < 10 || telefone.length > 13) { pulados++; continue; }
+      const nome = String((row && row.nome) || "").trim().slice(0, 80) || telefone;
+      if ((db.oficial.crmLeads || []).some((x) => x.telefone === telefone)) { pulados++; continue; } // dedupe por telefone
+      const dist = modo === "manual" ? { vendedorId: null, vendedorNome: "" } : distribuirReserva();
+      const lead = {
+        id: "lead_" + Date.now().toString(36) + "_" + i + Math.random().toString(36).slice(2, 5),
+        nome, telefone,
+        email: String((row && row.email) || "").trim().slice(0, 120),
+        curso: String((row && row.curso) || "").trim().slice(0, 120),
+        valor: parseFloat(row && row.valor) || 0,
+        formaPagamento: "",
+        etapa: destino,
+        vendedorId: dist.vendedorId, vendedorNome: dist.vendedorNome,
+        origem: "importado",
+        tags: tag ? [tag] : [],
+        notas: [],
+        historico: [{ tipo: "criado", texto: "Importado de planilha", ts: Date.now() }],
+        criadoEm: Date.now(), atualizadoEm: Date.now(),
+      };
+      db.oficial.crmLeads.unshift(lead);
+      criados++;
+    }
+    salvar();
+    res.json({ ok: true, criados, pulados });
+  });
+
+  // ---- Ações em lote (selecionar vários leads) ----
+  app.post("/api/oficial/crm/lote/atribuir", auth, permiteVend("crm"), (req, res) => {
+    garantirCRM();
+    const b = req.body || {};
+    const ids = Array.isArray(b.ids) ? b.ids : [];
+    const vid = b.vendedorId || null;
+    if (vid && !db.users.some((u) => u.id === vid)) return res.status(400).json({ error: "Vendedor inválido" });
+    let n = 0;
+    for (const l of (db.oficial.crmLeads || [])) {
+      if (!ids.includes(l.id)) continue;
+      if (req.user.role === "vendedor" && !podeVerVend(req.user, l.vendedorId)) continue; // vendedor só mexe nos seus
+      const anteriorId = l.vendedorId || null;
+      if (anteriorId !== vid) {
+        const v = vid ? db.users.find((u) => u.id === vid) : null;
+        l.historico = l.historico || [];
+        l.historico.push({ tipo: "atribuido", texto: (v ? "Atribuído a " + v.nome : "Atribuição removida") + " (em lote)", ts: Date.now(), dados: { de: anteriorId, para: vid || null, por: (req.user && req.user.id) || null, auto: false, lote: true, redistribuido: !!(anteriorId && vid) } });
+      }
+      l.vendedorId = vid;
+      l.vendedorNome = vid ? ((db.users.find((u) => u.id === vid) || {}).nome || "") : "";
+      l.atualizadoEm = Date.now();
+      n++;
+    }
+    salvar();
+    res.json({ ok: true, alterados: n });
+  });
+  // mover vários leads pra uma etapa de uma vez (kanban em lote)
+  app.post("/api/oficial/crm/lote/etapa", auth, permiteVend("crm"), (req, res) => {
+    garantirCRM();
+    const b = req.body || {};
+    const ids = Array.isArray(b.ids) ? b.ids : [];
+    const etapa = String(b.etapa || "").trim();
+    if (!etapasCRM().some((e) => e.k === etapa)) return res.status(400).json({ error: "Etapa inválida" });
+    const lbEtapa = (etapasCRM().find((e) => e.k === etapa) || {}).lb || etapa;
+    let n = 0;
+    for (const l of (db.oficial.crmLeads || [])) {
+      if (!ids.includes(l.id)) continue;
+      if (req.user.role === "vendedor" && !podeVerVend(req.user, l.vendedorId)) continue; // vendedor só mexe nos seus
+      if (l.etapa !== etapa) { l.historico = l.historico || []; l.historico.push({ tipo: "etapa", texto: "Movido para " + lbEtapa, ts: Date.now(), dados: { de: l.etapa || null, para: etapa, por: (req.user && req.user.id) || null, auto: false } }); }
+      l.etapa = etapa; l.atualizadoEm = Date.now();
+      n++;
+    }
+    salvar();
+    res.json({ ok: true, alterados: n });
+  });
+  app.post("/api/oficial/crm/lote/excluir", auth, permiteVend("crm"), (req, res) => {    garantirCRM();
+    if (req.user.role === "vendedor") return res.status(403).json({ error: "Vendedor não pode excluir leads" });
+    const ids = Array.isArray((req.body || {}).ids) ? req.body.ids : [];
+    const antes = (db.oficial.crmLeads || []).length;
+    db.oficial.crmLeads = (db.oficial.crmLeads || []).filter((l) => !ids.includes(l.id));
+    salvar();
+    res.json({ ok: true, excluidos: antes - db.oficial.crmLeads.length });
+  });
+
+  /* ============ LISTAS DE RESERVA (captação de leads por lançamento) ============
+     Cada lista = um lançamento (curso + valor) com um link público /r/<slug>.
+     A pessoa preenche → o lead cai no Pipeline (etapa "novo"), já com curso+valor,
+     distribuído pro vendedor pela regra de % que já existe. Aguenta rajada porque
+     a gravação do banco é síncrona/atômica (nunca corrompe) + anti-duplicado + anti-flood. */
+  function slugReserva() {
+    const abc = "abcdefghjkmnpqrstuvwxyz23456789";
+    let s = ""; for (let i = 0; i < 7; i++) s += abc[Math.floor(Math.random() * abc.length)];
+    return s;
+  }
+  function reservaPublica(l) {
+    const qtd = (db.oficial.crmLeads || []).filter((x) => x.reservaId === l.id || (Array.isArray(x.reservaIds) && x.reservaIds.includes(l.id))).length;
+    const modo = ["manual", "fixo", "equipe"].includes(l.distribuir) ? l.distribuir : "auto";
+    const vf = (modo === "fixo" && l.vendedorFixoId) ? (db.users || []).find((u) => u.id === l.vendedorFixoId) : null;
+    const recIds = Array.isArray(l.recebedoresIds) ? l.recebedoresIds : [];
+    const recebedores = recIds.map((id) => { const u = (db.users || []).find((x) => x.id === id); return u ? { id: u.id, nome: u.nome } : null; }).filter(Boolean);
+    const resp = l.responsavelId ? (db.users || []).find((u) => u.id === l.responsavelId) : null;
+    return { id: l.id, nome: l.nome, curso: l.curso, tag: l.tag || "", opcoes: Array.isArray(l.opcoes) ? l.opcoes : [], destino: l.destino || "reserva", distribuir: modo, vendedorFixoId: l.vendedorFixoId || "", vendedorFixoNome: vf ? vf.nome : "", recebedoresIds: recIds, recebedores, responsavelId: l.responsavelId || "", responsavelNome: resp ? resp.nome : "", slug: l.slug, ativa: l.ativa !== false, arquivada: !!l.arquivada, leads: qtd, criadoEm: l.criadoEm, atualizadoEm: l.atualizadoEm || l.criadoEm || 0 };
+  }
+  // Sanitiza as opções de pagamento (forma + preço), no máx 3
+  function limparOpcoes(arr) {
+    if (!Array.isArray(arr)) return [];
+    return arr
+      .map((o) => ({ forma: String((o && o.forma) || "").trim().slice(0, 60), preco: parseFloat(o && o.preco) || 0 }))
+      .filter((o) => o.forma || o.preco > 0)
+      .slice(0, 3);
+  }
+  function distribuirReserva() {
+    const v = escolherVendedor();
+    if (!v) return { vendedorId: null, vendedorNome: "" };
+    v.oficialLeadsRecebidos = (v.oficialLeadsRecebidos || 0) + 1;
+    return { vendedorId: v.id, vendedorNome: v.nome };
+  }
+  // resolve o dono do lead conforme o modo da lista:
+  //  "fixo"   -> SEMPRE aquele vendedor (se ainda existir/ativo), sem rodízio
+  //  "manual" -> sem dono (o gerente distribui na mão)
+  //  "auto"   -> rodízio normal ("Quem recebe os leads")
+  function donoDaLista(lista) {
+    if (lista.distribuir === "fixo") {
+      const v = (db.users || []).find((u) => u.id === lista.vendedorFixoId && (u.role === "vendedor" || u.role === "gerente") && u.ativo);
+      return v ? { vendedorId: v.id, vendedorNome: v.nome } : { vendedorId: null, vendedorNome: "" };
+    }
+    if (lista.distribuir === "manual") return { vendedorId: null, vendedorNome: "" };
+    if (lista.distribuir === "equipe") {
+      // rodízio SÓ entre os recebedores válidos DESTA lista (não usa a lista global)
+      const validos = (Array.isArray(lista.recebedoresIds) ? lista.recebedoresIds : [])
+        .map((id) => (db.users || []).find((u) => u.id === id && (u.role === "vendedor" || u.role === "gerente") && u.ativo))
+        .filter(Boolean);
+      if (!validos.length) return { vendedorId: null, vendedorNome: "" }; // ninguém válido -> lead sem dono (não bloqueia)
+      let cur = Number.isInteger(lista.rrCursor) ? lista.rrCursor : 0;
+      if (cur < 0 || cur >= validos.length) cur = 0;
+      const v = validos[cur];
+      lista.rrCursor = (cur + 1) % validos.length; // avança o cursor DESTA lista (persistido no salvar do fluxo)
+      v.oficialLeadsRecebidos = (v.oficialLeadsRecebidos || 0) + 1;
+      return { vendedorId: v.id, vendedorNome: v.nome };
+    }
+    return distribuirReserva();
+  }
+  // sanitiza a lista de recebedores: só usuários ativos (vendedor/gerente), sem duplicados
+  function limparRecebedores(ids) {
+    if (!Array.isArray(ids)) return [];
+    const vistos = new Set(), out = [];
+    for (const raw of ids) {
+      const id = String(raw || "").trim();
+      if (!id || vistos.has(id)) continue;
+      const ok = (db.users || []).some((u) => u.id === id && (u.role === "vendedor" || u.role === "gerente") && u.ativo);
+      if (ok) { vistos.add(id); out.push(id); }
+      if (out.length >= 50) break;
+    }
+    return out;
+  }
+  // valida o modo vindo do front (auto/fixo/manual/equipe) e exige os dados de cada um
+  function normalizarDistrib(distribuir, vendedorFixoId, recebedoresIds) {
+    const modo = ["manual", "fixo", "equipe"].includes(distribuir) ? distribuir : "auto";
+    let vf = "", rec = [];
+    if (modo === "fixo") {
+      const vid = String(vendedorFixoId || "").trim();
+      const ok = vid && (db.users || []).some((u) => u.id === vid && (u.role === "vendedor" || u.role === "gerente") && u.ativo);
+      if (!ok) return { erro: "Escolha o vendedor que vai receber os leads desta lista" };
+      vf = vid;
+    }
+    if (modo === "equipe") {
+      rec = limparRecebedores(recebedoresIds);
+      if (!rec.length) return { erro: "Escolha pelo menos uma pessoa para receber os leads desta lista" };
+    }
+    return { modo, vendedorFixoId: vf, recebedoresIds: rec };
+  }
+  function escHtml(s) {
+    return String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  }
+
+  // ---- Auditoria das listas (histórico persistente, à prova de adulteração pelo front) ----
+  const _rotuloEtapa = (k) => { const e = etapasCRM().find((x) => x.k === k); return e ? (e.lb || e.k) : k; };
+  const _nomeUser = (id) => { const u = (db.users || []).find((x) => x.id === id); return u ? u.nome : (id || ""); };
+  function _snapshotLista(l) {
+    return {
+      nome: l.nome || "", curso: l.curso || "", tag: l.tag || "",
+      destino: l.destino || "", distribuir: l.distribuir || "auto",
+      vendedorFixoId: l.vendedorFixoId || "", recebedoresIds: Array.isArray(l.recebedoresIds) ? [...l.recebedoresIds] : [],
+      responsavelId: l.responsavelId || "", ativa: l.ativa !== false,
+      opcoes: JSON.stringify(Array.isArray(l.opcoes) ? l.opcoes : []),
+    };
+  }
+  // calcula só o que MUDOU, com valores legíveis (antes/depois)
+  function _diffLista(antes, depois) {
+    const legivel = (campo, v) => {
+      if (campo === "destino") return _rotuloEtapa(v);
+      if (campo === "distribuir") return { auto: "Automática (global)", fixo: "Vendedor fixo", equipe: "Equipe da lista", manual: "Sem dono" }[v] || v;
+      if (campo === "vendedorFixoId" || campo === "responsavelId") return v ? _nomeUser(v) : "—";
+      if (campo === "recebedoresIds") { try { return (JSON.parse(v) || []).map(_nomeUser).join(", ") || "—"; } catch (_) { return "—"; } }
+      if (campo === "ativa") return v ? "Ativa" : "Pausada";
+      if (campo === "opcoes") { try { return (JSON.parse(v) || []).map((o) => (o.forma || "") + (o.preco ? " " + o.preco : "")).join(" · ") || "—"; } catch (_) { return "—"; } }
+      return v === "" || v == null ? "—" : String(v);
+    };
+    const alt = {};
+    for (const k of Object.keys(depois)) {
+      const a = k === "recebedoresIds" ? JSON.stringify(antes[k]) : antes[k];
+      const d = k === "recebedoresIds" ? JSON.stringify(depois[k]) : depois[k];
+      if (a !== d) alt[k] = { antes: legivel(k, a), depois: legivel(k, d) };
+    }
+    return alt;
+  }
+  function _auditarLista(l, req, acao, alteracoes) {
+    if (!Array.isArray(l.historicoAlteracoes)) l.historicoAlteracoes = [];
+    l.historicoAlteracoes.push({
+      id: proximoId("audit"), ts: Date.now(),
+      usuarioId: (req.user && req.user.id) || "", usuarioNome: (req.user && req.user.nome) || "",
+      acao, alteracoes: alteracoes || {},
+    });
+    if (l.historicoAlteracoes.length > 200) l.historicoAlteracoes = l.historicoAlteracoes.slice(-200);
+  }
+
+  // ---- Admin (gerente) ----
+  app.get("/api/oficial/reserva", auth, gerenteOnly, (req, res) => {
+    garantirEstrutura();
+    res.json({ listas: (db.oficial.reservaListas || []).filter((l) => !l.arquivada).map(reservaPublica) });
+  });
+  app.post("/api/oficial/reserva", auth, gerenteOnly, (req, res) => {
+    garantirEstrutura();
+    const b = req.body || {};
+    const nome = String(b.nome || "").trim().slice(0, 80);
+    if (!nome) return res.status(400).json({ error: "Dê um nome à lista" });
+    let slug; do { slug = slugReserva(); } while ((db.oficial.reservaListas || []).some((x) => x.slug === slug));
+    const destino = etapasCRM().some((e) => e.k === b.destino) ? b.destino : (etapasCRM().some((e) => e.k === "reserva") ? "reserva" : (etapasCRM()[0] || {}).k);
+    const nd = normalizarDistrib(b.distribuir, b.vendedorFixoId, b.recebedoresIds);
+    if (nd.erro) return res.status(400).json({ error: nd.erro });
+    const respId = b.responsavelId && (db.users || []).some((u) => u.id === b.responsavelId && u.ativo) ? b.responsavelId : "";
+    const lista = { id: proximoId("rsv"), nome, curso: String(b.curso || "").trim().slice(0, 120), tag: String(b.tag || "").trim().slice(0, 40), opcoes: limparOpcoes(b.opcoes), destino, distribuir: nd.modo, vendedorFixoId: nd.vendedorFixoId, recebedoresIds: nd.recebedoresIds, rrCursor: 0, responsavelId: respId, slug, ativa: true, historicoAlteracoes: [], criadoEm: Date.now(), atualizadoEm: Date.now(), atualizadoPor: (req.user && req.user.id) || "" };
+    _auditarLista(lista, req, "lista_criada", {});
+    db.oficial.reservaListas.push(lista);
+    salvar();
+    res.json({ ok: true, lista: reservaPublica(lista) });
+  });
+  app.put("/api/oficial/reserva/:id", auth, gerenteOnly, (req, res) => {
+    garantirEstrutura();
+    const l = (db.oficial.reservaListas || []).find((x) => x.id === req.params.id);
+    if (!l) return res.status(404).json({ error: "Lista não encontrada" });
+    if (l.arquivada) return res.status(400).json({ error: "Lista arquivada" });
+    const b = req.body || {};
+    // trava otimista: se o cliente editou uma versão antiga, recusa (evita perda silenciosa)
+    if (b.atualizadoEm !== undefined && Number(b.atualizadoEm) && Number(b.atualizadoEm) !== Number(l.atualizadoEm || l.criadoEm || 0)) {
+      return res.status(409).json({ error: "Esta lista foi alterada por outra pessoa. Recarregue e tente de novo." });
+    }
+    const antes = _snapshotLista(l);
+    // monta a versão nova validada EM MEMÓRIA (só aplica se tudo passar)
+    const novo = {};
+    if (b.nome !== undefined) { const n = String(b.nome).trim().slice(0, 80); if (!n) return res.status(400).json({ error: "O nome não pode ficar vazio" }); novo.nome = n; }
+    if (b.curso !== undefined) novo.curso = String(b.curso).trim().slice(0, 120);
+    if (b.tag !== undefined) novo.tag = String(b.tag).trim().slice(0, 40);
+    if (b.opcoes !== undefined) novo.opcoes = limparOpcoes(b.opcoes);
+    if (b.destino !== undefined) { if (!etapasCRM().some((e) => e.k === b.destino)) return res.status(400).json({ error: "Coluna de destino inválida" }); novo.destino = b.destino; }
+    if (b.distribuir !== undefined || b.vendedorFixoId !== undefined || b.recebedoresIds !== undefined) {
+      const nd = normalizarDistrib(
+        b.distribuir !== undefined ? b.distribuir : l.distribuir,
+        b.vendedorFixoId !== undefined ? b.vendedorFixoId : l.vendedorFixoId,
+        b.recebedoresIds !== undefined ? b.recebedoresIds : l.recebedoresIds
+      );
+      if (nd.erro) return res.status(400).json({ error: nd.erro });
+      novo.distribuir = nd.modo; novo.vendedorFixoId = nd.vendedorFixoId; novo.recebedoresIds = nd.recebedoresIds;
+      if (nd.modo === "equipe") { const antigos = new Set(Array.isArray(l.recebedoresIds) ? l.recebedoresIds : []); const mudou = nd.recebedoresIds.length !== antigos.size || nd.recebedoresIds.some((id) => !antigos.has(id)); if (mudou) novo.rrCursor = 0; }
+    }
+    if (b.responsavelId !== undefined) novo.responsavelId = (b.responsavelId && (db.users || []).some((u) => u.id === b.responsavelId && u.ativo)) ? b.responsavelId : "";
+    if (b.ativa !== undefined) novo.ativa = !!b.ativa;
+
+    // aplica
+    Object.assign(l, novo);
+    const depois = _snapshotLista(l);
+    const alt = _diffLista(antes, depois);
+    // pausa/reativação vira ação legível própria
+    let acao = "lista_editada";
+    if (Object.keys(alt).length === 1 && alt.ativa) acao = alt.ativa.depois === "Ativa" ? "lista_reativada" : "lista_pausada";
+    if (Object.keys(alt).length > 0) {
+      l.atualizadoEm = Date.now(); l.atualizadoPor = (req.user && req.user.id) || "";
+      _auditarLista(l, req, acao, alt);
+      salvar();
+    }
+    const pub = reservaPublica(l);
+    res.json({ ok: true, lista: pub, semMudanca: Object.keys(alt).length === 0, auditoria: Object.keys(alt).length > 0 ? l.historicoAlteracoes[l.historicoAlteracoes.length - 1] : null });
+  });
+  // histórico de alterações da lista (gerente) — só leitura, mais recente primeiro
+  app.get("/api/oficial/reserva/:id/historico", auth, gerenteOnly, (req, res) => {
+    garantirEstrutura();
+    const l = (db.oficial.reservaListas || []).find((x) => x.id === req.params.id);
+    if (!l) return res.status(404).json({ error: "Lista não encontrada" });
+    const hist = (Array.isArray(l.historicoAlteracoes) ? l.historicoAlteracoes : []).slice().reverse();
+    res.json({ historico: hist });
+  });
+  app.delete("/api/oficial/reserva/:id", auth, gerenteOnly, (req, res) => {
+    garantirEstrutura();
+    const l = (db.oficial.reservaListas || []).find((x) => x.id === req.params.id);
+    if (!l) return res.status(404).json({ error: "Lista não encontrada" });
+    // soft delete: arquiva (não perde a lista nem o histórico)
+    l.arquivada = true; l.arquivadaEm = Date.now(); l.arquivadaPor = (req.user && req.user.id) || "";
+    l.ativa = false;
+    _auditarLista(l, req, "lista_arquivada", {});
+    salvar();
+    res.json({ ok: true, arquivada: true });
+  });
+
+  // ---- Público: recebe o lead (SEM login) ----
+  const _rsvRate = new Map();
+  function rsvRateOk(ip) {
+    const agora = Date.now();
+    const arr = (_rsvRate.get(ip) || []).filter((t) => agora - t < 60000);
+    if (arr.length >= 25) { _rsvRate.set(ip, arr); return false; } // máx 25/min por IP
+    arr.push(agora); _rsvRate.set(ip, arr);
+    if (_rsvRate.size > 5000) _rsvRate.clear();
+    return true;
+  }
+  // sanitiza as respostas do formulário (aditivo, opcional) — protege o banco
+  function sanitizarRespostasFormulario(entrada) {
+    if (!entrada || typeof entrada !== "object" || Array.isArray(entrada)) return null;
+    const out = {}; let n = 0;
+    for (const [k, v] of Object.entries(entrada)) {
+      if (n >= 40) break;
+      const chave = String(k).trim().slice(0, 80);
+      if (!chave || v == null) continue;
+      let val;
+      if (typeof v === "string") { val = v.slice(0, 1000); if (!val.trim()) continue; }
+      else if (typeof v === "number" || typeof v === "boolean") val = v;
+      else if (Array.isArray(v)) { val = v.map((x) => String(x).slice(0, 200)).slice(0, 20); if (!val.length) continue; }
+      else val = String(v).slice(0, 1000);
+      out[chave] = val; n++;
+    }
+    return Object.keys(out).length ? out : null;
+  }
+
+  app.post("/api/reserva/:slug", (req, res) => {
+    garantirEstrutura(); garantirCRM();
+    const lista = (db.oficial.reservaListas || []).find((x) => x.slug === req.params.slug);
+    if (!lista || lista.ativa === false) return res.status(404).json({ error: "Lista indisponível" });
+    const ip = String(req.headers["x-forwarded-for"] || req.ip || "").split(",")[0].trim();
+    if (!rsvRateOk(ip)) return res.status(429).json({ error: "Muitas tentativas seguidas. Aguarde um instante." });
+    const b = req.body || {};
+    const nome = String(b.nome || "").trim().slice(0, 80);
+    const telefone = String(b.telefone || "").replace(/\D/g, "");
+    const email = String(b.email || "").trim().slice(0, 120);
+    const respForm = sanitizarRespostasFormulario(b.respostasFormulario); // NOVO: opcional, retrocompatível
+    if (!nome) return res.status(400).json({ error: "Informe seu nome" });
+    if (telefone.length < 10 || telefone.length > 13) return res.status(400).json({ error: "WhatsApp inválido" });
+    // opção de pagamento escolhida (forma + preço)
+    const opcoes = Array.isArray(lista.opcoes) ? lista.opcoes : [];
+    let idx = parseInt(b.opcao, 10);
+    if (!(idx >= 0 && idx < opcoes.length)) {
+      if (opcoes.length === 1) idx = 0;         // só tem 1 opção -> usa ela
+      else if (opcoes.length === 0) idx = -1;   // lista sem opções -> sem valor
+      else return res.status(400).json({ error: "Escolha uma opção de pagamento" });
+    }
+    const opc = idx >= 0 ? opcoes[idx] : null;
+    const etapaDestino = etapasCRM().some((e) => e.k === lista.destino) ? lista.destino : (etapasCRM()[0] || {}).k;
+    const novaTag = (lista.tag || lista.nome || "").trim();
+
+    // o lead já PERTENCE a esta lista? (aguenta o campo antigo reservaId e o novo reservaIds)
+    const naEstaLista = (x) => x.reservaId === lista.id || (Array.isArray(x.reservaIds) && x.reservaIds.includes(lista.id));
+
+    // 1) JÁ ESTÁ NESTA LISTA -> não duplica; se vierem respostas do formulário, atualiza-as
+    const jaNaLista = (db.oficial.crmLeads || []).find((x) => x.telefone === telefone && naEstaLista(x));
+    if (jaNaLista) {
+      if (respForm) { jaNaLista.respostasFormulario = { ...(jaNaLista.respostasFormulario || {}), ...respForm }; jaNaLista.atualizadoEm = Date.now(); salvar(); }
+      return res.json({ ok: true, jaEstava: true });
+    }
+
+    // 2) JÁ EXISTE NO CRM por telefone, mas entrou por OUTRA lista -> ATUALIZA (não duplica):
+    //    adiciona a tag da nova lista e joga na pipeline dela.
+    const existente = (db.oficial.crmLeads || []).find((x) => x.telefone === telefone);
+    if (existente) {
+      if (!Array.isArray(existente.historico)) existente.historico = [];
+      if (!Array.isArray(existente.tags)) existente.tags = [];
+      // passa a pertencer também a esta lista
+      if (!Array.isArray(existente.reservaIds)) existente.reservaIds = existente.reservaId ? [existente.reservaId] : [];
+      if (!existente.reservaIds.includes(lista.id)) existente.reservaIds.push(lista.id);
+      // tag da nova lista (sem repetir)
+      if (novaTag && !existente.tags.includes(novaTag)) existente.tags.push(novaTag);
+      // pipeline (etapa) da nova lista — sem NUNCA puxar o lead pra trás
+      // (se ele já está numa etapa mais avançada, ex: matriculado, mantém onde está)
+      const etapas = etapasCRM();
+      const iAtual = etapas.findIndex((e) => e.k === existente.etapa);
+      const iNova = etapas.findIndex((e) => e.k === etapaDestino);
+      if (iNova > -1 && (iAtual === -1 || iNova >= iAtual) && existente.etapa !== etapaDestino) {
+        existente.etapa = etapaDestino;
+        existente.historico.push({ tipo: "etapa", texto: "Movido para " + (etapas[iNova] ? etapas[iNova].lb : etapaDestino) + " pela lista " + lista.nome, ts: Date.now(), dados: { de: existente.etapa || null, para: etapaDestino, por: null, auto: true } });
+      }
+      // atualiza o interesse pra refletir a nova lista (curso/valor/forma) — sem apagar dado bom com vazio
+      if (lista.curso) existente.curso = lista.curso;
+      if (opc) { existente.valor = opc.preco; existente.formaPagamento = opc.forma; }
+      // completa nome/email se estavam faltando
+      if (nome && (!existente.nome || existente.nome === existente.telefone)) existente.nome = nome;
+      if (email && !existente.email) existente.email = email;
+      if (respForm) existente.respostasFormulario = { ...(existente.respostasFormulario || {}), ...respForm }; // NOVO
+      // se ainda não tinha dono e a lista distribui automático, distribui agora
+      if (!existente.vendedorId && lista.distribuir !== "manual") {
+        const d = donoDaLista(lista); existente.vendedorId = d.vendedorId; existente.vendedorNome = d.vendedorNome;
+        if (existente.vendedorId) existente.historico.push({ tipo: "atribuido", texto: "Atribuído a " + (existente.vendedorNome || existente.vendedorId) + " (distribuição da lista)", ts: Date.now(), dados: { de: null, para: existente.vendedorId, por: null, auto: true, lote: false, redistribuido: false } });
+      }
+      // marca como lead recorrente (Dashboard usa isso pra saber que é recontato, não gente nova)
+      existente.recorrente = true;
+      existente.ultimaCaptacaoEm = Date.now();
+      existente.historico.push({ tipo: "lista", texto: "Entrou também pela lista: " + lista.nome + (opc ? (" — " + opc.forma) : ""), ts: Date.now() });
+      existente.atualizadoEm = Date.now();
+      salvar();
+      return res.json({ ok: true, atualizado: true });
+    }
+
+    // 3) NÃO EXISTE -> cria novo lead
+    const dist = donoDaLista(lista);
+    const lead = {
+      id: "lead_" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+      nome, telefone, email,
+      curso: lista.curso,
+      valor: opc ? opc.preco : 0,
+      formaPagamento: opc ? opc.forma : "",
+      etapa: etapaDestino,
+      vendedorId: dist.vendedorId, vendedorNome: dist.vendedorNome,
+      origem: "reserva", reservaId: lista.id, reservaIds: [lista.id], reservaNome: lista.nome,
+      tags: novaTag ? [novaTag] : [],
+      respostasFormulario: respForm || undefined, // NOVO: respostas do formulário
+      notas: [],
+      historico: [{ tipo: "criado", texto: "Entrou pela lista de reserva: " + lista.nome + (opc ? (" — " + opc.forma) : ""), ts: Date.now() }],
+      criadoEm: Date.now(), atualizadoEm: Date.now(),
+    };
+    if (dist.vendedorId) lead.historico.push({ tipo: "atribuido", texto: "Atribuído a " + (dist.vendedorNome || dist.vendedorId) + " (distribuição da lista)", ts: Date.now(), dados: { de: null, para: dist.vendedorId, por: null, auto: true, lote: false, redistribuido: false } });
+    // registra a atribuição AUTOMÁTICA de entrada (pro Dashboard reconstruir carteira/histórico)
+    if (dist.vendedorId) {
+      lead.historico.push({ tipo: "atribuido", texto: "Atribuído a " + (dist.vendedorNome || "") + " (automático, entrada da lista)", ts: Date.now(), dados: { de: null, para: dist.vendedorId, por: null, auto: true, lote: false, redistribuido: false } });
+    }
+    db.oficial.crmLeads.unshift(lead);
+    salvar();
+    res.json({ ok: true });
+  });
+
+  app.post("/api/oficial/crm/vendedores", auth, gerenteOnly, (req, res) => {
+    garantirCRM();
+    const ids = Array.isArray((req.body || {}).ids) ? req.body.ids.filter((id) => db.users.some((u) => u.id === id && u.role === "vendedor")) : [];
+    db.oficial.crmVendedores = ids;
+    salvar();
+    res.json({ ok: true, crmVendedores: ids });
+  });
+
+  // quando qualifica (ou callback): cria/atualiza a conversa e passa pro vendedor
+  function finalizarLigacao(lig, ia) {
+    lig.status = "finalizada";
+    if (lig.classificacao === "qualificado") { try { criarLeadDaLigacao(lig); } catch (e) { console.error("[crm] criarLeadDaLigacao:", e.message); } }
+    const resumo = lig.transcricao.map((t) => (t.role === "ia" ? "IA: " : "Lead: ") + t.content).join("\n");
+    if (lig.classificacao === "qualificado" || lig.classificacao === "callback") {
+      const numero = (db.oficial.numeros || []).find((n) => n.ativo) || (db.oficial.numeros || [])[0];
+      if (numero) {
+        const chave = "oficial::" + numero.id + "::" + lig.telefone;
+        let chat = db.waChats[chave];
+        if (!chat) chat = db.waChats[chave] = { canal: "oficial", numeroOficialId: numero.id, numero: lig.telefone, nome: lig.nome || lig.telefone, mensagens: [], criadoEm: Date.now() };
+        chat.respondeu = true; chat.origemLigacao = true;
+        if (!Array.isArray(chat.notas)) chat.notas = [];
+        chat.notas.push({ tipo: "ligacao_ia", texto: `Ligação da IA — ${lig.classificacao === "qualificado" ? "QUALIFICOU o lead" : "lead pediu retorno"}.\n\n${resumo}`, ts: Date.now(), por: ia ? ia.nome : "IA" });
+        chat.mensagens.push({ role: "them", content: `📞 [Ligação IA · ${lig.classificacao}] Resumo da conversa:\n${resumo}`, ts: Date.now(), tipo: "ligacao" });
+        chat.atualizadoEm = Date.now();
+        chat.naoLidas = (chat.naoLidas || 0) + 1;
+        if (!chat.vendedorId) atribuirLead(chat);
+      }
+    }
+    salvar();
+  }
+
+  // 1) dispara a ligação
+  // helper reutilizável: dispara UMA ligação (usado no disparo único e no disparo em massa)
+  async function dispararLigacaoTwilio({ telefone, nome, iaId, baseUrl, campId }) {
+    garantirLigacoes();
+    const sid = process.env.TWILIO_ACCOUNT_SID, token = process.env.TWILIO_AUTH_TOKEN, from = process.env.TWILIO_NUMERO;
+    if (!sid || !token || !from) return { erro: "Configure TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN e TWILIO_NUMERO no Railway." };
+    const tel = String(telefone || "").replace(/\D/g, "");
+    const ia = (db.oficial.ias || []).find((x) => x.id === String(iaId || "").trim());
+    if (tel.length < 10) return { erro: "Telefone inválido" };
+    if (!ia) return { erro: "IA inválida" };
+    if (!ia.ativa) return { erro: `A IA "${ia.nome}" está desativada.` };
+    const lig = { id: "lig_" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), telefone: tel, nome: nome || "", iaId: ia.id, campId: campId || null, status: "discando", transcricao: [], classificacao: null, criadoEm: Date.now() };
+    db.oficial.ligacoes.unshift(lig);
+    if (db.oficial.ligacoes.length > 800) db.oficial.ligacoes = db.oficial.ligacoes.slice(0, 800);
+    salvar();
+    try {
+      const to = tel.startsWith("55") ? "+" + tel : "+55" + tel;
+      const body = new URLSearchParams({ To: to, From: from, Url: `${baseUrl}/api/oficial/ligacao/twiml/${lig.id}`, Method: "POST", StatusCallback: `${baseUrl}/api/oficial/ligacao/status/${lig.id}`, StatusCallbackMethod: "POST" });
+      const r = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${sid}/Calls.json`, { method: "POST", headers: { Authorization: "Basic " + Buffer.from(sid + ":" + token).toString("base64"), "Content-Type": "application/x-www-form-urlencoded" }, body });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) { lig.status = "erro"; lig.erro = (d && d.message) || ("Twilio erro " + r.status); salvar(); return { erro: lig.erro, lig }; }
+      lig.callSid = d.sid; salvar();
+      return { lig };
+    } catch (e) { lig.status = "erro"; lig.erro = e.message; salvar(); return { erro: e.message, lig }; }
+  }
+
+  app.post("/api/oficial/ligacao/iniciar", auth, gerenteOnly, async (req, res) => {
+    const b = req.body || {};
+    const r = await dispararLigacaoTwilio({ telefone: b.telefone, nome: b.nome, iaId: b.iaId, baseUrl: baseUrlDe(req) });
+    if (r.erro) return res.status(400).json({ error: r.erro });
+    res.json({ ok: true, ligacaoId: r.lig.id });
+  });
+
+  /* ---- DISPARO EM MASSA DE LIGAÇÕES ---- */
+  function garantirCampLig() { if (!Array.isArray(db.oficial.campLig)) db.oficial.campLig = []; }
+  app.post("/api/oficial/ligacao/campanha", auth, gerenteOnly, (req, res) => {
+    garantirCampLig();
+    const b = req.body || {};
+    const ia = (db.oficial.ias || []).find((x) => x.id === String(b.iaId || "").trim());
+    if (!ia) return res.status(400).json({ error: "Escolha uma IA válida" });
+    if (!ia.ativa) return res.status(400).json({ error: `A IA "${ia.nome}" está desativada.` });
+    const vistos = new Set();
+    const contatos = (Array.isArray(b.contatos) ? b.contatos : [])
+      .map((c) => ({ telefone: String(c.telefone || "").replace(/\D/g, ""), nome: c.nome || "", status: "pendente" }))
+      .filter((c) => { if (c.telefone.length < 10 || vistos.has(c.telefone)) return false; vistos.add(c.telefone); return true; });
+    if (!contatos.length) return res.status(400).json({ error: "Nenhum telefone válido na lista." });
+    const intervalo = Math.max(15, parseInt(b.intervalo) || 45);
+    const camp = { id: "campl_" + Date.now().toString(36), nome: b.nome || "Campanha de ligação", iaId: ia.id, intervalo, baseUrl: baseUrlDe(req), fila: contatos, status: "rodando", criadoEm: Date.now(), ultimaEm: 0 };
+    db.oficial.campLig.unshift(camp);
+    salvar();
+    res.json({ ok: true, campanhaId: camp.id, total: contatos.length });
+  });
+  app.get("/api/oficial/ligacao/campanhas", auth, gerenteOnly, (req, res) => {
+    garantirCampLig();
+    res.json((db.oficial.campLig || []).slice(0, 50).map((c) => ({
+      id: c.id, nome: c.nome, status: c.status, intervalo: c.intervalo,
+      total: c.fila.length, feitas: c.fila.filter((x) => x.status !== "pendente").length,
+      criadoEm: c.criadoEm,
+    })));
+  });
+  app.post("/api/oficial/ligacao/campanha/:id/pausar", auth, gerenteOnly, (req, res) => {
+    garantirCampLig();
+    const c = (db.oficial.campLig || []).find((x) => x.id === req.params.id);
+    if (!c) return res.status(404).json({ error: "Campanha não encontrada" });
+    c.status = c.status === "rodando" ? "pausada" : "rodando";
+    salvar();
+    res.json({ ok: true, status: c.status });
+  });
+  // agendador: dispara a próxima ligação de cada campanha rodando, respeitando o intervalo
+  setInterval(async () => {
+    try {
+      garantirCampLig();
+      const agora = Date.now();
+      for (const c of (db.oficial.campLig || [])) {
+        if (c.status !== "rodando") continue;
+        const pend = c.fila.find((x) => x.status === "pendente");
+        if (!pend) { c.status = "concluida"; salvar(); continue; }
+        if (agora - (c.ultimaEm || 0) < c.intervalo * 1000) continue;
+        c.ultimaEm = agora; pend.status = "ligando"; salvar();
+        const r = await dispararLigacaoTwilio({ telefone: pend.telefone, nome: pend.nome, iaId: c.iaId, baseUrl: c.baseUrl, campId: c.id });
+        pend.status = r.erro ? "erro" : "ligou";
+        if (r.erro) pend.erro = r.erro;
+        salvar();
+      }
+    } catch (e) { console.error("[campLig] agendador:", e.message); }
+  }, 5000);
+
+  // 2) TwiML inicial (o lead atendeu) — a IA dá a primeira fala
+  app.post("/api/oficial/ligacao/twiml/:id", async (req, res) => {
+    garantirLigacoes();
+    res.set("Content-Type", "text/xml");
+    const lig = (db.oficial.ligacoes || []).find((x) => x.id === req.params.id);
+    if (!lig) return res.send(`<Response><Say ${VOZ_TW}>Desculpe, houve um erro.</Say><Hangup/></Response>`);
+    const ia = (db.oficial.ias || []).find((x) => x.id === lig.iaId);
+    lig.status = "em_conversa"; salvar();
+    let fala = "Alô! Tudo bem?";
+    try { if (ia) { const r = await falaDaIA(lig, ia); fala = r.fala || fala; if (r.classe) lig.classificacao = r.classe; } } catch (e) { console.error("[ligacao] twiml:", e.message); }
+    lig.transcricao.push({ role: "ia", content: fala, ts: Date.now() }); salvar();
+    res.send(await gatherXml(baseUrlDe(req), lig.id, fala, ia && ia.voiceId));
+  });
+
+  // 3) recebe a fala do lead e responde (loop)
+  app.post("/api/oficial/ligacao/resposta/:id", async (req, res) => {
+    garantirLigacoes();
+    res.set("Content-Type", "text/xml");
+    const lig = (db.oficial.ligacoes || []).find((x) => x.id === req.params.id);
+    if (!lig) return res.send("<Response><Hangup/></Response>");
+    const ia = (db.oficial.ias || []).find((x) => x.id === lig.iaId);
+    const fala = String((req.body && req.body.SpeechResult) || "").trim();
+    const base = baseUrlDe(req);
+    if (fala) { lig.transcricao.push({ role: "lead", content: fala, ts: Date.now() }); lig._vazios = 0; }
+    else { lig._vazios = (lig._vazios || 0) + 1; }
+    if (lig._vazios >= 2) { lig.status = "sem_resposta"; salvar(); return res.send(`<Response>${await vozTag(base, "Parece que não consigo te ouvir bem. Vou encerrar e a gente se fala pelo WhatsApp. Até logo!", ia && ia.voiceId)}<Hangup/></Response>`); }
+    if (!fala) { salvar(); return res.send(`<Response>${await vozTag(base, "Ainda está aí?", ia && ia.voiceId)}<Gather input="speech" language="pt-BR" speechTimeout="auto" action="${base}/api/oficial/ligacao/resposta/${lig.id}" method="POST"></Gather><Redirect method="POST">${base}/api/oficial/ligacao/resposta/${lig.id}?vazio=1</Redirect></Response>`); }
+    let r;
+    try { r = await falaDaIA(lig, ia); } catch (e) { r = { fala: "Tive um probleminha na conexão. Um consultor vai te chamar no WhatsApp, tá? Obrigado!", classe: "callback" }; }
+    lig.transcricao.push({ role: "ia", content: r.fala, ts: Date.now() });
+    if (r.classe) lig.classificacao = r.classe;
+    salvar();
+    if (r.classe) { finalizarLigacao(lig, ia); return res.send(`<Response>${await vozTag(base, r.fala, ia && ia.voiceId)}<Hangup/></Response>`); }
+    res.send(await gatherXml(base, lig.id, r.fala, ia && ia.voiceId));
+  });
+
+  // 4) status final (Twilio avisa quando termina)
+  app.post("/api/oficial/ligacao/status/:id", (req, res) => {
+    garantirLigacoes();
+    const lig = (db.oficial.ligacoes || []).find((x) => x.id === req.params.id);
+    if (lig) {
+      const st = String((req.body && req.body.CallStatus) || "");
+      lig.duracao = parseInt((req.body && req.body.CallDuration) || "0") || 0;
+      if (["completed", "busy", "no-answer", "failed", "canceled"].includes(st)) {
+        if (st === "no-answer") lig.status = "nao_atendeu";
+        else if (st === "busy") lig.status = "ocupado";
+        else if (st === "failed" || st === "canceled") lig.status = st;
+        else if (lig.status !== "finalizada" && lig.status !== "sem_resposta") lig.status = "finalizada";
+      }
+      salvar();
+    }
+    res.sendStatus(200);
+  });
+
+  // 5) lista as ligações (histórico + transcrição)
+  app.get("/api/oficial/ligacoes", auth, gerenteOnly, (req, res) => {
+    garantirLigacoes();
+    res.json((db.oficial.ligacoes || []).slice(0, 100).map((l) => ({
+      id: l.id, telefone: l.telefone, nome: l.nome, status: l.status,
+      classificacao: l.classificacao, duracao: l.duracao || 0, criadoEm: l.criadoEm,
+      transcricao: l.transcricao || [], erro: l.erro || null,
+    })));
+  });
+
+  // medidor de custo estimado das ligações (duração × R$/min, ajustável)
+  app.get("/api/oficial/ligacao/custo", auth, gerenteOnly, (req, res) => {
+    garantirLigacoes();
+    const rate = db.oficial.custoPorMin != null ? db.oficial.custoPorMin : 3;
+    const agora = new Date();
+    const inicioHoje = new Date(agora.getFullYear(), agora.getMonth(), agora.getDate()).getTime();
+    const inicioMes = new Date(agora.getFullYear(), agora.getMonth(), 1).getTime();
+    const calc = (desde) => {
+      const ligs = (db.oficial.ligacoes || []).filter((l) => l.criadoEm >= desde && (l.duracao || 0) > 0);
+      const seg = ligs.reduce((s, l) => s + (l.duracao || 0), 0);
+      const min = seg / 60;
+      return { ligacoes: ligs.length, minutos: Math.round(min * 10) / 10, custo: Math.round(min * rate * 100) / 100 };
+    };
+    res.json({ custoPorMin: rate, hoje: calc(inicioHoje), mes: calc(inicioMes), total: calc(0) });
+  });
+  app.post("/api/oficial/ligacao/custo", auth, gerenteOnly, (req, res) => {
+    const r = parseFloat((req.body || {}).custoPorMin);
+    if (!isNaN(r) && r >= 0) { db.oficial.custoPorMin = r; salvar(); }
+    res.json({ ok: true, custoPorMin: db.oficial.custoPorMin != null ? db.oficial.custoPorMin : 3 });
+  });
+
+
+  // pausar a IA em TODAS as conversas que já existem agora (de uma vez).
+  // Útil antes de um disparo novo: as conversas antigas ficam congeladas
+  // (a IA não responde mais nelas), mas as NOVAS conversas do disparo
+  // continuam com a IA respondendo normalmente.
+  app.post("/api/oficial/chats/pausar-todas-atuais", auth, gerenteOnly, (req, res) => {
+    let total = 0;
+    for (const chat of Object.values(db.waChats || {})) {
+      if (!chat || chat.canal !== "oficial") continue;
+      if (chat.iaPausada) continue; // já estava pausada, pula
+      chat.iaPausada = true;
+      total++;
+      if (!Array.isArray(chat.notas)) chat.notas = [];
+      chat.notas.push({
+        tipo: "ia_pausada",
+        texto: `${req.user.nome} pausou a IA em massa (antes de novo disparo)`,
+        ts: Date.now(), por: req.user.nome,
+      });
+      if (chat.notas.length > 100) chat.notas = chat.notas.slice(-100);
+    }
+    salvar();
+    res.json({ ok: true, pausadas: total });
+  });
+
+  // EXPORTAR a base de conhecimento de uma IA (backup do treinamento).
+  // Baixa um arquivo .json com toda a configuração da agente (persona,
+  // cursos, objeções, FAQ, playbook, escalação). Serve de backup e pra
+  // recriar a IA depois se precisar. Token via query pra funcionar no download.
+  app.get("/api/oficial/ias/:id/exportar", (req, res) => {
+    const t = String(req.query.token || (req.headers.authorization || "").replace("Bearer ", "")).trim();
+    const user = (db.users || []).find((u) => u.token && u.token === t);
+    if (!user || !user.ativo || user.role !== "gerente") {
+      return res.status(401).send("Não autorizado");
+    }
+    const ia = (db.oficial.ias || []).find((x) => x.id === req.params.id);
+    if (!ia) return res.status(404).send("IA não encontrada");
+    const exportData = {
+      _tipo: "base-conhecimento-instructiva",
+      _versao: 1,
+      _exportadoEm: new Date().toISOString(),
+      nome: ia.nome,
+      modo: ia.modo,
+      config: ia.config || {},
+    };
+    const nomeArq = "base-conhecimento-" + String(ia.nome || "ia").toLowerCase().replace(/[^a-z0-9]+/g, "-") + ".json";
+    res.setHeader("Content-Type", "application/json; charset=utf-8");
+    res.setHeader("Content-Disposition", 'attachment; filename="' + nomeArq + '"');
+    res.send(JSON.stringify(exportData, null, 2));
+  });
+
+  // PREVIEW: testa a IA com a config atual (sem salvar, sem WhatsApp)
+  app.post("/api/oficial/ias/preview", auth, gerenteOnly, async (req, res) => {
+    const b = req.body || {};
+    const iaFake = {
+      nome: String(b.nome || "IA").trim() || "IA",
+      modo: b.modo === "qualifica" ? "qualifica" : "fecha",
+      config: sanitizaConfig(b.config),
+      conhecimento: sanitizaConhecimento(b.conhecimento),
+    };
+    const historico = Array.isArray(b.historico) ? b.historico.slice(-24) : [];
+    if (!historico.length) return res.status(400).json({ error: "Sem mensagens" });
+    try {
+      const system = montarSystemPrompt(iaFake, b.nomeLead || "");
+      let resposta = await chamarClaude(system, historico);
+      let passar = false;
+      if (resposta.includes("[PASSAR_HUMANO]")) { passar = true; resposta = resposta.replace(/\[PASSAR_HUMANO\]/g, "").trim(); }
+      res.json({ ok: true, resposta, passar });
+    } catch (e) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  // extrai texto de um arquivo enviado (base64): TXT/MD/CSV nativo, PDF via pdfjs, DOCX via mammoth
+  app.post("/api/oficial/ias/extrair", auth, gerenteOnly, async (req, res) => {
+    const b = req.body || {};
+    const nome = String(b.nome || "arquivo").trim();
+    const base64 = String(b.base64 || "");
+    if (!base64) return res.status(400).json({ error: "Arquivo vazio" });
+    const lower = nome.toLowerCase();
+    let buf;
+    try { buf = Buffer.from(base64, "base64"); }
+    catch (_) { return res.status(400).json({ error: "Arquivo inválido" }); }
+    if (buf.length > 6 * 1024 * 1024) return res.status(400).json({ error: "Arquivo passa de 6MB" });
+
+    try {
+      // TXT / MD / CSV
+      if (lower.endsWith(".txt") || lower.endsWith(".md") || lower.endsWith(".csv") || lower.endsWith(".text")) {
+        const texto = buf.toString("utf8").slice(0, 200000);
+        if (!texto.trim()) return res.status(422).json({ error: "Arquivo de texto vazio" });
+        return res.json({ ok: true, nome, texto, tipo: "texto" });
+      }
+
+      // PDF
+      if (lower.endsWith(".pdf")) {
+        const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
+        const data = new Uint8Array(buf);
+        const doc = await pdfjs.getDocument({ data, useSystemFonts: true, isEvalSupported: false }).promise;
+        let texto = "";
+        const maxPag = Math.min(doc.numPages, 200);
+        for (let i = 1; i <= maxPag; i++) {
+          const page = await doc.getPage(i);
+          const content = await page.getTextContent();
+          texto += content.items.map((it) => it.str).join(" ") + "\n";
+          if (texto.length > 200000) break;
+        }
+        texto = texto.slice(0, 200000).trim();
+        if (!texto) return res.status(422).json({ error: "Não consegui ler texto desse PDF (pode ser um PDF de imagem/escaneado)." });
+        return res.json({ ok: true, nome, texto, tipo: "pdf" });
+      }
+
+      // DOC / DOCX
+      if (lower.endsWith(".docx") || lower.endsWith(".doc")) {
+        const { createRequire } = await import("module");
+        const require2 = createRequire(import.meta.url);
+        const mammoth = require2("mammoth");
+        const r = await mammoth.extractRawText({ buffer: buf });
+        const texto = String(r.value || "").slice(0, 200000).trim();
+        if (!texto) return res.status(422).json({ error: "Não consegui ler texto desse documento." });
+        return res.json({ ok: true, nome, texto, tipo: "docx" });
+      }
+
+      return res.status(415).json({ error: "Formato não suportado. Use PDF, DOC, DOCX, TXT, MD ou CSV." });
+    } catch (e) {
+      console.error("Erro extrair arquivo:", e.message);
+      return res.status(500).json({ error: "Não consegui processar o arquivo: " + e.message });
+    }
+  });
+
+  /* ================= BASE DE CONHECIMENTO (RAG) da IA =================
+     Anexa documentos (docx/pdf/txt), extrai o texto, quebra em pedaços,
+     gera embeddings e guarda num arquivo separado por IA. Na hora de responder,
+     a IA busca só os trechos mais relevantes daquela conversa. */
+  const KB_DIR = MEDIA_DIR ? path.join(MEDIA_DIR, "ia_kb") : null;
+  function kbPath(iaId) { return KB_DIR ? path.join(KB_DIR, "ia_" + iaId + ".json") : null; }
+  function kbLer(iaId) {
+    try { const p = kbPath(iaId); if (p && fs.existsSync(p)) return JSON.parse(fs.readFileSync(p, "utf8")); } catch (_) {}
+    return { chunks: [] };
+  }
+  function kbSalvar(iaId, kb) {
+    try {
+      if (!KB_DIR) return;
+      if (!fs.existsSync(KB_DIR)) fs.mkdirSync(KB_DIR, { recursive: true });
+      fs.writeFileSync(kbPath(iaId), JSON.stringify(kb));
+    } catch (e) { console.error("kbSalvar:", e.message); }
+  }
+  async function extrairTextoDoc(nome, buf) {
+    const lower = String(nome || "").toLowerCase();
+    if (lower.endsWith(".txt") || lower.endsWith(".md") || lower.endsWith(".csv") || lower.endsWith(".text")) {
+      return buf.toString("utf8");
+    }
+    if (lower.endsWith(".pdf")) {
+      const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
+      const doc = await pdfjs.getDocument({ data: new Uint8Array(buf), useSystemFonts: true, isEvalSupported: false }).promise;
+      let texto = ""; const maxPag = Math.min(doc.numPages, 400);
+      for (let i = 1; i <= maxPag; i++) { const page = await doc.getPage(i); const c = await page.getTextContent(); texto += c.items.map((it) => it.str).join(" ") + "\n"; }
+      return texto;
+    }
+    if (lower.endsWith(".docx") || lower.endsWith(".doc")) {
+      const { createRequire } = await import("module");
+      const mammoth = createRequire(import.meta.url)("mammoth");
+      const r = await mammoth.extractRawText({ buffer: buf });
+      return String(r.value || "");
+    }
+    throw new Error("Formato não suportado (use PDF, DOCX, TXT, MD ou CSV)");
+  }
+  function chunkTexto(texto, tam = 1600, over = 200) {
+    const limpo = String(texto).replace(/\r/g, "").replace(/[ \t]{2,}/g, " ").replace(/\n{3,}/g, "\n\n").trim();
+    const chunks = []; let i = 0;
+    while (i < limpo.length) {
+      let fim = Math.min(i + tam, limpo.length);
+      if (fim < limpo.length) {
+        const janela = limpo.slice(i, fim);
+        const corte = Math.max(janela.lastIndexOf("\n"), janela.lastIndexOf(". "), janela.lastIndexOf("! "), janela.lastIndexOf("? "));
+        if (corte > tam * 0.5) fim = i + corte + 1;
+      }
+      const pedaco = limpo.slice(i, fim).trim();
+      if (pedaco.length > 30) chunks.push(pedaco);
+      const prox = fim - over;
+      i = prox > i ? prox : fim;
+    }
+    return chunks;
+  }
+  async function embeddar(textos) {
+    const key = process.env.OPENAI_API_KEY;
+    if (!key) throw new Error("OPENAI_API_KEY não configurada");
+    const out = [];
+    for (let i = 0; i < textos.length; i += 96) {
+      const lote = textos.slice(i, i + 96);
+      const r = await fetch("https://api.openai.com/v1/embeddings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: "Bearer " + key },
+        body: JSON.stringify({ model: "text-embedding-3-small", input: lote, dimensions: 512 }),
+      });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error((d.error && d.error.message) || ("Erro embeddings " + r.status));
+      (d.data || []).forEach((x) => out.push(x.embedding));
+    }
+    return out;
+  }
+  function cosseno(a, b) {
+    let dot = 0, na = 0, nb = 0;
+    const n = Math.min(a.length, b.length);
+    for (let i = 0; i < n; i++) { dot += a[i] * b[i]; na += a[i] * a[i]; nb += b[i] * b[i]; }
+    return dot / (Math.sqrt(na) * Math.sqrt(nb) || 1);
+  }
+  // devolve os trechos mais relevantes da base pra conversa (string pronta pro prompt)
+  async function buscarConhecimento(ia, chat) {
+    try {
+      if (!ia || !ia.docs || !ia.docs.length) return "";
+      const kb = kbLer(ia.id);
+      if (!kb.chunks || !kb.chunks.length) return "";
+      const ultimas = (chat.mensagens || []).filter((m) => m.role === "them").slice(-3)
+        .map((m) => m.transcricao || m.content || "").join("\n").trim();
+      const consulta = (ultimas || (chat.mensagens || []).slice(-3).map((m) => m.content || "").join("\n")).trim();
+      if (!consulta) return "";
+      const [q] = await embeddar([consulta.slice(0, 2000)]);
+      const rank = kb.chunks.map((c) => ({ texto: c.texto, s: cosseno(q, c.emb) }))
+        .sort((a, b) => b.s - a.s).slice(0, 8);
+      return rank.map((r, i) => `[Trecho ${i + 1}]\n${r.texto}`).join("\n\n");
+    } catch (e) { console.error("buscarConhecimento:", e.message); return ""; }
+  }
+
+  // ---- anexa um documento à base de conhecimento da IA ----
+  app.post("/api/oficial/ias/:id/docs", auth, gerenteOnly, async (req, res) => {
+    const ia = (db.oficial.ias || []).find((x) => x.id === req.params.id);
+    if (!ia) return res.status(404).json({ error: "IA não encontrada" });
+    const b = req.body || {};
+    const nome = String(b.nome || "documento").trim();
+    const base64 = String(b.base64 || "");
+    if (!base64) return res.status(400).json({ error: "Arquivo vazio" });
+    let buf; try { buf = Buffer.from(base64, "base64"); } catch (_) { return res.status(400).json({ error: "Arquivo inválido" }); }
+    if (buf.length > 20 * 1024 * 1024) return res.status(400).json({ error: "Arquivo passa de 20MB" });
+    try {
+      const texto = await extrairTextoDoc(nome, buf);
+      if (!texto || texto.trim().length < 20) return res.status(422).json({ error: "Não consegui ler texto (pode ser PDF escaneado/imagem)." });
+      const pedacos = chunkTexto(texto);
+      if (!pedacos.length) return res.status(422).json({ error: "Documento sem conteúdo aproveitável." });
+      const embs = await embeddar(pedacos);
+      const docId = "doc_" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+      const kb = kbLer(ia.id);
+      pedacos.forEach((t, i) => kb.chunks.push({ docId, texto: t, emb: embs[i] }));
+      kbSalvar(ia.id, kb);
+      if (!Array.isArray(ia.docs)) ia.docs = [];
+      const doc = { id: docId, nome, tamanho: buf.length, nChunks: pedacos.length, criadoEm: Date.now() };
+      ia.docs.push(doc);
+      salvar();
+      console.log(`[oficial] IA ${ia.nome}: doc "${nome}" indexado (${pedacos.length} trechos)`);
+      res.json({ ok: true, doc });
+    } catch (e) {
+      console.error("upload doc IA:", e.message);
+      res.status(500).json({ error: "Não consegui processar: " + e.message });
+    }
+  });
+  app.get("/api/oficial/ias/:id/docs", auth, gerenteOnly, (req, res) => {
+    const ia = (db.oficial.ias || []).find((x) => x.id === req.params.id);
+    if (!ia) return res.status(404).json({ error: "IA não encontrada" });
+    res.json({ docs: ia.docs || [], totalChunks: (ia.docs || []).reduce((s, d) => s + (d.nChunks || 0), 0) });
+  });
+  app.delete("/api/oficial/ias/:id/docs/:docId", auth, gerenteOnly, (req, res) => {
+    const ia = (db.oficial.ias || []).find((x) => x.id === req.params.id);
+    if (!ia) return res.status(404).json({ error: "IA não encontrada" });
+    const kb = kbLer(ia.id);
+    kb.chunks = (kb.chunks || []).filter((c) => c.docId !== req.params.docId);
+    kbSalvar(ia.id, kb);
+    ia.docs = (ia.docs || []).filter((d) => d.id !== req.params.docId);
+    salvar();
+    res.json({ ok: true });
+  });
+
+
+
+
+
+  // dia no fuso do Brasil (-3), pra o limite virar à meia-noite daqui (não à meia-noite UTC)
+  function diaBR(ts) {
+    const d = new Date((ts || 0) - 3 * 3600000);
+    return d.getUTCFullYear() + "-" + String(d.getUTCMonth() + 1).padStart(2, "0") + "-" + String(d.getUTCDate()).padStart(2, "0");
+  }
+  // quanto o vendedor já disparou num dia e qual o limite dele
+  function limiteInfo(vendedor, diaAlvo) {
+    const dia = diaAlvo || diaBR(Date.now());
+    const usado = (db.oficial.campanhas || [])
+      .filter((c) => c.criadoPor === vendedor.id && c.status !== "cancelada" && diaBR(c.agendadoPara || c.criadoEm || 0) === dia)
+      .reduce((s, c) => s + (c.total || 0), 0);
+    const base = (typeof vendedor.limiteDisparoDia === "number") ? vendedor.limiteDisparoDia : 100;
+    const bonus = (vendedor.disparoBonus && vendedor.disparoBonus.data === dia) ? (vendedor.disparoBonus.qtd || 0) : 0;
+    const limite = base + bonus;
+    return { usado, base, bonus, limite, restante: Math.max(0, limite - usado) };
+  }
+
+  app.post("/api/oficial/disparar", auth, async (req, res) => {
+    const b = req.body || {};
+    const numeroCfg = numeroPermitido(req, b.numeroId);
+    if (!numeroCfg) return res.status(400).json({ error: "Escolha um número válido (ou você não tem acesso a ele)" });
+    if (!numeroCfg.ativo) return res.status(400).json({ error: "Esse número está inativo" });
+    const templateName = String(b.template || "").trim();
+    if (!templateName) return res.status(400).json({ error: "Escolha um template" });
+    const idioma = String(b.idioma || "pt_BR").trim();
+    const contatos = Array.isArray(b.contatos) ? b.contatos : [];
+    if (contatos.length === 0) return res.status(400).json({ error: "Nenhum contato na lista" });
+    if (contatos.length > 5000) return res.status(400).json({ error: "Máximo de 5000 por disparo" });
+
+    // AGENDAMENTO: se vier "agendarPara" (ms) no futuro, a campanha só dispara naquela hora
+    let agendadoPara = parseInt(b.agendarPara) || 0;
+    if (agendadoPara && agendadoPara < Date.now() + 30000) agendadoPara = 0; // no passado/agora -> dispara já
+    if (agendadoPara && agendadoPara > Date.now() + 366 * 86400000) {
+      return res.status(400).json({ error: "Data de agendamento muito longe (máx. 1 ano)" });
+    }
+
+    // LIMITE DIÁRIO por vendedor (gerente não tem limite). Conta no DIA em que vai disparar.
+    if (req.user.role === "vendedor") {
+      const diaAlvo = diaBR(agendadoPara || Date.now());
+      const info = limiteInfo(req.user, diaAlvo);
+      if (info.usado + contatos.length > info.limite) {
+        const quando = agendadoPara ? "nesse dia" : "hoje";
+        return res.status(403).json({
+          error: `Limite diário atingido: você já tem ${info.usado} de ${info.limite} disparos ${quando} e tentou somar mais ${contatos.length}. Peça pro gerente liberar mais.`,
+          limiteAtingido: true, usado: info.usado, limite: info.limite, restante: info.restante,
+        });
+      }
+    }
+
+    // IA opcional pra essa campanha (só o gerente pode acoplar IA; vendedor dispara "puro")
+    const iaId = req.user.role === "gerente" ? String(b.iaId || "").trim() : "";
+    const iaCampanha = iaId ? (db.oficial.ias || []).find((x) => x.id === iaId && x.ativa) : null;
+    if (iaId && !iaCampanha) return res.status(400).json({ error: "IA selecionada não existe ou está pausada" });
+
+    const campanha = {
+      id: proximoId("camp"),
+      nome: String(b.nomeCampanha || templateName).trim(),
+      numeroId: numeroCfg.id,
+      criadoPor: req.user.id,        // quem disparou (pro vendedor ver só as dele)
+      criadoPorNome: req.user.nome,
+      // pra onde vão os leads que responderem: "eu" (fica com quem disparou), "time" (distribui)
+      // ou "vendedor" (fica com um vendedor escolhido — só o gerente pode)
+      destinoLeads: (b.destinoLeads === "time") ? "time"
+        : (b.destinoLeads === "vendedor" && req.user.role === "gerente" && b.vendedorDestino && db.users.some((u) => u.id === b.vendedorDestino && (u.role === "vendedor" || u.role === "gerente") && u.ativo)) ? "vendedor"
+        : "eu",
+      vendedorDestino: (b.destinoLeads === "vendedor" && req.user.role === "gerente" && b.vendedorDestino && db.users.some((u) => u.id === b.vendedorDestino)) ? b.vendedorDestino : null,
+      vendedorDestinoNome: (b.destinoLeads === "vendedor" && b.vendedorDestino) ? ((db.users.find((u) => u.id === b.vendedorDestino) || {}).nome || "") : "",
+      template: templateName,
+      idioma,
+      iaId: iaCampanha ? iaCampanha.id : null,
+      iaNome: iaCampanha ? iaCampanha.nome : null,
+      enviados: 0,    // aceitos pela Meta (sent)
+      entregues: 0,   // delivered (via webhook de status)
+      lidos: 0,       // read (via webhook de status)
+      responderam: 0, // leads que mandaram msg de volta
+      falhas: 0,
+      total: contatos.length,
+      // fila salva no banco: lista de quem ainda falta enviar (sobrevive a reinício)
+      pendentes: contatos.map((c) => ({ telefone: c.telefone, nome: c.nome || "", variaveis: c.variaveis || [] })),
+      pularRecebidos: b.pularRecebidos === true,
+      agendadoPara: agendadoPara || null,               // ms de quando vai disparar (null = agora)
+      status: agendadoPara ? "agendada" : "rodando",    // agendada | rodando | concluida | parada
+      criadoEm: Date.now(),
+    };
+    db.oficial.campanhas.unshift(campanha);
+    salvar();
+
+    // AGENDADA: não dispara agora — o agendador dispara na hora certa
+    if (agendadoPara) {
+      res.json({ ok: true, campanhaId: campanha.id, total: contatos.length, agendadoPara });
+      console.log(`[oficial] campanha AGENDADA "${campanha.nome}" p/ ${new Date(agendadoPara).toISOString()}`);
+      return;
+    }
+
+    // responde já e dispara em background (não trava a tela)
+    res.json({ ok: true, campanhaId: campanha.id, total: contatos.length });
+    dispararCampanhaAgora(campanha);
+  });
+
+  // ---- inicia (ou dispara na hora agendada) uma campanha: pula recebidos + consome a fila ----
+  function dispararCampanhaAgora(campanha) {
+    const numeroCfg = acharNumero(campanha.numeroId);
+    if (!numeroCfg) { campanha.status = "erro"; campanha.ultimoErro = "Número não existe mais"; salvar(); return; }
+    campanha.status = "rodando";
+    campanha.iniciadoEm = Date.now();
+    // OPÇÃO "pular quem já recebeu": remove da fila quem já recebeu esse disparo nesse número
+    if (campanha.pularRecebidos) {
+      const jaReceberam = new Set();
+      for (const ch of Object.values(db.waChats || {})) {
+        if (ch && ch.canal === "oficial" && ch.numeroOficialId === numeroCfg.id && ch.origemDisparo) {
+          const tel = normalizaTelefone(ch.numero);
+          if (tel && (ch.mensagens || []).some((m) => m.role === "me" && m.template)) jaReceberam.add(tel);
+        }
+      }
+      const antes = (campanha.pendentes || []).length;
+      campanha.pendentes = (campanha.pendentes || []).filter((c) => {
+        const tel = normalizaTelefone(c.telefone);
+        return tel && !jaReceberam.has(tel);
+      });
+      campanha.total = campanha.pendentes.length;
+      console.log(`[oficial] ${campanha.nome}: ${antes - campanha.pendentes.length} pulados (já receberam)`);
+    }
+    salvar();
+    // processa a fila salva (sobrevive a reinício -> dá pra retomar)
+    processarFilaCampanha(campanha.id, numeroCfg);
+  }
+
+  // ---- processa os pendentes de uma campanha (consome a fila salva no banco) ----
+  // Como vai removendo cada contato da lista 'pendentes' conforme envia e salva,
+  // se o servidor reiniciar no meio, os que sobraram continuam no banco e dá pra retomar.
+  async function processarFilaCampanha(campanhaId, numeroCfg) {
+    const campanha = (db.oficial.campanhas || []).find((x) => x.id === campanhaId);
+    if (!campanha) return;
+    if (campanha._rodando) return; // evita rodar a mesma fila duas vezes ao mesmo tempo
+    campanha._rodando = true;
+    campanha.status = "rodando";
+    const templateName = campanha.template;
+    const idioma = campanha.idioma || "pt_BR";
+
+    while (campanha.pendentes && campanha.pendentes.length > 0) {
+      const c = campanha.pendentes[0]; // pega o primeiro
+      const telefone = normalizaTelefone(c.telefone);
+      if (!telefone) {
+        campanha.falhas++;
+        campanha.pendentes.shift();
+        salvar();
+        continue;
+      }
+      const nome = (c.nome || "").trim() || telefone;
+      try {
+        const resp = await enviarTemplate(numeroCfg, telefone, templateName, idioma, c.variaveis || []);
+        campanha.enviados++;
+        const mid = resp && resp.messages && resp.messages[0] && resp.messages[0].id;
+        if (mid) {
+          if (!db.oficial.msgCampanha) db.oficial.msgCampanha = {};
+          db.oficial.msgCampanha[mid] = campanha.id;
+        }
+        const chat = acharOuCriarChat(numeroCfg.id, telefone, nome);
+        chat.origemDisparo = true;
+        chat.campanha = campanha.nome;
+        chat.campanhaId = campanha.id;
+        // Dono do disparo: "eu" (quem disparou), "vendedor" (o escolhido pelo gerente),
+        // ou "time" (não carimba — rodízio quando o lead responder). A conversa cai
+        // na caixa desse dono, mesmo que já tivesse outro dono antes.
+        const donoDisparo = campanha.destinoLeads === "vendedor" ? campanha.vendedorDestino
+          : (campanha.destinoLeads !== "time" ? campanha.criadoPor : null);
+        const donoNome = campanha.destinoLeads === "vendedor" ? (campanha.vendedorDestinoNome || "") : (campanha.criadoPorNome || "");
+        if (donoDisparo) {
+          if (chat.vendedorId !== donoDisparo) {
+            chat.vendedorId = donoDisparo;
+            chat.vendedorNome = donoNome;
+            chat.atribuidoEm = Date.now();
+          }
+          // se o lead já conversou alguma vez, mantém visível (não vira "disparo sem resposta")
+          if ((chat.mensagens || []).some((m) => m.role === "them")) chat.respondeu = true;
+        }
+        chat.iaId = campanha.iaId || null;
+        chat.iaPausada = false;
+        if (chat.respondeu === undefined) chat.respondeu = false;
+        const ts = Date.now();
+        // guarda o "comprovante" (wamid) na mensagem E no índice, senão o aviso de
+        // entregue/lida que a Meta manda depois não acha essa mensagem pra atualizar
+        chat.mensagens.push({ role: "me", content: `[disparo] ${templateName}`, ts, template: true, wamid: mid || null, status: mid ? "sent" : null });
+        if (mid) { if (!db.oficial.wamidChat) db.oficial.wamidChat = {}; db.oficial.wamidChat[mid] = chat.id; }
+        chat.atualizadoEm = ts;
+      } catch (e) {
+        campanha.falhas++;
+        campanha.ultimoErro = (e && e.message) || String(e);
+        campanha.ultimoErroEm = Date.now();
+        console.error("Falha disparo p/", telefone, ":", e.message);
+      }
+      campanha.pendentes.shift(); // remove o que acabou de processar (enviado ou falho)
+      salvar();
+      await new Promise((r) => setTimeout(r, 120)); // ritmo pra proteger o número
+    }
+    campanha.status = "concluida";
+    campanha._rodando = false;
+    delete campanha.pendentes; // limpa a fila vazia
+    console.log(`Campanha ${campanha.nome}: ${campanha.enviados} enviados, ${campanha.falhas} falhas — concluída`);
+    salvar();
+  }
+
+  /* Números que EU posso usar pra iniciar conversa (os meus + os sem dono) */
+  app.get("/api/oficial/meus-numeros", auth, (req, res) => {
+    garantirEstrutura();
+    const lista = (db.oficial.numeros || []).filter((n) => {
+      if (n.ativo === false) return false;
+      if (!tokenDe(n)) return false;
+      if (req.user.role === "gerente") return true;
+      return !n.vendedorId || podeVerVend(req.user, n.vendedorId);
+    });
+    res.json({ numeros: lista.map(numeroPublico) });
+  });
+
+  /* Enviar UM template pra um número — inicia a conversa oficial a partir do lead */
+  app.post("/api/oficial/enviar-template", auth, async (req, res) => {
+    garantirEstrutura();
+    const b = req.body || {};
+    const numeroCfg = acharNumero(b.numeroId);
+    if (!numeroCfg) return res.status(404).json({ error: "Número não encontrado" });
+    if (req.user.role === "vendedor" && numeroCfg.vendedorId && !podeVerVend(req.user, numeroCfg.vendedorId)) {
+      return res.status(403).json({ error: "Esse número não é seu" });
+    }
+    const telefone = normalizaTelefone(b.telefone);
+    if (!telefone) return res.status(400).json({ error: "Telefone inválido" });
+    const template = String(b.template || "").trim();
+    if (!template) return res.status(400).json({ error: "Escolha um template" });
+    const idioma = String(b.idioma || "pt_BR");
+    const nome = String(b.nome || "").trim() || telefone;
+    try {
+      const resp = await enviarTemplate(numeroCfg, telefone, template, idioma, b.variaveis || []);
+      const mid = resp && resp.messages && resp.messages[0] && resp.messages[0].id;
+      const chat = acharOuCriarChat(numeroCfg.id, telefone, nome);
+      if (!chat.vendedorId) { chat.vendedorId = req.user.id; chat.vendedorNome = req.user.nome; chat.atribuidoEm = Date.now(); }
+      chat.iaPausada = true; // conversa iniciada por humano
+      const ts = Date.now();
+      chat.mensagens.push({ role: "me", content: `[template] ${template}`, ts, template: true, wamid: mid || null, status: mid ? "sent" : null });
+      if (mid) { if (!db.oficial.wamidChat) db.oficial.wamidChat = {}; db.oficial.wamidChat[mid] = chat.id; }
+      chat.atualizadoEm = ts;
+      salvar();
+      res.json({ ok: true, chatId: chat.id });
+    } catch (e) {
+      res.status(400).json({ error: (e && e.message) || "Falha ao enviar template" });
+    }
+  });
+
+  /* retomar uma campanha que parou no meio (ex: servidor reiniciou) */
+  app.post("/api/oficial/campanhas/:id/retomar", auth, (req, res) => {
+    const campanha = (db.oficial.campanhas || []).find((x) => x.id === req.params.id);
+    if (!campanha) return res.status(404).json({ error: "Campanha não encontrada" });
+    if (!campanhaDoUsuario(req, campanha)) return res.status(403).json({ error: "Essa campanha não é sua" });
+    if (!campanha.pendentes || campanha.pendentes.length === 0) {
+      return res.status(400).json({ error: "Essa campanha não tem envios pendentes (já terminou)" });
+    }
+    const numeroCfg = acharNumero(campanha.numeroId);
+    if (!numeroCfg) return res.status(400).json({ error: "Número da campanha não encontrado" });
+    if (!numeroCfg.ativo) return res.status(400).json({ error: "O número dessa campanha está inativo" });
+    const faltam = campanha.pendentes.length;
+    processarFilaCampanha(campanha.id, numeroCfg); // continua de onde parou
+    res.json({ ok: true, faltam, mensagem: `Retomando: ${faltam} envio(s) pendente(s)` });
+  });
+
+  /* RE-DISPARAR: reenvia o template pra quem recebeu essa campanha mas NÃO respondeu.
+     Reconstrói a lista a partir das conversas salvas (não precisa colar nada de novo). */
+  app.post("/api/oficial/campanhas/:id/redisparar", auth, (req, res) => {
+    const campanha = (db.oficial.campanhas || []).find((x) => x.id === req.params.id);
+    if (!campanha) return res.status(404).json({ error: "Campanha não encontrada" });
+    if (!campanhaDoUsuario(req, campanha)) return res.status(403).json({ error: "Essa campanha não é sua" });
+    const numeroCfg = acharNumero(campanha.numeroId);
+    if (!numeroCfg) return res.status(400).json({ error: "Número da campanha não encontrado" });
+    if (!numeroCfg.ativo) return res.status(400).json({ error: "O número dessa campanha está inativo" });
+
+    // reconstrói a lista: todos os chats dessa campanha que NÃO responderam
+    const alvo = [];
+    for (const ch of Object.values(db.waChats || {})) {
+      if (ch && ch.canal === "oficial" && ch.campanhaId === campanha.id && !ch.respondeu) {
+        const tel = normalizaTelefone(ch.numero);
+        if (tel) alvo.push({ telefone: tel, nome: ch.nome || "", variaveis: [] });
+      }
+    }
+    if (alvo.length === 0) {
+      return res.status(400).json({ error: "Ninguém pra re-disparar (todos já responderam ou não há registros)" });
+    }
+
+    // cria a fila de pendentes na própria campanha e processa (com retomar automático)
+    campanha.pendentes = alvo;
+    campanha.total = (campanha.total || 0) + alvo.length;
+    campanha.status = "rodando";
+    salvar();
+    processarFilaCampanha(campanha.id, numeroCfg);
+    res.json({ ok: true, total: alvo.length, mensagem: `Re-disparando pra ${alvo.length} contato(s) que não responderam` });
+  });
+
+  /* EXPORTAR: baixa um .txt com TODOS os números que já receberam algum disparo
+     (de todas as campanhas). Serve pra cruzar com a planilha e achar quem falta.
+     Aceita token via query (?token=) porque é aberto via window.open (sem header). */
+  app.get("/api/oficial/export-recebidos", (req, res) => {
+    const t = String(req.query.token || (req.headers.authorization || "").replace("Bearer ", "")).trim();
+    const user = (db.users || []).find((u) => u.token && u.token === t);
+    if (!user || !user.ativo || user.role !== "gerente") {
+      return res.status(401).send("Não autorizado");
+    }
+    const recebidos = new Set();
+    for (const ch of Object.values(db.waChats || {})) {
+      if (ch && ch.canal === "oficial" && ch.origemDisparo) {
+        const tel = normalizaTelefone(ch.numero);
+        if (tel) recebidos.add(tel);
+      }
+    }
+    const linhas = Array.from(recebidos).join("\n");
+    res.setHeader("Content-Type", "text/plain; charset=utf-8");
+    res.setHeader("Content-Disposition", 'attachment; filename="ja_receberam.txt"');
+    res.send(linhas);
+  });
+
+  // monta um CSV (pt-BR: separador ; e BOM pros acentos abrirem no Excel)
+  function montarCSV(linhas) {
+    return "\ufeff" + linhas.map((r) => r.map((c) => `"${String(c == null ? "" : c).replace(/"/g, '""')}"`).join(";")).join("\r\n");
+  }
+  function ultimaMsgTxt(ch) {
+    const ult = ch.mensagens && ch.mensagens.length ? ch.mensagens[ch.mensagens.length - 1] : null;
+    if (!ult) return "";
+    const t = ult.content || (ult.tipo && ult.tipo !== "text" ? "[" + ult.tipo + "]" : "");
+    return String(t).replace(/[\r\n;]+/g, " ").slice(0, 150);
+  }
+
+  // EXPORTA os leads de UMA campanha (dono da campanha ou gerente) — CSV
+  app.get("/api/oficial/campanhas/:id/leads", (req, res) => {
+    const t = String(req.query.token || (req.headers.authorization || "").replace("Bearer ", "")).trim();
+    const user = (db.users || []).find((u) => u.token && u.token === t);
+    if (!user || !user.ativo) return res.status(401).send("Não autorizado");
+    const camp = (db.oficial.campanhas || []).find((c) => c.id === req.params.id);
+    if (!camp) return res.status(404).send("Campanha não encontrada");
+    if (!campanhaDoUsuario({ user }, camp)) return res.status(403).send("Sem acesso a essa campanha");
+    const linhas = [["Telefone", "Nome", "Respondeu", "Ultima mensagem", "Data/hora"]];
+    for (const ch of Object.values(db.waChats || {})) {
+      if (ch && ch.canal === "oficial" && ch.campanhaId === camp.id) {
+        const ult = ch.mensagens && ch.mensagens.length ? ch.mensagens[ch.mensagens.length - 1] : null;
+        linhas.push([ch.numero || "", ch.nome || "", ch.respondeu ? "Sim" : "Não", ultimaMsgTxt(ch), ult && ult.ts ? new Date(ult.ts).toLocaleString("pt-BR") : ""]);
+      }
+    }
+    res.setHeader("Content-Type", "text/csv; charset=utf-8");
+    res.setHeader("Content-Disposition", `attachment; filename="leads_${String(camp.nome || "campanha").replace(/[^a-z0-9]/gi, "_").slice(0, 40)}.csv"`);
+    res.send(montarCSV(linhas));
+  });
+
+  // EXPORTA todos os leads dos disparos do usuário (vendedor = os dele; gerente = todos) — CSV
+  app.get("/api/oficial/meus-leads", (req, res) => {
+    const t = String(req.query.token || (req.headers.authorization || "").replace("Bearer ", "")).trim();
+    const user = (db.users || []).find((u) => u.token && u.token === t);
+    if (!user || !user.ativo) return res.status(401).send("Não autorizado");
+    const ehGerente = user.role === "gerente";
+    const campById = {};
+    for (const c of db.oficial.campanhas || []) campById[c.id] = c;
+    const linhas = [["Telefone", "Nome", "Campanha", "Respondeu", "Ultima mensagem", "Data/hora"]];
+    for (const ch of Object.values(db.waChats || {})) {
+      if (!ch || ch.canal !== "oficial" || !ch.origemDisparo || !ch.campanhaId) continue;
+      const camp = campById[ch.campanhaId];
+      if (!camp) continue;
+      const meu = ehGerente || camp.criadoPor === user.id || (acharNumero(camp.numeroId) || {}).vendedorId === user.id;
+      if (!meu) continue;
+      const ult = ch.mensagens && ch.mensagens.length ? ch.mensagens[ch.mensagens.length - 1] : null;
+      linhas.push([ch.numero || "", ch.nome || "", camp.nome || "", ch.respondeu ? "Sim" : "Não", ultimaMsgTxt(ch), ult && ult.ts ? new Date(ult.ts).toLocaleString("pt-BR") : ""]);
+    }
+    res.setHeader("Content-Type", "text/csv; charset=utf-8");
+    res.setHeader("Content-Disposition", 'attachment; filename="meus_leads_disparados.csv"');
+    res.send(montarCSV(linhas));
+  });
+
+  /* histórico de campanhas */
+  // um vendedor só pode mexer numa campanha que é dele (criou) OU que saiu do número dele
+  function campanhaDoUsuario(req, campanha) {
+    if (req.user.role === "gerente") return true;
+    if (campanha.criadoPor === req.user.id) return true;
+    const n = acharNumero(campanha.numeroId);
+    return !!(n && podeVerVend(req.user, n.vendedorId));
+  }
+
+  /* ============================================================
+     REPASSE DE LEADS EM MASSA
+     ------------------------------------------------------------
+     Serve pra consertar disparos feitos pela conta do gerente:
+     as conversas ficaram carimbadas com ele, mas cada campanha
+     saiu do número de um vendedor. Aqui devolvemos cada conversa
+     pro dono do número (ou pro vendedor escolhido na mão).
+     ============================================================ */
+  function repasseAlvo(chat, mapa) {
+    // 1) vendedor escolhido pra essa campanha específica
+    if (chat.campanhaId && mapa.porCampanha[chat.campanhaId]) return mapa.porCampanha[chat.campanhaId];
+    // 2) dono do número que enviou
+    const n = acharNumero(chat.numeroOficialId);
+    if (n && n.vendedorId) return n.vendedorId;
+    return null;
+  }
+
+  /* ------------------------------------------------------------
+     TRANSFERIR CAMPANHA PRO VENDEDOR
+     Pega TODAS as conversas daquela campanha e passa pro vendedor
+     escolhido. Simples assim. As conversas ficam em db.waChats.
+     ------------------------------------------------------------ */
+  const chatsOficiais = () => Object.values(db.waChats || {}).filter((c) => c && c.canal === "oficial");
+  // conversa pertence à campanha? (por id ou, se faltar, pelo nome + número)
+  function daCampanha(c, camp) {
+    if (!c || !camp) return false;
+    if (c.campanhaId && c.campanhaId === camp.id) return true;
+    if (!c.campanhaId && camp.nome && c.campanha === camp.nome && c.numeroOficialId === camp.numeroId) return true;
+    return false;
+  }
+  function ehVendedorAtivo(id) {
+    const u = (db.users || []).find((x) => x.id === id);
+    return !!(u && u.role === "vendedor" && u.ativo);
+  }
+
+  // resumo de UMA campanha: quantas conversas tem e com quem estão
+  app.get("/api/oficial/campanhas/:id/donos", auth, gerenteOnly, (req, res) => {
+    garantirEstrutura();
+    const camp = (db.oficial.campanhas || []).find((c) => c.id === req.params.id);
+    if (!camp) return res.status(404).json({ error: "Campanha não encontrada" });
+    const n = acharNumero(camp.numeroId);
+    const dono = n && n.vendedorId ? (db.users || []).find((u) => u.id === n.vendedorId) : null;
+    const donos = {};
+    let total = 0, semVendedor = 0, responderam = 0;
+    chatsOficiais().forEach((c) => {
+      if (!daCampanha(c, camp)) return;
+      total++;
+      if (c.respondeu) responderam++;
+      if (!ehVendedorAtivo(c.vendedorId)) semVendedor++;
+      const nome = c.vendedorNome || "sem dono";
+      donos[nome] = (donos[nome] || 0) + 1;
+    });
+    res.json({
+      total, semVendedor, responderam,
+      numeroApelido: n ? (n.apelido || n.numero) : "—",
+      sugeridoId: dono ? dono.id : null,
+      sugeridoNome: dono ? dono.nome : "",
+      donos: Object.entries(donos).map(([nome, qtd]) => ({ nome, qtd })).sort((a, b) => b.qtd - a.qtd),
+      vendedores: (db.users || []).filter((u) => u.role === "vendedor" && u.ativo)
+        .map((u) => ({ id: u.id, nome: u.nome })),
+    });
+  });
+
+  // transfere a campanha inteira pro vendedor escolhido
+  app.post("/api/oficial/campanhas/:id/transferir", auth, gerenteOnly, (req, res) => {
+    garantirEstrutura();
+    const camp = (db.oficial.campanhas || []).find((c) => c.id === req.params.id);
+    if (!camp) return res.status(404).json({ error: "Campanha não encontrada" });
+    const vendedorId = (req.body || {}).vendedorId;
+    const v = (db.users || []).find((u) => u.id === vendedorId && u.role === "vendedor" && u.ativo);
+    if (!v) return res.status(400).json({ error: "Escolha um vendedor ativo" });
+    // por padrão move TODAS as conversas da campanha (é o que o gerente espera)
+    const soSemDono = (req.body || {}).soSemDono === true;
+
+    let movidas = 0;
+    chatsOficiais().forEach((c) => {
+      if (!daCampanha(c, camp)) return;
+      if (soSemDono && ehVendedorAtivo(c.vendedorId)) return;
+      if (c.vendedorId === v.id) return;
+      c.vendedorId = v.id;
+      c.vendedorNome = v.nome;
+      c.atribuidoEm = Date.now();
+      movidas++;
+    });
+    // as próximas respostas dessa campanha também vão pra ele
+    camp.destinoVendedorId = v.id;
+    salvar();
+    res.json({ ok: true, movidas, vendedor: v.nome });
+  });
+
+  /* ---- visão geral (todas as campanhas de uma vez) ---- */
+  // diagnóstico de ÁUDIO/ffmpeg (renomeado: antes colidia com o /diagnostico do webhook)
+  app.get("/api/oficial/diagnostico-audio", auth, gerenteOnly, async (req, res) => {
+    const temFfmpeg = await ffmpegOk();
+    res.json({
+      ffmpeg: temFfmpeg,
+      audio: temFfmpeg
+        ? "OK — áudio gravado no navegador é convertido pra OGG/Opus antes de ir pra Meta."
+        : "ATENÇÃO — o servidor está sem ffmpeg. Áudio gravado no Chrome/Android pode não ser entregue. Confira se o deploy usou o nixpacks.toml com ffmpeg.",
+    });
+  });
+
+  app.get("/api/oficial/repasse/previa", auth, gerenteOnly, (req, res) => {
+    garantirEstrutura();
+    const porCamp = {};
+    chatsOficiais().forEach((c) => {
+      const cid = c.campanhaId || (c.campanha ? "nome:" + c.campanha : null);
+      if (!cid) return;
+      if (!porCamp[cid]) porCamp[cid] = { total: 0, semVendedor: 0, donos: {} };
+      const g = porCamp[cid];
+      g.total++;
+      if (!ehVendedorAtivo(c.vendedorId)) g.semVendedor++;
+      const nome = c.vendedorNome || "sem dono";
+      g.donos[nome] = (g.donos[nome] || 0) + 1;
+    });
+    const grupos = (db.oficial.campanhas || []).map((camp) => {
+      const g = porCamp[camp.id] || porCamp["nome:" + camp.nome] || { total: 0, semVendedor: 0, donos: {} };
+      const n = acharNumero(camp.numeroId);
+      const dono = n && n.vendedorId ? (db.users || []).find((u) => u.id === n.vendedorId) : null;
+      return {
+        campanhaId: camp.id, chave: camp.id,
+        campanha: camp.nome, template: camp.template || "",
+        numeroApelido: n ? (n.apelido || n.numero) : "—",
+        total: g.total, semVendedor: g.semVendedor,
+        donos: Object.entries(g.donos).map(([nome, qtd]) => ({ nome, qtd })).sort((a, b) => b.qtd - a.qtd),
+        sugeridoId: dono ? dono.id : null, sugeridoNome: dono ? dono.nome : "",
+        criadoEm: camp.criadoEm || 0,
+      };
+    }).filter((g) => g.total > 0).sort((a, b) => b.criadoEm - a.criadoEm);
+    res.json({
+      grupos,
+      vendedores: (db.users || []).filter((u) => u.role === "vendedor" && u.ativo).map((u) => ({ id: u.id, nome: u.nome })),
+      totalARepassar: grupos.reduce((s2, g) => s2 + g.semVendedor, 0),
+    });
+  });
+
+  // ===== MÉTRICAS DE DISPARO — taxas claras (entrega, leitura, resposta) =====
+  app.get("/api/oficial/disparo-metricas", auth, (req, res) => {
+    garantirEstrutura();
+    let campanhas = db.oficial.campanhas || [];
+    if (req.user.role !== "gerente") campanhas = campanhas.filter((c) => campanhaDoUsuario(req, c));
+    const de = parseInt(req.query.de) || 0, ate = parseInt(req.query.ate) || 0;
+    if (de || ate) campanhas = campanhas.filter((c) => (!de || (c.criadoEm || 0) >= de) && (!ate || (c.criadoEm || 0) <= ate));
+    const numMap = {}; (db.oficial.numeros || []).forEach((n) => { numMap[n.id] = n.apelido || n.numero || n.id; });
+    const zera = () => ({ campanhas: 0, total: 0, enviados: 0, entregues: 0, lidos: 0, responderam: 0, falhas: 0 });
+    const soma = (acc, c) => {
+      acc.campanhas++;
+      acc.total += Number(c.total || c.enviados || 0);
+      acc.enviados += Number(c.enviados || 0);
+      acc.entregues += Number(c.entregues || 0);
+      acc.lidos += Number(c.lidos || 0);
+      acc.responderam += Number(c.responderam || 0);
+      acc.falhas += Number(c.falhas || 0);
+      return acc;
+    };
+    const geral = zera(); const porTemplate = {}; const porNumero = {};
+    for (const c of campanhas) {
+      soma(geral, c);
+      const tk = c.template || "—"; if (!porTemplate[tk]) porTemplate[tk] = { nome: tk, ...zera() }; soma(porTemplate[tk], c);
+      const nk = c.numeroId || "—"; if (!porNumero[nk]) porNumero[nk] = { nome: numMap[nk] || "número", ...zera() }; soma(porNumero[nk], c);
+    }
+    // campanhas recentes com as taxas já calculadas
+    const taxa = (a, b) => (b > 0 ? Math.round((a / b) * 1000) / 10 : 0);
+    const comTaxas = (o) => ({ ...o, txEntrega: taxa(o.entregues, o.enviados), txLeitura: taxa(o.lidos, o.entregues), txResposta: taxa(o.responderam, o.entregues) });
+    const lista = campanhas.slice().sort((a, b) => (b.criadoEm || 0) - (a.criadoEm || 0)).slice(0, 100).map((c) => ({
+      id: c.id, nome: c.nome, template: c.template, numero: numMap[c.numeroId] || "", criadoEm: c.criadoEm, criadoPorNome: c.criadoPorNome || "",
+      total: Number(c.total || c.enviados || 0), enviados: Number(c.enviados || 0), entregues: Number(c.entregues || 0),
+      lidos: Number(c.lidos || 0), responderam: Number(c.responderam || 0), falhas: Number(c.falhas || 0),
+      txEntrega: taxa(c.entregues, c.enviados), txLeitura: taxa(c.lidos, c.entregues), txResposta: taxa(c.responderam, c.entregues),
+    }));
+    res.json({
+      geral: comTaxas(geral),
+      porTemplate: Object.values(porTemplate).map(comTaxas).sort((a, b) => b.responderam - a.responderam),
+      porNumero: Object.values(porNumero).map(comTaxas).sort((a, b) => b.enviados - a.enviados),
+      campanhas: lista,
+    });
+  });
+
+  // ===== LIMPEZA MANUAL — remove conversas de disparo sem resposta + lixo técnico =====
+  app.post("/api/oficial/limpar-disparos", auth, gerenteOnly, (req, res) => {
+    garantirEstrutura();
+    const of = db.oficial;
+    let conversas = 0; const novo = {};
+    for (const [k, c] of Object.entries(db.waChats || {})) {
+      const temResposta = c && Array.isArray(c.mensagens) && c.mensagens.some((m) => m.role === "them");
+      if (c && c.origemDisparo && !c.respondeu && !temResposta) { conversas++; continue; }
+      novo[k] = c;
+    }
+    db.waChats = novo;
+    const statusVistos = of.statusVistos ? Object.keys(of.statusVistos).length : 0; of.statusVistos = {};
+    const vivos = new Set(Object.keys(db.waChats));
+    let wamid = 0; const wNovo = {};
+    for (const [w, cid] of Object.entries(of.wamidChat || {})) { if (vivos.has(cid)) wNovo[w] = cid; else wamid++; }
+    of.wamidChat = wNovo;
+    const campVivas = new Set((of.campanhas || []).map((c) => c.id));
+    let msgCamp = 0; const mNovo = {};
+    for (const [cid, v] of Object.entries(of.msgCampanha || {})) { if (campVivas.has(cid)) mNovo[cid] = v; else msgCamp++; }
+    of.msgCampanha = mNovo;
+    db.oficial = of;
+    salvar();
+    res.json({ ok: true, conversas, statusVistos, wamid, msgCamp });
+  });
+
+  // ===== ANÁLISE IA — a IA lê as conversas do vendedor no período e dá feedback =====
+  app.post("/api/oficial/analise-ia", auth, async (req, res) => {
+    try {
+      garantirEstrutura();
+      const b = req.body || {};
+      let alvoId = req.user.id;
+      if (req.user.role === "gerente" && b.vendedorId) alvoId = b.vendedorId;
+      else if (req.user.role !== "gerente" && b.vendedorId && !podeVerVend(req.user, b.vendedorId)) return res.status(403).json({ error: "Você só pode analisar as conversas suas ou de quem você lidera" });
+      const alvo = (db.users || []).find((u) => u.id === alvoId);
+      if (!alvo) return res.status(404).json({ error: "Vendedor não encontrado" });
+      const de = parseInt(b.de) || 0, ate = parseInt(b.ate) || 0;
+      // reúne as conversas oficiais do vendedor no período
+      const chats = Object.values(db.waChats || {}).filter((c) => c && c.canal === "oficial" && c.vendedorId === alvoId);
+      let convs = [];
+      for (const c of chats) {
+        const msgs = (c.mensagens || []).filter((m) => { const ts = m.ts || 0; return (!de || ts >= de) && (!ate || ts <= ate); });
+        if (msgs.length) convs.push({ nome: c.nome || c.numero, ult: msgs[msgs.length - 1].ts || 0, msgs });
+      }
+      const totalConversas = convs.length;
+      if (!totalConversas) return res.json({ ok: true, vazio: true, totalConversas: 0, vendedor: alvo.nome });
+      convs.sort((a, c) => c.ult - a.ult);
+      convs = convs.slice(0, 40); // cap de conversas (controla custo/token)
+      // monta o transcript (com limites)
+      const linhas = [];
+      for (const c of convs) {
+        linhas.push("=== Conversa com " + c.nome + " ===");
+        for (const m of c.msgs.slice(-30)) {
+          const quem = m.role === "them" ? "CLIENTE" : "VENDEDOR";
+          let txt = m.transcricao ? "[áudio] " + m.transcricao
+            : (m.content || (m.template ? "[enviou template: " + m.template + "]" : (m.tipo === "audio" ? "[áudio sem transcrição]" : (m.tipo && m.tipo !== "text" ? "[" + m.tipo + "]" : ""))));
+          txt = String(txt || "").replace(/\s+/g, " ").slice(0, 300);
+          if (txt) linhas.push(quem + ": " + txt);
+        }
+        linhas.push("");
+      }
+      let transcript = linhas.join("\n");
+      if (transcript.length > 60000) transcript = transcript.slice(0, 60000) + "\n...(cortado por tamanho)";
+
+      const sistema = "Você é um analista de vendas sênior da Instructiva, especialista no método dos 7 Passos da Venda (padrão Conquer). Analise as conversas de WhatsApp de um vendedor e faça uma avaliação PROFUNDA, honesta e específica, sempre citando situações reais que viu nas conversas (nunca invente). Seja detalhado e direto — nada de análise genérica ou rasa.\n\n"
+        + "OS 7 PASSOS DA VENDA (avalie o vendedor em CADA um):\n"
+        + "1. APRESENTAÇÃO: abre citando quem indicou (se houver), dá um overview rápido e emenda numa pergunta aberta de conexão. Puxa pra LIGAÇÃO quem só quer resolver por WhatsApp. NÃO tenta vender tudo por mensagem, não pede desculpa por contatar, não fica só em follow no zap.\n"
+        + "2. CONEXÃO (o coração da venda): faz MUITA pergunta e ouve (ideal ~80% ouvir, 20% falar), levanta as dores reais (o que é importante E urgente), aprofunda a dor (nota de 0 a 10, referência/comparação, sonho, oportunidade já perdida) e cria rapport genuíno. Deve sair sabendo as 2 dores principais e o sonho/ambição do cliente.\n"
+        + "3. DECISÃO IMEDIATA (Pré-DI + DI): mede prioridade ('se encaixar tempo, método e financeiro, você começaria agora?') e faz o combinado (contato único, pode dizer não, quer um sim ou não no final). Antecipa quem decide (esposa/sócio/pais) e se a pessoa tem cartão.\n"
+        + "4. SPEECH (3 portas): apresenta o produto fechando TEMPO -> METODOLOGIA -> FINANCEIRO (nessa ordem), sempre amarrando nas 2 dores do cliente e pegando um 'sim' a cada porta. Não despeja tudo do produto de uma vez.\n"
+        + "5. FECHAMENTO (ancoragem + silêncio): ancora o valor alto (quanto custaria algo equivalente), revela o preço acessível, faz silêncio e usa perguntas fechadas (sim/não). Conduz o cadastro com opções na hora, sem deixar pra 'depois'.\n"
+        + "6. INDICAÇÕES (pega, não pede): logo após o fechamento (ou mesmo sem fechar, se houve conexão), pega indicações por voz de comando, NA HORA — nunca 'depois'.\n"
+        + "7. VALIDAÇÃO: faz o cliente aquecer os indicados (reenviar a mensagem) e diz quem respondeu / quem priorizar, transformando a próxima ligação de fria em quente.\n\n"
+        + "PRINCÍPIOS-CHAVE: o certo é levar a conversa pra LIGAÇÃO (fechar tudo só por WhatsApp é fraco); postura de confiança (conduz, não implora, não fica pedindo desculpa); a venda está na conexão. IMPORTANTE: como você só vê o WhatsApp, avalie o que dá pra ver e, quando um passo deveria acontecer na ligação, verifique se o vendedor pelo menos PUXOU pra ligação — se ele tentou vender tudo no zap, aponte isso como falha. As mensagens de áudio aparecem transcritas e marcadas com [áudio] — trate-as como o que a pessoa falou.\n\n"
+        + "Responda SOMENTE com um JSON válido, sem texto fora dele, exatamente nesta estrutura:\n"
+        + "{\"nota\":7,\"resumo\":\"4 a 7 frases com uma análise geral aprofundada do comportamento do vendedor no período (padrões reais, tom, ritmo, condução, evolução)\",\"passos\":[{\"n\":1,\"nome\":\"Apresentação\",\"status\":\"ok\",\"comentario\":\"o que o vendedor fez ou deixou de fazer nesse passo, com exemplo real da conversa\"}],\"followup\":{\"status\":\"ok\",\"comentario\":\"avaliação do follow-up do vendedor: ele retoma o contato com quem não respondeu ou esfriou? com que cadência? desiste cedo demais ou fica insistente/spam? cite exemplos reais\"},\"bem\":[\"...\"],\"melhorar\":[\"...\"],\"fortes\":[\"...\"],\"fracos\":[\"...\"],\"criticos\":[\"...\"],\"sugestoes\":[\"ações práticas e específicas pra melhorar, ligadas aos 7 passos\"],\"cpc\":{\"comece\":[\"o que o vendedor deve COMEÇAR a fazer\"],\"pare\":[\"o que deve PARAR de fazer\"],\"continue\":[\"o que já faz bem e deve CONTINUAR\"]}}\n"
+        + "Regras: \"nota\" é um inteiro de 0 a 10 pra performance geral do vendedor no período. Em \"passos\" traga os 7 passos (n de 1 a 7, com o nome certo), e \"status\" é 'ok' (fez bem), 'parcial' (fez pela metade) ou 'nao' (não fez). Cada \"comentario\" deve ser específico e citar o que viu. Em \"followup\" avalie SE e COMO o vendedor faz follow-up: retomar leads que ficaram sem responder, reengajar quem esfriou, cadência adequada (nem sumir, nem virar spam) — 'ok' se faz bem, 'parcial' se faz pouco/mal, 'nao' se não faz. \"criticos\" só para coisas graves (cliente sem resposta e sem follow-up, promessa não cumprida, oportunidade claramente perdida, demora excessiva, tom rude). Se não houver, use []. \"sugestoes\" deve ter itens acionáveis. Em \"cpc\" (o fechamento de coaching Comece/Pare/Continue) traga de 1 a 4 itens curtos e diretos em CADA um (comece, pare, continue), específicos pra esse vendedor e baseados nas conversas — é a recomendação final. Escreva tudo em português do Brasil, com profundidade (não seja raso).";
+      const usuario = "Vendedor: " + alvo.nome + "\nConversas analisadas: " + convs.length + (totalConversas > convs.length ? " (as " + convs.length + " mais recentes de " + totalConversas + ")" : "") + "\n\n" + transcript;
+
+      const bruto = await analisarComIA(sistema, usuario, 2400);
+      let analise = null;
+      try { analise = JSON.parse(String(bruto).replace(/```json/gi, "").replace(/```/g, "").trim()); } catch (_) {}
+
+      // registra a AUTOAVALIAÇÃO: só conta quando o próprio vendedor analisa as conversas dele
+      // (gerente analisando um vendedor NÃO conta; líder analisando liderado também não).
+      if (alvoId === req.user.id && req.user.role !== "gerente") {
+        if (!Array.isArray(db.oficial.autoavaliacoes)) db.oficial.autoavaliacoes = [];
+        db.oficial.autoavaliacoes.push({ v: alvoId, ts: Date.now() });
+        // poda: mantém só os últimos 180 dias (evita crescer sem fim)
+        const corte = Date.now() - 180 * 24 * 60 * 60 * 1000;
+        if (db.oficial.autoavaliacoes.length > 400) db.oficial.autoavaliacoes = db.oficial.autoavaliacoes.filter((a) => (a.ts || 0) >= corte);
+        salvar();
+      }
+
+      res.json({ ok: true, vendedor: alvo.nome, totalConversas, analisadas: convs.length, analise, bruto: analise ? null : bruto });
+    } catch (e) { res.status(500).json({ error: e.message || "Falha na análise" }); }
+  });
+
+  // ===== RELATÓRIOS DO TIME (só gerente): objeções e abordagem =====
+  app.post("/api/oficial/relatorio-ia", auth, gerenteOnly, async (req, res) => {
+    try {
+      garantirEstrutura();
+      const b = req.body || {};
+      const tipo = b.tipo === "abordagem" ? "abordagem" : b.tipo === "geral" ? "geral" : "objecoes";
+      const de = parseInt(b.de) || 0, ate = parseInt(b.ate) || 0;
+      const soVendedor = b.vendedorId || null; // opcional: focar num vendedor
+      // opcional (relatório geral): lista de vendedores a INCLUIR (marca só quem é do time).
+      // Se vier vazia/ausente, considera todos.
+      const incluir = Array.isArray(b.vendedorIds) ? b.vendedorIds.filter(Boolean) : null;
+      const nomeDe = (id) => { const u = (db.users || []).find((x) => x.id === id); return u ? u.nome : ""; };
+      // reúne conversas oficiais do time no período
+      const chats = Object.values(db.waChats || {}).filter((c) =>
+        c && c.canal === "oficial" &&
+        (!soVendedor || c.vendedorId === soVendedor) &&
+        (!incluir || !incluir.length || incluir.includes(c.vendedorId))
+      );
+      let convs = [];
+      for (const c of chats) {
+        const msgs = (c.mensagens || []).filter((m) => { const ts = m.ts || 0; return (!de || ts >= de) && (!ate || ts <= ate); });
+        const respostas = msgs.filter((m) => m.role === "them").length;
+        if (msgs.length && respostas > 0) convs.push({ nome: c.nome || c.numero, vend: nomeDe(c.vendedorId), respostas, msgs });
+      }
+      const totalConversas = convs.length;
+      if (!totalConversas) return res.json({ ok: true, vazio: true, totalConversas: 0, tipo });
+      // prioriza conversas com mais troca (mais objeção/abordagem pra analisar)
+      convs.sort((a, c) => c.respostas - a.respostas);
+      convs = convs.slice(0, 60);
+      const linhas = [];
+      for (const c of convs) {
+        linhas.push("=== Lead " + c.nome + (c.vend ? " (vendedor: " + c.vend + ")" : "") + " ===");
+        for (const m of c.msgs.slice(-24)) {
+          const quem = m.role === "them" ? "CLIENTE" : "VENDEDOR";
+          let txt = m.transcricao ? "[áudio] " + m.transcricao
+            : (m.content || (m.template ? "[template: " + m.template + "]" : (m.tipo === "audio" ? "[áudio sem transcrição]" : (m.tipo && m.tipo !== "text" ? "[" + m.tipo + "]" : ""))));
+          txt = String(txt || "").replace(/\s+/g, " ").slice(0, 260);
+          if (txt) linhas.push(quem + ": " + txt);
+        }
+        linhas.push("");
+      }
+      let transcript = linhas.join("\n");
+      if (transcript.length > 65000) transcript = transcript.slice(0, 65000) + "\n...(cortado por tamanho)";
+
+      const base = "Você é um analista de vendas sênior da Instructiva, especialista no método dos 7 Passos da Venda (padrão Conquer). Leia as conversas de WhatsApp do TIME comercial e produza um relatório PROFUNDO e específico, citando situações reais (nunca invente). No método: objeções devem ser antecipadas no combinado (DI, 'kimono aberto'); preço se fecha com ancoragem + silêncio; o certo é puxar pra LIGAÇÃO (vender tudo no zap é fraco); postura de confiança; a venda está na conexão.\n\n";
+      let sistema;
+      if (tipo === "objecoes") {
+        sistema = base
+          + "Faça um RELATÓRIO DE OBJEÇÕES: identifique as objeções que os leads MAIS levantam (ex.: preço/'está caro', falta de tempo, 'vou pensar', 'preciso falar com esposa/sócio/pais', 'não tenho interesse agora', 'já faço outro curso', etc.), estime a frequência de cada uma, cite exemplos reais e avalie COMO os vendedores estão respondendo (bem ou mal) e onde o time perde venda.\n"
+          + "Responda SOMENTE com JSON válido, sem texto fora dele:\n"
+          + "{\"resumo\":\"3 a 6 frases sobre o panorama de objeções no período\",\"itens\":[{\"titulo\":\"a objeção\",\"nivel\":\"alta\",\"detalhe\":\"como o time responde hoje e o que falha\",\"exemplo\":\"trecho ou situação real\",\"recomendacao\":\"como contornar essa objeção (ligado ao método)\"}],\"destaques\":[\"achados principais\"],\"recomendacoes\":[\"ações práticas pro time\"]}\n"
+          + "Regras: \"nivel\" é a frequência ('alta', 'média' ou 'baixa'). Ordene os itens da objeção mais frequente pra menos. Português do Brasil, com profundidade.";
+      } else if (tipo === "abordagem") {
+        sistema = base
+          + "Faça um RELATÓRIO DE ABORDAGEM: avalie COMO o time aborda/abre as conversas com os leads — o tom, se puxam pra LIGAÇÃO (certo) ou tentam vender tudo no zap (fraco), se fazem conexão e perguntas, se seguem os 7 passos na abordagem inicial, e a velocidade de resposta. Identifique padrões bons e ruins com exemplos reais.\n"
+          + "Responda SOMENTE com JSON válido, sem texto fora dele:\n"
+          + "{\"resumo\":\"3 a 6 frases sobre a abordagem do time no período\",\"itens\":[{\"titulo\":\"o padrão de abordagem observado\",\"nivel\":\"bom\",\"detalhe\":\"explicação do padrão e impacto\",\"exemplo\":\"situação real\",\"recomendacao\":\"o que ajustar\"}],\"destaques\":[\"achados principais\"],\"recomendacoes\":[\"ações práticas pro time\"]}\n"
+          + "Regras: \"nivel\" é a qualidade do padrão ('bom', 'regular' ou 'ruim'). Português do Brasil, com profundidade.";
+      } else {
+        // RELATÓRIO GERAL DO TIME — profundo e completo (panorama coletivo)
+        sistema = base
+          + "Faça um RELATÓRIO GERAL DO TIME comercial: uma avaliação PROFUNDA, longa e específica do desempenho COLETIVO no atendimento via WhatsApp, sempre citando situações reais (nunca invente). Avalie o time COMO UM TODO à luz dos 7 Passos da Venda, mostre onde o time ganha e onde perde venda, as objeções que mais aparecem e como está o follow-up do time. IMPORTANTE: NÃO faça ranking nem avaliação individual de vendedores, e NÃO cite nomes de vendedores — o foco é o time como conjunto (a análise individual é feita à parte). Nada de análise rasa ou genérica — quero densidade e exemplos.\n\n"
+          + "OS 7 PASSOS (avalie como o TIME se sai em cada um): 1.Apresentação (abre com indicação/overview e puxa pra LIGAÇÃO, não tenta vender tudo no zap) 2.Conexão (faz muita pergunta, levanta e aprofunda as 2 dores, cria rapport) 3.Decisão Imediata/DI (mede prioridade e faz o combinado, antecipa quem decide) 4.Speech 3 portas (tempo→metodologia→financeiro amarrado nas dores) 5.Fechamento (ancoragem + silêncio + perguntas fechadas, conduz cadastro) 6.Indicações (pega na hora, não pede) 7.Validação (aquece os indicados).\n\n"
+          + "Responda SOMENTE com JSON válido, sem texto fora dele, exatamente nesta estrutura:\n"
+          + "{"
+          + "\"notaTime\":7,"
+          + "\"resumo\":\"6 a 10 frases com o panorama geral profundo do time no período (padrões coletivos, tom, ritmo, condução, o que salta aos olhos)\","
+          + "\"saudeComercial\":\"um parágrafo sobre a saúde comercial do time e a tendência (está evoluindo, estável ou piorando, e por quê)\","
+          + "\"porPasso\":[{\"n\":1,\"nome\":\"Apresentação\",\"nivel\":\"bom\",\"comentario\":\"como o time se sai nesse passo, com exemplo real, e o impacto\"}],"
+          + "\"oQueVaiBem\":[\"pontos fortes coletivos, com contexto\"],"
+          + "\"problemas\":[\"problemas coletivos, com contexto\"],"
+          + "\"gargalos\":[\"onde exatamente o time mais perde venda no funil (qual passo/momento) e por quê\"],"
+          + "\"objecoesComuns\":[{\"objecao\":\"a objeção\",\"nivel\":\"alta\",\"comoLidam\":\"como o time responde hoje e o que falha\"}],"
+          + "\"followupTime\":\"um parágrafo sobre como está o follow-up COLETIVO do time (retomam quem sumiu? cadência? desistem cedo? viram spam?), com exemplos\","
+          + "\"destaques\":[\"momentos/trechos reais que se destacaram no período (bons E ruins), citando o que aconteceu SEM citar nome de vendedor\"],"
+          + "\"recomendacoes\":[\"ações práticas e priorizadas pro time todo evoluir\"],"
+          + "\"focoProximo\":[\"o que o time deve priorizar no próximo período (2 a 4 focos)\"],\"cpc\":{\"comece\":[\"o que o time deve COMEÇAR a fazer\"],\"pare\":[\"o que o time deve PARAR de fazer\"],\"continue\":[\"o que o time faz bem e deve CONTINUAR\"]}"
+          + "}\n"
+          + "Regras: \"notaTime\" é inteiro de 0 a 10. Em \"porPasso\" traga os 7 passos (n de 1 a 7, nome certo) com \"nivel\" 'bom'/'regular'/'ruim'. Em \"objecoesComuns\", \"nivel\" é a frequência ('alta'/'média'/'baixa'), ordenadas da mais comum pra menos. NÃO cite nomes de vendedores em nenhuma parte — fale sempre do time como conjunto. Português do Brasil, DETALHADO e específico em tudo.";
+      }
+      const usuario = "Conversas do time analisadas: " + convs.length + (soVendedor ? " (vendedor: " + nomeDe(soVendedor) + ")" : " (todos os vendedores)") + "\n\n" + transcript;
+      const bruto = await analisarComIA(sistema, usuario, tipo === "geral" ? 4500 : 2600);
+      let relatorio = null;
+      try { relatorio = JSON.parse(String(bruto).replace(/```json/gi, "").replace(/```/g, "").trim()); } catch (_) {}
+      res.json({ ok: true, tipo, totalConversas, analisadas: convs.length, relatorio, bruto: relatorio ? null : bruto });
+    } catch (e) { res.status(500).json({ error: e.message || "Falha no relatório" }); }
+  });
+
+  app.get("/api/oficial/campanhas", auth, (req, res) => {
+    let campanhas = db.oficial.campanhas || [];
+    if (req.user.role !== "gerente") {
+      campanhas = campanhas.filter((c) => campanhaDoUsuario(req, c));
+    }
+    // filtro por data (de/ate em ms) — pro filtro de dia da tela
+    const de = parseInt(req.query.de) || 0;
+    const ate = parseInt(req.query.ate) || 0;
+    if (de || ate) {
+      campanhas = campanhas.filter((c) => (!de || (c.criadoEm || 0) >= de) && (!ate || (c.criadoEm || 0) <= ate));
+    }
+    // mais recentes primeiro
+    campanhas = campanhas.slice().sort((a, b) => (b.criadoEm || 0) - (a.criadoEm || 0));
+    const limite = (de || ate) ? 500 : 50;
+    // não manda a lista enorme de pendentes pro front — só a contagem, pra mostrar o botão Retomar
+    const lista = campanhas.slice(0, limite).map((c) => {
+      const { pendentes, _rodando, ...resto } = c;
+      return { ...resto, pendentes: pendentes && pendentes.length ? pendentes.length : 0, rodando: !!_rodando };
+    });
+    res.json(lista);
+  });
+
+  /* recalcula "responderam" de todas as campanhas com base nas conversas atuais.
+     Conserta campanhas antigas onde a resposta caiu numa conversa separada. */
+  app.post("/api/oficial/campanhas/recontar", auth, (req, res) => {
+    const nucleo = (t) => String(t || "").replace(/\D/g, "").slice(-8);
+    // mapa: para cada campanha, conjunto de núcleos que receberam disparo
+    const porCampanha = {}; // campId -> Set(nucleos disparados)
+    const respondeuNucleo = {}; // numeroId -> Set(nucleos que responderam)
+
+    for (const c of Object.values(db.waChats)) {
+      if (c.canal !== "oficial") continue;
+      const nuc = nucleo(c.numero);
+      if (!nuc) continue;
+      // quem respondeu? (tem alguma mensagem role=them)
+      const temResposta = (c.mensagens || []).some((m) => m.role === "them");
+      if (temResposta) {
+        if (!respondeuNucleo[c.numeroOficialId]) respondeuNucleo[c.numeroOficialId] = new Set();
+        respondeuNucleo[c.numeroOficialId].add(nuc);
+      }
+      // de qual campanha veio
+      if (c.origemDisparo && c.campanhaId) {
+        if (!porCampanha[c.campanhaId]) porCampanha[c.campanhaId] = { numeroId: c.numeroOficialId, nucs: new Set() };
+        porCampanha[c.campanhaId].nucs.add(nuc);
+      }
+    }
+
+    let ajustadas = 0;
+    for (const camp of db.oficial.campanhas || []) {
+      const info = porCampanha[camp.id];
+      if (!info) continue;
+      const respSet = respondeuNucleo[info.numeroId] || new Set();
+      let n = 0;
+      for (const nuc of info.nucs) if (respSet.has(nuc)) n++;
+      if (n !== (camp.responderam || 0)) { camp.responderam = n; ajustadas++; }
+    }
+    salvar();
+    res.json({ ok: true, ajustadas });
+  });
+
+  /* excluir uma campanha (e, opcionalmente, as conversas que vieram dela) */
+  app.delete("/api/oficial/campanhas/:id", auth, gerenteOnly, (req, res) => {
+    const i = (db.oficial.campanhas || []).findIndex((c) => c.id === req.params.id);
+    if (i < 0) return res.status(404).json({ error: "Campanha não encontrada" });
+    const camp = db.oficial.campanhas[i];
+    const apagarConversas = String(req.query.conversas || "") === "1";
+    let conversasRemovidas = 0;
+    if (apagarConversas) {
+      for (const [id, chat] of Object.entries(db.waChats)) {
+        if (chat.canal === "oficial" && chat.campanhaId === camp.id) {
+          delete db.waChats[id];
+          conversasRemovidas++;
+        }
+      }
+    }
+    db.oficial.campanhas.splice(i, 1);
+    salvar();
+    res.json({ ok: true, conversasRemovidas });
+  });
+
+  /* ============================================================
+     INBOX OFICIAL — lista de chats
+     gerente vê todos; vendedor vê só os atribuídos a ele
+     ============================================================ */
+  // Carimbo leve da caixa: só diz "mudou algo?" (nº de conversas + atividade mais recente
+  // + nº de não-lidas visíveis). O front pergunta isso a cada poucos segundos e só baixa
+  // a lista pesada quando o carimbo muda. Não monta lista, não manda mensagem — é barato.
+  app.get("/api/oficial/chats-versao", auth, (req, res) => {
+    let n = 0, maxAt = 0, naoLidas = 0;
+    const vals = Object.values(db.waChats || {});
+    for (const c of vals) {
+      if (!(c.canal === "oficial" || c.canal === "instagram")) continue;
+      if (c.encerrado) continue;
+      if (req.user.role !== "gerente" && !podeVerVend(req.user, c.vendedorId)) continue;
+      n++;
+      const at = c.atualizadoEm || 0;
+      if (at > maxAt) maxAt = at;
+      naoLidas += c.naoLidas || 0;
+    }
+    res.json({ v: n + ":" + maxAt + ":" + naoLidas });
+  });
+
+  app.get("/api/oficial/chats", auth, (req, res) => {
+    const q = String(req.query.q || "").trim().toLowerCase();
+    let chats = Object.values(db.waChats).filter((c) => c.canal === "oficial" || c.canal === "instagram");
+    const incluirEncerrados = String(req.query.encerrados || "") === "1";
+    if (!incluirEncerrados) chats = chats.filter((c) => !c.encerrado);
+    if (req.user.role !== "gerente") {
+      // vendedor vê conversas atribuídas a ele que o lead já respondeu
+      // (disparo sem resposta fica invisível pra não lotar a caixa).
+      // GARANTIA: se a conversa é DELE, ela SEMPRE aparece — nenhuma IA esconde
+      // uma conversa que já tem dono. IA só atende lead novo/sem dono.
+      chats = chats.filter((c) =>
+        podeVerVend(req.user, c.vendedorId) &&
+        (!c.origemDisparo || c.respondeu)
+      );
+    } else if (req.query.numeroId && req.query.numeroId !== "todos") {
+      chats = chats.filter((c) => c.numeroOficialId === req.query.numeroId);
+    }
+    // filtro por vendedor específico (gerente vê todos; líder só os que ele pode ver)
+    if (req.query.vendedorId && req.query.vendedorId !== "todos" && podeVerVend(req.user, req.query.vendedorId)) {
+      chats = chats.filter((c) => c.vendedorId === req.query.vendedorId);
+    }
+    // filtro por campanha (ex: ver só as conversas do disparo que EU fiz)
+    if (req.query.campanhaId && req.query.campanhaId !== "todas") {
+      chats = chats.filter((c) => c.campanhaId === req.query.campanhaId);
+    }
+    if (q) {
+      chats = chats.filter(
+        (c) => (c.nome || "").toLowerCase().includes(q) || (c.numero || "").includes(q)
+      );
+    }
+    const lista = chats
+      .sort((a, b) => (b.atualizadoEm || 0) - (a.atualizadoEm || 0))
+      .slice(0, 500)
+      .map((c) => {
+        const ultima = c.mensagens && c.mensagens.length ? c.mensagens[c.mensagens.length - 1] : null;
+        // última mensagem do LEAD (role them) -> base da janela de 24h (renova quando ele fala)
+        let ultimaEntrada = 0;
+        if (c.mensagens) { for (let i = c.mensagens.length - 1; i >= 0; i--) { if (c.mensagens[i].role === "them") { ultimaEntrada = c.mensagens[i].ts || 0; break; } } }
+        const v = c.vendedorId ? db.users.find((u) => u.id === c.vendedorId) : null;
+        const camp = c.campanhaId ? (db.oficial.campanhas || []).find((x) => x.id === c.campanhaId) : null;
+        return {
+          id: c.id,
+          canal: c.canal || "oficial",
+          igUsuario: c.igUsuario || "",
+          numero: c.numero,
+          nome: c.nome,
+          naoLidas: c.naoLidas || 0,
+          atualizadoEm: c.atualizadoEm || 0,
+          ultimaEntrada, // ts da última msg do lead (pra janela de 24h)
+          origemDisparo: !!c.origemDisparo,
+          campanha: c.campanha || "",
+          campanhaId: c.campanhaId || null,
+          campanhaNome: camp ? camp.nome : "",
+          vendedorId: c.vendedorId || null,
+          vendedorNome: v ? v.nome : "",
+          numeroOficialId: c.numeroOficialId,
+          comIA: !!(c.iaId && !c.iaPausada),
+          iaPassou: !!(c.iaId && c.iaPausada && c.vendedorId),
+          ultima: ultima ? { role: ultima.role, content: String(ultima.content || "").slice(0, 80), ts: ultima.ts } : null,
+        };
+      });
+    res.json(lista);
+  });
+
+  /* abrir uma conversa */
+  app.get("/api/oficial/chats/:id", auth, (req, res) => {
+    const chat = db.waChats[req.params.id];
+    if (!chat || (chat.canal !== "oficial" && chat.canal !== "instagram")) return res.status(404).json({ error: "Conversa não encontrada" });
+    if (req.user.role !== "gerente" && !podeVerVend(req.user, chat.vendedorId)) {
+      return res.status(403).json({ error: "Sem acesso a essa conversa" });
+    }
+    // enquanto a IA está no comando, o VENDEDOR não vê (gestor acompanha)
+    if (req.user.role !== "gerente" && chat.iaId && !chat.iaPausada) {
+      return res.status(403).json({ error: "Conversa em atendimento automático" });
+    }
+    chat.naoLidas = 0;
+    salvar();
+    const v = chat.vendedorId ? db.users.find((u) => u.id === chat.vendedorId) : null;
+    res.json({
+      id: chat.id,
+      canal: chat.canal || "oficial",
+      igUsuario: chat.igUsuario || "",
+      numero: chat.numero,
+      nome: chat.nome,
+      origemDisparo: !!chat.origemDisparo,
+      campanha: chat.campanha || "",
+      vendedorId: chat.vendedorId || null,
+      vendedorNome: v ? v.nome : "",
+      temIA: !!chat.iaId,
+      iaPausada: !!chat.iaPausada,
+      iaUltimoErro: chat.iaUltimoErro || null,
+      mensagens: chat.mensagens || [],
+      notas: chat.notas || [], // notas internas (transferências etc) — lead não vê
+      ...(() => {
+        const l = leadDoChat(chat, false);
+        return {
+          etapaLead: l ? l.etapa : null,
+          // de onde o lead veio (pro vendedor personalizar o atendimento)
+          origemLead: l ? (l.origem || "") : "",
+          cursoLead: l ? (l.curso || "") : "",
+          tagsLead: l && Array.isArray(l.tags) ? l.tags : [],
+          recorrenteLead: !!(l && l.recorrente),
+        };
+      })(),
+    });
+  });
+
+  /* enviar mensagem do vendedor/gerente nessa conversa */
+  app.post("/api/oficial/chats/:id/send", auth, async (req, res) => {
+    const chat = db.waChats[req.params.id];
+    if (!chat || (chat.canal !== "oficial" && chat.canal !== "instagram")) return res.status(404).json({ error: "Conversa não encontrada" });
+    if (req.user.role !== "gerente" && !podeVerVend(req.user, chat.vendedorId)) {
+      return res.status(403).json({ error: "Sem acesso a essa conversa" });
+    }
+    // enquanto a IA está atendendo, ninguém digita — precisa pausar a IA antes
+    if (chat.iaId && !chat.iaPausada) {
+      return res.status(409).json({ error: "Pause a IA para assumir esta conversa." });
+    }
+    const texto = String((req.body && req.body.texto) || "").trim();
+    if (!texto) return res.status(400).json({ error: "Mensagem vazia" });
+    const ehIG = chat.canal === "instagram";
+    let numeroCfg = null;
+    if (!ehIG) {
+      numeroCfg = acharNumero(chat.numeroOficialId);
+      if (!numeroCfg) return res.status(400).json({ error: "Número de origem não encontrado" });
+    }
+    try {
+      let wamid = null;
+      if (ehIG) {
+        const resp = await enviarTextoInstagram(chat.igUserId || chat.numero, texto);
+        wamid = (resp && (resp.message_id || (resp.messages && resp.messages[0] && resp.messages[0].id))) || null;
+      } else {
+        const resp = await enviarTextoOficial(numeroCfg, chat.numero, texto);
+        wamid = resp && resp.messages && resp.messages[0] && resp.messages[0].id;
+      }
+      const ts = Date.now();
+      chat.mensagens.push({ role: "me", content: texto, ts, wamid: wamid || null, status: "sent" });
+      if (wamid && !ehIG) { if (!db.oficial.wamidChat) db.oficial.wamidChat = {}; db.oficial.wamidChat[wamid] = chat.id; }
+      if (chat.iaId && !chat.iaPausada) chat.iaPausada = true; // humano assumiu -> IA pausa sozinha
+      if (chat.mensagens.length > 300) chat.mensagens = chat.mensagens.slice(-300);
+      chat.atualizadoEm = ts;
+      salvar();
+      res.json({ ok: true });
+    } catch (e) {
+      const m = String((e && e.message) || "");
+      if (ehIG) {
+        if (/24|window|outside|allowed|10\b|551/i.test(m) || e.code === 10 || e.code === 551 || e.subcode === 2534022) {
+          return res.status(400).json({ error: "O cliente ainda não te mandou DM (ou já passou das 24h). No Instagram só dá pra responder dentro de 24h da última mensagem dele." });
+        }
+        return res.status(400).json({ error: m || "Falha ao enviar no Instagram" });
+      }
+      // erro típico do WhatsApp: janela de 24h fechada (precisa de template)
+      if (/131047|24 hours|24h|re-?engagement/i.test(m)) {
+        return res.status(400).json({ error: "Esse contato ainda não respondeu (ou passou das 24h). O WhatsApp só entrega template aprovado agora — use o botão Enviar template." });
+      }
+      res.status(400).json({ error: m || "Falha ao enviar" });
+    }
+  });
+
+  /* serve a mídia recebida do lead (foto, áudio, vídeo, documento) pro frontend */
+  app.get("/api/oficial/chats/:id/midia/:mid", auth, (req, res) => {
+    if (!MEDIA_DIR || !fs || !path) return res.status(404).end();
+    const db = getDb();
+    const chat = db.waChats[req.params.id];
+    if (!chat || chat.canal !== "oficial") return res.status(404).json({ error: "Conversa não encontrada" });
+    const m = (chat.mensagens || []).find((x) => x.mid === req.params.mid);
+    if (!m || !m.arquivo) return res.status(404).json({ error: "Mídia não encontrada" });
+    const fp = path.join(MEDIA_DIR, m.arquivo);
+    if (!fs.existsSync(fp)) return res.status(404).json({ error: "Arquivo não encontrado" });
+    res.setHeader("Content-Type", m.mimetype || "application/octet-stream");
+    res.setHeader("Cache-Control", "private, max-age=86400");
+    if (m.tipo === "document" && m.filename)
+      res.setHeader("Content-Disposition", `inline; filename="${encodeURIComponent(m.filename)}"`);
+    fs.createReadStream(fp).pipe(res);
+  });
+
+  /* enviar mídia (áudio/imagem/vídeo/arquivo) numa conversa do oficial.
+     Recebe o arquivo em base64; faz upload pro Meta e envia. */
+  app.post("/api/oficial/chats/:id/midia", auth, async (req, res) => {
+    const chat = db.waChats[req.params.id];
+    if (!chat || chat.canal !== "oficial") return res.status(404).json({ error: "Conversa não encontrada" });
+    if (req.user.role !== "gerente" && !podeVerVend(req.user, chat.vendedorId)) {
+      return res.status(403).json({ error: "Sem acesso a essa conversa" });
+    }
+    if (chat.iaId && !chat.iaPausada) {
+      return res.status(409).json({ error: "Pause a IA para assumir esta conversa." });
+    }
+    const b = req.body || {};
+    const base64 = String(b.base64 || "");
+    const mime = String(b.mime || "application/octet-stream");
+    const filename = String(b.filename || "arquivo");
+    const caption = String(b.caption || "").trim();
+    if (!base64) return res.status(400).json({ error: "Arquivo vazio" });
+
+    let buffer;
+    try { buffer = Buffer.from(base64, "base64"); }
+    catch (_) { return res.status(400).json({ error: "Arquivo inválido" }); }
+    if (buffer.length > 16 * 1024 * 1024) return res.status(400).json({ error: "Arquivo passa de 16MB" });
+
+    const numeroCfg = acharNumero(chat.numeroOficialId);
+    if (!numeroCfg) return res.status(400).json({ error: "Número de origem não encontrado" });
+
+    try {
+      // áudio gravado no navegador vem em WebM: converte pra OGG/Opus antes de subir
+      const conv = await audioParaMeta(buffer, mime);
+      if (conv.ok === false) return res.status(400).json({ error: conv.motivo || "Não consegui preparar o áudio." });
+      buffer = conv.buffer;
+      const mimeFinal = conv.mime;
+      const nomeFinal = conv.filename || filename;
+      const tipo = tipoPorMime(mimeFinal);
+      // áudio do vendedor -> transcreve também (pra IA "ouvir" na análise)
+      let transcricaoVend = null;
+      if (tipo === "audio") { try { transcricaoVend = await transcreverAudio(buffer, mimeFinal); } catch (_) {} }
+      const mediaId = await uploadMidiaMeta(numeroCfg, buffer, mimeFinal, nomeFinal);
+      const respMidia = await enviarMidiaOficial(numeroCfg, chat.numero, tipo, mediaId, caption, nomeFinal);
+      const wamidMidia = respMidia && respMidia.messages && respMidia.messages[0] && respMidia.messages[0].id;
+      const ts = Date.now();
+      // salva o arquivo enviado no volume TAMBÉM, pra conseguir EXIBIR de volta na conversa
+      let arquivoSalvo = null;
+      try {
+        if (MEDIA_DIR && fs && path) {
+          const ext = extPorMime(mimeFinal);
+          arquivoSalvo = "of_out_" + ts + "_" + Math.random().toString(36).slice(2, 8) + "." + ext;
+          fs.writeFileSync(path.join(MEDIA_DIR, arquivoSalvo), buffer);
+        }
+      } catch (_) { arquivoSalvo = null; }
+      const rotulo = tipo === "image" ? "📷 Foto" : tipo === "audio" ? "🎤 Áudio" : tipo === "video" ? "🎬 Vídeo" : "📄 " + filename;
+      const msgObj = { role: "me", content: caption || "", ts, wamid: wamidMidia || null, status: "sent" };
+      if (arquivoSalvo) {
+        // mesmo esquema da mídia recebida -> renderiza igual (imagem/vídeo/áudio/doc)
+        msgObj.tipo = tipo;
+        msgObj.arquivo = arquivoSalvo;
+        msgObj.mimetype = mimeFinal;
+        msgObj.filename = nomeFinal;
+        msgObj.mid = "ofout" + ts + Math.random().toString(36).slice(2, 6);
+        if (tipo === "document") msgObj.content = caption || nomeFinal;
+        if (transcricaoVend) msgObj.transcricao = transcricaoVend;
+      } else {
+        // não deu pra salvar -> mantém o rótulo de texto (fallback antigo)
+        msgObj.content = caption ? rotulo + ": " + caption : rotulo;
+        msgObj.midia = { tipo, mediaId, filename: nomeFinal, mime: mimeFinal };
+      }
+      chat.mensagens.push(msgObj);
+      if (wamidMidia) { if (!db.oficial.wamidChat) db.oficial.wamidChat = {}; db.oficial.wamidChat[wamidMidia] = chat.id; }
+      if (chat.iaId && !chat.iaPausada) chat.iaPausada = true;
+      if (chat.mensagens.length > 300) chat.mensagens = chat.mensagens.slice(-300);
+      chat.atualizadoEm = ts;
+      salvar();
+      res.json({ ok: true });
+    } catch (e) {
+      res.status(400).json({ error: e.message });
+    }
+  });
+
+  /* reatribuir: gerente sempre; vendedor pode passar pra um colega.
+     Grava uma NOTA interna visível a todos os colaboradores (o lead não vê). */
+  app.post("/api/oficial/chats/:id/atribuir", auth, (req, res) => {
+    const chat = db.waChats[req.params.id];
+    if (!chat || (chat.canal !== "oficial" && chat.canal !== "instagram")) return res.status(404).json({ error: "Conversa não encontrada" });
+    // vendedor só pode reatribuir se a conversa for dele
+    if (req.user.role !== "gerente" && !podeVerVend(req.user, chat.vendedorId)) {
+      return res.status(403).json({ error: "Você só pode transferir conversas suas" });
+    }
+    const vendedorId = String((req.body && req.body.vendedorId) || "");
+    const v = db.users.find((u) => u.id === vendedorId && u.role === "vendedor");
+    if (!v) return res.status(400).json({ error: "Vendedor inválido" });
+
+    const de = chat.vendedorNome || (chat.vendedorId ? "" : "ninguém");
+    chat.vendedorId = v.id;
+    chat.vendedorNome = v.nome;
+    chat.atribuidoEm = Date.now();
+
+    // nota interna de transferência
+    if (!Array.isArray(chat.notas)) chat.notas = [];
+    chat.notas.push({
+      tipo: "transferencia",
+      texto: `${req.user.nome} transferiu ${de ? "de " + de + " " : ""}para ${v.nome}`,
+      ts: Date.now(),
+      por: req.user.nome,
+    });
+    if (chat.notas.length > 100) chat.notas = chat.notas.slice(-100);
+    salvar();
+    res.json({ ok: true, vendedorId: v.id, vendedorNome: v.nome });
+  });
+
+  /* lista de vendedores pra reatribuição (qualquer colaborador logado pode ver) */
+  app.get("/api/oficial/vendedores-lista", auth, (req, res) => {
+    const ids = idsVisiveis(req.user); // null = gerente (todos)
+    res.json(
+      db.users
+        .filter((u) => u.role === "vendedor" && u.ativo && (ids === null || ids.includes(u.id)))
+        .map((u) => ({ id: u.id, nome: u.nome, oficialAtivo: !!u.oficialAtivo }))
+    );
+  });
+
+  /* encerrar atendimento (some da lista ativa do vendedor) */
+  app.post("/api/oficial/chats/:id/encerrar", auth, (req, res) => {
+    const chat = db.waChats[req.params.id];
+    if (!chat || chat.canal !== "oficial") return res.status(404).json({ error: "Conversa não encontrada" });
+    if (req.user.role !== "gerente" && !podeVerVend(req.user, chat.vendedorId)) {
+      return res.status(403).json({ error: "Sem acesso a essa conversa" });
+    }
+    const encerrar = req.body && req.body.encerrar !== false; // default true
+    chat.encerrado = !!encerrar;
+    if (encerrar) {
+      chat.encerradoEm = Date.now();
+      if (!Array.isArray(chat.notas)) chat.notas = [];
+      chat.notas.push({ tipo: "encerrado", texto: `${req.user.nome} encerrou o atendimento`, ts: Date.now(), por: req.user.nome });
+    }
+    salvar();
+    res.json({ ok: true, encerrado: chat.encerrado });
+  });
+
+  /* diagnóstico: últimas chamadas recebidas no webhook + status de inscrição de cada WABA */
+  app.get("/api/oficial/diagnostico", auth, gerenteOnly, async (req, res) => {
+    const log = (db.oficial.webhookLog || []).slice(0, 20);
+    const lista = db.oficial.numeros || [];
+    // checa a inscrição de todos os números EM PARALELO, com timeout por chamada,
+    // pra a tela nunca travar (antes era sequencial e estourava com muitos números).
+    const numeros = await Promise.all(lista.map(async (n) => {
+      let inscrito = null, erro = null;
+      if (n.wabaId && tokenDe(n)) {
+        try {
+          const ctrl = new AbortController();
+          const t = setTimeout(() => ctrl.abort(), 4000);
+          const r = await fetch(`${GRAPH}/${n.wabaId}/subscribed_apps`, {
+            headers: { Authorization: `Bearer ${tokenDe(n)}` },
+            signal: ctrl.signal,
+          });
+          clearTimeout(t);
+          const data = await r.json().catch(() => ({}));
+          if (r.ok) inscrito = (data.data || []).length > 0;
+          else erro = (data.error && data.error.message) || "erro";
+        } catch (e) { erro = e.name === "AbortError" ? "tempo esgotado ao checar na Meta" : e.message; }
+      }
+      return { apelido: n.apelido, phoneNumberId: n.phoneNumberId, wabaId: n.wabaId, inscrito, erro };
+    }));
+    res.json({ verifyToken: db.oficial.verifyToken, numeros, log });
+  });
+
+  /* limpar conversas de teste/órfãs (gerente) */
+  app.post("/api/oficial/chats/limpar", auth, gerenteOnly, (req, res) => {
+    const modo = String((req.body && req.body.modo) || "");
+    let removidas = 0;
+    for (const [id, chat] of Object.entries(db.waChats)) {
+      if (chat.canal !== "oficial") continue;
+      let apaga = false;
+      if (modo === "todas") apaga = true;
+      else if (modo === "sem_resposta") apaga = chat.origemDisparo && !chat.respondeu;
+      else if (modo === "sem_dono") apaga = !chat.vendedorId;
+      if (apaga) { delete db.waChats[id]; removidas++; }
+    }
+    salvar();
+    res.json({ ok: true, removidas });
+  });
+
+  /* ============================================================
+     DESEMPENHO — dashboard de métricas, cargo, faixa e progresso
+     Calcula as 5 métricas por vendedor a partir do que já existe
+     (vendas em db.vendas.lista, leads em db.oficial.crmLeads).
+     ============================================================ */
+  const CARGOS = [
+    { k: "trainee", nome: "Trainee de Vendas", salario: 1800 },
+    { k: "assessor", nome: "Assessor de Vendas", salario: 2500 },
+    { k: "supervisor", nome: "Supervisor de Vendas", salario: 3500 },
+    { k: "supervisor_senior", nome: "Supervisor Sênior", salario: 5000 },
+    { k: "coordenador", nome: "Coordenador", salario: 7000 },
+    { k: "gerente_vendas", nome: "Gerente de Vendas", salario: 10000 },
+    { k: "diretor", nome: "Diretor / Sócio", salario: 15000 },
+  ];
+  const FAIXAS = [
+    { k: "branca", nome: "Branca", cor: "#e5e7eb", texto: "#374151" },
+    { k: "azul", nome: "Azul", cor: "#3b82f6", texto: "#ffffff" },
+    { k: "roxa", nome: "Roxa", cor: "#8b5cf6", texto: "#ffffff" },
+    { k: "marrom", nome: "Marrom", cor: "#7c4a1e", texto: "#ffffff" },
+    { k: "preta", nome: "Preta", cor: "#111827", texto: "#ffffff" },
+  ];
+  // regras de subida de cargo (do documento) — usadas pra barra "próximo cargo"
+  const PROX_CARGO = {
+    trainee: { proximo: "assessor", faturamento: 100000, conversao: 5, meses: 3 },
+    assessor: { proximo: "supervisor", faturamento: 150000, conversao: 5, meses: 3 },
+  };
+  const mesDesempenho = (ts) => { const d = new Date(ts || Date.now()); return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0"); };
+  const chaveNomeDes = (n) => String(n || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim().toLowerCase();
+  // as vendas ficam num arquivo SEPARADO (vendas.json, ao lado do crm.json); leio direto,
+  // porque o db daqui não intercepta db.vendas (isso é interno do módulo de vendas).
+  function lerVendasArquivo() {
+    try {
+      const vp = path.join(path.dirname(process.env.DB_PATH || "/data/crm.json"), "vendas.json");
+      if (fs.existsSync(vp)) { const j = JSON.parse(fs.readFileSync(vp, "utf8")); if (j && typeof j === "object") return j; }
+    } catch (_) {}
+    return { pessoas: [], lista: [], metasMes: {} };
+  }
+  const FAIXA_ORDEM = ["branca", "azul", "roxa", "marrom", "preta"];
+  function metaVendedorMes(pes, mes, metasMes) {
+    if (!pes) return 0;
+    const mm = metasMes || {};
+    if (mm[mes] && mm[mes][pes.id] !== undefined && mm[mes][pes.id] !== null && mm[mes][pes.id] !== "") return Number(mm[mes][pes.id]) || 0;
+    return Number(pes.metaMensal) || 0;
+  }
+  // pontos de conversão pela taxa (escala inbound do documento) — máx 6/semana
+  function pontosConversao(conv) {
+    if (conv < 1.5) return 0; if (conv < 2) return 1; if (conv < 3) return 2;
+    if (conv < 4) return 3; if (conv < 5) return 4; if (conv < 6) return 5; return 6;
+  }
+  // bônus mensal por pontos (aplica a MAIOR faixa)
+  function bonusPontos(total) {
+    if (total > 40) return { rotulo: "acima de 40", adicional: 1.0, dinheiro: 750 };
+    if (total > 36) return { rotulo: "acima de 36", adicional: 0.75, dinheiro: 500 };
+    if (total > 28) return { rotulo: "acima de 28", adicional: 0.5, dinheiro: 300 };
+    return { rotulo: "abaixo de 28", adicional: 0, dinheiro: 0 };
+  }
+  // ---- COMISSÃO (só o que a pessoa recebe em cima do que VENDEU, pela conversão) ----
+  // SEM salário, SEM pontos. Decisão da direção: sem corte de mínimo (todo mundo recebe).
+  // Vendedor: % da faixa de faturamento + adicional da conversão. Gerente: 1% fixo.
+  function _comBaseFat(receita) {
+    if (receita >= 200000) return 4.0;
+    if (receita >= 150000) return 3.0;
+    if (receita >= 120000) return 2.5;
+    if (receita >= 100000) return 2.0;
+    if (receita >= 75000) return 1.5;
+    return 1.0; // < 75k (inclui < 50k): recebe a base mínima, sem corte
+  }
+  function _comAdicConv(c) {
+    if (c >= 6) return 1.5;
+    if (c >= 5) return 1.0;
+    if (c >= 4) return 0.8;
+    if (c >= 3) return 0.6;
+    if (c >= 2) return 0.4;
+    if (c >= 1.5) return 0.2;
+    return 0; // < 1,5%: sem bônus de conversão, mas mantém a base
+  }
+  function calcularComissao(role, receita, conversao) {
+    receita = Number(receita) || 0;
+    if (role === "gerente") {
+      return { pct: 1.0, valor: receita * 0.01, regra: "gerente" }; // 1% fixo, sem política
+    }
+    const pct = Math.round((_comBaseFat(receita) + _comAdicConv(Number(conversao) || 0)) * 100) / 100;
+    return { pct, valor: receita * pct / 100, regra: "vendedor" };
+  }
+  // semanas do mês (cortes fixos por dia — "semana comercial" provisória)
+  function semanasDoMes(mes) {
+    const p = mes.split("-").map(Number), a = p[0], m = p[1];
+    const ultimo = new Date(a, m, 0).getDate();
+    const cortes = [[1, 7], [8, 14], [15, 21], [22, 28], [29, ultimo]];
+    const out = [];
+    for (let i = 0; i < cortes.length; i++) {
+      const d1 = cortes[i][0], d2 = Math.min(cortes[i][1], ultimo);
+      if (d1 > ultimo) break;
+      out.push({ n: i + 1, ini: new Date(a, m - 1, d1, 0, 0, 0).getTime(), fim: new Date(a, m - 1, d2, 23, 59, 59).getTime() });
+    }
+    return out;
+  }
+  function pontosManuais(userId, mes, semana) {
+    const dp = (db.oficial.desempenhoPontos || {})[mes] || {};
+    const u = dp[userId] || {};
+    return u[semana] || { crm: 0, cultura: 0, pontualidade: 0, indicacao: 0 };
+  }
+  // pontos de um user num mês: por semana, conversão (automática) + manuais
+  function pontosMes(userId, pes, mes, vendas, leads) {
+    const semanas = semanasDoMes(mes), agora = Date.now();
+    const detalhe = semanas.map((s) => {
+      const jaComecou = s.ini <= agora;
+      const vend = pes ? vendas.filter((v) => v.pessoaId === pes.id && v.data >= s.ini && v.data <= s.fim).length : 0;
+      const lds = leads.filter((l) => l.vendedorId === userId && l.criadoEm >= s.ini && l.criadoEm <= s.fim).length;
+      const conv = lds ? (vend / lds) * 100 : 0;
+      const pc = jaComecou ? pontosConversao(conv) : 0;
+      const man = pontosManuais(userId, mes, s.n);
+      const crm = Math.max(0, Math.min(1, Number(man.crm) || 0));
+      const cultura = Math.max(0, Math.min(2, Number(man.cultura) || 0));
+      const pont = Math.max(0, Math.min(1, Number(man.pontualidade) || 0));
+      const indicacao = Math.max(0, Math.min(5, Number(man.indicacao) || 0));
+      return { n: s.n, jaComecou, vendas: vend, leads: lds, conversao: Math.round(conv * 100) / 100, conversaoPts: pc, crm, cultura, pontualidade: pont, indicacao, total: pc + crm + cultura + pont + indicacao };
+    });
+    return { total: detalhe.reduce((s, x) => s + x.total, 0), semanas: detalhe };
+  }
+  function metaFaixa(faixaAtual) {
+    if (faixaAtual === "branca") return { proxima: "azul", pontos: 36, meses: 3 };
+    const i = FAIXA_ORDEM.indexOf(faixaAtual);
+    if (i >= 0 && i < FAIXA_ORDEM.length - 1) return { proxima: FAIXA_ORDEM[i + 1], pontos: 40, meses: 3 };
+    return null;
+  }
+  const mesMenos = (mes, k) => { let p = mes.split("-").map(Number), a = p[0], m = p[1] - k; while (m <= 0) { m += 12; a -= 1; } return a + "-" + String(m).padStart(2, "0"); };
+
+  function desempenhoDoMes(mes) {
+    const vd = lerVendasArquivo();
+    const vendas = vd.lista || [], pessoas = vd.pessoas || [], metasMes = vd.metasMes || {};
+    const leads = db.oficial.crmLeads || [];
+    const ocultos = new Set(db.oficial.desempenhoOcultos || []);
+    const usuarios = (db.users || []).filter((u) => (u.role === "vendedor" || u.role === "gerente") && u.ativo);
+    return usuarios.map((u) => {
+      const pes = (u.vendasPessoaId && pessoas.find((p) => p.id === u.vendasPessoaId))
+        || pessoas.find((p) => p.userId === u.id)
+        || pessoas.find((p) => chaveNomeDes(p.nome) === chaveNomeDes(u.nome));
+      const vendasMes = pes ? vendas.filter((v) => v.pessoaId === pes.id && mesDesempenho(v.data) === mes) : [];
+      const receita = vendasMes.reduce((s, v) => s + (Number(v.valor) || 0), 0);
+      const qtdVendas = vendasMes.length;
+      const ticket = qtdVendas ? receita / qtdVendas : 0;
+      const leadsMes = leads.filter((l) => l.vendedorId === u.id && mesDesempenho(l.criadoEm) === mes);
+      const qtdLeads = leadsMes.length;
+      const conversao = qtdLeads ? (qtdVendas / qtdLeads) * 100 : 0;
+      const pontos = pontosMes(u.id, pes, mes, vendas, leads);
+      const faixa = u.faixa || "branca";
+      const mf = metaFaixa(faixa);
+      let mesesSeguidos = 0;
+      if (mf) {
+        for (let k = 0; k < 6; k++) {
+          const tot = k === 0 ? pontos.total : pontosMes(u.id, pes, mesMenos(mes, k), vendas, leads).total;
+          if (tot > mf.pontos) mesesSeguidos++; else break;
+        }
+      }
+      return {
+        id: u.id, nome: u.nome, foto: u.foto || "", role: u.role,
+        cargo: u.cargo || "trainee", faixa, oculto: ocultos.has(u.id),
+        pessoaId: pes ? pes.id : null, pessoaNome: pes ? pes.nome : null,
+        receita, vendas: qtdVendas, ticket, leads: qtdLeads,
+        conversao: Math.round(conversao * 100) / 100,
+        meta: metaVendedorMes(pes, mes, metasMes),
+        pontos: pontos.total, semanas: pontos.semanas, bonus: bonusPontos(pontos.total),
+        comissao: (() => { const convExib = Math.round(conversao * 10) / 10; const c = calcularComissao(u.role, receita, convExib); return { pct: c.pct, valor: Math.round(c.valor * 100) / 100, regra: c.regra }; })(),
+        faixaMeta: mf ? { proxima: mf.proxima, pontos: mf.pontos, meses: mf.meses, mesesSeguidos } : null,
+      };
+    });
+  }
+
+  app.get("/api/oficial/desempenho", auth, (req, res) => {
+    garantirEstrutura();
+    // gerente pode esconder o desempenho dos vendedores
+    if (req.user.role === "vendedor" && acessoVend().desempenhoOculto) return res.status(403).json({ error: "Acesso restrito" });
+    const mes = /^\d{4}-\d{2}$/.test(String(req.query.mes || "")) ? req.query.mes : mesDesempenho(Date.now());
+    let lista = desempenhoDoMes(mes);
+    const souGerente = req.user.role === "gerente";
+    if (!souGerente) lista = lista.filter((x) => podeVerVend(req.user, x.id));
+    else if (String(req.query.incluirOcultos || "") !== "1") lista = lista.filter((x) => !x.oculto);
+    lista.sort((a, b) => b.receita - a.receita || b.conversao - a.conversao);
+    const qtdOcultos = souGerente ? desempenhoDoMes(mes).filter((x) => x.oculto).length : 0;
+    // lista de "pessoas" das Vendas, pro gerente ligar cada vendedor à pessoa certa
+    const pessoasVendas = souGerente ? (lerVendasArquivo().pessoas || []).map((p) => ({ id: p.id, nome: p.nome })) : [];
+    // Comissão de GESTÃO: 1% de tudo que os vendedores da unidade venderam, pra gestora da unidade.
+    // Jesuítas → Thalia · Toledo → Maeli (definido pela unidade em process.env.UNIDADE).
+    const unidade = String(process.env.UNIDADE || "").trim().toLowerCase();
+    const GESTORA_POR_UNIDADE = { jesuitas: "thalia", toledo: "maeli" };
+    const primeiroNomeGestora = GESTORA_POR_UNIDADE[unidade];
+    let gestao = null;
+    if (primeiroNomeGestora) {
+      const totalVendedores = lista.filter((v) => v.role !== "gerente").reduce((s, v) => s + (v.receita || 0), 0);
+      const uGest = (db.users || []).find((x) => (x.role === "vendedor" || x.role === "gerente") && x.ativo && chaveNomeDes(x.nome).startsWith(primeiroNomeGestora));
+      gestao = {
+        nome: uGest ? uGest.nome : (primeiroNomeGestora.charAt(0).toUpperCase() + primeiroNomeGestora.slice(1)),
+        unidade, pct: 1.0,
+        baseVendas: Math.round(totalVendedores * 100) / 100,
+        valor: Math.round(totalVendedores * 0.01 * 100) / 100,
+      };
+    }
+    res.json({ mes, cargos: CARGOS, faixas: FAIXAS, proxCargo: PROX_CARGO, semanasNoMes: semanasDoMes(mes).length, vendedores: lista, souGerente, qtdOcultos, pessoasVendas, unidade, gestao });
+  });
+
+  // gerente liga um usuário à "pessoa" das Vendas (resolve quando o nome do login é diferente do das vendas)
+  app.put("/api/oficial/desempenho/:id/pessoa", auth, gerenteOnly, (req, res) => {
+    const u = (db.users || []).find((x) => x.id === req.params.id);
+    if (!u) return res.status(404).json({ error: "Usuário não encontrado" });
+    const pid = String((req.body && req.body.pessoaId) || "").trim();
+    u.vendasPessoaId = pid || null;
+    salvar();
+    res.json({ ok: true, pessoaId: u.vendasPessoaId });
+  });
+
+  // gerente define cargo/faixa de um vendedor
+  app.put("/api/oficial/desempenho/:id/cargo-faixa", auth, gerenteOnly, (req, res) => {
+    const u = (db.users || []).find((x) => x.id === req.params.id);
+    if (!u) return res.status(404).json({ error: "Usuário não encontrado" });
+    const b = req.body || {};
+    if (b.cargo !== undefined && CARGOS.some((c) => c.k === b.cargo)) u.cargo = b.cargo;
+    if (b.faixa !== undefined && FAIXAS.some((f) => f.k === b.faixa)) u.faixa = b.faixa;
+    salvar();
+    res.json({ ok: true, cargo: u.cargo, faixa: u.faixa });
+  });
+
+  // gerente lança os pontos manuais de uma semana (CRM, cultura, pontualidade)
+  app.put("/api/oficial/desempenho/:id/pontos", auth, gerenteOnly, (req, res) => {
+    const u = (db.users || []).find((x) => x.id === req.params.id);
+    if (!u) return res.status(404).json({ error: "Usuário não encontrado" });
+    const b = req.body || {};
+    const mes = /^\d{4}-\d{2}$/.test(String(b.mes || "")) ? b.mes : mesDesempenho(Date.now());
+    const semana = Math.max(1, Math.min(5, parseInt(b.semana, 10) || 1));
+    if (!db.oficial.desempenhoPontos) db.oficial.desempenhoPontos = {};
+    if (!db.oficial.desempenhoPontos[mes]) db.oficial.desempenhoPontos[mes] = {};
+    if (!db.oficial.desempenhoPontos[mes][u.id]) db.oficial.desempenhoPontos[mes][u.id] = {};
+    db.oficial.desempenhoPontos[mes][u.id][semana] = {
+      crm: Math.max(0, Math.min(1, Number(b.crm) || 0)),
+      cultura: Math.max(0, Math.min(2, Number(b.cultura) || 0)),
+      pontualidade: Math.max(0, Math.min(1, Number(b.pontualidade) || 0)),
+      indicacao: Math.max(0, Math.min(5, Number(b.indicacao) || 0)),
+    };
+    salvar();
+    res.json({ ok: true });
+  });
+
+  // gerente esconde/mostra um vendedor no dashboard
+  app.put("/api/oficial/desempenho/:id/ocultar", auth, gerenteOnly, (req, res) => {
+    const u = (db.users || []).find((x) => x.id === req.params.id);
+    if (!u) return res.status(404).json({ error: "Usuário não encontrado" });
+    if (!Array.isArray(db.oficial.desempenhoOcultos)) db.oficial.desempenhoOcultos = [];
+    const oculto = !!(req.body && req.body.oculto);
+    db.oficial.desempenhoOcultos = db.oficial.desempenhoOcultos.filter((x) => x !== u.id);
+    if (oculto) db.oficial.desempenhoOcultos.push(u.id);
+    salvar();
+    res.json({ ok: true, oculto });
+  });
+
+  /* ---- REENVIO de webhook pra outro(s) sistema(s) que usam o MESMO app da Meta ----
+     O sistema pra onde a Meta aponta recebe tudo e repassa aqui pros "irmãos".
+     Guarda só a BASE (ex: https://xxx.up.railway.app); o repasse já anexa o caminho. */
+  app.get("/api/oficial/webhook-reenvio", auth, gerenteOnly, (req, res) => {
+    garantirEstrutura();
+    res.json({ urls: db.oficial.webhookReenvio || [] });
+  });
+  app.put("/api/oficial/webhook-reenvio", auth, gerenteOnly, (req, res) => {
+    garantirEstrutura();
+    const lista = Array.isArray(req.body && req.body.urls) ? req.body.urls : [];
+    const limpas = lista
+      .map((u) => String(u || "").trim())
+      .map((u) => u.replace(/\/api\/oficial\/webhook.*$/i, "")) // aceita colar a URL completa
+      .map((u) => u.replace(/\/+$/, ""))
+      .filter((u) => /^https?:\/\//i.test(u));
+    db.oficial.webhookReenvio = [...new Set(limpas)];
+    salvar();
+    res.json({ ok: true, urls: db.oficial.webhookReenvio });
+  });
+
+  /* ============================================================
+     WEBHOOK OFICIAL (Meta chama aqui)
+     GET = verificação | POST = mensagens recebidas
+     URL: /api/oficial/webhook
+     ============================================================ */
+  app.get("/api/oficial/webhook", (req, res) => {
+    const mode = req.query["hub.mode"];
+    const token = req.query["hub.verify_token"];
+    const challenge = req.query["hub.challenge"];
+    if (mode === "subscribe" && token === db.oficial.verifyToken) {
+      return res.status(200).send(challenge);
+    }
+    return res.sendStatus(403);
+  });
+
+  app.post("/api/oficial/webhook", async (req, res) => {
+    // responde 200 sempre e rápido (a Meta exige)
+    res.sendStatus(200);
+    try {
+      const body = req.body || {};
+      // === diagnóstico: guarda as últimas chamadas recebidas (pra depurar) ===
+      if (!db.oficial.webhookLog) db.oficial.webhookLog = [];
+      db.oficial.webhookLog.unshift({
+        ts: Date.now(),
+        object: body.object,
+        resumo: (() => {
+          try {
+            const ch = body.entry && body.entry[0] && body.entry[0].changes && body.entry[0].changes[0];
+            const val = (ch && ch.value) || {};
+            const pid = (val.metadata && val.metadata.phone_number_id) || "?";
+            const msgs = (val.messages || []).length;
+            const statuses = (val.statuses || []).length;
+            const from = val.messages && val.messages[0] && val.messages[0].from;
+            return `phone_id=${pid} msgs=${msgs} status=${statuses}${from ? " from=" + from : ""}`;
+          } catch (e) { return "erro ao resumir"; }
+        })(),
+      });
+      if (db.oficial.webhookLog.length > 30) db.oficial.webhookLog = db.oficial.webhookLog.slice(0, 30);
+      salvar();
+
+      // ===== REENVIO ENTRE SISTEMAS (mesmo app da Meta servindo mais de um CRM) =====
+      // A Meta manda tudo pra UM sistema (o que a URL aponta). Esse sistema repassa
+      // pros outros o MESMO evento; cada um processa só os números dele e ignora o resto.
+      // O marcador ?fwd=1 garante repasse de UM salto só (nunca vira loop).
+      if (req.query.fwd !== "1") {
+        const destinos = (db.oficial.webhookReenvio || []).filter((u) => /^https?:\/\//i.test(u));
+        if (destinos.length) {
+          const corpo = JSON.stringify(body);
+          for (const base of destinos) {
+            const alvo = base.replace(/\/+$/, "") + "/api/oficial/webhook?fwd=1";
+            (async () => {
+              try {
+                const ctrl = new AbortController();
+                const t = setTimeout(() => ctrl.abort(), 6000);
+                await fetch(alvo, { method: "POST", headers: { "Content-Type": "application/json" }, body: corpo, signal: ctrl.signal });
+                clearTimeout(t);
+              } catch (_) {}
+            })();
+          }
+        }
+      }
+
+      if (body.object === "instagram") { await processarWebhookIG(body); return; }
+      if (body.object !== "whatsapp_business_account") return;
+      for (const entry of body.entry || []) {
+        for (const ch of entry.changes || []) {
+          const val = ch.value || {};
+          // QUALIDADE do número mudou (a Meta avisa quando sobe/cai) -> re-puxa de todos
+          if (ch.field === "phone_number_quality_update") {
+            console.log("[oficial] webhook de QUALIDADE recebido:", JSON.stringify(val).slice(0, 180));
+            try { await atualizarQualidadeTodos(); } catch (_) {}
+            continue;
+          }
+          const phoneNumberId = (val.metadata && val.metadata.phone_number_id) || "";
+          // acha qual número do pool recebeu
+          const numeroCfg = (db.oficial.numeros || []).find((n) => n.phoneNumberId === phoneNumberId);
+          if (!numeroCfg) continue;
+
+          // mapa de nomes (pushName) que a Meta manda em contacts
+          const nomes = {};
+          (val.contacts || []).forEach((c) => {
+            if (c.wa_id) nomes[c.wa_id] = (c.profile && c.profile.name) || "";
+          });
+
+          for (const m of val.messages || []) {
+            const telefone = m.from; // já vem com DDI
+            const nome = nomes[telefone] || telefone;
+            // tenta casar com uma conversa de disparo já existente (tolera 9º dígito)
+            let chat = acharChatTolerante(numeroCfg.id, telefone);
+            if (!chat) chat = acharOuCriarChat(numeroCfg.id, telefone, nome);
+            if (nome && nome !== telefone) chat.nome = nome;
+
+            // extrai o conteúdo por tipo
+            let content = "";
+            let midiaTipo = "text";   // text | image | audio | video | document
+            let midiaArquivo = null;  // nome do arquivo salvo no volume
+            let midiaMime = null;
+            let midiaFilename = null; // nome original (documentos)
+            let transcricao = null;   // texto do áudio (pra IA e pra exibir)
+            let mediaIdMeta = null;
+
+            if (m.type === "text") content = (m.text && m.text.body) || "";
+            else if (m.type === "button") content = (m.button && m.button.text) || "";
+            else if (m.type === "interactive") {
+              const it = m.interactive || {};
+              content = (it.button_reply && it.button_reply.title) ||
+                        (it.list_reply && it.list_reply.title) || "";
+            }
+            else if (m.type === "image") {
+              content = (m.image && m.image.caption) ? m.image.caption : "📷 Foto";
+              midiaTipo = "image"; mediaIdMeta = m.image && m.image.id;
+            }
+            else if (m.type === "audio") {
+              content = "🎤 Áudio";
+              midiaTipo = "audio"; mediaIdMeta = m.audio && m.audio.id;
+            }
+            else if (m.type === "video") {
+              content = (m.video && m.video.caption) ? m.video.caption : "🎬 Vídeo";
+              midiaTipo = "video"; mediaIdMeta = m.video && m.video.id;
+            }
+            else if (m.type === "document") {
+              midiaFilename = (m.document && m.document.filename) || "Documento";
+              content = "📄 " + midiaFilename;
+              midiaTipo = "document"; mediaIdMeta = m.document && m.document.id;
+            }
+            else if (m.type === "sticker") {
+              content = "[figurinha]";
+              midiaTipo = "image"; mediaIdMeta = m.sticker && m.sticker.id;
+            }
+            else if (m.type === "reaction") {
+              const emoji = (m.reaction && m.reaction.emoji) || "";
+              content = emoji ? ("reagiu com " + emoji) : "removeu a reação";
+            }
+            else content = "[" + m.type + "]";
+
+            // baixa o arquivo de mídia (foto, áudio, vídeo, documento) pro volume
+            if (mediaIdMeta && midiaTipo !== "text") {
+              try {
+                const baixado = await baixarMidiaMeta(numeroCfg, mediaIdMeta);
+                if (baixado) {
+                  midiaArquivo = baixado.arquivo;
+                  midiaMime = baixado.mimetype;
+                  // áudio -> transcreve pra IA "ouvir" e pra exibir
+                  if (midiaTipo === "audio") {
+                    transcricao = await transcreverAudio(baixado.buffer, baixado.mimetype);
+                  }
+                }
+              } catch (_) {}
+            }
+
+            const ts = m.timestamp ? Number(m.timestamp) * 1000 : Date.now();
+            // mensagem rica (texto + mídia + transcrição)
+            const msgObj = { role: "them", content, ts };
+            if (midiaTipo !== "text") {
+              msgObj.tipo = midiaTipo;
+              if (midiaArquivo) msgObj.arquivo = midiaArquivo;
+              if (midiaMime) msgObj.mimetype = midiaMime;
+              if (midiaFilename) msgObj.filename = midiaFilename;
+              msgObj.mid = m.id || ("of" + ts);
+            }
+            if (transcricao) msgObj.transcricao = transcricao;
+            chat.mensagens.push(msgObj);
+            chat.ultimaMsgLeadId = m.id || null; // pro indicador "digitando"
+            if (chat.mensagens.length > 300) chat.mensagens = chat.mensagens.slice(-300);
+            chat.naoLidas = (chat.naoLidas || 0) + 1;
+            chat.atualizadoEm = ts;
+
+            // conta "responderam" na campanha (só a 1ª resposta de cada lead daquela campanha)
+            if (chat.origemDisparo && chat.campanhaId && !chat.jaContouResposta) {
+              chat.jaContouResposta = true;
+              chat.respondeu = true;
+              const camp = (db.oficial.campanhas || []).find((x) => x.id === chat.campanhaId);
+              if (camp) camp.responderam = (camp.responderam || 0) + 1;
+            } else if (chat.origemDisparo) {
+              // garante que conversas de disparo fiquem visíveis ao vendedor após responder
+              chat.respondeu = true;
+            }
+
+            // ===== IA por campanha OU distribuição pro vendedor =====
+            // se a conversa ainda não tem IA, NÃO tem dono humano, e o NÚMERO tem uma IA padrão, atribui ela.
+            // IMPORTANTE: se a conversa já é de um vendedor (ex.: disparo "fica comigo"/atribuição manual),
+            // a IA padrão NÃO assume — senão a conversa sumiria da Caixa de entrada do vendedor. A IA padrão
+            // do número só entra em lead NOVO/sem dono.
+            // A IA padrão do número NUNCA assume conversa de disparo nem conversa que já
+            // tem dono — ela só entra em lead NOVO/sem dono que não veio de disparo.
+            // (Disparo é sempre do vendedor; a IA não pode roubar/esconder isso dele.)
+            if (!chat.iaId && !chat.vendedorId && !chat.origemDisparo && numeroCfg.iaId) {
+              const iaPadrao = (db.oficial.ias || []).find((x) => x.id === numeroCfg.iaId && x.ativa);
+              if (iaPadrao) { chat.iaId = numeroCfg.iaId; chat.iaPausada = false; }
+            }
+            const temIA = chat.iaId && !chat.iaPausada;
+            if (temIA) {
+              // responde de forma assíncrona (não trava o webhook; a Meta espera 200 rápido)
+              rodarIA(chat, numeroCfg);
+            } else if (!chat.vendedorId) {
+              atribuirLead(chat);
+            }
+          }
+
+          // ===== STATUS de entrega (delivered/read) das mensagens de disparo =====
+          for (const st of val.statuses || []) {
+            const mid = st.id;
+            // --- pauzinhos: atualiza o status da mensagem individual (enviado/entregue/lido) ---
+            const chatIdMsg = db.oficial.wamidChat && db.oficial.wamidChat[mid];
+            if (chatIdMsg && db.waChats[chatIdMsg]) {
+              const msg = (db.waChats[chatIdMsg].mensagens || []).find((x) => x.wamid === mid);
+              if (msg) {
+                const ordem = { sent: 1, delivered: 2, read: 3 };
+                if (st.status === "failed") {
+                  msg.status = "failed";
+                  // guarda o PORQUÊ, pra tela poder explicar em vez de só "não entregue"
+                  const e0 = (st.errors && st.errors[0]) || {};
+                  const det = (e0.error_data && e0.error_data.details) || "";
+                  msg.erroCodigo = e0.code || null;
+                  msg.erro = [e0.title || e0.message, det].filter(Boolean).join(" — ") || ("erro " + (e0.code || "?"));
+                } else if ((ordem[st.status] || 0) > (ordem[msg.status] || 0)) {
+                  msg.status = st.status;
+                  const quando = st.timestamp ? Number(st.timestamp) * 1000 : Date.now();
+                  if (st.status === "read") msg.lidoEm = quando;
+                  else if (st.status === "delivered") msg.entregueEm = quando;
+                }
+              }
+            }
+            const campId = db.oficial.msgCampanha && db.oficial.msgCampanha[mid];
+            if (!campId) continue;
+            const camp = (db.oficial.campanhas || []).find((x) => x.id === campId);
+            if (!camp) continue;
+            // dedup: não conta o mesmo (mensagem + status) duas vezes
+            if (!db.oficial.statusVistos) db.oficial.statusVistos = {};
+            const chave = mid + ":" + st.status;
+            if (db.oficial.statusVistos[chave]) continue;
+            db.oficial.statusVistos[chave] = 1;
+
+            if (st.status === "delivered") {
+              camp.entregues = (camp.entregues || 0) + 1;
+            } else if (st.status === "read") {
+              camp.lidos = (camp.lidos || 0) + 1;
+            } else if (st.status === "failed") {
+              camp.falhas = (camp.falhas || 0) + 1;
+              if (camp.enviados > 0) camp.enviados--;
+              // captura o MOTIVO da falha de entrega (vem em st.errors) — antes a gente jogava fora
+              const err = (st.errors && st.errors[0]) || {};
+              const motivo = err.message || err.title
+                || (err.error_data && err.error_data.details)
+                || ("erro " + (err.code || "?"));
+              camp.ultimoErro = (err.code ? "(#" + err.code + ") " : "") + motivo;
+              camp.ultimoErroEm = Date.now();
+              console.error("Falha ENTREGA camp '" + camp.nome + "' p/ " + (st.recipient_id || "?") + " : " + camp.ultimoErro);
+            }
+          }
+        }
+      }
+      salvar();
+    } catch (e) {
+      console.error("Erro no webhook oficial:", e.message);
+    }
+  });
+
+  /* expõe a config do webhook pro painel (URL + verify token) */
+  // ---- Instagram (DM) : configuração ----
+  app.get("/api/oficial/instagram", auth, gerenteOnly, (req, res) => {
+    const ig = cfgInstagram();
+    res.json({
+      igId: ig.igId, usuario: ig.usuario, ativo: ig.ativo,
+      vendedorId: ig.vendedorId || null,   // vendedor responsável pelas DMs
+      temToken: !!ig.token,        // não devolve o token em si
+      verifyToken: db.oficial.verifyToken, // mesmo webhook do WhatsApp
+    });
+  });
+  app.put("/api/oficial/instagram", auth, gerenteOnly, (req, res) => {
+    garantirEstrutura();
+    const b = req.body || {};
+    const ig = db.oficial.instagram;
+    if (b.igId !== undefined) ig.igId = String(b.igId || "").trim();
+    if (b.usuario !== undefined) ig.usuario = String(b.usuario || "").trim().replace(/^@/, "");
+    if (typeof b.token === "string" && b.token.trim()) ig.token = b.token.trim(); // só troca se vier um novo
+    if (b.ativo !== undefined) ig.ativo = !!b.ativo;
+    if (b.vendedorId !== undefined) ig.vendedorId = b.vendedorId || null;
+    salvar();
+    const c = cfgInstagram();
+    res.json({ ok: true, igId: c.igId, usuario: c.usuario, ativo: c.ativo, vendedorId: c.vendedorId || null, temToken: !!c.token });
+  });
+
+  app.get("/api/oficial/webhook-info", auth, gerenteOnly, (req, res) => {
+    const base = String(req.query.base || "").replace(/\/+$/, "");
+    res.json({
+      url: base ? base + "/api/oficial/webhook" : "/api/oficial/webhook",
+      verifyToken: db.oficial.verifyToken,
+    });
+  });
+
+  console.log("✓ Canal Oficial (Cloud API) instalado");
+
+  // RETOMAR AUTOMÁTICO: se o servidor reiniciou com campanhas que tinham envios
+  // pendentes, continua de onde parou sozinho (espera 5s pra tudo carregar).
+  // (as AGENDADAS ficam de fora — quem cuida delas é o agendador abaixo)
+  setTimeout(() => {
+    const pendentes = (db.oficial.campanhas || []).filter((c) => c.pendentes && c.pendentes.length > 0 && c.status !== "parada" && c.status !== "agendada");
+    if (pendentes.length > 0) {
+      console.log(`[oficial] Retomando ${pendentes.length} campanha(s) com envios pendentes após reinício...`);
+      for (const camp of pendentes) {
+        const numeroCfg = acharNumero(camp.numeroId);
+        if (numeroCfg && numeroCfg.ativo) {
+          processarFilaCampanha(camp.id, numeroCfg);
+        } else {
+          console.log(`[oficial] Campanha ${camp.nome}: número inativo, não retomou`);
+        }
+      }
+    }
+  }, 5000);
+
+  // RE-ASSINAR WEBHOOK NO BOOT: garante que a Meta continue mandando as respostas
+  // de TODOS os números depois de cada deploy/reinício (assinar de novo é inofensivo:
+  // se já estava assinado, a Meta só confirma). Assim nunca "solta" sozinho.
+  setTimeout(async () => {
+    const ns = (db.oficial && db.oficial.numeros || []).filter((n) => n.wabaId && tokenDe(n));
+    if (!ns.length) return;
+    let ok = 0;
+    for (const n of ns) {
+      try {
+        const r = await fetch(`${GRAPH}/${n.wabaId}/subscribed_apps`, {
+          method: "POST",
+          headers: { Authorization: `Bearer ${tokenDe(n)}`, "Content-Type": "application/json" },
+        });
+        if (r.ok) { n.webhookAssinado = true; n.webhookAssinadoEm = Date.now(); ok++; }
+        else { const d = await r.json().catch(() => ({})); n.webhookErro = (d.error && d.error.message) || ("HTTP " + r.status); }
+      } catch (e) { n.webhookErro = e.message; }
+      await new Promise((r) => setTimeout(r, 150)); // ritmo leve pra não sobrecarregar
+    }
+    salvar();
+    console.log(`[oficial] Webhook re-assinado no boot: ${ok}/${ns.length} número(s) OK`);
+  }, 8000);
+  // Roda no servidor e é confiável: as campanhas ficam salvas no banco, então mesmo
+  // que o servidor reinicie, elas disparam na hora certa — e se ele estava fora na
+  // hora marcada, dispara assim que voltar (agendadoPara <= agora).
+  setInterval(() => {
+    try {
+      const agora = Date.now();
+      for (const camp of db.oficial.campanhas || []) {
+        if (camp.status === "agendada" && !camp._rodando && camp.agendadoPara && camp.agendadoPara <= agora) {
+          console.log(`[oficial] AGENDAMENTO disparando "${camp.nome}" (marcado p/ ${new Date(camp.agendadoPara).toISOString()})`);
+          dispararCampanhaAgora(camp);
+        }
+      }
+    } catch (e) { console.error("[oficial] agendador erro:", e.message); }
+  }, 20000);
+
+  // QUALIDADE dos números: atualiza de tempos em tempos (a cada 3h) e uma vez logo ao subir.
+  // Assim o rating (Alta/Média/Baixa) e o limite ficam sempre atualizados no sistema,
+  // mesmo sem o webhook de qualidade estar ligado.
+  setTimeout(() => { atualizarQualidadeTodos().catch(() => {}); }, 15000);
+  setInterval(() => { atualizarQualidadeTodos().catch(() => {}); }, 3 * 3600000);
+
+  // devolve a função de init pro index chamar DEPOIS do loadDB()
+  // ============================================================
+  // INTEGRAÇÃO INTELLIGENCE — API SÓ-LEITURA pro Dashboard
+  // Não altera NADA do CRM; apenas EXPÕE os dados existentes.
+  // Unidade sempre de process.env.UNIDADE (identificação da v238).
+  // Auth por token dedicado (INTELLIGENCE_API_TOKEN), nunca o login do CRM.
+  // ============================================================
+  const _uni = () => String(process.env.UNIDADE || "").trim().toLowerCase() || "nao-configurada";
+  const _iso = (ts) => { if (ts === null || ts === undefined || ts === "") return null; const n = Number(ts); const d = new Date(isNaN(n) ? ts : n); return isNaN(d.getTime()) ? null : d.toISOString(); };
+  function authIntel(req, res, next) {
+    const tk = String(process.env.INTELLIGENCE_API_TOKEN || "");
+    if (!tk) return res.status(503).json({ error: "INTELLIGENCE_API_TOKEN não configurado neste serviço" });
+    const h = String(req.headers.authorization || "");
+    const bearer = h.startsWith("Bearer ") ? h.slice(7).trim() : "";
+    if (!bearer || bearer !== tk) return res.status(401).json({ error: "Token inválido ou ausente" });
+    next();
+  }
+  // marcos derivados do histórico do lead (só o que EXISTE; senão null)
+  function _marcosLead(l) {
+    let qualified = null, lost = null, won = null, assigned = null;
+    for (const h of (Array.isArray(l.historico) ? l.historico : [])) {
+      const t = (h.texto || "").toLowerCase(), ts = h.ts || null;
+      if (h.tipo === "atribuido" && assigned === null && !/removid/.test(t)) assigned = ts;
+      if (h.tipo === "etapa") {
+        if (/qualificad/.test(t) && qualified === null) qualified = ts;
+        if (/perdid/.test(t) && lost === null) lost = ts;
+        if (/matriculad/.test(t) && won === null) won = ts;
+      }
+    }
+    return { qualified, lost, won, assigned };
+  }
+  function _utmsLead(l) {
+    for (let i = (l.historico || []).length - 1; i >= 0; i--) {
+      const h = l.historico[i];
+      if (h && h.dados && h.dados.utms && typeof h.dados.utms === "object") return h.dados.utms;
+    }
+    return null;
+  }
+  // índice telefone(8 díg) -> conversa, pra derivar 1ª interação/resposta
+  function _idxTelefone() {
+    const idx = {};
+    for (const c of Object.values(db.waChats || {})) {
+      const tel = String(c.numero || c.telefone || "").replace(/\D/g, "").slice(-8);
+      if (tel && tel.length >= 8 && !idx[tel]) idx[tel] = c;
+    }
+    return idx;
+  }
+  function _interacoes(chat) {
+    if (!chat || !Array.isArray(chat.mensagens) || !chat.mensagens.length) return { humano: null, cliente: null, ultima: null };
+    let humano = null, cliente = null;
+    for (const m of chat.mensagens) {
+      if (!m || !m.ts) continue;
+      if (m.role === "them" && cliente === null) cliente = m.ts; // cliente respondeu
+      if (m.role === "me" && humano === null && !m.template && !m.origemDisparo) humano = m.ts; // vendedor humano (não automação/disparo)
+    }
+    const ultima = chat.mensagens[chat.mensagens.length - 1].ts || null;
+    return { humano, cliente, ultima };
+  }
+  // paginação incremental estável: ordena por _ord (ts) asc, cursor = "ts:id"
+  function _paginar(itens, req) {
+    const limit = Math.max(1, Math.min(1000, parseInt(req.query.limit, 10) || 500));
+    const since = req.query.updated_since ? Date.parse(req.query.updated_since) : null;
+    let arr = itens.slice().sort((a, b) => (a._ord - b._ord) || String(a._id).localeCompare(String(b._id)));
+    if (since !== null && !isNaN(since)) arr = arr.filter((x) => (x._ord || 0) >= since);
+    if (req.query.cursor) {
+      const i = arr.findIndex((x) => x._cursor === req.query.cursor);
+      if (i < 0) return { erro: "cursor_invalido" }; // cursor desconhecido: erro explícito (não recomeça do zero)
+      arr = arr.slice(i + 1);
+    }
+    const pagina = arr.slice(0, limit);
+    const next = pagina.length === limit ? pagina[pagina.length - 1]._cursor : null;
+    return { items: pagina.map(({ _id, _ord, _cursor, ...r }) => r), next_cursor: next };
+  }
+  const _respPag = (res, r, extra) => r.erro ? res.status(400).json({ error: "Cursor inválido ou expirado. Reinicie a sincronização sem cursor." }) : res.json({ ...extra, count: r.items.length, next_cursor: r.next_cursor, items: r.items });
+
+  // --- Endpoint 2: listas ---
+  app.get("/api/integrations/intelligence/lists", authIntel, (req, res) => {
+    garantirEstrutura();
+    const incluirInativos = String(req.query.incluir_inativos || "") === "true";
+    const fonte = (db.oficial.reservaListas || []).filter((l) => incluirInativos || !l.arquivada);
+    const items = fonte.map((l) => ({
+      id: String(l.id), nome: l.nome, tag: l.tag || null, ativo: l.ativa !== false,
+      arquivada: !!l.arquivada, arquivada_em: _iso(l.arquivadaEm),
+      curso: l.curso || null, destino_etapa_id: l.destino || null, distribuir: l.distribuir || "auto",
+      created_at: _iso(l.criadoEm), updated_at: _iso(l.atualizadoEm || l.criadoEm),
+    }));
+    res.json({ unidade: _uni(), total: items.length, items });
+  });
+
+  // --- Endpoint 3: vendedores ---
+  app.get("/api/integrations/intelligence/sellers", authIntel, (req, res) => {
+    const incluirInativos = String(req.query.incluir_inativos || "") === "true";
+    const fonte = (db.users || []).filter((u) => {
+      const ehVendedor = u.role === "vendedor" || u.role === "gerente";
+      if (ehVendedor) return true;
+      return incluirInativos && u._foiVendedor; // ex-vendedores só se pedir e se marcados
+    });
+    const items = fonte.map((u) => ({
+      id: String(u.id), nome: u.nome, email: u.email || null, ativo: u.ativo !== false, papel: u.role,
+      created_at: _iso(u.criadoEm),
+    }));
+    res.json({ unidade: _uni(), total: items.length, items });
+  });
+
+  // --- Endpoint 7: etapas do funil (lista completa, com ordem) ---
+  app.get("/api/integrations/intelligence/stages", authIntel, (req, res) => {
+    const items = etapasCRM().map((e, i) => ({ id: e.k, nome: e.lb || e.k, ordem: i + 1, cor: e.cor || null }));
+    res.json({ unidade: _uni(), total: items.length, items });
+  });
+
+  // --- Endpoint 4: leads/oportunidades ---
+  app.get("/api/integrations/intelligence/opportunities", authIntel, (req, res) => {
+    garantirCRM();
+    const idx = _idxTelefone();
+    const preparados = (db.oficial.crmLeads || []).map((l) => {
+      const tel8 = String(l.telefone || "").replace(/\D/g, "").slice(-8);
+      const chat = tel8 && tel8.length >= 8 ? idx[tel8] : null;
+      const it = _interacoes(chat);
+      const mk = _marcosLead(l);
+      const v = l.vendedorId ? (db.users || []).find((u) => u.id === l.vendedorId) : null;
+      const eName = (etapasCRM().find((e) => e.k === l.etapa) || {}).lb || null;
+      const utms = _utmsLead(l) || {};
+      const telDig = String(l.telefone || "").replace(/\D/g, "");
+      const ddi = (telDig.length >= 12 && telDig.startsWith("55")) ? "55" : null; // derivado do próprio número, sem inventar
+      const temLigacao = (Array.isArray(l.historico) ? l.historico : []).some((h) => h.tipo === "ligacao");
+      const canalAtend = chat ? (chat.canal === "instagram" ? "instagram" : "whatsapp") : (temLigacao ? "ligacao" : null);
+      return {
+        _id: l.id, _ord: l.atualizadoEm || l.criadoEm || 0, _cursor: (l.atualizadoEm || l.criadoEm || 0) + ":" + l.id,
+        unidade: _uni(),
+        lead_id: String(l.id),
+        nome: l.nome || null, email: l.email || null, telefone: l.telefone || null, telefone_ddi: ddi,
+        lista_id: l.reservaId ? String(l.reservaId) : (Array.isArray(l.reservaIds) && l.reservaIds[0] ? String(l.reservaIds[0]) : null),
+        lista_ids: Array.isArray(l.reservaIds) && l.reservaIds.length ? l.reservaIds.map(String) : (l.reservaId ? [String(l.reservaId)] : []),
+        vendedor_id: l.vendedorId ? String(l.vendedorId) : null,
+        vendedor_nome: v ? v.nome : null,
+        etapa_id: l.etapa || null, etapa_nome: eName,
+        created_at: _iso(l.criadoEm), updated_at: _iso(l.atualizadoEm),
+        assigned_at: _iso(mk.assigned || (chat && chat.atribuidoEm) || null),
+        first_human_interaction_at: _iso(it.humano),
+        first_customer_reply_at: _iso(it.cliente),
+        last_interaction_at: _iso(it.ultima),
+        atendimento_chat_id: chat ? String(chat.id || chat.chaveId || "") || null : null,
+        primeiro_atendimento_canal: canalAtend,
+        qualified_at: _iso(mk.qualified),
+        lost_at: _iso(mk.lost),
+        loss_reason: l.motivoPerda || null,
+        crm_won_at: _iso(mk.won),
+        recorrente: !!l.recorrente,
+        ultima_captacao_at: _iso(l.ultimaCaptacaoEm),
+        origem: l.origem || null,
+        utm_source: utms.utm_source || null, utm_medium: utms.utm_medium || null,
+        utm_campaign: utms.utm_campaign || null, utm_content: utms.utm_content || null, utm_term: utms.utm_term || null,
+      };
+    });
+    const _r = _paginar(preparados, req); return _respPag(res, _r, { unidade: _uni() });
+  });
+
+  // --- Endpoint 5: histórico das etapas ---
+  app.get("/api/integrations/intelligence/stage-events", authIntel, (req, res) => {
+    garantirCRM();
+    const eventos = [];
+    for (const l of (db.oficial.crmLeads || [])) {
+      let n = 0;
+      for (const h of (Array.isArray(l.historico) ? l.historico : [])) {
+        if (h.tipo !== "etapa" || !h.ts) continue;
+        const d = h.dados || {};
+        n++;
+        // prefere os dados estruturados; se não houver (registro antigo), cai pro texto
+        let toKey = d.para || null, fromKey = d.de || null, porId = d.por || null;
+        let toNome = toKey ? ((etapasCRM().find((e) => e.k === toKey) || {}).lb || toKey) : null;
+        if (!toKey) {
+          const lbl = (h.texto || "").replace(/^movido para\s+/i, "").split(" pela lista ")[0].trim();
+          const to = etapasCRM().find((e) => (e.lb || "").toLowerCase() === lbl.toLowerCase());
+          toKey = to ? to.k : null; toNome = to ? to.lb : (lbl || null);
+        }
+        eventos.push({
+          _id: h.id || (l.id + ":" + h.ts + ":" + n), _ord: h.ts, _cursor: h.ts + ":" + l.id + ":" + n,
+          unidade: _uni(), event_id: String(h.id || (l.id + "_" + h.ts + "_" + n)),
+          lead_id: String(l.id), from_stage_id: fromKey, to_stage_id: toKey, to_stage_nome: toNome,
+          changed_at: _iso(h.ts), changed_by_id: porId ? String(porId) : null,
+          automatico: d.auto !== undefined ? !!d.auto : null,
+        });
+      }
+    }
+    const _r = _paginar(eventos, req); return _respPag(res, _r, { unidade: _uni() });
+  });
+
+  // --- Endpoint 6: distribuição/redistribuição ---
+  app.get("/api/integrations/intelligence/assignment-events", authIntel, (req, res) => {
+    garantirCRM();
+    const eventos = [];
+    for (const l of (db.oficial.crmLeads || [])) {
+      let n = 0;
+      for (const h of (Array.isArray(l.historico) ? l.historico : [])) {
+        if (h.tipo !== "atribuido" || !h.ts) continue;
+        n++;
+        const d = h.dados || {};
+        let toId = d.para || null, deId = d.de || null, porId = d.por || null;
+        let redistribuido = d.redistribuido !== undefined ? !!d.redistribuido : /redistribu/i.test(h.texto || "");
+        const auto = d.auto !== undefined ? !!d.auto : false;
+        const lote = d.lote !== undefined ? !!d.lote : false;
+        let toNome = toId ? ((db.users || []).find((x) => x.id === toId) || {}).nome || null : null;
+        if (!toId) { // registro antigo: acha pelo nome citado no texto
+          const m = (h.texto || "").match(/(?:para|a)\s+(.+?)(?:\s+\(|$)/i);
+          const nome = m ? m[1].trim() : null;
+          const u = nome ? (db.users || []).find((x) => x.nome && x.nome.toLowerCase() === nome.toLowerCase()) : null;
+          toId = u ? u.id : null; toNome = nome;
+        }
+        const deNome = deId ? (((db.users || []).find((x) => x.id === deId) || {}).nome || null) : null;
+        eventos.push({
+          _id: h.id || (l.id + ":" + h.ts + ":" + n), _ord: h.ts, _cursor: h.ts + ":" + l.id + ":" + n,
+          unidade: _uni(), event_id: String(h.id || (l.id + "_" + h.ts + "_" + n)),
+          lead_id: String(l.id),
+          to_seller_id: toId ? String(toId) : null, to_seller_nome: toNome,
+          from_seller_id: deId ? String(deId) : null, from_seller_nome: deNome,
+          changed_by_id: porId ? String(porId) : null,
+          automatico: auto, em_lote: lote, redistribuido,
+          assigned_at: _iso(h.ts),
+        });
+      }
+    }
+    const _r = _paginar(eventos, req); return _respPag(res, _r, { unidade: _uni() });
+  });
+
+  // ============================================================
+  // INTEGRAÇÃO ATENDE SIMPLES (ligação): config, botão ligar (fila),
+  // sincronizar ligações (CDRs -> histórico do lead) e pré-chamada.
+  // ============================================================
+  const ATENDE_BASE = "https://api.atendesimples.com";
+  function cfgAtende() { garantirEstrutura(); return db.oficial.atende || {}; }
+  const _soDig = (t) => String(t || "").replace(/\D/g, "");
+
+  // config (gerente) — lê e grava as chaves globais
+  app.get("/api/oficial/atende", auth, gerenteOnly, (req, res) => {
+    const a = cfgAtende();
+    res.json({
+      apiKey: a.apiKey || "", userId: a.userId || "", queueId: a.queueId || "", queueToken: a.queueToken || "", dialerToken: a.dialerToken || "", voipToken: a.voipToken || "",
+      ativo: !!a.ativo, ultimoSync: a.ultimoSync || 0,
+      // ramais/emails por vendedor, pra tela de config
+      vendedores: (db.users || []).filter((u) => u.role === "vendedor" || u.role === "gerente").map((u) => ({ id: u.id, nome: u.nome, atendeEmail: u.atendeEmail || "", atendeRamal: u.atendeRamal || "" })),
+    });
+  });
+  app.put("/api/oficial/atende", auth, gerenteOnly, (req, res) => {
+    garantirEstrutura();
+    const b = req.body || {};
+    const a = db.oficial.atende;
+    if (b.apiKey !== undefined) a.apiKey = String(b.apiKey).trim();
+    if (b.userId !== undefined) a.userId = String(b.userId).trim();
+    if (b.queueId !== undefined) a.queueId = String(b.queueId).trim();
+    if (b.queueToken !== undefined) a.queueToken = String(b.queueToken).trim();
+    if (b.dialerToken !== undefined) a.dialerToken = String(b.dialerToken).trim();
+    if (b.voipToken !== undefined) a.voipToken = String(b.voipToken).trim();
+    if (b.ativo !== undefined) a.ativo = !!b.ativo;
+    // ramais/emails por vendedor
+    if (Array.isArray(b.vendedores)) {
+      for (const v of b.vendedores) {
+        const u = (db.users || []).find((x) => x.id === v.id);
+        if (u) { if (v.atendeEmail !== undefined) u.atendeEmail = String(v.atendeEmail || "").trim(); if (v.atendeRamal !== undefined) u.atendeRamal = String(v.atendeRamal || "").trim(); }
+      }
+    }
+    salvar();
+    res.json({ ok: true });
+  });
+
+  // Botão "Ligar agora": chama DIRETO o ramal do vendedor e liga pro cliente (API Discador).
+  // Toca no ramal do próprio vendedor logado e disca pro número do lead.
+  app.post("/api/oficial/atende/ligar", auth, permiteVend("crm"), async (req, res) => {
+    const a = cfgAtende();
+    if (!a.ativo) return res.status(400).json({ error: "Integração do Atende Simples está desligada" });
+    if (!a.dialerToken) return res.status(400).json({ error: "Configure o token do discador (na tela do Atende Simples) em Configurações" });
+    // acha o vendedor que está ligando (o usuário logado) e o email/ramal dele no Atende
+    const u = (db.users || []).find((x) => x.id === req.user.id) || {};
+    const email = (u.atendeEmail || "").trim();
+    const ramal = (u.atendeRamal || "").trim();
+    if (!email && !ramal) return res.status(400).json({ error: "Seu ramal/e-mail no Atende Simples não está configurado. Peça pro gerente preencher em Configurações → Atende Simples." });
+    const telefone = _soDig(req.body && req.body.telefone);
+    if (telefone.length < 10) return res.status(400).json({ error: "Telefone inválido" });
+    // formato preferido: 55 + DDD + número
+    const numeroCliente = (telefone.length >= 12 && telefone.startsWith("55")) ? telefone : ("55" + telefone);
+    const dial = { attendant_email: email || undefined, customer_info: (req.body && req.body.leadId) ? ("Lead " + req.body.leadId) : "CRM", client: { phones: [{ name: (req.body && req.body.nome) || "", number: numeroCliente, type: "2" }] } };
+    if (ramal) dial.extension_number = Number(ramal) || ramal;
+    try {
+      const r = await fetch("https://dialer.atendesimples.com/", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ dialer: { dials: [dial] }, token: a.dialerToken }),
+      });
+      if (!r.ok) { const t = await r.text().catch(() => ""); return res.status(502).json({ error: "Atende Simples recusou (" + r.status + "): " + t.slice(0, 200) }); }
+      // registra no histórico do lead
+      const leadId = req.body && req.body.leadId;
+      if (leadId) { const l = (db.oficial.crmLeads || []).find((x) => x.id === leadId); if (l) { l.historico = l.historico || []; l.historico.push({ tipo: "ligacao", texto: "📞 Ligação iniciada" + (u.nome ? " por " + u.nome : ""), ts: Date.now(), dados: { direcao: "saida", porId: (req.user && req.user.id) || null } }); l.atualizadoEm = Date.now(); salvar(); } }
+      res.json({ ok: true, mensagem: "Ligação sendo realizada — atenda no seu ramal do Atende" });
+    } catch (e) { res.status(502).json({ error: "Falha ao falar com o Atende Simples: " + e.message }); }
+  });
+
+  // TESTE de ligação (gerente): usa os dados enviados no corpo (o que está DIGITADO na modal,
+  // mesmo antes de salvar) e faz a chamada crua ao Discador, devolvendo status + resposta do Atende
+  // pra diagnosticar token/ramal/email/bloqueio sem precisar de lead nem de curl.
+  app.post("/api/oficial/atende/testar", auth, gerenteOnly, async (req, res) => {
+    const b = req.body || {};
+    const dialerToken = String((b.dialerToken != null ? b.dialerToken : (cfgAtende().dialerToken || ""))).trim();
+    const email = String(b.email || "").trim();
+    const ramal = String(b.ramal || "").trim();
+    const telefone = _soDig(b.telefone);
+    if (!dialerToken) return res.json({ ok: false, etapa: "config", diagnostico: "Sem token do discador. Cole o token (API Discador) no campo e teste de novo." });
+    if (!email && !ramal) return res.json({ ok: false, etapa: "config", diagnostico: "Informe o e-mail e/ou o ramal do atendente no Atende pra testar." });
+    if (telefone.length < 10) return res.json({ ok: false, etapa: "config", diagnostico: "Informe um telefone de teste válido (com DDD)." });
+    const numeroCliente = (telefone.length >= 12 && telefone.startsWith("55")) ? telefone : ("55" + telefone);
+    const dial = { attendant_email: email || undefined, customer_info: "Teste CRM", client: { phones: [{ name: "Teste CRM", number: numeroCliente, type: "2" }] } };
+    if (ramal) dial.extension_number = Number(ramal) || ramal;
+    const payloadEnviado = { dialer: { dials: [dial] }, token: dialerToken.slice(0, 6) + "…(" + dialerToken.length + " chars)" };
+    try {
+      const r = await fetch("https://dialer.atendesimples.com/", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ dialer: { dials: [dial] }, token: dialerToken }),
+      });
+      const corpo = await r.text().catch(() => "");
+      let diagnostico = "";
+      if (r.ok) diagnostico = "✅ O Atende ACEITOU a chamada. Atenda no ramal/softphone (voip.atendesimples.com precisa estar logado com este e-mail).";
+      else if (r.status === 401) diagnostico = "❌ 401 — token do discador incorreto ou não pertence a esta conta/usuário. Confirme o token (API Discador) com o suporte do Atende.";
+      else if (r.status === 402 || /bloquead|mensalidade|pagamento|vencid/i.test(corpo)) diagnostico = "❌ Conta bloqueada / pagamento pendente no Atende.";
+      else if (r.status === 403) diagnostico = "❌ 403 — sem permissão. A API do Discador pode não estar habilitada nesta conta.";
+      else diagnostico = "❌ O Atende recusou (HTTP " + r.status + ").";
+      res.json({ ok: r.ok, status: r.status, resposta: (corpo || "").slice(0, 500), enviado: payloadEnviado, diagnostico });
+    } catch (e) {
+      res.json({ ok: false, etapa: "rede", diagnostico: "Falha de rede ao falar com o Atende: " + e.message });
+    }
+  });
+
+  // Sincroniza as ligações (CDRs) do Atende e grava no histórico do lead certo
+  async function sincronizarLigacoesAtende(desdeMs) {
+    const a = cfgAtende();
+    if (!a.ativo || !a.apiKey) return { erro: "integração desligada ou sem chave" };
+    const ini = new Date(desdeMs || (a.ultimoSync || (Date.now() - 24 * 3600 * 1000)));
+    const fim = new Date();
+    const fmt = (d) => d.toISOString().slice(0, 16); // YYYY-MM-DDTHH:mm
+    const url = ATENDE_BASE + "/customers/cdrs/logs?start_at=" + encodeURIComponent(fmt(ini)) + "&end_at=" + encodeURIComponent(fmt(fim)) + "&size=1000";
+    const r = await fetch(url, { headers: { "x-api-key": a.apiKey } });
+    if (!r.ok) return { erro: "CDR " + r.status };
+    const data = await r.json().catch(() => ({}));
+    const itens = Array.isArray(data.items) ? data.items : [];
+    // índice telefone(8) -> lead
+    const idx = {};
+    for (const l of (db.oficial.crmLeads || [])) { const t = _soDig(l.telefone).slice(-8); if (t.length >= 8 && !idx[t]) idx[t] = l; }
+    let gravadas = 0;
+    const vistas = new Set(a.callsVistas || []);
+    for (const it of itens) {
+      const callid = String(it.callid || it.call_id || "");
+      if (!callid || vistas.has(callid)) continue;
+      const numero = _soDig(it.ani || it.customer_phone || it.alt_dnis).slice(-8);
+      const lead = numero.length >= 8 ? idx[numero] : null;
+      if (lead) {
+        const dur = it.duration_call || it.ori_billing_time || it.uraduration || 0;
+        const status = it.call_status || "";
+        const dir = it.direction === "outbound" ? "saída" : "entrante";
+        const stMap = { answered: "atendida", failed: "falhou", missed: "perdida", handled: "atendida", abandoned: "abandonada" };
+        const quando = it.ori_start_time ? Date.parse(it.ori_start_time) : Date.now();
+        lead.historico = lead.historico || [];
+        lead.historico.push({ tipo: "ligacao", texto: "📞 Ligação " + dir + " · " + (stMap[status] || status || "—") + (dur ? " · " + dur + "s" : ""), ts: quando || Date.now(), dados: { direcao: dir, status, duracao: dur, callid, vendedorNome: (it.redirects && it.redirects[0] && it.redirects[0].user_name) || null, audioUrl: it.public_audio_url || null } });
+        lead.atualizadoEm = Date.now();
+        gravadas++;
+      }
+      vistas.add(callid);
+    }
+    a.callsVistas = Array.from(vistas).slice(-5000); // não crescer pra sempre
+    a.ultimoSync = Date.now();
+    salvar();
+    return { ok: true, total: itens.length, gravadas };
+  }
+  // botão "sincronizar agora" (gerente)
+  app.post("/api/oficial/atende/sincronizar", auth, gerenteOnly, async (req, res) => {
+    try { const desde = req.body && req.body.desde ? Number(req.body.desde) : null; const r = await sincronizarLigacoesAtende(desde); if (r.erro) return res.status(502).json({ error: r.erro }); res.json(r); }
+    catch (e) { res.status(502).json({ error: e.message }); }
+  });
+
+  // Pré-chamada: o Atende chama ISSO quando entra uma ligação. Identifica o lead pelo número.
+  app.post("/api/oficial/atende/pre-chamada", async (req, res) => {
+    try {
+      garantirEstrutura();
+      const ic = (req.body && req.body.incoming_call) || {};
+      const ani = _soDig(ic.ani).slice(-8);
+      const lead = ani.length >= 8 ? (db.oficial.crmLeads || []).find((l) => _soDig(l.telefone).slice(-8) === ani) : null;
+      if (lead) { lead.historico = lead.historico || []; lead.historico.push({ tipo: "ligacao", texto: "📞 Ligação recebida (tocando)", ts: Date.now(), dados: { direcao: "entrante", callid: String(ic.call_id || ""), tocando: true } }); lead.atualizadoEm = Date.now(); salvar(); }
+      // responde no formato do Atende (sem prompt/option = segue o fluxo normal configurado)
+      res.json({ incoming_call: { action: {} } });
+    } catch (e) { res.json({ incoming_call: { action: {} } }); }
+  });
+
+  // Webhook do Atende: recebe eventos de chamada (call.finished etc.) e registra no histórico do lead.
+  // Configure no Atende (Integrações → Webhooks) apontando pra: <URL do CRM>/api/oficial/atende/webhook
+  app.post("/api/oficial/atende/webhook", async (req, res) => {
+    try {
+      garantirEstrutura();
+      const b = req.body || {};
+      const ev = b.event_code || "";
+      const call = b.call || {};
+      // só registramos quando a chamada TERMINA (tem duração/resultado)
+      if (ev === "call.finished" || ev === "call.b_leg_answered" || ev === "call.a_leg_answered") {
+        const numero = _soDig(call.from_number || call.client_number || call.dnis).slice(-8);
+        const lead = numero.length >= 8 ? (db.oficial.crmLeads || []).find((l) => _soDig(l.telefone).slice(-8) === numero) : null;
+        if (lead && ev === "call.finished") {
+          const callid = String(call.call_id || "");
+          const a = cfgAtende(); const vistas = new Set(a.callsVistas || []);
+          if (!callid || !vistas.has(callid)) { // idempotente
+            const dur = call.inbound_duration || call.billed_duration || 0;
+            const dir = call.direction === "outbound" ? "saída" : "entrante";
+            const atendida = call.status === "answered" || (call.outbound_calls && call.outbound_calls.length);
+            const vendedor = (call.outbound_calls && call.outbound_calls[0] && call.outbound_calls[0].name) || call.attendant_name || null;
+            lead.historico = lead.historico || [];
+            lead.historico.push({ tipo: "ligacao", texto: "📞 Ligação " + dir + " · " + (atendida ? "atendida" : "não atendida") + (dur ? " · " + Math.round(Number(dur)) + "s" : ""), ts: call.started_at ? Date.parse(call.started_at) : Date.now(), dados: { direcao: dir, status: call.status || null, duracao: dur, callid, vendedorNome: vendedor, audioUrl: call.audio_url || null } });
+            lead.atualizadoEm = Date.now();
+            if (callid) { vistas.add(callid); a.callsVistas = Array.from(vistas).slice(-5000); }
+            salvar();
+          }
+        }
+      }
+      res.json({ ok: true });
+    } catch (e) { res.json({ ok: true }); }
+  });
+
+  return { garantirEstrutura };
+}
