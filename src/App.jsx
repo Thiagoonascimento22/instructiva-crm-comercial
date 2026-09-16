@@ -450,7 +450,7 @@ export default function App() {
             <span>{theme === "dark" ? "Modo claro" : "Modo escuro"}</span>
           </button>
           <button className="logout" onClick={logout}>Sair</button>
-          <div style={{ textAlign: "center", fontSize: 10, color: "var(--muted)", marginTop: 8, opacity: 0.7 }}>v254 · 16/09 10h45</div>
+          <div style={{ textAlign: "center", fontSize: 10, color: "var(--muted)", marginTop: 8, opacity: 0.7 }}>v256 · 16/09 12h20</div>
         </div>
       </aside>
 
@@ -8523,12 +8523,17 @@ function PainelAtende({ showToast }) {
         {configurado
           ? <p className="onum-webhook-intro">Integração ativa ✅ — o botão <b>📞 Ligar</b> aparece nas conversas e as ligações entram no <b>histórico do lead</b>.</p>
           : <p className="onum-webhook-intro">Conecte o Atende Simples pra <b>ligar de dentro da conversa</b> e registrar as ligações no histórico do lead.</p>}
+        {cfg && !configurado && (cfg.dialerToken || cfg.ativo) && (
+          <p style={{ fontSize: 12, color: "#b45309", background: "#fffbeb", border: "1px solid #fde68a", borderRadius: 8, padding: "6px 10px", margin: "6px 0" }}>
+            {!cfg.dialerToken ? "⚠️ Falta colar o token do discador (clique em Configurar e salve)." : !cfg.ativo ? "⚠️ Falta marcar \"Integração ativa\" (clique em Configurar, marque e salve)." : ""}
+          </p>
+        )}
         <p className="onum-webhook-fim">Cole o <b>token do discador</b> (peça ao suporte do Atende: token da <b>API Discador</b>, endpoint dialer.atendesimples.com) e preencha o <b>e-mail/ramal</b> de cada vendedor. O vendedor precisa estar <b>logado e disponível</b> no voip.atendesimples.com pra ligar.</p>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
           <button className="onum-btn-save" onClick={() => setForm({ apiKey: (cfg && cfg.apiKey) || "", dialerToken: (cfg && cfg.dialerToken) || "", userId: (cfg && cfg.userId) || "", queueId: (cfg && cfg.queueId) || "", queueToken: (cfg && cfg.queueToken) || "", voipToken: (cfg && cfg.voipToken) || "", ativo: cfg ? !!cfg.ativo : true, vendedores: (cfg && cfg.vendedores) ? cfg.vendedores.map((v) => ({ ...v })) : [] })}>
             {configurado ? "Editar Atende Simples" : "Configurar Atende Simples"}
           </button>
-          {configurado && cfg.ativo && <button className="btn" onClick={sincronizar} disabled={sincronizando}>{sincronizando ? "Sincronizando…" : "↻ Sincronizar ligações agora"}</button>}
+          {cfg && cfg.dialerToken && <button className="btn" onClick={sincronizar} disabled={sincronizando}>{sincronizando ? "Sincronizando…" : "↻ Sincronizar ligações agora"}</button>}
         </div>
       </div>
       {form && (
