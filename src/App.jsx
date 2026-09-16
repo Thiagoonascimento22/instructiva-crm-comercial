@@ -8487,7 +8487,7 @@ function PainelAtende({ showToast }) {
   const [testeRes, setTesteRes] = useState(null);
   const carregar = () => api.ofAtendeCfg().then(setCfg).catch(() => {});
   useEffect(() => { carregar(); }, []);
-  const configurado = cfg && cfg.apiKey && cfg.userId && cfg.queueId && cfg.queueToken;
+  const configurado = cfg && cfg.dialerToken && cfg.ativo;
   async function salvar() {
     setSalvando(true);
     try { await api.ofAtendeSalvar(form); showToast("✓ Atende Simples salvo"); setForm(null); carregar(); }
@@ -8520,9 +8520,9 @@ function PainelAtende({ showToast }) {
           </span>
         </div>
         {configurado
-          ? <p className="onum-webhook-intro">Credenciais salvas ✅ — o botão <b>📞 Ligar</b> aparece nas conversas e as ligações entram no <b>histórico do lead</b>.</p>
+          ? <p className="onum-webhook-intro">Integração ativa ✅ — o botão <b>📞 Ligar</b> aparece nas conversas e as ligações entram no <b>histórico do lead</b>.</p>
           : <p className="onum-webhook-intro">Conecte o Atende Simples pra <b>ligar de dentro da conversa</b> e registrar as ligações no histórico do lead.</p>}
-        <p className="onum-webhook-fim">Pegue as chaves no Atende: a <b>x-api-key</b> em Opções da conta → Configuração de Acesso à API; e o <b>user-id / queue-id / token</b> em Discador → Discador por Fila → Importar fichas.</p>
+        <p className="onum-webhook-fim">Cole o <b>token do discador</b> (peça ao suporte do Atende: token da <b>API Discador</b>, endpoint dialer.atendesimples.com) e preencha o <b>e-mail/ramal</b> de cada vendedor. O vendedor precisa estar <b>logado e disponível</b> no voip.atendesimples.com pra ligar.</p>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
           <button className="onum-btn-save" onClick={() => setForm({ apiKey: (cfg && cfg.apiKey) || "", dialerToken: (cfg && cfg.dialerToken) || "", userId: (cfg && cfg.userId) || "", queueId: (cfg && cfg.queueId) || "", queueToken: (cfg && cfg.queueToken) || "", voipToken: (cfg && cfg.voipToken) || "", ativo: cfg ? !!cfg.ativo : true, vendedores: (cfg && cfg.vendedores) ? cfg.vendedores.map((v) => ({ ...v })) : [] })}>
             {configurado ? "Editar Atende Simples" : "Configurar Atende Simples"}
@@ -8558,14 +8558,17 @@ function PainelAtende({ showToast }) {
               <input type="checkbox" checked={form.ativo} onChange={(e) => setForm({ ...form, ativo: e.target.checked })} /> Integração ativa
             </label>
             {form.vendedores && form.vendedores.length > 0 && (
-              <div style={{ marginTop: 6 }}>
-                <label className="lbl-mini">Ramal / e-mail de cada vendedor no Atende (opcional)</label>
-                <div style={{ maxHeight: 200, overflowY: "auto", border: "1px solid var(--line)", borderRadius: 10, padding: 8, display: "flex", flexDirection: "column", gap: 8 }}>
+              <div style={{ marginTop: 10 }}>
+                <label className="lbl-mini" style={{ fontWeight: 700 }}>Ramal / e-mail de cada vendedor no Atende</label>
+                <p style={{ fontSize: 11.5, color: "var(--muted)", margin: "2px 0 8px" }}>Use o mesmo e-mail com que o vendedor faz login no Atende. Só quem tiver e-mail/ramal aqui consegue ligar.</p>
+                <div style={{ maxHeight: 260, overflowY: "auto", display: "flex", flexDirection: "column", gap: 8, paddingRight: 4 }}>
                   {form.vendedores.map((v, i) => (
-                    <div key={v.id} style={{ display: "grid", gridTemplateColumns: "1fr 1.4fr 70px", gap: 6, alignItems: "center" }}>
-                      <span style={{ fontSize: 12.5, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{v.nome}</span>
-                      <input className="input" style={{ padding: "6px 8px", fontSize: 12.5 }} value={v.atendeEmail} placeholder="email no Atende" onChange={(e) => { const arr = form.vendedores.slice(); arr[i] = { ...v, atendeEmail: e.target.value }; setForm({ ...form, vendedores: arr }); }} />
-                      <input className="input" style={{ padding: "6px 8px", fontSize: 12.5 }} value={v.atendeRamal} placeholder="ramal" onChange={(e) => { const arr = form.vendedores.slice(); arr[i] = { ...v, atendeRamal: e.target.value }; setForm({ ...form, vendedores: arr }); }} />
+                    <div key={v.id} style={{ border: "1px solid var(--line)", borderRadius: 10, padding: "8px 10px", background: "var(--card2, #f9fafb)" }}>
+                      <div style={{ fontSize: 12.5, fontWeight: 700, marginBottom: 6, color: "var(--txt)" }}>{v.nome}</div>
+                      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                        <input className="input" style={{ flex: "1 1 200px", minWidth: 0, padding: "8px 10px", fontSize: 13 }} value={v.atendeEmail} placeholder="e-mail no Atende" onChange={(e) => { const arr = form.vendedores.slice(); arr[i] = { ...v, atendeEmail: e.target.value }; setForm({ ...form, vendedores: arr }); }} />
+                        <input className="input" style={{ flex: "0 0 90px", width: 90, padding: "8px 10px", fontSize: 13, textAlign: "center" }} value={v.atendeRamal} placeholder="ramal" onChange={(e) => { const arr = form.vendedores.slice(); arr[i] = { ...v, atendeRamal: e.target.value }; setForm({ ...form, vendedores: arr }); }} />
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -9241,12 +9244,22 @@ function InboxOficial({ isGer, ehLider, showToast, onIrParaEvolution, target, on
   const [conversa, setConversa] = useState(null);
   const [baixandoConvPdf, setBaixandoConvPdf] = useState(false);
   const [ligando, setLigando] = useState(false);
+  const [chamada, setChamada] = useState(null); // {nome, numero, inicio} quando o Atende aceitou
+  const [cronometro, setCronometro] = useState(0);
+  useEffect(() => {
+    if (!chamada) return;
+    setCronometro(0);
+    const t = setInterval(() => setCronometro((s) => s + 1), 1000);
+    return () => clearInterval(t);
+  }, [chamada]);
+  const fmtTempo = (s) => String(Math.floor(s / 60)).padStart(2, "0") + ":" + String(s % 60).padStart(2, "0");
   async function ligarAtende() {
     if (!conversa || ligando) return;
     setLigando(true);
     try {
       const r = await api.ofAtendeLigar({ telefone: conversa.numero, nome: conversa.nome, leadId: conversa.leadId || conversa.id });
-      showToast("📞 " + (r.mensagem || "Número colocado na fila de ligação"));
+      // Atende aceitou a chamada — abre a tela de "chamando" com cronômetro
+      setChamada({ nome: conversa.nome || conversa.numero, numero: conversa.numero, mensagem: r.mensagem || "" });
     } catch (e) {
       showToast("✗ " + e.message);
     } finally { setLigando(false); }
@@ -9830,9 +9843,28 @@ function InboxOficial({ isGer, ehLider, showToast, onIrParaEvolution, target, on
                     <I.pipe className="ico" /> Pipeline
                   </button>
                 )}
-                <button className="of-acao-btn" title="Ligar para este lead (coloca na fila do discador)" disabled={ligando} onClick={ligarAtende}>
+                <button className="of-acao-btn" title="Ligar para este lead pelo Atende Simples" disabled={ligando} onClick={ligarAtende}>
                   {ligando ? <span className="spin" /> : "📞"} Ligar
                 </button>
+                {chamada && (
+                  <Portal>
+                    <div className="modal" onClick={(e) => e.target === e.currentTarget && setChamada(null)}>
+                      <div className="onum-modal" style={{ maxWidth: 360, textAlign: "center", padding: 28 }}>
+                        <div style={{ width: 72, height: 72, borderRadius: "50%", background: "#25A06B", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 14px", animation: "callPulse 1.4s ease-in-out infinite" }}>
+                          <span style={{ fontSize: 32 }}>📞</span>
+                        </div>
+                        <div style={{ fontSize: 13, color: "var(--muted)", fontWeight: 600, letterSpacing: 0.4, textTransform: "uppercase" }}>Ligando…</div>
+                        <div style={{ fontSize: 18, fontWeight: 700, margin: "4px 0 2px", color: "var(--txt)" }}>{chamada.nome}</div>
+                        <div style={{ fontSize: 13, color: "var(--muted)" }}>{chamada.numero}</div>
+                        <div style={{ fontSize: 34, fontWeight: 800, fontVariantNumeric: "tabular-nums", margin: "14px 0", color: "#25A06B" }}>{fmtTempo(cronometro)}</div>
+                        <p style={{ fontSize: 12.5, color: "var(--muted)", margin: "0 0 16px", lineHeight: 1.5 }}>
+                          Atenda no seu <b>ramal / softphone do Atende</b>. Quando a chamada terminar, a duração real e o horário entram no histórico do lead.
+                        </p>
+                        <button className="btn btn-primary" style={{ width: "100%" }} onClick={() => setChamada(null)}>Fechar</button>
+                      </div>
+                    </div>
+                  </Portal>
+                )}
                 <button className="of-acao-btn venda" title="Registrar uma venda deste cliente" onClick={() => setRegVenda(true)}>
                   <I.gauge className="ico" /> Registrar venda
                 </button>
