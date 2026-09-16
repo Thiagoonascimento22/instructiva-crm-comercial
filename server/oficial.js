@@ -5322,6 +5322,13 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
     catch (e) { res.status(502).json({ error: e.message }); }
   });
 
+  // Sincronização automática disparada ao DESLIGAR uma ligação (qualquer vendedor com CRM pode chamar).
+  // Puxa só as ligações das últimas ~2h pra achar a que acabou de terminar e gravar no histórico do lead.
+  app.post("/api/oficial/atende/sincronizar-auto", auth, permiteVend("crm"), async (req, res) => {
+    try { const desde = Date.now() - 2 * 3600 * 1000; const r = await sincronizarLigacoesAtende(desde); if (r.erro) return res.status(200).json({ ok: false, erro: r.erro }); res.json(r); }
+    catch (e) { res.status(200).json({ ok: false, erro: e.message }); }
+  });
+
   // Pré-chamada: o Atende chama ISSO quando entra uma ligação. Identifica o lead pelo número.
   app.post("/api/oficial/atende/pre-chamada", async (req, res) => {
     try {

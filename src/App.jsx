@@ -450,7 +450,7 @@ export default function App() {
             <span>{theme === "dark" ? "Modo claro" : "Modo escuro"}</span>
           </button>
           <button className="logout" onClick={logout}>Sair</button>
-          <div style={{ textAlign: "center", fontSize: 10, color: "var(--muted)", marginTop: 8, opacity: 0.7 }}>v256 · 16/09 12h20</div>
+          <div style={{ textAlign: "center", fontSize: 10, color: "var(--muted)", marginTop: 8, opacity: 0.7 }}>v257 · 16/09 12h40</div>
         </div>
       </aside>
 
@@ -9270,6 +9270,12 @@ function InboxOficial({ isGer, ehLider, showToast, onIrParaEvolution, target, on
       showToast("✗ " + e.message);
     } finally { setLigando(false); }
   }
+  async function encerrarChamada() {
+    setChamada(null);
+    // ao desligar, puxa a ligação recém-feita do Atende pro histórico do lead (sem precisar clicar em sincronizar).
+    // aguarda uns segundos pro CDR ficar disponível no Atende; o auto-refresh da conversa (6s) mostra a ligação.
+    setTimeout(async () => { try { await api.ofAtendeSincronizarAuto(); } catch (_) {} }, 5000);
+  }
   async function exportarConversaPDF() {
     if (!conversa) return;
     setBaixandoConvPdf(true);
@@ -9854,20 +9860,20 @@ function InboxOficial({ isGer, ehLider, showToast, onIrParaEvolution, target, on
                 </button>
                 {chamada && (
                   <Portal>
-                    <div className="modal" onClick={(e) => e.target === e.currentTarget && setChamada(null)}>
-                      <div className="onum-modal" style={{ maxWidth: 360, textAlign: "center", padding: 28 }}>
-                        <div style={{ width: 72, height: 72, borderRadius: "50%", background: "#25A06B", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 14px", animation: "callPulse 1.4s ease-in-out infinite" }}>
-                          <span style={{ fontSize: 32 }}>📞</span>
+                    <div style={{ position: "fixed", bottom: 24, right: 24, zIndex: 9999, width: 300, background: "var(--card, #fff)", borderRadius: 16, boxShadow: "0 12px 40px rgba(0,0,0,0.25)", border: "1px solid var(--line)", overflow: "hidden", animation: "slideUp 0.25s ease" }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "14px 16px" }}>
+                        <div style={{ width: 44, height: 44, borderRadius: "50%", background: "#25A06B", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, animation: "callPulse 1.4s ease-in-out infinite" }}>
+                          <span style={{ fontSize: 20 }}>📞</span>
                         </div>
-                        <div style={{ fontSize: 13, color: "var(--muted)", fontWeight: 600, letterSpacing: 0.4, textTransform: "uppercase" }}>Ligando…</div>
-                        <div style={{ fontSize: 18, fontWeight: 700, margin: "4px 0 2px", color: "var(--txt)" }}>{chamada.nome}</div>
-                        <div style={{ fontSize: 13, color: "var(--muted)" }}>{chamada.numero}</div>
-                        <div style={{ fontSize: 34, fontWeight: 800, fontVariantNumeric: "tabular-nums", margin: "14px 0", color: "#25A06B" }}>{fmtTempo(cronometro)}</div>
-                        <p style={{ fontSize: 12.5, color: "var(--muted)", margin: "0 0 16px", lineHeight: 1.5 }}>
-                          Atenda no seu <b>ramal / softphone do Atende</b>. Quando a chamada terminar, a duração real e o horário entram no histórico do lead.
-                        </p>
-                        <button className="btn btn-primary" style={{ width: "100%" }} onClick={() => setChamada(null)}>Fechar</button>
+                        <div style={{ minWidth: 0, flex: 1 }}>
+                          <div style={{ fontSize: 11, color: "#25A06B", fontWeight: 700, letterSpacing: 0.4, textTransform: "uppercase" }}>Em ligação</div>
+                          <div style={{ fontSize: 14, fontWeight: 700, color: "var(--txt)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{chamada.nome}</div>
+                        </div>
+                        <div style={{ fontSize: 20, fontWeight: 800, fontVariantNumeric: "tabular-nums", color: "var(--txt)", flexShrink: 0 }}>{fmtTempo(cronometro)}</div>
                       </div>
+                      <button onClick={() => encerrarChamada()} style={{ width: "100%", border: "none", background: "#ef4444", color: "#fff", fontWeight: 700, fontSize: 14, padding: "11px", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
+                        <span style={{ fontSize: 16 }}>📵</span> Desligar
+                      </button>
                     </div>
                   </Portal>
                 )}
