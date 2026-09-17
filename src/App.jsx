@@ -450,7 +450,7 @@ export default function App() {
             <span>{theme === "dark" ? "Modo claro" : "Modo escuro"}</span>
           </button>
           <button className="logout" onClick={logout}>Sair</button>
-          <div style={{ textAlign: "center", fontSize: 10, color: "var(--muted)", marginTop: 8, opacity: 0.7 }}>v267 · 16/09 16h00</div>
+          <div style={{ textAlign: "center", fontSize: 10, color: "var(--muted)", marginTop: 8, opacity: 0.7 }}>v268 · 16/09 16h20</div>
         </div>
       </aside>
 
@@ -9318,8 +9318,18 @@ function InboxOficial({ isGer, ehLider, showToast, onIrParaEvolution, target, on
     return () => clearInterval(t);
   }, [chamada]);
   const fmtTempo = (s) => String(Math.floor(s / 60)).padStart(2, "0") + ":" + String(s % 60).padStart(2, "0");
+  const [confirmarLig, setConfirmarLig] = useState(false); // popup de confirmação (estilo Vekta)
+  const [voipStatus, setVoipStatus] = useState(null); // {disponivel, tela, motivo}
+  const [checandoVoip, setChecandoVoip] = useState(false);
+  async function abrirConfirmacaoLigar() {
+    if (!conversa) return;
+    setConfirmarLig(true); setVoipStatus(null); setChecandoVoip(true);
+    try { const s = await api.ofAtendeVoipStatus(); setVoipStatus(s); } catch (_) { setVoipStatus({ disponivel: null }); }
+    finally { setChecandoVoip(false); }
+  }
   async function ligarAtende() {
     if (!conversa || ligando) return;
+    setConfirmarLig(false);
     setLigando(true);
     try {
       const r = await api.ofAtendeLigar({ telefone: conversa.numero, nome: conversa.nome, leadId: conversa.leadId || conversa.id });
@@ -9329,7 +9339,7 @@ function InboxOficial({ isGer, ehLider, showToast, onIrParaEvolution, target, on
       showToast("✗ " + e.message);
     } finally { setLigando(false); }
   }
-  async function encerrarChamada() {
+  function encerrarChamada() {
     setChamada(null);
     // uma única sincronização rápida ~15s depois (o robô do servidor, a cada 3 min, cuida do resto sozinho).
     setTimeout(async () => { try { await api.ofAtendeSincronizarAuto(); } catch (_) {} }, 15000);
@@ -9913,9 +9923,37 @@ function InboxOficial({ isGer, ehLider, showToast, onIrParaEvolution, target, on
                     <I.pipe className="ico" /> Pipeline
                   </button>
                 )}
-                <button className="of-acao-btn" title="Ligar para este lead pelo Atende Simples" disabled={ligando} onClick={ligarAtende}>
+                <button className="of-acao-btn" title="Ligar para este lead pelo Atende Simples" disabled={ligando} onClick={abrirConfirmacaoLigar}>
                   {ligando ? <span className="spin" /> : "📞"} Ligar
                 </button>
+                {confirmarLig && (
+                  <Portal>
+                    <div className="modal" onClick={(e) => e.target === e.currentTarget && setConfirmarLig(false)}>
+                      <div className="onum-modal" style={{ maxWidth: 460, padding: 24 }}>
+                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
+                          <b style={{ fontSize: 18 }}>Realizar ligação</b>
+                          <button className="crm-x" onClick={() => setConfirmarLig(false)}>✕</button>
+                        </div>
+                        <p style={{ fontSize: 13.5, color: "var(--txt)", lineHeight: 1.55, margin: "0 0 14px" }}>
+                          Antes de ligar, confirme que você está logado no <a href="https://voip.atendesimples.com" target="_blank" rel="noreferrer" style={{ color: "var(--brand)", fontWeight: 600 }}>voip.atendesimples.com ↗</a> e disponível.
+                        </p>
+                        <div style={{ padding: "12px 14px", borderRadius: 10, marginBottom: 16, fontSize: 13.5, fontWeight: 600, display: "flex", alignItems: "center", gap: 8,
+                          background: checandoVoip ? "var(--surface-2)" : voipStatus && voipStatus.disponivel === true ? "#ecfdf3" : voipStatus && voipStatus.disponivel === false ? "#fef2f2" : "#fffbeb",
+                          border: "1px solid " + (checandoVoip ? "var(--line)" : voipStatus && voipStatus.disponivel === true ? "#a7f3d0" : voipStatus && voipStatus.disponivel === false ? "#fecaca" : "#fde68a"),
+                          color: checandoVoip ? "var(--muted)" : voipStatus && voipStatus.disponivel === true ? "#065f46" : voipStatus && voipStatus.disponivel === false ? "#991b1b" : "#92400e" }}>
+                          {checandoVoip ? <><span className="spin" /> Verificando seu VoIP…</>
+                            : voipStatus && voipStatus.disponivel === true ? <>✓ Seu VoIP está disponível para realizar a ligação.</>
+                            : voipStatus && voipStatus.disponivel === false ? <>⚠️ Você aparece como desconectado no VoIP. Faça login antes de ligar.</>
+                            : <>⚠️ Confirme que você está logado no VoIP antes de ligar.</>}
+                        </div>
+                        <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
+                          <button className="btn" onClick={() => setConfirmarLig(false)}>Cancelar</button>
+                          <button className="btn btn-primary" disabled={ligando} onClick={ligarAtende}>{ligando ? "Ligando…" : "📞 Realizar ligação"}</button>
+                        </div>
+                      </div>
+                    </div>
+                  </Portal>
+                )}
                 {chamada && (
                   <Portal>
                     <div style={{ position: "fixed", bottom: 24, right: 24, zIndex: 9999, width: 300, background: "var(--card, #fff)", borderRadius: 16, boxShadow: "0 12px 40px rgba(0,0,0,0.25)", border: "1px solid var(--line)", overflow: "hidden", animation: "slideUp 0.25s ease" }}>
@@ -9929,8 +9967,8 @@ function InboxOficial({ isGer, ehLider, showToast, onIrParaEvolution, target, on
                         </div>
                         <div style={{ fontSize: 20, fontWeight: 800, fontVariantNumeric: "tabular-nums", color: "var(--txt)", flexShrink: 0 }}>{fmtTempo(cronometro)}</div>
                       </div>
-                      <button onClick={() => encerrarChamada()} style={{ width: "100%", border: "none", background: "#ef4444", color: "#fff", fontWeight: 700, fontSize: 14, padding: "11px", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
-                        <span style={{ fontSize: 16 }}>📵</span> Desligar
+                      <button onClick={() => encerrarChamada()} style={{ width: "100%", border: "none", borderTop: "1px solid var(--line)", background: "transparent", color: "var(--muted)", fontWeight: 600, fontSize: 13, padding: "10px", cursor: "pointer" }}>
+                        Fechar (a ligação continua no seu ramal)
                       </button>
                     </div>
                   </Portal>

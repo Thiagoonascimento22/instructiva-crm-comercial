@@ -5213,6 +5213,35 @@ export function instalarCanalOficial({ app, getDb, saveDB, saveSoon, proximoId, 
 
   // Botão "Ligar agora": chama DIRETO o ramal do vendedor e liga pro cliente (API Discador).
   // Toca no ramal do próprio vendedor logado e disca pro número do lead.
+  // Status do VoIP do vendedor logado — pro popup de confirmação antes de ligar (estilo Vekta).
+  // Checa a última tela do atendente nos logs do Atende: se "disconnected", está offline.
+  app.get("/api/oficial/atende/voip-status", auth, permiteVend("crm"), async (req, res) => {
+    try {
+      const a = cfgAtende();
+      const u = (db.users || []).find((x) => x.id === req.user.id) || {};
+      const email = (u.atendeEmail || "").trim();
+      if (!a.ativo || !a.apiKey) return res.json({ ok: true, disponivel: null, motivo: "integração desligada" });
+      if (!email && !(u.atendeRamal || "").trim()) return res.json({ ok: true, disponivel: null, motivo: "sem e-mail/ramal configurado" });
+      if (!email) return res.json({ ok: true, disponivel: null, motivo: "sem e-mail" });
+      const ini = new Date(Date.now() - 12 * 3600 * 1000).toISOString().slice(0, 16);
+      const fim = new Date().toISOString().slice(0, 16);
+      const url = ATENDE_BASE + "/customers/attendants/logs?start_at=" + encodeURIComponent(ini) + "&end_at=" + encodeURIComponent(fim) + "&attendant_email=" + encodeURIComponent(email) + "&size=1000";
+      const ctrl = new AbortController(); const to = setTimeout(() => ctrl.abort(), 6000); // não trava: timeout 6s
+      const r = await fetch(url, { headers: { "x-api-key": a.apiKey }, signal: ctrl.signal }).catch(() => null);
+      clearTimeout(to);
+      if (!r || !r.ok) return res.json({ ok: true, disponivel: null, motivo: "não deu pra checar agora" });
+      const data = await r.json().catch(() => ({}));
+      const itens = Array.isArray(data.items) ? data.items : [];
+      if (!itens.length) return res.json({ ok: true, disponivel: null, motivo: "sem registros recentes" });
+      // pega o log mais recente
+      itens.sort((x, y) => (Date.parse(y.timestamp || 0) || 0) - (Date.parse(x.timestamp || 0) || 0));
+      const ult = itens[0] || {};
+      const tela = (ult.screen || "").toLowerCase();
+      const offline = tela === "disconnected" || tela === "offline" || tela === "";
+      res.json({ ok: true, disponivel: !offline, tela: ult.screen_name || ult.screen || null });
+    } catch (e) { res.json({ ok: true, disponivel: null, motivo: "erro ao checar" }); }
+  });
+
   app.post("/api/oficial/atende/ligar", auth, permiteVend("crm"), async (req, res) => {
     const a = cfgAtende();
     if (!a.ativo) return res.status(400).json({ error: "Integração do Atende Simples está desligada" });

@@ -209,6 +209,7 @@ export const api = {
   ofAtendeSincronizarAuto: () => req("POST", "/api/oficial/atende/sincronizar-auto", {}),
   ofAtendeResumoLigacao: (chatId, callid) => req("POST", "/api/oficial/atende/resumo-ligacao", { chatId, callid }),
   ofAtendeDiagnostico: () => req("GET", "/api/oficial/atende/diagnostico"),
+  ofAtendeVoipStatus: () => req("GET", "/api/oficial/atende/voip-status"),
   ofAtendeTestar: (dados) => req("POST", "/api/oficial/atende/testar", dados),
   ofCrmEtapaCriar: (dados) => req("POST", "/api/oficial/crm/etapa", dados),
   ofCrmEtapaEditar: (k, dados) => req("PUT", "/api/oficial/crm/etapa/" + k, dados),
