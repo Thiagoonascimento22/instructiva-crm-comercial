@@ -450,7 +450,7 @@ export default function App() {
             <span>{theme === "dark" ? "Modo claro" : "Modo escuro"}</span>
           </button>
           <button className="logout" onClick={logout}>Sair</button>
-          <div style={{ textAlign: "center", fontSize: 10, color: "var(--muted)", marginTop: 8, opacity: 0.7 }}>v270 · 17/09 10h00</div>
+          <div style={{ textAlign: "center", fontSize: 10, color: "var(--muted)", marginTop: 8, opacity: 0.7 }}>v271 · 17/09 10h20</div>
         </div>
       </aside>
 
@@ -9332,7 +9332,7 @@ function InboxOficial({ isGer, ehLider, showToast, onIrParaEvolution, target, on
     setConfirmarLig(false);
     setLigando(true);
     try {
-      const r = await api.ofAtendeLigar({ telefone: conversa.numero, nome: conversa.nome, leadId: conversa.leadId || conversa.id });
+      const r = await api.ofAtendeLigar({ telefone: conversa.numero, nome: conversa.nome, leadId: conversa.leadId || conversa.id, chatId: conversa.id });
       // Atende aceitou a chamada — abre a tela de "chamando" com cronômetro
       setChamada({ nome: conversa.nome || conversa.numero, numero: conversa.numero, mensagem: r.mensagem || "" });
     } catch (e) {

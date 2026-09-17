@@ -5268,12 +5268,12 @@ export function instalarCanalOficial({ app, getDb, saveDB, saveSoon, proximoId, 
       // registra no histórico do lead
       const leadId = req.body && req.body.leadId;
       if (leadId) { const l = (db.oficial.crmLeads || []).find((x) => x.id === leadId); if (l) { l.historico = l.historico || []; l.historico.push({ tipo: "ligacao", texto: "📞 Ligação iniciada" + (u.nome ? " por " + u.nome : ""), ts: agora, dados: { direcao: "saida", porId: (req.user && req.user.id) || null } }); l.atualizadoEm = agora; } }
-      // registra o balão NA CONVERSA na hora (pendente) — aparece instantâneo; o sync depois completa com duração/gravação
-      const chat = acharChatPorTelefone(numeroCliente);
-      if (chat) {
-        chat.mensagens = chat.mensagens || [];
-        chat.mensagens.push({ role: "me", tipo: "ligacao", ligacao: { direcao: "saída", vendedorNome: u.nome || null, pendente: true, atendida: null, ts: agora }, ts: agora });
-        chat.atualizadoEm = agora;
+      // guarda qual CONVERSA fez a ligação agora (por ID) — o sync vai registrar o balão nela quando o CDR chegar.
+      // (não cria balão "Chamando" na hora — aparece só depois que a ligação termina)
+      const chatId = req.body && req.body.chatId;
+      if (chatId && db.waChats[chatId]) {
+        a.ligacoesPendentes = (a.ligacoesPendentes || []).filter((p) => agora - (p.ts || 0) < 3 * 3600 * 1000); // limpa antigas (3h)
+        a.ligacoesPendentes.push({ chatId, numero: _soDig(numeroCliente).slice(-8), vendedorNome: u.nome || null, ts: agora });
       }
       salvar();
       res.json({ ok: true, mensagem: "Ligação sendo realizada — atenda no seu ramal do Atende" });
@@ -5406,6 +5406,10 @@ export function instalarCanalOficial({ app, getDb, saveDB, saveSoon, proximoId, 
         if (!chat && idxChat[nu]) { chat = idxChat[nu]; numeroCasado = nu; }
         if (lead && chat) break;
       }
+      // PRIORIDADE: se essa ligação foi feita pelo botão a partir de uma conversa específica, usa ELA
+      // (evita registrar na conversa errada quando há duas conversas com o mesmo número)
+      const pend = (a.ligacoesPendentes || []).find((p) => candidatos.includes(p.numero) && Math.abs((p.ts || 0) - (quando || Date.now())) < 2 * 3600 * 1000);
+      if (pend && db.waChats[pend.chatId]) { chat = db.waChats[pend.chatId]; a.ligacoesPendentes = (a.ligacoesPendentes || []).filter((p) => p !== pend); }
       const dur = Math.round(Number(it.duration_call || it.ori_billing_time || it.uraduration || 0)) || 0;
       const status = it.call_status || "";
       const dir = it.direction === "outbound" ? "saída" : "entrante";
