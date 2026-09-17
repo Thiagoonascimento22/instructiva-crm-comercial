@@ -450,7 +450,7 @@ export default function App() {
             <span>{theme === "dark" ? "Modo claro" : "Modo escuro"}</span>
           </button>
           <button className="logout" onClick={logout}>Sair</button>
-          <div style={{ textAlign: "center", fontSize: 10, color: "var(--muted)", marginTop: 8, opacity: 0.7 }}>v269 · 17/09 09h40</div>
+          <div style={{ textAlign: "center", fontSize: 10, color: "var(--muted)", marginTop: 8, opacity: 0.7 }}>v270 · 17/09 10h00</div>
         </div>
       </aside>
 
@@ -9938,14 +9938,11 @@ function InboxOficial({ isGer, ehLider, showToast, onIrParaEvolution, target, on
                         <p style={{ fontSize: 13.5, color: "var(--txt)", lineHeight: 1.55, margin: "0 0 14px" }}>
                           Antes de ligar, confirme que você está logado no <a href="https://voip.atendesimples.com" target="_blank" rel="noreferrer" style={{ color: "var(--brand)", fontWeight: 600 }}>voip.atendesimples.com ↗</a> e disponível.
                         </p>
-                        <div style={{ padding: "12px 14px", borderRadius: 10, marginBottom: 16, fontSize: 13.5, fontWeight: 600, display: "flex", alignItems: "center", gap: 8,
-                          background: voipStatus && voipStatus.disponivel === true ? "#ecfdf3" : "#fffbeb",
-                          border: "1px solid " + (voipStatus && voipStatus.disponivel === true ? "#a7f3d0" : "#fde68a"),
-                          color: voipStatus && voipStatus.disponivel === true ? "#065f46" : "#92400e" }}>
+                        <p style={{ fontSize: 12.5, color: "var(--muted)", margin: "0 0 16px", display: "flex", alignItems: "center", gap: 6 }}>
                           {voipStatus && voipStatus.disponivel === true
-                            ? <>✓ Seu VoIP está disponível para realizar a ligação.</>
-                            : <>💡 Confira se você está logado e disponível no VoIP antes de ligar.</>}
-                        </div>
+                            ? <span style={{ color: "#059669", fontWeight: 600 }}>✓ Seu VoIP está disponível.</span>
+                            : <>💡 Confira se você está logado e disponível no VoIP.</>}
+                        </p>
                         <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
                           <button className="btn" onClick={() => setConfirmarLig(false)}>Cancelar</button>
                           <button className="btn btn-primary" disabled={ligando} onClick={ligarAtende}>{ligando ? "Ligando…" : "📞 Realizar ligação"}</button>
@@ -10082,7 +10079,8 @@ function InboxOficial({ isGer, ehLider, showToast, onIrParaEvolution, target, on
                       <div style={{ minWidth: 0 }}>
                         <div style={{ fontSize: 13.5, fontWeight: 700, color: "#065f46" }}>Ligação de voz {item.m.ligacao.direcao === "entrante" ? "recebida" : ""}</div>
                         <div style={{ fontSize: 12, color: "#047857" }}>
-                          {item.m.ligacao.pendente ? "Chamando… (o resumo aparece depois)"
+                          {item.m.ligacao.pendente
+                            ? ((Date.now() - (item.m.ligacao.ts || item.m.ts || 0)) > 10 * 60 * 1000 ? "Sem registro de duração" : "Chamando… (o resumo aparece depois)")
                             : item.m.ligacao.duracao ? "Duração: " + fmtTempo(item.m.ligacao.duracao)
                             : (item.m.ligacao.atendida === false ? "Não atendida" : "—")}
                           {" · "}{horaCurta(item.m.ts)}
