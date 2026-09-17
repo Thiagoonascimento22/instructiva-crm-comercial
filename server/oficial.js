@@ -5264,9 +5264,18 @@ export function instalarCanalOficial({ app, getDb, saveDB, saveSoon, proximoId, 
         body: JSON.stringify({ dialer: { dials: [dial] }, token: a.dialerToken }),
       });
       if (!r.ok) { const t = await r.text().catch(() => ""); return res.status(502).json({ error: "Atende Simples recusou (" + r.status + "): " + t.slice(0, 200) }); }
+      const agora = Date.now();
       // registra no histórico do lead
       const leadId = req.body && req.body.leadId;
-      if (leadId) { const l = (db.oficial.crmLeads || []).find((x) => x.id === leadId); if (l) { l.historico = l.historico || []; l.historico.push({ tipo: "ligacao", texto: "📞 Ligação iniciada" + (u.nome ? " por " + u.nome : ""), ts: Date.now(), dados: { direcao: "saida", porId: (req.user && req.user.id) || null } }); l.atualizadoEm = Date.now(); salvar(); } }
+      if (leadId) { const l = (db.oficial.crmLeads || []).find((x) => x.id === leadId); if (l) { l.historico = l.historico || []; l.historico.push({ tipo: "ligacao", texto: "📞 Ligação iniciada" + (u.nome ? " por " + u.nome : ""), ts: agora, dados: { direcao: "saida", porId: (req.user && req.user.id) || null } }); l.atualizadoEm = agora; } }
+      // registra o balão NA CONVERSA na hora (pendente) — aparece instantâneo; o sync depois completa com duração/gravação
+      const chat = acharChatPorTelefone(numeroCliente);
+      if (chat) {
+        chat.mensagens = chat.mensagens || [];
+        chat.mensagens.push({ role: "me", tipo: "ligacao", ligacao: { direcao: "saída", vendedorNome: u.nome || null, pendente: true, atendida: null, ts: agora }, ts: agora });
+        chat.atualizadoEm = agora;
+      }
+      salvar();
       res.json({ ok: true, mensagem: "Ligação sendo realizada — atenda no seu ramal do Atende" });
     } catch (e) { res.status(502).json({ error: "Falha ao falar com o Atende Simples: " + e.message }); }
   });
@@ -5415,8 +5424,14 @@ export function instalarCanalOficial({ app, getDb, saveDB, saveSoon, proximoId, 
       // 2) grava NA CONVERSA (Caixa de entrada) — é onde o vendedor olha
       if (chat) {
         chat.mensagens = chat.mensagens || [];
-        const msg = { role: "me", tipo: "ligacao", ligacao: { ...dados, atendida: status === "answered" || status === "handled" }, ts: quando || Date.now() };
-        chat.mensagens.push(msg);
+        // se existe um balão PENDENTE recente (da ligação feita agora pelo botão), completa ele em vez de duplicar
+        let msg = null;
+        for (let i = chat.mensagens.length - 1; i >= 0 && i >= chat.mensagens.length - 12; i--) {
+          const mm = chat.mensagens[i];
+          if (mm && mm.tipo === "ligacao" && mm.ligacao && mm.ligacao.pendente && !mm.ligacao.callid && Math.abs((mm.ligacao.ts || mm.ts || 0) - (quando || 0)) < 2 * 3600 * 1000) { msg = mm; break; }
+        }
+        if (msg) { msg.ligacao = { ...msg.ligacao, ...dados, atendida: status === "answered" || status === "handled", pendente: false }; }
+        else { msg = { role: "me", tipo: "ligacao", ligacao: { ...dados, atendida: status === "answered" || status === "handled" }, ts: quando || Date.now() }; chat.mensagens.push(msg); }
         chat.atualizadoEm = Date.now();
         paraResumir.push({ msg }); // sempre tenta (via callid, mesmo sem url pública)
       }

@@ -450,7 +450,7 @@ export default function App() {
             <span>{theme === "dark" ? "Modo claro" : "Modo escuro"}</span>
           </button>
           <button className="logout" onClick={logout}>Sair</button>
-          <div style={{ textAlign: "center", fontSize: 10, color: "var(--muted)", marginTop: 8, opacity: 0.7 }}>v268 · 16/09 16h20</div>
+          <div style={{ textAlign: "center", fontSize: 10, color: "var(--muted)", marginTop: 8, opacity: 0.7 }}>v269 · 17/09 09h40</div>
         </div>
       </aside>
 
@@ -9341,8 +9341,9 @@ function InboxOficial({ isGer, ehLider, showToast, onIrParaEvolution, target, on
   }
   function encerrarChamada() {
     setChamada(null);
-    // uma única sincronização rápida ~15s depois (o robô do servidor, a cada 3 min, cuida do resto sozinho).
-    setTimeout(async () => { try { await api.ofAtendeSincronizarAuto(); } catch (_) {} }, 15000);
+    // sem webhook, o Atende leva alguns minutos pra gerar o registro. Tentamos algumas vezes
+    // (15s, 40s, 90s) pra a ligação aparecer mais rápido no chat; o robô do servidor cobre o resto.
+    [15000, 40000, 90000].forEach((ms) => setTimeout(async () => { try { await api.ofAtendeSincronizarAuto(); } catch (_) {} }, ms));
   }
   async function exportarConversaPDF() {
     if (!conversa) return;
@@ -9938,13 +9939,12 @@ function InboxOficial({ isGer, ehLider, showToast, onIrParaEvolution, target, on
                           Antes de ligar, confirme que você está logado no <a href="https://voip.atendesimples.com" target="_blank" rel="noreferrer" style={{ color: "var(--brand)", fontWeight: 600 }}>voip.atendesimples.com ↗</a> e disponível.
                         </p>
                         <div style={{ padding: "12px 14px", borderRadius: 10, marginBottom: 16, fontSize: 13.5, fontWeight: 600, display: "flex", alignItems: "center", gap: 8,
-                          background: checandoVoip ? "var(--surface-2)" : voipStatus && voipStatus.disponivel === true ? "#ecfdf3" : voipStatus && voipStatus.disponivel === false ? "#fef2f2" : "#fffbeb",
-                          border: "1px solid " + (checandoVoip ? "var(--line)" : voipStatus && voipStatus.disponivel === true ? "#a7f3d0" : voipStatus && voipStatus.disponivel === false ? "#fecaca" : "#fde68a"),
-                          color: checandoVoip ? "var(--muted)" : voipStatus && voipStatus.disponivel === true ? "#065f46" : voipStatus && voipStatus.disponivel === false ? "#991b1b" : "#92400e" }}>
-                          {checandoVoip ? <><span className="spin" /> Verificando seu VoIP…</>
-                            : voipStatus && voipStatus.disponivel === true ? <>✓ Seu VoIP está disponível para realizar a ligação.</>
-                            : voipStatus && voipStatus.disponivel === false ? <>⚠️ Você aparece como desconectado no VoIP. Faça login antes de ligar.</>
-                            : <>⚠️ Confirme que você está logado no VoIP antes de ligar.</>}
+                          background: voipStatus && voipStatus.disponivel === true ? "#ecfdf3" : "#fffbeb",
+                          border: "1px solid " + (voipStatus && voipStatus.disponivel === true ? "#a7f3d0" : "#fde68a"),
+                          color: voipStatus && voipStatus.disponivel === true ? "#065f46" : "#92400e" }}>
+                          {voipStatus && voipStatus.disponivel === true
+                            ? <>✓ Seu VoIP está disponível para realizar a ligação.</>
+                            : <>💡 Confira se você está logado e disponível no VoIP antes de ligar.</>}
                         </div>
                         <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
                           <button className="btn" onClick={() => setConfirmarLig(false)}>Cancelar</button>
@@ -10082,9 +10082,11 @@ function InboxOficial({ isGer, ehLider, showToast, onIrParaEvolution, target, on
                       <div style={{ minWidth: 0 }}>
                         <div style={{ fontSize: 13.5, fontWeight: 700, color: "#065f46" }}>Ligação de voz {item.m.ligacao.direcao === "entrante" ? "recebida" : ""}</div>
                         <div style={{ fontSize: 12, color: "#047857" }}>
-                          {item.m.ligacao.duracao ? "Duração: " + fmtTempo(item.m.ligacao.duracao) : (item.m.ligacao.atendida === false ? "Não atendida" : "—")}
+                          {item.m.ligacao.pendente ? "Chamando… (o resumo aparece depois)"
+                            : item.m.ligacao.duracao ? "Duração: " + fmtTempo(item.m.ligacao.duracao)
+                            : (item.m.ligacao.atendida === false ? "Não atendida" : "—")}
                           {" · "}{horaCurta(item.m.ts)}
-                          {item.m.ligacao.resumoPronto ? " · 📝 resumo" : (item.m.ligacao.audioUrl ? " · toque p/ resumo" : "")}
+                          {item.m.ligacao.resumoPronto ? " · 📝 resumo" : (!item.m.ligacao.pendente && item.m.ligacao.audioUrl ? " · toque p/ resumo" : "")}
                         </div>
                       </div>
                     </button>
