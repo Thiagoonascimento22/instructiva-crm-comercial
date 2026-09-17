@@ -5548,6 +5548,18 @@ export function instalarCanalOficial({ app, getDb, saveDB, saveSoon, proximoId, 
     try {
       garantirEstrutura();
       const b = req.body || {};
+      // REPASSE ENTRE SISTEMAS: o Atende manda pra UM sistema (Toledo); ele repassa o mesmo evento
+      // pros outros (Jesuítas), e cada um registra só nas próprias conversas. ?fwd=1 evita loop.
+      if (req.query.fwd !== "1") {
+        const destinos = (db.oficial.webhookReenvio || []).filter((u) => /^https?:\/\//i.test(u));
+        if (destinos.length) {
+          const corpo = JSON.stringify(b);
+          for (const base of destinos) {
+            const alvo = base.replace(/\/+$/, "") + "/api/oficial/atende/webhook?fwd=1";
+            (async () => { try { const ctrl = new AbortController(); const t = setTimeout(() => ctrl.abort(), 6000); await fetch(alvo, { method: "POST", headers: { "Content-Type": "application/json" }, body: corpo, signal: ctrl.signal }); clearTimeout(t); } catch (_) {} })();
+          }
+        }
+      }
       const ev = b.event_code || "";
       const call = b.call || {};
       if (ev === "call.finished") {
