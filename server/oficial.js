@@ -35,7 +35,7 @@ const FFMPEG_BIN = (() => {
   return "ffmpeg"; // último recurso: procura no PATH
 })();
 
-export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gerenteOnly, MEDIA_DIR, fs, path }) {
+export function instalarCanalOficial({ app, getDb, saveDB, saveSoon, proximoId, auth, gerenteOnly, MEDIA_DIR, fs, path }) {
   // O index.js REATRIBUI o objeto db dentro de loadDB(). Por isso resolvemos
   // o db dinamicamente via Proxy: todo acesso db.x lê/escreve no objeto atual.
   const db = new Proxy({}, {
@@ -116,7 +116,7 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
     if (!Array.isArray(db.oficial.atende.callsVistas)) db.oficial.atende.callsVistas = [];
   }
 
-  function salvar() { saveDB(); }
+  function salvar() { (saveSoon || saveDB)(); }
 
   /* ---- helpers de número do pool ---- */
   function acharNumero(id) {
@@ -5349,6 +5349,9 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
     // índice telefone(8) -> lead
     const idx = {};
     for (const l of (db.oficial.crmLeads || [])) { const t = _soDig(l.telefone).slice(-8); if (t.length >= 8 && !idx[t]) idx[t] = l; }
+    // índice telefone(8) -> conversa (montado UMA vez; antes varria todas as conversas por ligação = travava)
+    const idxChat = {};
+    for (const c of Object.values(db.waChats || {})) { if (c.canal !== "oficial") continue; const t = _soDig(c.numero).slice(-8); if (t.length >= 8 && !idxChat[t]) idxChat[t] = c; }
     let gravadas = 0;
     const vistas = new Set(a.callsVistas || []);
     const paraResumir = []; // { msg, audioUrl } — gera o resumo depois, fora do loop
@@ -5362,7 +5365,7 @@ export function instalarCanalOficial({ app, getDb, saveDB, proximoId, auth, gere
       let lead = null, chat = null, numeroCasado = "";
       for (const nu of candidatos) {
         if (!lead && idx[nu]) { lead = idx[nu]; numeroCasado = nu; }
-        if (!chat) { const c = acharChatPorTelefone(nu); if (c) { chat = c; numeroCasado = nu; } }
+        if (!chat && idxChat[nu]) { chat = idxChat[nu]; numeroCasado = nu; }
         if (lead && chat) break;
       }
       const dur = Math.round(Number(it.duration_call || it.ori_billing_time || it.uraduration || 0)) || 0;
