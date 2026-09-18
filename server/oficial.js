@@ -178,7 +178,7 @@ export function instalarCanalOficial({ app, getDb, saveDB, saveSoon, proximoId, 
       const mime = r.headers.get("content-type") || "image/jpeg";
       const ext = mime.includes("png") ? "png" : "jpg";
       const arquivo = `perfil_${n.id}.${ext}`;
-      if (MEDIA_DIR && fs && path) fs.writeFileSync(path.join(MEDIA_DIR, arquivo), buf);
+      if (MEDIA_DIR && fs && path) await fs.promises.writeFile(path.join(MEDIA_DIR, arquivo), buf);
       n.fotoArquivo = arquivo;
       n.fotoAtualizadaEm = Date.now();
       return { ok: true };
@@ -513,9 +513,11 @@ export function instalarCanalOficial({ app, getDb, saveDB, saveSoon, proximoId, 
      reencodar: é instantâneo e não perde qualidade).
      Safari já grava em MP4, que a Meta aceita: passa direto.
      ------------------------------------------------------------ */
+  let _ffmpegOkCache = null;
   function ffmpegOk() {
+    if (_ffmpegOkCache !== null) return Promise.resolve(_ffmpegOkCache);
     return new Promise((resolve) => {
-      execFile(FFMPEG_BIN, ["-version"], (err) => resolve(!err));
+      execFile(FFMPEG_BIN, ["-version"], (err) => { _ffmpegOkCache = !err; resolve(_ffmpegOkCache); });
     });
   }
   async function audioParaMeta(buffer, mime) {
@@ -537,22 +539,23 @@ export function instalarCanalOficial({ app, getDb, saveDB, saveSoon, proximoId, 
     const entrada = path.join(tmp, "in_" + marca);
     const saida = path.join(tmp, "out_" + marca + ".ogg");
     try {
-      fs.writeFileSync(entrada, buffer);
+      await fs.promises.writeFile(entrada, buffer); // async: não trava o servidor
       const rodar = (args) => new Promise((resolve) => execFile(FFMPEG_BIN, args, (err, so, se) => resolve({ ok: !err, err: err ? (se || err.message || "").toString().slice(0, 200) : "" })));
-      const validar = () => fs.existsSync(saida) && fs.statSync(saida).size > 200 && fs.readFileSync(saida).slice(0, 4).toString("ascii") === "OggS";
+      // lê a saída UMA vez (async) e valida (tamanho + assinatura OggS) a partir do próprio buffer
+      const lerValidar = async () => { try { const b = await fs.promises.readFile(saida); if (b && b.length > 200 && b.slice(0, 4).toString("ascii") === "OggS") return b; } catch (_) {} return null; };
       // 1) opus mono 48k (padrão de voz do WhatsApp) via libopus
       let r = await rodar(["-y", "-i", entrada, "-vn", "-ac", "1", "-ar", "48000", "-c:a", "libopus", "-b:a", "32k", "-f", "ogg", saida]);
-      let bom = r.ok && validar();
-      if (!bom) {
+      let out = r.ok ? await lerValidar() : null;
+      if (!out) {
         console.log("[audio] libopus falhou (" + r.err + "). Tentando encoder 'opus' nativo...");
-        try { fs.existsSync(saida) && fs.unlinkSync(saida); } catch (_) {}
+        try { await fs.promises.unlink(saida); } catch (_) {}
         // 2) fallback: encoder opus nativo do ffmpeg (caso o build não tenha libopus)
         r = await rodar(["-y", "-i", entrada, "-vn", "-ac", "1", "-ar", "48000", "-c:a", "opus", "-strict", "-2", "-b:a", "32k", "-f", "ogg", saida]);
-        bom = r.ok && validar();
+        out = r.ok ? await lerValidar() : null;
       }
-      if (bom) {
-        console.log("[audio] convertido OK -> audio/ogg (opus mono 48k), " + fs.statSync(saida).size + " bytes");
-        return { buffer: fs.readFileSync(saida), mime: "audio/ogg", filename: "audio.ogg", ok: true };
+      if (out) {
+        console.log("[audio] convertido OK -> audio/ogg (opus mono 48k), " + out.length + " bytes");
+        return { buffer: out, mime: "audio/ogg", filename: "audio.ogg", ok: true };
       }
       console.log("[audio] NÃO consegui converter (" + r.err + ")");
       return { buffer, mime: m, filename: null, ok: false, motivo: "Não consegui converter esse áudio pro formato do WhatsApp." };
@@ -560,8 +563,8 @@ export function instalarCanalOficial({ app, getDb, saveDB, saveSoon, proximoId, 
       console.log("[audio] erro na conversão:", e.message);
       return { buffer, mime: m, filename: null, ok: false, motivo: "Erro ao converter o áudio." };
     } finally {
-      try { fs.existsSync(entrada) && fs.unlinkSync(entrada); } catch (_) {}
-      try { fs.existsSync(saida) && fs.unlinkSync(saida); } catch (_) {}
+      fs.promises.unlink(entrada).catch(() => {});
+      fs.promises.unlink(saida).catch(() => {});
     }
   }
 
@@ -636,7 +639,7 @@ export function instalarCanalOficial({ app, getDb, saveDB, saveSoon, proximoId, 
       const mime = meta.mime_type || "application/octet-stream";
       const ext = extPorMime(mime);
       const fname = "of_" + mediaId + "." + ext;
-      fs.writeFileSync(path.join(MEDIA_DIR, fname), buf);
+      await fs.promises.writeFile(path.join(MEDIA_DIR, fname), buf);
       return { arquivo: fname, mimetype: mime, buffer: buf, tamanho: buf.length };
     } catch (e) {
       console.log("[oficial] erro ao baixar mídia:", e.message);
@@ -1808,7 +1811,7 @@ export function instalarCanalOficial({ app, getDb, saveDB, saveSoon, proximoId, 
       if (!r.ok) { console.error("[ligacao] ElevenLabs " + r.status + ":", (await r.text().catch(() => "")).slice(0, 160)); return null; }
       const buf = Buffer.from(await r.arrayBuffer());
       const nome = "voz_" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6) + ".mp3";
-      fs.writeFileSync(path.join(MEDIA_DIR, nome), buf);
+      await fs.promises.writeFile(path.join(MEDIA_DIR, nome), buf);
       return nome;
     } catch (e) { console.error("[ligacao] ElevenLabs erro:", e.message); return null; }
   }
@@ -4187,7 +4190,7 @@ export function instalarCanalOficial({ app, getDb, saveDB, saveSoon, proximoId, 
         if (MEDIA_DIR && fs && path) {
           const ext = extPorMime(mimeFinal);
           arquivoSalvo = "of_out_" + ts + "_" + Math.random().toString(36).slice(2, 8) + "." + ext;
-          fs.writeFileSync(path.join(MEDIA_DIR, arquivoSalvo), buffer);
+          await fs.promises.writeFile(path.join(MEDIA_DIR, arquivoSalvo), buffer);
         }
       } catch (_) { arquivoSalvo = null; }
       const rotulo = tipo === "image" ? "📷 Foto" : tipo === "audio" ? "🎤 Áudio" : tipo === "video" ? "🎬 Vídeo" : "📄 " + filename;
