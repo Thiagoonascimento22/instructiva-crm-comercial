@@ -449,7 +449,7 @@ export default function App() {
             <span>{theme === "dark" ? "Modo claro" : "Modo escuro"}</span>
           </button>
           <button className="logout" onClick={logout}>Sair</button>
-          <div style={{ textAlign: "center", fontSize: 10, color: "var(--muted)", marginTop: 8, opacity: 0.7 }}>v275 · 18/09 16h10</div>
+          <div style={{ textAlign: "center", fontSize: 10, color: "var(--muted)", marginTop: 8, opacity: 0.7 }}>v276 · 22/09 17h30</div>
         </div>
       </aside>
 
@@ -5642,6 +5642,70 @@ function PainelVendas({ showToast, isGer = true, ehLider = false }) {
     );
   }, [vendas, buscaVenda]);
 
+  const [exportandoV, setExportandoV] = useState(false);
+  async function exportarVendasPDF() {
+    const lista = vendasFiltradas || [];
+    if (!lista.length) { showToast("Nenhuma venda pra exportar"); return; }
+    setExportandoV(true); showToast("Gerando PDF…");
+    try {
+      const dinBR = (v) => "R$ " + Number(v || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      const dataBR = (d) => { try { return new Date(d).toLocaleDateString("pt-BR"); } catch (_) { return "—"; } };
+      // agrupa por vendedor
+      const porVend = {};
+      for (const v of lista) { const nome = v.pessoaNome || "— sem vendedor —"; (porVend[nome] = porVend[nome] || []).push(v); }
+      const nomes = Object.keys(porVend).sort((a, b) => a.localeCompare(b));
+      const totalGeral = lista.reduce((s, v) => s + Number(v.valor || 0), 0);
+      const recebidoGeral = lista.reduce((s, v) => s + Number(v.recebido || 0), 0);
+      const esc = (s) => String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+      let html = '<div style="font-family: Arial, Helvetica, sans-serif; color:#111418; padding:24px; background:#fff; width:800px;">';
+      html += '<div style="display:flex; align-items:center; justify-content:space-between; border-bottom:2px solid #25A06B; padding-bottom:12px; margin-bottom:14px;">';
+      html += '<div style="font-size:22px; font-weight:800;"><span style="color:#111418;">instruct</span><span style="color:#25A06B;">iva</span></div>';
+      html += '<div style="font-size:11px; color:#5b6472;">Emitido em ' + esc(new Date().toLocaleString("pt-BR")) + '</div></div>';
+      html += '<div style="font-size:17px; font-weight:700;">Relatório de Vendas — ' + esc(mesLegivel(mes)) + '</div>';
+      html += '<div style="font-size:12.5px; color:#5b6472; margin:4px 0 14px;">' + lista.length + ' venda(s) · Total ' + dinBR(totalGeral) + ' · Recebido ' + dinBR(recebidoGeral) + ' · Ticket médio ' + dinBR(lista.length ? totalGeral / lista.length : 0) + '</div>';
+      // resumo por vendedor
+      html += '<table style="width:100%; border-collapse:collapse; font-size:12px; margin-bottom:18px;">';
+      html += '<thead><tr style="background:#f0fdf4;"><th style="text-align:left; padding:7px 8px; border:1px solid #d1fae5;">Vendedor</th><th style="text-align:right; padding:7px 8px; border:1px solid #d1fae5;">Vendas</th><th style="text-align:right; padding:7px 8px; border:1px solid #d1fae5;">Total</th><th style="text-align:right; padding:7px 8px; border:1px solid #d1fae5;">Recebido</th></tr></thead><tbody>';
+      for (const nome of nomes) {
+        const vs = porVend[nome];
+        const tot = vs.reduce((s, v) => s + Number(v.valor || 0), 0);
+        const rec = vs.reduce((s, v) => s + Number(v.recebido || 0), 0);
+        html += '<tr><td style="padding:6px 8px; border:1px solid #e6e8ee; font-weight:600;">' + esc(nome) + '</td><td style="text-align:right; padding:6px 8px; border:1px solid #e6e8ee;">' + vs.length + '</td><td style="text-align:right; padding:6px 8px; border:1px solid #e6e8ee;">' + dinBR(tot) + '</td><td style="text-align:right; padding:6px 8px; border:1px solid #e6e8ee;">' + dinBR(rec) + '</td></tr>';
+      }
+      html += '</tbody></table>';
+      // detalhe: todas as vendas, agrupadas por vendedor
+      for (const nome of nomes) {
+        const vs = porVend[nome].slice().sort((a, b) => new Date(b.data) - new Date(a.data));
+        const tot = vs.reduce((s, v) => s + Number(v.valor || 0), 0);
+        html += '<div style="font-size:13.5px; font-weight:700; margin:14px 0 6px; color:#166534; page-break-after:avoid;">' + esc(nome) + ' <span style="font-weight:400; color:#5b6472;">· ' + vs.length + ' venda(s) · ' + dinBR(tot) + '</span></div>';
+        html += '<table style="width:100%; border-collapse:collapse; font-size:11.5px; margin-bottom:6px;">';
+        html += '<thead><tr style="background:#f7f8fa;"><th style="text-align:left; padding:6px; border:1px solid #e6e8ee;">Data</th><th style="text-align:left; padding:6px; border:1px solid #e6e8ee;">Cliente</th><th style="text-align:left; padding:6px; border:1px solid #e6e8ee;">Curso</th><th style="text-align:left; padding:6px; border:1px solid #e6e8ee;">Plataforma</th><th style="text-align:left; padding:6px; border:1px solid #e6e8ee;">Código</th><th style="text-align:right; padding:6px; border:1px solid #e6e8ee;">Valor</th><th style="text-align:right; padding:6px; border:1px solid #e6e8ee;">Recebido</th></tr></thead><tbody>';
+        for (const v of vs) {
+          html += '<tr><td style="padding:5px 6px; border:1px solid #eef0f4; white-space:nowrap;">' + esc(dataBR(v.data)) + '</td><td style="padding:5px 6px; border:1px solid #eef0f4;">' + esc(v.cliente) + '</td><td style="padding:5px 6px; border:1px solid #eef0f4;">' + esc(v.curso) + '</td><td style="padding:5px 6px; border:1px solid #eef0f4;">' + esc(v.plataforma) + '</td><td style="padding:5px 6px; border:1px solid #eef0f4;">' + esc(v.codigo) + '</td><td style="text-align:right; padding:5px 6px; border:1px solid #eef0f4; white-space:nowrap;">' + dinBR(v.valor) + '</td><td style="text-align:right; padding:5px 6px; border:1px solid #eef0f4; white-space:nowrap;">' + dinBR(v.recebido) + '</td></tr>';
+        }
+        html += '</tbody></table>';
+      }
+      html += '</div>';
+      const holder = document.createElement("div");
+      holder.style.position = "fixed"; holder.style.left = "-9999px"; holder.style.top = "0";
+      holder.innerHTML = html;
+      document.body.appendChild(holder);
+      try {
+        const html2pdf = (await import("html2pdf.js")).default;
+        const nomeArq = "vendas-" + mesLegivel(mes).replace(/\s+/g, "-").toLowerCase() + ".pdf";
+        await html2pdf().set({
+          margin: [10, 8, 12, 8], filename: nomeArq,
+          image: { type: "jpeg", quality: 0.96 },
+          html2canvas: { scale: 2, backgroundColor: "#ffffff", logging: false },
+          jsPDF: { unit: "mm", format: "a4", orientation: "portrait" },
+          pagebreak: { mode: ["css", "legacy"] },
+        }).from(holder.firstElementChild).save();
+        showToast("✅ PDF baixado!");
+      } finally { document.body.removeChild(holder); }
+    } catch (e) { showToast("✗ " + (e.message || "Falha ao gerar PDF")); }
+    finally { setExportandoV(false); }
+  }
+
   if (carregando && !dados) return <div className="dash-empty"><span className="spin" /> Carregando…</div>;
   if (!dados) return null;
 
@@ -5865,11 +5929,16 @@ function PainelVendas({ showToast, isGer = true, ehLider = false }) {
           <span>
             <b>{vendasFiltradas.length}</b>{buscaVenda ? ` de ${vendas.length}` : ""} {isGer ? "venda(s) lançada(s)" : "venda(s) sua(s)"} em {mesLegivel(mes)}
           </span>
-          {isGer && <button className="crm-lote-del" onClick={async () => {
+          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+            <button className="crm-lote-del" style={{ background: "var(--card)", color: "var(--ink, #111418)", border: "1px solid var(--line)" }} onClick={exportarVendasPDF} disabled={exportandoV}>
+              {exportandoV ? "Gerando…" : "⬇ Exportar PDF"}
+            </button>
+            {isGer && <button className="crm-lote-del" onClick={async () => {
             if (!window.confirm(`Apagar TODAS as ${vendas.length} vendas de ${mesLegivel(mes)}? Isso não dá pra desfazer.`)) return;
             try { const r = await api.vdLimparMes(mes); showToast(`✓ ${r.excluidas} venda(s) apagada(s)`); carregar(); }
             catch (e) { showToast("✗ " + e.message); }
           }}><I.trash className="ico" /> Limpar o mês</button>}
+          </div>
         </div>
         <ListaVendas vendas={vendasFiltradas} onEditar={(v) => setForm({
           ...v, data: new Date(v.data).toISOString().slice(0, 10),
