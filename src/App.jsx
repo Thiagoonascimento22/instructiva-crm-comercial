@@ -449,7 +449,7 @@ export default function App() {
             <span>{theme === "dark" ? "Modo claro" : "Modo escuro"}</span>
           </button>
           <button className="logout" onClick={logout}>Sair</button>
-          <div style={{ textAlign: "center", fontSize: 10, color: "var(--muted)", marginTop: 8, opacity: 0.7 }}>v276 · 22/09 17h30</div>
+          <div style={{ textAlign: "center", fontSize: 10, color: "var(--muted)", marginTop: 8, opacity: 0.7 }}>v277 · 22/09 17h50</div>
         </div>
       </aside>
 
@@ -5650,40 +5650,61 @@ function PainelVendas({ showToast, isGer = true, ehLider = false }) {
     try {
       const dinBR = (v) => "R$ " + Number(v || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
       const dataBR = (d) => { try { return new Date(d).toLocaleDateString("pt-BR"); } catch (_) { return "—"; } };
+      const esc = (s) => String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
       // agrupa por vendedor
       const porVend = {};
       for (const v of lista) { const nome = v.pessoaNome || "— sem vendedor —"; (porVend[nome] = porVend[nome] || []).push(v); }
-      const nomes = Object.keys(porVend).sort((a, b) => a.localeCompare(b));
+      const nomes = Object.keys(porVend).sort((a, b) => (porVend[b].reduce((s, v) => s + Number(v.valor || 0), 0)) - (porVend[a].reduce((s, v) => s + Number(v.valor || 0), 0)));
       const totalGeral = lista.reduce((s, v) => s + Number(v.valor || 0), 0);
       const recebidoGeral = lista.reduce((s, v) => s + Number(v.recebido || 0), 0);
-      const esc = (s) => String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-      let html = '<div style="font-family: Arial, Helvetica, sans-serif; color:#111418; padding:24px; background:#fff; width:800px;">';
-      html += '<div style="display:flex; align-items:center; justify-content:space-between; border-bottom:2px solid #25A06B; padding-bottom:12px; margin-bottom:14px;">';
-      html += '<div style="font-size:22px; font-weight:800;"><span style="color:#111418;">instruct</span><span style="color:#25A06B;">iva</span></div>';
-      html += '<div style="font-size:11px; color:#5b6472;">Emitido em ' + esc(new Date().toLocaleString("pt-BR")) + '</div></div>';
-      html += '<div style="font-size:17px; font-weight:700;">Relatório de Vendas — ' + esc(mesLegivel(mes)) + '</div>';
-      html += '<div style="font-size:12.5px; color:#5b6472; margin:4px 0 14px;">' + lista.length + ' venda(s) · Total ' + dinBR(totalGeral) + ' · Recebido ' + dinBR(recebidoGeral) + ' · Ticket médio ' + dinBR(lista.length ? totalGeral / lista.length : 0) + '</div>';
-      // resumo por vendedor
-      html += '<table style="width:100%; border-collapse:collapse; font-size:12px; margin-bottom:18px;">';
-      html += '<thead><tr style="background:#f0fdf4;"><th style="text-align:left; padding:7px 8px; border:1px solid #d1fae5;">Vendedor</th><th style="text-align:right; padding:7px 8px; border:1px solid #d1fae5;">Vendas</th><th style="text-align:right; padding:7px 8px; border:1px solid #d1fae5;">Total</th><th style="text-align:right; padding:7px 8px; border:1px solid #d1fae5;">Recebido</th></tr></thead><tbody>';
+
+      let html = '<div style="font-family:\'Segoe UI\',Roboto,Arial,sans-serif; color:#1f2430; padding:0; background:#fff; width:760px;">';
+      // Cabeçalho
+      html += '<div style="background:linear-gradient(135deg,#0f5132,#25A06B); border-radius:14px; padding:22px 26px; color:#fff; margin-bottom:20px;">';
+      html += '<div style="display:flex; align-items:center; justify-content:space-between;">';
+      html += '<div style="font-size:24px; font-weight:800; letter-spacing:-.02em;">instructiva</div>';
+      html += '<div style="font-size:11px; opacity:.85;">Emitido em ' + esc(new Date().toLocaleString("pt-BR")) + '</div></div>';
+      html += '<div style="font-size:19px; font-weight:700; margin-top:14px;">Relatório de Vendas</div>';
+      html += '<div style="font-size:13px; opacity:.9; margin-top:2px;">' + esc(mesLegivel(mes)) + '</div>';
+      html += '</div>';
+      // KPIs
+      const kpi = (rot, val) => '<div style="flex:1; background:#f6f8fa; border:1px solid #e6eaef; border-radius:12px; padding:13px 16px;"><div style="font-size:11px; color:#67707e; font-weight:600; text-transform:uppercase; letter-spacing:.04em;">' + rot + '</div><div style="font-size:18px; font-weight:800; color:#1f2430; margin-top:3px;">' + val + '</div></div>';
+      html += '<div style="display:flex; gap:12px; margin-bottom:22px;">' + kpi("Vendas", String(lista.length)) + kpi("Total vendido", dinBR(totalGeral)) + kpi("Recebido", dinBR(recebidoGeral)) + kpi("Ticket médio", dinBR(lista.length ? totalGeral / lista.length : 0)) + '</div>';
+      // Resumo por vendedor (barras)
+      html += '<div style="font-size:15px; font-weight:800; color:#1f2430; margin:0 0 12px;">Resumo por vendedor</div>';
+      const maxV = Math.max(...nomes.map((n) => porVend[n].reduce((s, v) => s + Number(v.valor || 0), 0)), 1);
       for (const nome of nomes) {
         const vs = porVend[nome];
         const tot = vs.reduce((s, v) => s + Number(v.valor || 0), 0);
-        const rec = vs.reduce((s, v) => s + Number(v.recebido || 0), 0);
-        html += '<tr><td style="padding:6px 8px; border:1px solid #e6e8ee; font-weight:600;">' + esc(nome) + '</td><td style="text-align:right; padding:6px 8px; border:1px solid #e6e8ee;">' + vs.length + '</td><td style="text-align:right; padding:6px 8px; border:1px solid #e6e8ee;">' + dinBR(tot) + '</td><td style="text-align:right; padding:6px 8px; border:1px solid #e6e8ee;">' + dinBR(rec) + '</td></tr>';
+        const pct = Math.round((tot / maxV) * 100);
+        html += '<div style="margin-bottom:10px;">';
+        html += '<div style="display:flex; justify-content:space-between; font-size:12.5px; margin-bottom:4px;"><span style="font-weight:700; color:#1f2430;">' + esc(nome) + '</span><span style="color:#67707e;">' + vs.length + ' venda(s) · <b style="color:#1f2430;">' + dinBR(tot) + '</b></span></div>';
+        html += '<div style="height:8px; background:#eef1f4; border-radius:6px; overflow:hidden;"><div style="height:100%; width:' + pct + '%; background:linear-gradient(90deg,#25A06B,#34c47f); border-radius:6px;"></div></div>';
+        html += '</div>';
       }
-      html += '</tbody></table>';
-      // detalhe: todas as vendas, agrupadas por vendedor
+      // Detalhe por vendedor — cada venda num cartão (mostra tudo, sem cortar)
       for (const nome of nomes) {
         const vs = porVend[nome].slice().sort((a, b) => new Date(b.data) - new Date(a.data));
         const tot = vs.reduce((s, v) => s + Number(v.valor || 0), 0);
-        html += '<div style="font-size:13.5px; font-weight:700; margin:14px 0 6px; color:#166534; page-break-after:avoid;">' + esc(nome) + ' <span style="font-weight:400; color:#5b6472;">· ' + vs.length + ' venda(s) · ' + dinBR(tot) + '</span></div>';
-        html += '<table style="width:100%; border-collapse:collapse; font-size:11.5px; margin-bottom:6px;">';
-        html += '<thead><tr style="background:#f7f8fa;"><th style="text-align:left; padding:6px; border:1px solid #e6e8ee;">Data</th><th style="text-align:left; padding:6px; border:1px solid #e6e8ee;">Cliente</th><th style="text-align:left; padding:6px; border:1px solid #e6e8ee;">Curso</th><th style="text-align:left; padding:6px; border:1px solid #e6e8ee;">Plataforma</th><th style="text-align:left; padding:6px; border:1px solid #e6e8ee;">Código</th><th style="text-align:right; padding:6px; border:1px solid #e6e8ee;">Valor</th><th style="text-align:right; padding:6px; border:1px solid #e6e8ee;">Recebido</th></tr></thead><tbody>';
+        html += '<div style="margin-top:26px; padding-bottom:8px; border-bottom:2px solid #25A06B; page-break-after:avoid;"><span style="font-size:16px; font-weight:800; color:#0f5132;">' + esc(nome) + '</span> <span style="font-size:12.5px; color:#67707e;">· ' + vs.length + ' venda(s) · ' + dinBR(tot) + '</span></div>';
         for (const v of vs) {
-          html += '<tr><td style="padding:5px 6px; border:1px solid #eef0f4; white-space:nowrap;">' + esc(dataBR(v.data)) + '</td><td style="padding:5px 6px; border:1px solid #eef0f4;">' + esc(v.cliente) + '</td><td style="padding:5px 6px; border:1px solid #eef0f4;">' + esc(v.curso) + '</td><td style="padding:5px 6px; border:1px solid #eef0f4;">' + esc(v.plataforma) + '</td><td style="padding:5px 6px; border:1px solid #eef0f4;">' + esc(v.codigo) + '</td><td style="text-align:right; padding:5px 6px; border:1px solid #eef0f4; white-space:nowrap;">' + dinBR(v.valor) + '</td><td style="text-align:right; padding:5px 6px; border:1px solid #eef0f4; white-space:nowrap;">' + dinBR(v.recebido) + '</td></tr>';
+          html += '<div style="border:1px solid #e6eaef; border-radius:12px; padding:12px 15px; margin-top:10px; page-break-inside:avoid;">';
+          html += '<div style="display:flex; justify-content:space-between; align-items:flex-start; gap:10px;">';
+          html += '<div style="font-size:14px; font-weight:700; color:#1f2430;">' + esc(v.cliente || "—") + '</div>';
+          html += '<div style="text-align:right; white-space:nowrap;"><div style="font-size:15px; font-weight:800; color:#0f5132;">' + dinBR(v.valor) + '</div><div style="font-size:11px; color:#67707e;">recebido ' + dinBR(v.recebido) + '</div></div>';
+          html += '</div>';
+          // linha de infos (curso, plataforma, data, código)
+          const chip = (t) => t ? '<span style="display:inline-block; background:#f0fdf4; color:#166534; border:1px solid #bbf7d0; border-radius:20px; padding:2px 10px; font-size:11px; font-weight:600; margin:6px 6px 0 0;">' + esc(t) + '</span>' : '';
+          html += '<div style="margin-top:2px;">' + chip(v.curso) + chip(v.plataforma) + chip(v.parcelas ? v.parcelas + "x" : "") + chip(dataBR(v.data)) + (v.codigo ? '<span style="display:inline-block; color:#67707e; font-size:11px; margin:6px 0 0 2px;">cód ' + esc(v.codigo) + '</span>' : '') + '</div>';
+          // contato (email + telefone)
+          if (v.email || v.telefone) {
+            html += '<div style="margin-top:9px; padding-top:9px; border-top:1px dashed #e6eaef; font-size:12px; color:#4a5361;">';
+            if (v.email) html += '<span style="margin-right:16px;">✉️ ' + esc(v.email) + '</span>';
+            if (v.telefone) html += '<span>📞 ' + esc(v.telefone) + '</span>';
+            html += '</div>';
+          }
+          html += '</div>';
         }
-        html += '</tbody></table>';
       }
       html += '</div>';
       const holder = document.createElement("div");
@@ -5694,9 +5715,9 @@ function PainelVendas({ showToast, isGer = true, ehLider = false }) {
         const html2pdf = (await import("html2pdf.js")).default;
         const nomeArq = "vendas-" + mesLegivel(mes).replace(/\s+/g, "-").toLowerCase() + ".pdf";
         await html2pdf().set({
-          margin: [10, 8, 12, 8], filename: nomeArq,
-          image: { type: "jpeg", quality: 0.96 },
-          html2canvas: { scale: 2, backgroundColor: "#ffffff", logging: false },
+          margin: [12, 12, 14, 12], filename: nomeArq,
+          image: { type: "jpeg", quality: 0.97 },
+          html2canvas: { scale: 2, backgroundColor: "#ffffff", logging: false, windowWidth: 800 },
           jsPDF: { unit: "mm", format: "a4", orientation: "portrait" },
           pagebreak: { mode: ["css", "legacy"] },
         }).from(holder.firstElementChild).save();
