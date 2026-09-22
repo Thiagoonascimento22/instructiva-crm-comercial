@@ -1754,6 +1754,32 @@ export function instalarCanalOficial({ app, getDb, saveDB, saveSoon, proximoId, 
     res.json({ ok: true, iaPausada: chat.iaPausada });
   });
 
+  // Observação do vendedor numa conversa (oficial OU não-oficial) — a IA lê e considera na análise.
+  // Serve pra registrar o que rolou por fora (ligação, resolvido, etc.) pra não ficar vago.
+  app.post("/api/oficial/chats/:id/observacao", auth, permiteVend("crm"), (req, res) => {
+    const chat = db.waChats[req.params.id];
+    if (!chat) return res.status(404).json({ error: "Conversa não encontrada" });
+    if (req.user.role === "vendedor") {
+      const ehOficial = chat.canal === "oficial" && chat.vendedorId === req.user.id;
+      const ehNaoOficial = chat.instance && ((db.waConfig && db.waConfig.instancias) || []).some((i) => i.instance === chat.instance && i.vendedorId === req.user.id);
+      if (!ehOficial && !ehNaoOficial) return res.status(403).json({ error: "Sem acesso a esta conversa" });
+    }
+    const texto = String((req.body && req.body.texto) || "").trim().slice(0, 1000);
+    if (!texto) return res.status(400).json({ error: "Escreva a observação" });
+    if (!Array.isArray(chat.notas)) chat.notas = [];
+    chat.notas.push({ tipo: "obs", texto, ts: Date.now(), por: req.user.nome });
+    if (chat.notas.length > 100) chat.notas = chat.notas.slice(-100);
+    salvar();
+    res.json({ ok: true, notas: chat.notas });
+  });
+
+  // lista as observações de uma conversa
+  app.get("/api/oficial/chats/:id/observacoes", auth, permiteVend("crm"), (req, res) => {
+    const chat = db.waChats[req.params.id];
+    if (!chat) return res.status(404).json({ error: "Conversa não encontrada" });
+    res.json({ ok: true, notas: (chat.notas || []).filter((n) => n.tipo === "obs") });
+  });
+
   // ATIVA uma IA nesta conversa (atribui a IA ao chat). Se o lead já mandou a última
   // mensagem, a IA responde na hora — se não, responde quando o lead falar.
   app.post("/api/oficial/chats/:id/atribuir-ia", auth, gerenteOnly, async (req, res) => {
@@ -3729,7 +3755,8 @@ export function instalarCanalOficial({ app, getDb, saveDB, saveSoon, proximoId, 
       for (const c of chats) {
         const canal = c.canal === "oficial" ? "oficial" : "naoOficial";
         const msgs = (c.mensagens || []).filter((m) => { const ts = m.ts || 0; return (!de || ts >= de) && (!ate || ts <= ate); });
-        if (msgs.length) convs.push({ nome: c.nome || c.numero, canal, ult: msgs[msgs.length - 1].ts || 0, msgs });
+        const obs = (c.notas || []).filter((n) => n.tipo === "obs").map((n) => n.texto);
+        if (msgs.length) convs.push({ nome: c.nome || c.numero, canal, obs, ult: msgs[msgs.length - 1].ts || 0, msgs });
       }
       const totalConversas = convs.length;
       const totalOficial = convs.filter((c) => c.canal === "oficial").length;
@@ -3742,6 +3769,7 @@ export function instalarCanalOficial({ app, getDb, saveDB, saveSoon, proximoId, 
       const linhas = [];
       for (const c of convs) {
         linhas.push("=== Conversa [" + (c.canal === "oficial" ? "OFICIAL" : "NÃO-OFICIAL") + "] com " + c.nome + " ===");
+        if (c.obs && c.obs.length) linhas.push(">> OBSERVAÇÕES DO VENDEDOR (leve MUITO em conta — explica o que rolou por fora do chat, ex: resolvido por ligação): " + c.obs.join(" | "));
         for (const m of c.msgs.slice(-25)) {
           const quem = m.role === "them" ? "CLIENTE" : "VENDEDOR";
           let txt = m.transcricao ? "[áudio] " + m.transcricao
@@ -3768,6 +3796,7 @@ export function instalarCanalOficial({ app, getDb, saveDB, saveSoon, proximoId, 
         + "ATENÇÃO — MENSAGEM DE ABERTURA (não penalize!): no canal OFICIAL a PRIMEIRA mensagem é quase sempre um TEMPLATE de disparo em massa (aparece como '[abertura: template de disparo em massa]'). Isso é uma LIMITAÇÃO do WhatsApp oficial (fora da janela de 24h só entra template aprovado) e é um DISPARO AUTOMÁTICO — NÃO é escolha nem culpa do vendedor. NUNCA rebaixe a nota nem marque a Apresentação como ruim só porque a abertura foi um template. Avalie a habilidade do vendedor a partir de COMO ELE CONDUZ a conversa DEPOIS que o cliente responde, e pela CADÊNCIA DE FOLLOW-UP. Se o cliente nunca respondeu ao template, o que importa é se o vendedor fez follow-up (não a abertura em si).\n\n"
         + "CADÊNCIA DE FOLLOW-UP (avalie com MUITA atenção, usando os HORÁRIOS [entre colchetes] de cada mensagem): quando o cliente não responde ou some, o vendedor RETOMA o contato? Meça a cadência pelos horários: depois de ~24h sem resposta ele volta a chamar? Com que frequência (todo dia? some por uma semana e desiste? ou vira spam mandando várias no mesmo dia)? O ideal é uma cadência CONSISTENTE e educada — retomar após ~24h, depois espaçar (1-2 dias), insistir algumas vezes sem sumir e sem encher o saco. Avalie a cadência de follow-up TANTO no OFICIAL quanto no NÃO-OFICIAL. Follow-up bem feito é um dos maiores sinais de um bom vendedor — valorize quem faz e cobre quem não faz.\n\n"
         + "CANAIS: as conversas vêm marcadas como [OFICIAL] (WhatsApp oficial, com template de abertura) ou [NÃO-OFICIAL] (WhatsApp comum do vendedor, onde ele fala livremente). Avalie os dois e comente separadamente como o vendedor se sai em cada canal.\n\n"
+        + "OBSERVAÇÕES DO VENDEDOR: algumas conversas têm uma linha '>> OBSERVAÇÕES DO VENDEDOR'. São notas que o próprio vendedor escreveu explicando o que aconteceu POR FORA do chat (ex: 'liguei e resolvi', 'cliente comprou pelo telefone', 'fechado presencial'). LEVE ISSO MUITO EM CONTA: se o vendedor parou de responder no chat MAS anotou que resolveu por ligação/pessoalmente, NÃO trate como lead abandonado ou follow-up falho — considere que foi tratado. Use as observações pra entender o quadro real antes de criticar.\n\n"
         + "Responda SOMENTE com um JSON válido, sem texto fora dele, exatamente nesta estrutura:\n"
         + "{\"nota\":7,\"resumo\":\"4 a 7 frases com uma análise geral aprofundada do comportamento do vendedor no período (padrões reais, tom, ritmo, condução, evolução)\",\"passos\":[{\"n\":1,\"nome\":\"Apresentação\",\"status\":\"ok\",\"comentario\":\"o que o vendedor fez ou deixou de fazer nesse passo, com exemplo real da conversa\"}],\"followup\":{\"status\":\"ok\",\"comentario\":\"avaliação da CADÊNCIA de follow-up do vendedor: ele retoma quem não respondeu após ~24h? com que frequência? desiste cedo demais ou vira spam? cite exemplos reais com os horários\"},\"porCanal\":{\"oficial\":\"como o vendedor se sai no WhatsApp OFICIAL especificamente (condução pós-template e follow-up)\",\"naoOficial\":\"como o vendedor se sai no WhatsApp NÃO-OFICIAL especificamente\"},\"bem\":[\"...\"],\"melhorar\":[\"...\"],\"fortes\":[\"...\"],\"fracos\":[\"...\"],\"criticos\":[\"...\"],\"sugestoes\":[\"ações práticas e específicas pra melhorar, ligadas aos 7 passos\"],\"cpc\":{\"comece\":[\"o que o vendedor deve COMEÇAR a fazer\"],\"pare\":[\"o que deve PARAR de fazer\"],\"continue\":[\"o que já faz bem e deve CONTINUAR\"]}}\n"
         + "Regras: \"nota\" é um inteiro de 0 a 10 pra performance geral do vendedor no período (LEMBRE: não rebaixe por causa do template de abertura). Em \"passos\" traga os 7 passos (n de 1 a 7, com o nome certo), e \"status\" é 'ok' (fez bem), 'parcial' (fez pela metade) ou 'nao' (não fez). Cada \"comentario\" deve ser específico e citar o que viu. Em \"followup\" avalie a CADÊNCIA (retomar após ~24h, frequência adequada, nem sumir nem virar spam) — 'ok' se faz bem, 'parcial' se faz pouco/mal, 'nao' se não faz. Em \"porCanal\" comente separadamente o desempenho no oficial e no não-oficial (se não houver conversas de um canal, diga que não houve). \"criticos\" só para coisas graves (cliente sem resposta e sem follow-up, promessa não cumprida, oportunidade claramente perdida, demora excessiva, tom rude). Se não houver, use []. \"sugestoes\" deve ter itens acionáveis. Em \"cpc\" (o fechamento de coaching Comece/Pare/Continue) traga de 1 a 4 itens curtos e diretos em CADA um (comece, pare, continue), específicos pra esse vendedor e baseados nas conversas — é a recomendação final. Escreva tudo em português do Brasil, com profundidade (não seja raso).";

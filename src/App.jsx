@@ -407,7 +407,6 @@ export default function App() {
     crm: { t: "Pipeline", s: "Funil de leads — arraste entre as etapas, atribua e acompanhe" },
     vendas: { t: "Vendas", s: "Metas, ranking e todas as vendas do time" },
     desempenho: { t: "Desempenho", s: "Métricas, cargo, faixa e progresso de cada vendedor" },
-    analiseia: { t: "Análise IA", s: "A IA lê as conversas e aponta o que está bom, o que melhorar e alertas" },
     sistema: { t: "Sistema", s: "Controle dos módulos entregues — visível só pra você (dono)" },
     minhasSolicitacoes: { t: "Minhas solicitações", s: "Acompanhe seus pedidos ao suporte" },
     solicitacoes: { t: "Solicitações de suporte", s: "Pedidos de ajuda dos vendedores e análise" },
@@ -450,7 +449,7 @@ export default function App() {
             <span>{theme === "dark" ? "Modo claro" : "Modo escuro"}</span>
           </button>
           <button className="logout" onClick={logout}>Sair</button>
-          <div style={{ textAlign: "center", fontSize: 10, color: "var(--muted)", marginTop: 8, opacity: 0.7 }}>v274 · 18/09 15h00</div>
+          <div style={{ textAlign: "center", fontSize: 10, color: "var(--muted)", marginTop: 8, opacity: 0.7 }}>v275 · 18/09 16h10</div>
         </div>
       </aside>
 
@@ -9311,6 +9310,20 @@ function InboxOficial({ isGer, ehLider, showToast, onIrParaEvolution, target, on
   useEffect(() => { conversaRef.current = conversa; }, [conversa]);
   const [baixandoConvPdf, setBaixandoConvPdf] = useState(false);
   const [ligando, setLigando] = useState(false);
+  const [obsAberta, setObsAberta] = useState(false);
+  const [obsTexto, setObsTexto] = useState("");
+  const [obsLista, setObsLista] = useState([]);
+  const [obsSalvando, setObsSalvando] = useState(false);
+  async function abrirObs() {
+    setObsAberta(true); setObsTexto("");
+    try { const r = await api.ofChatObsList(conversa.id); setObsLista(((r && r.notas) || []).filter((n) => n.tipo === "obs")); } catch (_) { setObsLista([]); }
+  }
+  async function salvarObs() {
+    if (!obsTexto.trim()) return;
+    setObsSalvando(true);
+    try { const r = await api.ofChatObsAdd(conversa.id, obsTexto.trim()); setObsLista(((r && r.notas) || []).filter((n) => n.tipo === "obs")); setObsTexto(""); showToast("✓ Observação salva"); }
+    catch (e) { showToast("✗ " + e.message); } finally { setObsSalvando(false); }
+  }
   const [chamada, setChamada] = useState(null); // {nome, numero, inicio} quando o Atende aceitou
   const [cronometro, setCronometro] = useState(0);
   const [ligDetalhe, setLigDetalhe] = useState(null); // ligação aberta no painel de resumo
@@ -10042,10 +10055,46 @@ function InboxOficial({ isGer, ehLider, showToast, onIrParaEvolution, target, on
                 <button className="of-acao-btn" title="Exportar esta conversa em PDF" disabled={baixandoConvPdf} onClick={exportarConversaPDF}>
                   {baixandoConvPdf ? <span className="spin" /> : "⬇"} Exportar PDF
                 </button>
+                <button className="of-acao-btn" title="Adicionar observação (a IA lê e considera na análise)" onClick={abrirObs}>
+                  📝 Observação
+                </button>
                 <button className="of-acao-btn fim" title="Encerrar atendimento" onClick={() => encerrar()}>
                   <I.check className="ico" /> Encerrar
                 </button>
               </div>
+              {obsAberta && (
+                <Portal>
+                  <div className="modal" onClick={(e) => e.target === e.currentTarget && setObsAberta(false)}>
+                    <div className="onum-modal" style={{ maxWidth: 480, padding: 22 }}>
+                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
+                        <b style={{ fontSize: 16 }}>📝 Observações do lead</b>
+                        <button className="crm-x" onClick={() => setObsAberta(false)}>✕</button>
+                      </div>
+                      <p style={{ fontSize: 12.5, color: "var(--muted)", margin: "0 0 12px", lineHeight: 1.5 }}>
+                        Registre o que rolou por fora do chat (ligou e resolveu, fechou presencial, cliente pediu pra chamar depois...). <b>A IA lê essas observações</b> e considera na análise — assim não trata como lead abandonado.
+                      </p>
+                      <textarea value={obsTexto} onChange={(e) => setObsTexto(e.target.value)} placeholder="Ex: Liguei pro cliente e ele fechou por telefone. / Resolvido presencialmente." rows={3} style={{ width: "100%", boxSizing: "border-box", padding: "10px 12px", borderRadius: 10, border: "1px solid var(--line)", fontSize: 13.5, resize: "vertical", fontFamily: "inherit" }} />
+                      <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 10 }}>
+                        <button className="btn" onClick={() => setObsAberta(false)}>Fechar</button>
+                        <button className="btn btn-primary" disabled={obsSalvando || !obsTexto.trim()} onClick={salvarObs}>{obsSalvando ? "Salvando…" : "Salvar observação"}</button>
+                      </div>
+                      {obsLista.length > 0 && (
+                        <div style={{ marginTop: 16, borderTop: "1px solid var(--line)", paddingTop: 12 }}>
+                          <div style={{ fontSize: 12, fontWeight: 700, color: "var(--muted)", marginBottom: 8 }}>Observações anteriores</div>
+                          <div style={{ display: "flex", flexDirection: "column", gap: 8, maxHeight: 220, overflowY: "auto" }}>
+                            {obsLista.slice().reverse().map((n, i) => (
+                              <div key={i} style={{ background: "var(--surface-2)", border: "1px solid var(--line)", borderRadius: 10, padding: "8px 12px" }}>
+                                <div style={{ fontSize: 13, color: "var(--txt)", lineHeight: 1.45 }}>{n.texto}</div>
+                                <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 4 }}>{n.por || ""}{n.ts ? " · " + new Date(n.ts).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }) : ""}</div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </Portal>
+              )}
               {showTransfer && (
                 <div className="of-transfer-pop">
                   <div className="of-transfer-tit">Transferir conversa para:</div>
@@ -10267,6 +10316,20 @@ function WhatsApp({ user, showToast, target, onTargetUsed, recarregarSol }) {
   const [pedindoSuporte, setPedindoSuporte] = useState(false);
   const [regVenda, setRegVenda] = useState(false);
   const [cadPipeline, setCadPipeline] = useState(false);
+  const [obsAberta, setObsAberta] = useState(false);
+  const [obsTexto, setObsTexto] = useState("");
+  const [obsLista, setObsLista] = useState([]);
+  const [obsSalvando, setObsSalvando] = useState(false);
+  async function abrirObs() {
+    setObsAberta(true); setObsTexto("");
+    try { const r = await api.ofChatObsList(sel); setObsLista(((r && r.notas) || []).filter((n) => n.tipo === "obs")); } catch (_) { setObsLista([]); }
+  }
+  async function salvarObs() {
+    if (!obsTexto.trim() || !sel) return;
+    setObsSalvando(true);
+    try { const r = await api.ofChatObsAdd(sel, obsTexto.trim()); setObsLista(((r && r.notas) || []).filter((n) => n.tipo === "obs")); setObsTexto(""); showToast("✓ Observação salva"); }
+    catch (e) { showToast("✗ " + e.message); } finally { setObsSalvando(false); }
+  }
   const [showEmoji, setShowEmoji] = useState(false);
   const [verArquivadas, setVerArquivadas] = useState(false);
   const [gravando, setGravando] = useState(false);
@@ -10658,6 +10721,7 @@ function WhatsApp({ user, showToast, target, onTargetUsed, recarregarSol }) {
               {chat.nota != null && <span className="nota-badge" title="Nota da pesquisa de satisfação">⭐ {chat.nota}/5</span>}
               {isGer && <button type="button" className="btn-pipe" onClick={() => setCadPipeline(true)} title="Cadastrar este lead no Pipeline"><I.pipe style={{ width: 14, height: 14 }} /> Pipeline</button>}
               <button type="button" className="btn-venda" onClick={() => setRegVenda(true)} title="Registrar uma venda deste cliente"><I.gauge style={{ width: 14, height: 14 }} /> Registrar venda</button>
+              <button type="button" className="btn-pipe" onClick={abrirObs} title="Adicionar observação (a IA lê e considera na análise)">📝 Observação</button>
               {!isGer && <button type="button" className="btn-suporte" onClick={() => setPedindoSuporte(true)} title="Encaminhar este atendimento para a equipe de suporte"><I.suporte style={{ width: 14, height: 14 }} /> Encaminhar pro suporte</button>}
               {chat.encerrado ? (
                 <div className="enc-acao">
@@ -10746,6 +10810,39 @@ function WhatsApp({ user, showToast, target, onTargetUsed, recarregarSol }) {
       {regVenda && chat && (
         <ModalRegistrarVenda prefill={{ nome: chat.nome, telefone: chat.numero }} isGer={isGer}
           onClose={() => setRegVenda(false)} showToast={showToast} />
+      )}
+      {obsAberta && chat && (
+        <Portal>
+          <div className="modal" onClick={(e) => e.target === e.currentTarget && setObsAberta(false)}>
+            <div className="onum-modal" style={{ maxWidth: 480, padding: 22 }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
+                <b style={{ fontSize: 16 }}>📝 Observações do lead</b>
+                <button className="crm-x" onClick={() => setObsAberta(false)}>✕</button>
+              </div>
+              <p style={{ fontSize: 12.5, color: "var(--muted)", margin: "0 0 12px", lineHeight: 1.5 }}>
+                Registre o que rolou por fora do chat (ligou e resolveu, fechou presencial, cliente pediu pra chamar depois...). <b>A IA lê essas observações</b> e considera na análise — assim não trata como lead abandonado.
+              </p>
+              <textarea value={obsTexto} onChange={(e) => setObsTexto(e.target.value)} placeholder="Ex: Liguei pro cliente e ele fechou por telefone. / Resolvido presencialmente." rows={3} style={{ width: "100%", boxSizing: "border-box", padding: "10px 12px", borderRadius: 10, border: "1px solid var(--line)", fontSize: 13.5, resize: "vertical", fontFamily: "inherit" }} />
+              <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 10 }}>
+                <button className="btn" onClick={() => setObsAberta(false)}>Fechar</button>
+                <button className="btn btn-primary" disabled={obsSalvando || !obsTexto.trim()} onClick={salvarObs}>{obsSalvando ? "Salvando…" : "Salvar observação"}</button>
+              </div>
+              {obsLista.length > 0 && (
+                <div style={{ marginTop: 16, borderTop: "1px solid var(--line)", paddingTop: 12 }}>
+                  <div style={{ fontSize: 12, fontWeight: 700, color: "var(--muted)", marginBottom: 8 }}>Observações anteriores</div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 8, maxHeight: 220, overflowY: "auto" }}>
+                    {obsLista.slice().reverse().map((n, i) => (
+                      <div key={i} style={{ background: "var(--surface-2)", border: "1px solid var(--line)", borderRadius: 10, padding: "8px 12px" }}>
+                        <div style={{ fontSize: 13, color: "var(--txt)", lineHeight: 1.45 }}>{n.texto}</div>
+                        <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 4 }}>{n.por || ""}{n.ts ? " · " + new Date(n.ts).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }) : ""}</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </Portal>
       )}
       {cadPipeline && chat && (
         <ModalCadastrarPipeline
