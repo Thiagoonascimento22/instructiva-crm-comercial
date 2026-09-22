@@ -3716,32 +3716,44 @@ export function instalarCanalOficial({ app, getDb, saveDB, saveSoon, proximoId, 
       const alvo = (db.users || []).find((u) => u.id === alvoId);
       if (!alvo) return res.status(404).json({ error: "Vendedor não encontrado" });
       const de = parseInt(b.de) || 0, ate = parseInt(b.ate) || 0;
-      // reúne as conversas oficiais do vendedor no período
-      const chats = Object.values(db.waChats || {}).filter((c) => c && c.canal === "oficial" && c.vendedorId === alvoId);
+      // instâncias NÃO-OFICIAIS (Evolution) desse vendedor
+      const instDoVend = new Set(((db.waConfig && db.waConfig.instancias) || []).filter((i) => i.vendedorId === alvoId).map((i) => i.instance));
+      // reúne conversas OFICIAIS e NÃO-OFICIAIS do vendedor no período
+      const chats = Object.values(db.waChats || {}).filter((c) => {
+        if (!c) return false;
+        const ehOficial = c.canal === "oficial" && c.vendedorId === alvoId;
+        const ehNaoOficial = c.instance && instDoVend.has(c.instance);
+        return ehOficial || ehNaoOficial;
+      });
       let convs = [];
       for (const c of chats) {
+        const canal = c.canal === "oficial" ? "oficial" : "naoOficial";
         const msgs = (c.mensagens || []).filter((m) => { const ts = m.ts || 0; return (!de || ts >= de) && (!ate || ts <= ate); });
-        if (msgs.length) convs.push({ nome: c.nome || c.numero, ult: msgs[msgs.length - 1].ts || 0, msgs });
+        if (msgs.length) convs.push({ nome: c.nome || c.numero, canal, ult: msgs[msgs.length - 1].ts || 0, msgs });
       }
       const totalConversas = convs.length;
+      const totalOficial = convs.filter((c) => c.canal === "oficial").length;
+      const totalNaoOficial = totalConversas - totalOficial;
       if (!totalConversas) return res.json({ ok: true, vazio: true, totalConversas: 0, vendedor: alvo.nome });
       convs.sort((a, c) => c.ult - a.ult);
-      convs = convs.slice(0, 150); // cap de conversas (controla custo/token) — subiu de 40 p/ 150
-      // monta o transcript (com limites)
+      convs = convs.slice(0, 400); // cap de conversas (controla custo/token) — subiu de 150 p/ 400
+      // monta o transcript com HORÁRIO de cada mensagem (pra IA medir cadência de follow-up) e marcando o CANAL
+      const fmtData = (ts) => { try { return new Date(ts).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }); } catch (_) { return ""; } };
       const linhas = [];
       for (const c of convs) {
-        linhas.push("=== Conversa com " + c.nome + " ===");
+        linhas.push("=== Conversa [" + (c.canal === "oficial" ? "OFICIAL" : "NÃO-OFICIAL") + "] com " + c.nome + " ===");
         for (const m of c.msgs.slice(-25)) {
           const quem = m.role === "them" ? "CLIENTE" : "VENDEDOR";
           let txt = m.transcricao ? "[áudio] " + m.transcricao
-            : (m.content || (m.template ? "[enviou template: " + m.template + "]" : (m.tipo === "audio" ? "[áudio sem transcrição]" : (m.tipo && m.tipo !== "text" ? "[" + m.tipo + "]" : ""))));
+            : (m.content || (m.template ? "[abertura: template de disparo em massa]" : (m.tipo === "audio" ? "[áudio sem transcrição]" : (m.tipo && m.tipo !== "text" ? "[" + m.tipo + "]" : ""))));
           txt = String(txt || "").replace(/\s+/g, " ").slice(0, 300);
-          if (txt) linhas.push(quem + ": " + txt);
+          const hora = m.ts ? "[" + fmtData(m.ts) + "] " : "";
+          if (txt) linhas.push(hora + quem + ": " + txt);
         }
         linhas.push("");
       }
       let transcript = linhas.join("\n");
-      if (transcript.length > 300000) transcript = transcript.slice(0, 300000) + "\n...(cortado por tamanho)";
+      if (transcript.length > 400000) transcript = transcript.slice(0, 400000) + "\n...(cortado por tamanho)";
 
       const sistema = "Você é um analista de vendas sênior da Instructiva, especialista no método dos 7 Passos da Venda (padrão Conquer). Analise as conversas de WhatsApp de um vendedor e faça uma avaliação PROFUNDA, honesta e específica, sempre citando situações reais que viu nas conversas (nunca invente). Seja detalhado e direto — nada de análise genérica ou rasa.\n\n"
         + "OS 7 PASSOS DA VENDA (avalie o vendedor em CADA um):\n"
@@ -3753,12 +3765,15 @@ export function instalarCanalOficial({ app, getDb, saveDB, saveSoon, proximoId, 
         + "6. INDICAÇÕES (pega, não pede): logo após o fechamento (ou mesmo sem fechar, se houve conexão), pega indicações por voz de comando, NA HORA — nunca 'depois'.\n"
         + "7. VALIDAÇÃO: faz o cliente aquecer os indicados (reenviar a mensagem) e diz quem respondeu / quem priorizar, transformando a próxima ligação de fria em quente.\n\n"
         + "PRINCÍPIOS-CHAVE: o certo é levar a conversa pra LIGAÇÃO (fechar tudo só por WhatsApp é fraco); postura de confiança (conduz, não implora, não fica pedindo desculpa); a venda está na conexão. IMPORTANTE: como você só vê o WhatsApp, avalie o que dá pra ver e, quando um passo deveria acontecer na ligação, verifique se o vendedor pelo menos PUXOU pra ligação — se ele tentou vender tudo no zap, aponte isso como falha. As mensagens de áudio aparecem transcritas e marcadas com [áudio] — trate-as como o que a pessoa falou.\n\n"
+        + "ATENÇÃO — MENSAGEM DE ABERTURA (não penalize!): no canal OFICIAL a PRIMEIRA mensagem é quase sempre um TEMPLATE de disparo em massa (aparece como '[abertura: template de disparo em massa]'). Isso é uma LIMITAÇÃO do WhatsApp oficial (fora da janela de 24h só entra template aprovado) e é um DISPARO AUTOMÁTICO — NÃO é escolha nem culpa do vendedor. NUNCA rebaixe a nota nem marque a Apresentação como ruim só porque a abertura foi um template. Avalie a habilidade do vendedor a partir de COMO ELE CONDUZ a conversa DEPOIS que o cliente responde, e pela CADÊNCIA DE FOLLOW-UP. Se o cliente nunca respondeu ao template, o que importa é se o vendedor fez follow-up (não a abertura em si).\n\n"
+        + "CADÊNCIA DE FOLLOW-UP (avalie com MUITA atenção, usando os HORÁRIOS [entre colchetes] de cada mensagem): quando o cliente não responde ou some, o vendedor RETOMA o contato? Meça a cadência pelos horários: depois de ~24h sem resposta ele volta a chamar? Com que frequência (todo dia? some por uma semana e desiste? ou vira spam mandando várias no mesmo dia)? O ideal é uma cadência CONSISTENTE e educada — retomar após ~24h, depois espaçar (1-2 dias), insistir algumas vezes sem sumir e sem encher o saco. Avalie a cadência de follow-up TANTO no OFICIAL quanto no NÃO-OFICIAL. Follow-up bem feito é um dos maiores sinais de um bom vendedor — valorize quem faz e cobre quem não faz.\n\n"
+        + "CANAIS: as conversas vêm marcadas como [OFICIAL] (WhatsApp oficial, com template de abertura) ou [NÃO-OFICIAL] (WhatsApp comum do vendedor, onde ele fala livremente). Avalie os dois e comente separadamente como o vendedor se sai em cada canal.\n\n"
         + "Responda SOMENTE com um JSON válido, sem texto fora dele, exatamente nesta estrutura:\n"
-        + "{\"nota\":7,\"resumo\":\"4 a 7 frases com uma análise geral aprofundada do comportamento do vendedor no período (padrões reais, tom, ritmo, condução, evolução)\",\"passos\":[{\"n\":1,\"nome\":\"Apresentação\",\"status\":\"ok\",\"comentario\":\"o que o vendedor fez ou deixou de fazer nesse passo, com exemplo real da conversa\"}],\"followup\":{\"status\":\"ok\",\"comentario\":\"avaliação do follow-up do vendedor: ele retoma o contato com quem não respondeu ou esfriou? com que cadência? desiste cedo demais ou fica insistente/spam? cite exemplos reais\"},\"bem\":[\"...\"],\"melhorar\":[\"...\"],\"fortes\":[\"...\"],\"fracos\":[\"...\"],\"criticos\":[\"...\"],\"sugestoes\":[\"ações práticas e específicas pra melhorar, ligadas aos 7 passos\"],\"cpc\":{\"comece\":[\"o que o vendedor deve COMEÇAR a fazer\"],\"pare\":[\"o que deve PARAR de fazer\"],\"continue\":[\"o que já faz bem e deve CONTINUAR\"]}}\n"
-        + "Regras: \"nota\" é um inteiro de 0 a 10 pra performance geral do vendedor no período. Em \"passos\" traga os 7 passos (n de 1 a 7, com o nome certo), e \"status\" é 'ok' (fez bem), 'parcial' (fez pela metade) ou 'nao' (não fez). Cada \"comentario\" deve ser específico e citar o que viu. Em \"followup\" avalie SE e COMO o vendedor faz follow-up: retomar leads que ficaram sem responder, reengajar quem esfriou, cadência adequada (nem sumir, nem virar spam) — 'ok' se faz bem, 'parcial' se faz pouco/mal, 'nao' se não faz. \"criticos\" só para coisas graves (cliente sem resposta e sem follow-up, promessa não cumprida, oportunidade claramente perdida, demora excessiva, tom rude). Se não houver, use []. \"sugestoes\" deve ter itens acionáveis. Em \"cpc\" (o fechamento de coaching Comece/Pare/Continue) traga de 1 a 4 itens curtos e diretos em CADA um (comece, pare, continue), específicos pra esse vendedor e baseados nas conversas — é a recomendação final. Escreva tudo em português do Brasil, com profundidade (não seja raso).";
-      const usuario = "Vendedor: " + alvo.nome + "\nConversas analisadas: " + convs.length + (totalConversas > convs.length ? " (as " + convs.length + " mais recentes de " + totalConversas + ")" : "") + "\n\n" + transcript;
+        + "{\"nota\":7,\"resumo\":\"4 a 7 frases com uma análise geral aprofundada do comportamento do vendedor no período (padrões reais, tom, ritmo, condução, evolução)\",\"passos\":[{\"n\":1,\"nome\":\"Apresentação\",\"status\":\"ok\",\"comentario\":\"o que o vendedor fez ou deixou de fazer nesse passo, com exemplo real da conversa\"}],\"followup\":{\"status\":\"ok\",\"comentario\":\"avaliação da CADÊNCIA de follow-up do vendedor: ele retoma quem não respondeu após ~24h? com que frequência? desiste cedo demais ou vira spam? cite exemplos reais com os horários\"},\"porCanal\":{\"oficial\":\"como o vendedor se sai no WhatsApp OFICIAL especificamente (condução pós-template e follow-up)\",\"naoOficial\":\"como o vendedor se sai no WhatsApp NÃO-OFICIAL especificamente\"},\"bem\":[\"...\"],\"melhorar\":[\"...\"],\"fortes\":[\"...\"],\"fracos\":[\"...\"],\"criticos\":[\"...\"],\"sugestoes\":[\"ações práticas e específicas pra melhorar, ligadas aos 7 passos\"],\"cpc\":{\"comece\":[\"o que o vendedor deve COMEÇAR a fazer\"],\"pare\":[\"o que deve PARAR de fazer\"],\"continue\":[\"o que já faz bem e deve CONTINUAR\"]}}\n"
+        + "Regras: \"nota\" é um inteiro de 0 a 10 pra performance geral do vendedor no período (LEMBRE: não rebaixe por causa do template de abertura). Em \"passos\" traga os 7 passos (n de 1 a 7, com o nome certo), e \"status\" é 'ok' (fez bem), 'parcial' (fez pela metade) ou 'nao' (não fez). Cada \"comentario\" deve ser específico e citar o que viu. Em \"followup\" avalie a CADÊNCIA (retomar após ~24h, frequência adequada, nem sumir nem virar spam) — 'ok' se faz bem, 'parcial' se faz pouco/mal, 'nao' se não faz. Em \"porCanal\" comente separadamente o desempenho no oficial e no não-oficial (se não houver conversas de um canal, diga que não houve). \"criticos\" só para coisas graves (cliente sem resposta e sem follow-up, promessa não cumprida, oportunidade claramente perdida, demora excessiva, tom rude). Se não houver, use []. \"sugestoes\" deve ter itens acionáveis. Em \"cpc\" (o fechamento de coaching Comece/Pare/Continue) traga de 1 a 4 itens curtos e diretos em CADA um (comece, pare, continue), específicos pra esse vendedor e baseados nas conversas — é a recomendação final. Escreva tudo em português do Brasil, com profundidade (não seja raso).";
+      const usuario = "Vendedor: " + alvo.nome + "\nConversas analisadas: " + convs.length + " (" + totalOficial + " oficiais + " + totalNaoOficial + " não-oficiais)" + (totalConversas > convs.length ? " — as " + convs.length + " mais recentes de " + totalConversas : "") + "\n\n" + transcript;
 
-      const bruto = await analisarComIA(sistema, usuario, 2400);
+      const bruto = await analisarComIA(sistema, usuario, 2800);
       let analise = null;
       try { analise = JSON.parse(String(bruto).replace(/```json/gi, "").replace(/```/g, "").trim()); } catch (_) {}
 
@@ -3773,7 +3788,7 @@ export function instalarCanalOficial({ app, getDb, saveDB, saveSoon, proximoId, 
         salvar();
       }
 
-      res.json({ ok: true, vendedor: alvo.nome, totalConversas, analisadas: convs.length, analise, bruto: analise ? null : bruto });
+      res.json({ ok: true, vendedor: alvo.nome, totalConversas, totalOficial, totalNaoOficial, analisadas: convs.length, analise, bruto: analise ? null : bruto });
     } catch (e) { res.status(500).json({ error: e.message || "Falha na análise" }); }
   });
 

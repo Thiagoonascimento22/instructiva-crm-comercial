@@ -450,7 +450,7 @@ export default function App() {
             <span>{theme === "dark" ? "Modo claro" : "Modo escuro"}</span>
           </button>
           <button className="logout" onClick={logout}>Sair</button>
-          <div style={{ textAlign: "center", fontSize: 10, color: "var(--muted)", marginTop: 8, opacity: 0.7 }}>v273 · 17/09 11h30</div>
+          <div style={{ textAlign: "center", fontSize: 10, color: "var(--muted)", marginTop: 8, opacity: 0.7 }}>v274 · 18/09 15h00</div>
         </div>
       </aside>
 
@@ -6973,7 +6973,7 @@ function AnaliseIAVendedor({ showToast, isGer = true }) {
 
       {res && !res.vazio && !carregando && res._modo === "vendedor" && (
         <div>
-          <div style={{ fontSize: 12, color: DES.mut2, marginBottom: 14 }}>Analisadas {res.analisadas} conversa(s){res.totalConversas > res.analisadas ? " (as mais recentes de " + res.totalConversas + ")" : ""}{isGer && res.vendedor ? " · " + res.vendedor : ""}.</div>
+          <div style={{ fontSize: 12, color: DES.mut2, marginBottom: 14 }}>Analisadas {res.analisadas} conversa(s){res.totalOficial != null && res.totalNaoOficial != null ? " (" + res.totalOficial + " oficiais + " + res.totalNaoOficial + " não-oficiais)" : ""}{res.totalConversas > res.analisadas ? " · as " + res.analisadas + " mais recentes de " + res.totalConversas : ""}{isGer && res.vendedor ? " · " + res.vendedor : ""}.</div>
           {A ? <>
             {(A.nota !== undefined && A.nota !== null) && (
               <div style={{ display: "flex", alignItems: "center", gap: 14, background: "var(--card)", border: "1px solid " + DES.line, borderRadius: 16, padding: 18, marginBottom: 16 }}>
@@ -7010,6 +7010,22 @@ function AnaliseIAVendedor({ showToast, isGer = true }) {
                 </div>
               );
             })()}
+            {A.porCanal && (A.porCanal.oficial || A.porCanal.naoOficial) && (
+              <div style={{ display: "flex", gap: 12, marginBottom: 14, flexWrap: "wrap" }}>
+                {A.porCanal.oficial && (
+                  <div style={{ flex: "1 1 260px", background: "#eff6ff", border: "1px solid #bfdbfe", borderRadius: 14, padding: 16 }}>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: "#1e40af", marginBottom: 6 }}>📱 WhatsApp Oficial{res.totalOficial != null ? " · " + res.totalOficial + " conversa(s)" : ""}</div>
+                    <div style={{ fontSize: 13, color: DES.ink, lineHeight: 1.55 }}>{A.porCanal.oficial}</div>
+                  </div>
+                )}
+                {A.porCanal.naoOficial && (
+                  <div style={{ flex: "1 1 260px", background: "#f0fdf4", border: "1px solid #bbf7d0", borderRadius: 14, padding: 16 }}>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: "#166534", marginBottom: 6 }}>💬 WhatsApp Não-oficial{res.totalNaoOficial != null ? " · " + res.totalNaoOficial + " conversa(s)" : ""}</div>
+                    <div style={{ fontSize: 13, color: DES.ink, lineHeight: 1.55 }}>{A.porCanal.naoOficial}</div>
+                  </div>
+                )}
+              </div>
+            )}
             <Bloco titulo="O que está indo bem" itens={A.bem} cor={DES.green} bg="#f0fdf4" ico="✅" />
             <Bloco titulo="O que precisa melhorar" itens={A.melhorar} cor={DES.orange} bg="#fff7ed" ico="⚠️" />
             <Bloco titulo="Pontos fortes" itens={A.fortes} cor="#2563eb" bg="#eff6ff" ico="💪" />
