@@ -5389,10 +5389,9 @@ export function instalarCanalOficial({ app, getDb, saveDB, saveSoon, proximoId, 
   async function gerarResumoLigacao(audioUrl, callid) {
     try {
       let audio = null;
-      // 1) tenta a URL pública direto
-      if (audioUrl) audio = await _baixarAudio(audioUrl);
-      // 2) fallback: API de Download de Áudio do Atende (POST callid + x-api-key → 301 com Location)
-      if (!audio && callid) {
+      // 1) PRINCIPAL: API de Download de Áudio do Atende (acesso por máquina — POST callid + x-api-key → 301 com Location).
+      //    A URL pública direta é bloqueada pra acesso automático (retorna 401/HTML), por isso a API é o caminho certo.
+      if (callid) {
         try {
           const a = cfgAtende();
           if (a.apiKey) {
@@ -5407,6 +5406,8 @@ export function instalarCanalOficial({ app, getDb, saveDB, saveSoon, proximoId, 
           }
         } catch (_) {}
       }
+      // 2) fallback: URL pública direta (funciona em alguns casos)
+      if (!audio && audioUrl) audio = await _baixarAudio(audioUrl);
       if (!audio) return null;
       const transcricao = await transcreverAudio(audio.buf, audio.ct);
       if (!transcricao) return null;
@@ -5609,7 +5610,10 @@ export function instalarCanalOficial({ app, getDb, saveDB, saveSoon, proximoId, 
       }
       const ev = b.event_code || "";
       const call = b.call || {};
-      if (ev === "call.finished") {
+      const callid = String(call.call_id || call.callid || "");
+      // Processa QUALQUER evento que traga dados de chamada (chamada processada, finalizada, áudio disponível...).
+      // Idempotente e incremental: acha a ligação pelo callid e ATUALIZA (ex: preenche gravação quando fica pronta).
+      if (callid && (call.from_number || call.client_number || call.dnis || call.alt_dnis || call.number || call.audio_url)) {
         const candidatos = [call.from_number, call.client_number, call.dnis, call.alt_dnis, call.number]
           .map((x) => _soDig(x).slice(-8)).filter((x) => x.length >= 8);
         let lead = null, chat = null;
@@ -5618,28 +5622,40 @@ export function instalarCanalOficial({ app, getDb, saveDB, saveSoon, proximoId, 
           if (!chat) chat = acharChatPorTelefone(nu);
           if (lead && chat) break;
         }
-        const callid = String(call.call_id || "");
-        const a = cfgAtende(); const vistas = new Set(a.callsVistas || []);
-        if (!callid || !vistas.has(callid)) { // idempotente
-          const dur = Math.round(Number(call.inbound_duration || call.billed_duration || 0)) || 0;
-          const dir = call.direction === "outbound" ? "saída" : "entrante";
-          const atendida = call.status === "answered" || (call.outbound_calls && call.outbound_calls.length);
-          const vendedor = (call.outbound_calls && call.outbound_calls[0] && call.outbound_calls[0].name) || call.attendant_name || null;
-          const quando = call.started_at ? Date.parse(call.started_at) : Date.now();
-          const audioUrl = call.audio_url || null;
-          const dados = { direcao: dir, status: call.status || null, duracao: dur, callid, vendedorNome: vendedor, audioUrl, atendida: !!atendida };
-          if (lead) {
-            lead.historico = lead.historico || [];
-            lead.historico.push({ tipo: "ligacao", texto: "📞 Ligação " + dir + " · " + (atendida ? "atendida" : "não atendida") + (dur ? " · " + dur + "s" : ""), ts: quando, dados });
-            lead.atualizadoEm = Date.now();
+        const dur = Math.round(Number(call.inbound_duration || call.billed_duration || call.duration_call || 0)) || 0;
+        const dir = call.direction === "outbound" ? "saída" : "entrante";
+        const atendida = call.status === "answered" || call.status === "handled" || (call.outbound_calls && call.outbound_calls.length);
+        const vendedor = (call.outbound_calls && call.outbound_calls[0] && call.outbound_calls[0].name) || call.attendant_name || null;
+        const quando = call.started_at ? Date.parse(call.started_at) : Date.now();
+        const audioUrl = call.audio_url || call.public_audio_url || null;
+        const dados = { direcao: dir, status: call.status || null, duracao: dur, callid, vendedorNome: vendedor, audioUrl, atendida: !!atendida };
+        // histórico do lead (cria uma vez)
+        if (lead) {
+          lead.historico = lead.historico || [];
+          const jaTem = lead.historico.some((h) => h.tipo === "ligacao" && h.dados && String(h.dados.callid) === callid);
+          if (!jaTem) { lead.historico.push({ tipo: "ligacao", texto: "📞 Ligação " + dir + " · " + (atendida ? "atendida" : "não atendida") + (dur ? " · " + dur + "s" : ""), ts: quando, dados }); lead.atualizadoEm = Date.now(); }
+        }
+        // conversa: acha a ligação pelo callid e atualiza; se não existe, cria
+        let msgRef = null;
+        if (chat) {
+          chat.mensagens = chat.mensagens || [];
+          msgRef = chat.mensagens.find((m) => m.tipo === "ligacao" && m.ligacao && String(m.ligacao.callid) === callid);
+          if (msgRef) { msgRef.ligacao = { ...msgRef.ligacao, ...dados, pendente: false }; }
+          else {
+            // pode existir um balão pendente (feito pelo botão) sem callid — completa ele
+            for (let i = chat.mensagens.length - 1; i >= 0 && i >= chat.mensagens.length - 12; i--) {
+              const mm = chat.mensagens[i];
+              if (mm && mm.tipo === "ligacao" && mm.ligacao && mm.ligacao.pendente && !mm.ligacao.callid) { msgRef = mm; break; }
+            }
+            if (msgRef) { msgRef.ligacao = { ...msgRef.ligacao, ...dados, pendente: false }; }
+            else { msgRef = { role: "me", tipo: "ligacao", ligacao: { ...dados }, ts: quando }; chat.mensagens.push(msgRef); }
           }
-          // grava na conversa (é onde o vendedor olha)
-          let msgRef = null;
-          if (chat) { chat.mensagens = chat.mensagens || []; msgRef = { role: "me", tipo: "ligacao", ligacao: { ...dados }, ts: quando }; chat.mensagens.push(msgRef); chat.atualizadoEm = Date.now(); }
-          if (callid) { vistas.add(callid); a.callsVistas = Array.from(vistas).slice(-5000); }
-          salvar();
-          // resumo em background (webhook dá a audio_url já pronta na maioria das vezes)
-          if (audioUrl && msgRef) { (async () => { try { const rz = await gerarResumoLigacao(audioUrl, callid); if (rz) { msgRef.ligacao.transcricao = rz.transcricao || null; msgRef.ligacao.resumo = rz.resumo || null; msgRef.ligacao.resumoPronto = true; } else { msgRef.ligacao.resumoPendente = true; } salvar(); } catch (_) {} })(); }
+          chat.atualizadoEm = Date.now();
+        }
+        salvar();
+        // gera o resumo quando houver gravação (a API de áudio baixa via callid — acesso por máquina)
+        if (msgRef && !msgRef.ligacao.resumoPronto && (audioUrl || atendida)) {
+          (async () => { try { const rz = await gerarResumoLigacao(audioUrl, callid); if (rz) { msgRef.ligacao.transcricao = rz.transcricao || null; msgRef.ligacao.resumo = rz.resumo || null; msgRef.ligacao.resumoPronto = true; salvar(); } else { msgRef.ligacao.resumoPendente = true; } } catch (_) {} })();
         }
       }
       res.json({ ok: true });
