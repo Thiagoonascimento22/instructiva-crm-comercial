@@ -449,7 +449,7 @@ export default function App() {
             <span>{theme === "dark" ? "Modo claro" : "Modo escuro"}</span>
           </button>
           <button className="logout" onClick={logout}>Sair</button>
-          <div style={{ textAlign: "center", fontSize: 10, color: "var(--muted)", marginTop: 8, opacity: 0.7 }}>v279 · 23/09 10h00</div>
+          <div style={{ textAlign: "center", fontSize: 10, color: "var(--muted)", marginTop: 8, opacity: 0.7 }}>v280 · 23/09 12h00</div>
         </div>
       </aside>
 
@@ -8684,6 +8684,12 @@ function PainelAtende({ showToast }) {
                   </div>
                 )}
                 {!diag.testeGravacao && diag.totalCDRs > 0 && <div style={{ marginTop: 8, color: "#fbbf24" }}>Nenhuma ligação com gravação encontrada — provável que a gravação de chamadas não esteja ativada na conta do Atende.</div>}
+                <div style={{ marginTop: 10, paddingTop: 10, borderTop: "1px solid #334155" }}>
+                  <div style={{ color: "#38bdf8", fontWeight: 700 }}>Webhooks recebidos (últimos):</div>
+                  {(!diag.webhooksRecebidos || !diag.webhooksRecebidos.length)
+                    ? <div style={{ color: "#fca5a5" }}>⚠️ Nenhum webhook recebido ainda. O Atende não está mandando os eventos pra este sistema (verificar a URL do webhook no Atende).</div>
+                    : diag.webhooksRecebidos.map((w, i) => <div key={i} style={{ marginTop: 3 }}>{new Date(w.ts).toLocaleTimeString("pt-BR")} · <b>{w.evento}</b> · callid {w.callid || "—"} · {w.dur}s · áudio:{String(w.temAudio)} · tel:{(w.nums || []).join("/") || "—"}{w.fwd ? " · (repassado)" : ""}</div>)}
+                </div>
                 {diag.amostraCDRs && diag.amostraCDRs.length > 0 && (
                   <details style={{ marginTop: 8 }}>
                     <summary style={{ cursor: "pointer", color: "#94a3b8" }}>Ver telefones das ligações (comparar com as conversas)</summary>

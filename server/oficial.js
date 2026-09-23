@@ -5549,7 +5549,7 @@ export function instalarCanalOficial({ app, getDb, saveDB, saveSoon, proximoId, 
       }
       // quantas conversas oficiais existem (pra ver se há com que casar)
       const numsChats = Object.values(db.waChats || {}).filter((c) => c.canal === "oficial").map((c) => _soDig(c.numero).slice(-8)).slice(0, 30);
-      res.json({ ok: true, httpAtende: r.status, ativo: !!a.ativo, temDialerToken: !!a.dialerToken, totalCDRs: itens.length, amostraCDRs: amostra, testeGravacao, telefonesDasConversas: numsChats });
+      res.json({ ok: true, httpAtende: r.status, ativo: !!a.ativo, temDialerToken: !!a.dialerToken, totalCDRs: itens.length, amostraCDRs: amostra, testeGravacao, telefonesDasConversas: numsChats, webhooksRecebidos: (a.webhooksLog || []).slice(-15).reverse() });
     } catch (e) { res.json({ ok: false, erro: e.message }); }
   });
 
@@ -5596,6 +5596,14 @@ export function instalarCanalOficial({ app, getDb, saveDB, saveSoon, proximoId, 
     try {
       garantirEstrutura();
       const b = req.body || {};
+      // REGISTRA o recebimento (pro diagnóstico ver se o Atende está mandando os eventos)
+      try {
+        const a = cfgAtende();
+        a.webhooksLog = (a.webhooksLog || []).slice(-19);
+        const c = b.call || {};
+        a.webhooksLog.push({ ts: Date.now(), evento: b.event_code || "?", callid: String(c.call_id || c.callid || ""), fwd: req.query.fwd === "1", temAudio: !!(c.audio_url || c.public_audio_url), dur: c.inbound_duration || c.billed_duration || c.duration_call || 0, nums: [c.from_number, c.client_number, c.dnis, c.alt_dnis].filter(Boolean).map((x) => _soDig(x).slice(-8)) });
+        salvar();
+      } catch (_) {}
       // REPASSE ENTRE SISTEMAS: o Atende manda pra UM sistema (Toledo); ele repassa o mesmo evento
       // pros outros (Jesuítas), e cada um registra só nas próprias conversas. ?fwd=1 evita loop.
       if (req.query.fwd !== "1") {
