@@ -449,7 +449,7 @@ export default function App() {
             <span>{theme === "dark" ? "Modo claro" : "Modo escuro"}</span>
           </button>
           <button className="logout" onClick={logout}>Sair</button>
-          <div style={{ textAlign: "center", fontSize: 10, color: "var(--muted)", marginTop: 8, opacity: 0.7 }}>v283 · 23/09 15h00</div>
+          <div style={{ textAlign: "center", fontSize: 10, color: "var(--muted)", marginTop: 8, opacity: 0.7 }}>v284 · 23/09 15h20</div>
         </div>
       </aside>
 
@@ -10249,22 +10249,25 @@ function InboxOficial({ isGer, ehLider, showToast, onIrParaEvolution, target, on
                   </div>
                 ) : item.m.tipo === "ligacao" && item.m.ligacao ? (
                   <div key={i} className={"of-msg " + (item.m.role === "me" ? "me" : "them")}>
-                    <button onClick={() => abrirResumoLigacao(item.m.ligacao)} title="Ver detalhes da ligação" style={{ display: "flex", alignItems: "center", gap: 10, background: "#ecfdf3", border: "1px solid #b7e4c7", borderRadius: 12, padding: "10px 14px", cursor: "pointer", textAlign: "left", maxWidth: 300 }}>
-                      <div style={{ width: 34, height: 34, borderRadius: "50%", background: "#d1fae5", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                        <span style={{ fontSize: 16 }}>{item.m.ligacao.atendida === false ? "📵" : "📞"}</span>
+                    {(() => { const naoAtend = item.m.ligacao.atendida === false && !item.m.ligacao.pendente; return (
+                    <button onClick={() => abrirResumoLigacao(item.m.ligacao)} title="Ver detalhes da ligação" style={{ display: "flex", alignItems: "center", gap: 10, background: naoAtend ? "#fef2f2" : "#ecfdf3", border: "1px solid " + (naoAtend ? "#fecaca" : "#b7e4c7"), borderRadius: 12, padding: "10px 14px", cursor: "pointer", textAlign: "left", maxWidth: 300 }}>
+                      <div style={{ width: 34, height: 34, borderRadius: "50%", background: naoAtend ? "#fee2e2" : "#d1fae5", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                        <span style={{ fontSize: 16 }}>{naoAtend ? "📵" : "📞"}</span>
                       </div>
                       <div style={{ minWidth: 0 }}>
-                        <div style={{ fontSize: 13.5, fontWeight: 700, color: "#065f46" }}>Ligação de voz {item.m.ligacao.direcao === "entrante" ? "recebida" : ""}</div>
-                        <div style={{ fontSize: 12, color: "#047857" }}>
+                        <div style={{ fontSize: 13.5, fontWeight: 700, color: naoAtend ? "#991b1b" : "#065f46" }}>Ligação de voz {item.m.ligacao.direcao === "entrante" ? "recebida" : ""}</div>
+                        <div style={{ fontSize: 12, color: naoAtend ? "#b91c1c" : "#047857" }}>
                           {item.m.ligacao.pendente
                             ? ((Date.now() - (item.m.ligacao.ts || item.m.ts || 0)) > 10 * 60 * 1000 ? "Sem registro de duração" : "Chamando… (o resumo aparece depois)")
+                            : naoAtend ? "Não atendida — tentativa de ligação"
                             : item.m.ligacao.duracao ? "Duração: " + fmtTempo(item.m.ligacao.duracao)
-                            : (item.m.ligacao.atendida === false ? "Não atendida" : "—")}
+                            : "—"}
                           {" · "}{horaCurta(item.m.ts)}
-                          {item.m.ligacao.resumoPronto ? " · 📝 resumo" : (!item.m.ligacao.pendente && item.m.ligacao.audioUrl ? " · toque p/ resumo" : "")}
+                          {item.m.ligacao.resumoPronto ? " · 📝 resumo" : (!item.m.ligacao.pendente && !naoAtend && item.m.ligacao.audioUrl ? " · toque p/ resumo" : "")}
                         </div>
                       </div>
                     </button>
+                    ); })()}
                   </div>
                 ) : (
                   <div key={i} className={"of-msg " + (item.m.role === "me" ? "me" : "them")}>
