@@ -5641,7 +5641,10 @@ export function instalarCanalOficial({ app, getDb, saveDB, saveSoon, proximoId, 
         const pend = (a2.ligacoesPendentes || []).find((p) => candidatos.includes(p.numero));
         if (pend && db.waChats[pend.chatId]) { chat = db.waChats[pend.chatId]; a2.ligacoesPendentes = (a2.ligacoesPendentes || []).filter((p) => p !== pend); }
         if (_logEntry) { _logEntry.casouChat = !!chat; _logEntry.casouLead = !!lead; }
-        const dur = Math.round(Number(call.inbound_duration || call.billed_duration || call.duration_call || 0)) || 0;
+        // duração REAL da conversa (não a cobrada, que o Atende arredonda pra 60s no mínimo)
+        const durReal = (call.outbound_calls && call.outbound_calls[0] && Number(call.outbound_calls[0].duration))
+          || Number(call.inbound_duration) || Number(call.duration_call) || 0;
+        const dur = Math.round(durReal || Number(call.billed_duration) || 0) || 0;
         const dir = call.direction === "outbound" ? "saída" : "entrante";
         const atendida = call.status === "answered" || call.status === "handled" || (call.outbound_calls && call.outbound_calls.length);
         const vendedor = (call.outbound_calls && call.outbound_calls[0] && call.outbound_calls[0].name) || call.attendant_name || null;
