@@ -5366,11 +5366,13 @@ export function instalarCanalOficial({ app, getDb, saveDB, saveSoon, proximoId, 
   function acharChatPorTelefone(telefone) {
     const nucleo = _soDig(telefone).slice(-8);
     if (nucleo.length < 8) return null;
+    let oficial = null, outro = null;
     for (const c of Object.values(db.waChats || {})) {
-      if (c.canal !== "oficial") continue;
-      if (_soDig(c.numero).slice(-8) === nucleo) return c;
+      if (_soDig(c.numero).slice(-8) !== nucleo) continue;
+      if (c.canal === "oficial") { if (!oficial) oficial = c; }
+      else if (!outro) outro = c;
     }
-    return null;
+    return oficial || outro; // prefere oficial, mas casa não-oficial também
   }
 
   // baixa a gravação da ligação, transcreve (Groq) e resume (IA) — estilo "resumo da chamada"
@@ -5634,6 +5636,10 @@ export function instalarCanalOficial({ app, getDb, saveDB, saveSoon, proximoId, 
           if (!chat) chat = acharChatPorTelefone(nu);
           if (lead && chat) break;
         }
+        // PRIORIDADE: se a ligação foi feita pelo botão a partir de uma conversa específica, usa ELA
+        const a2 = cfgAtende();
+        const pend = (a2.ligacoesPendentes || []).find((p) => candidatos.includes(p.numero));
+        if (pend && db.waChats[pend.chatId]) { chat = db.waChats[pend.chatId]; a2.ligacoesPendentes = (a2.ligacoesPendentes || []).filter((p) => p !== pend); }
         if (_logEntry) { _logEntry.casouChat = !!chat; _logEntry.casouLead = !!lead; }
         const dur = Math.round(Number(call.inbound_duration || call.billed_duration || call.duration_call || 0)) || 0;
         const dir = call.direction === "outbound" ? "saída" : "entrante";
