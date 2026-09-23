@@ -5225,6 +5225,14 @@ export function instalarCanalOficial({ app, getDb, saveDB, saveSoon, proximoId, 
   const ATENDE_BASE = "https://api.atendesimples.com";
   function cfgAtende() { garantirEstrutura(); return db.oficial.atende || {}; }
   const _soDig = (t) => String(t || "").replace(/\D/g, "");
+  // normaliza número brasileiro pro formato que o Atende aceita: 55 + DDD + 9 + número (celular).
+  // Adiciona o 9º dígito quando falta (formato antigo do WhatsApp) e NÃO mexe em telefone fixo.
+  function numeroAtende(tel) {
+    let d = _soDig(tel);
+    if (d.startsWith("55") && d.length > 11) d = d.slice(2); // tira o código do país
+    if (d.length === 10) { const ddd = d.slice(0, 2), local = d.slice(2); if (/^[6-9]/.test(local)) d = ddd + "9" + local; } // celular sem o 9 → insere
+    return "55" + d;
+  }
 
   // config (gerente) — lê e grava as chaves globais
   app.get("/api/oficial/atende", auth, gerenteOnly, (req, res) => {
@@ -5302,7 +5310,7 @@ export function instalarCanalOficial({ app, getDb, saveDB, saveSoon, proximoId, 
     const telefone = _soDig(req.body && req.body.telefone);
     if (telefone.length < 10) return res.status(400).json({ error: "Telefone inválido" });
     // formato preferido: 55 + DDD + número
-    const numeroCliente = (telefone.length >= 12 && telefone.startsWith("55")) ? telefone : ("55" + telefone);
+    const numeroCliente = numeroAtende(telefone);
     const dial = { attendant_email: email || undefined, customer_info: (req.body && req.body.leadId) ? ("Lead " + req.body.leadId) : "CRM", client: { phones: [{ name: (req.body && req.body.nome) || "", number: numeroCliente, type: "2" }] } };
     if (ramal) dial.extension_number = Number(ramal) || ramal;
     try {
@@ -5340,7 +5348,7 @@ export function instalarCanalOficial({ app, getDb, saveDB, saveSoon, proximoId, 
     if (!dialerToken) return res.json({ ok: false, etapa: "config", diagnostico: "Sem token do discador. Cole o token (API Discador) no campo e teste de novo." });
     if (!email && !ramal) return res.json({ ok: false, etapa: "config", diagnostico: "Informe o e-mail e/ou o ramal do atendente no Atende pra testar." });
     if (telefone.length < 10) return res.json({ ok: false, etapa: "config", diagnostico: "Informe um telefone de teste válido (com DDD)." });
-    const numeroCliente = (telefone.length >= 12 && telefone.startsWith("55")) ? telefone : ("55" + telefone);
+    const numeroCliente = numeroAtende(telefone);
     const dial = { attendant_email: email || undefined, customer_info: "Teste CRM", client: { phones: [{ name: "Teste CRM", number: numeroCliente, type: "2" }] } };
     if (ramal) dial.extension_number = Number(ramal) || ramal;
     const payloadEnviado = { dialer: { dials: [dial] }, token: dialerToken.slice(0, 6) + "…(" + dialerToken.length + " chars)" };
