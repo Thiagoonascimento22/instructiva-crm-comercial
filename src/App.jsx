@@ -449,7 +449,7 @@ export default function App() {
             <span>{theme === "dark" ? "Modo claro" : "Modo escuro"}</span>
           </button>
           <button className="logout" onClick={logout}>Sair</button>
-          <div style={{ textAlign: "center", fontSize: 10, color: "var(--muted)", marginTop: 8, opacity: 0.7 }}>v288 · 23/09 17h00</div>
+          <div style={{ textAlign: "center", fontSize: 10, color: "var(--muted)", marginTop: 8, opacity: 0.7 }}>v290 · 23/09 17h50</div>
         </div>
       </aside>
 
@@ -7078,12 +7078,23 @@ function AnaliseIAVendedor({ showToast, isGer = true }) {
         <div>
           <div style={{ fontSize: 12, color: DES.mut2, marginBottom: 14 }}>Analisadas {res.analisadas} conversa(s){res.totalOficial != null && res.totalNaoOficial != null ? " (" + res.totalOficial + " oficiais + " + res.totalNaoOficial + " não-oficiais)" : ""}{res.totalConversas > res.analisadas ? " · as " + res.analisadas + " mais recentes de " + res.totalConversas : ""}{isGer && res.vendedor ? " · " + res.vendedor : ""}.</div>
           {A ? <>
-            {(A.nota !== undefined && A.nota !== null) && (
-              <div style={{ display: "flex", alignItems: "center", gap: 14, background: "var(--card)", border: "1px solid " + DES.line, borderRadius: 16, padding: 18, marginBottom: 16 }}>
-                <div style={{ fontSize: 40, fontWeight: 800, color: (Number(A.nota) >= 7 ? DES.green : Number(A.nota) >= 5 ? DES.orange : "#dc2626"), lineHeight: 1 }}>{A.nota}<span style={{ fontSize: 18, opacity: .5 }}>/10</span></div>
-                <div><div style={{ fontSize: 14, color: DES.ink, fontWeight: 700 }}>Nota{isGer && res.vendedor ? " de " + res.vendedor : ""}</div><div style={{ fontSize: 12, color: DES.mut, marginTop: 2 }}>estimativa da IA · pode variar um pouco a cada análise</div></div>
+            {(A.nota !== undefined && A.nota !== null) && (() => {
+              const n = Number(A.nota);
+              const cor = n >= 7 ? DES.green : n >= 4 ? DES.orange : "#dc2626";
+              const lampada = (ativa, corLamp) => (<div style={{ width: 18, height: 18, borderRadius: "50%", background: ativa ? corLamp : "var(--surface-2)", border: "1px solid " + (ativa ? corLamp : DES.line), boxShadow: ativa ? "0 0 8px " + corLamp : "none", opacity: ativa ? 1 : 0.35 }} />);
+              const nivel = n >= 7 ? "Bom desempenho" : n >= 4 ? "Desempenho mediano — precisa melhorar" : "Desempenho baixo — atenção";
+              return (
+              <div style={{ display: "flex", alignItems: "center", gap: 16, background: "var(--card)", border: "1px solid " + DES.line, borderRadius: 16, padding: 18, marginBottom: 16 }}>
+                <div style={{ fontSize: 40, fontWeight: 800, color: cor, lineHeight: 1 }}>{A.nota}<span style={{ fontSize: 18, opacity: .5 }}>/10</span></div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 5, padding: "8px 10px", background: "var(--surface-2)", borderRadius: 12, border: "1px solid " + DES.line }}>
+                  {lampada(n <= 3, "#dc2626")}
+                  {lampada(n >= 4 && n <= 6, DES.orange)}
+                  {lampada(n >= 7, DES.green)}
+                </div>
+                <div><div style={{ fontSize: 14, color: DES.ink, fontWeight: 700 }}>Nota{isGer && res.vendedor ? " de " + res.vendedor : ""}</div><div style={{ fontSize: 13, color: cor, fontWeight: 600, marginTop: 2 }}>{nivel}</div><div style={{ fontSize: 11.5, color: DES.mut, marginTop: 2 }}>estimativa da IA · pode variar um pouco a cada análise</div></div>
               </div>
-            )}
+              );
+            })()}
             {A.resumo && <div style={{ background: "var(--surface-2)", border: "1px solid " + DES.line, borderRadius: 16, padding: 20, marginBottom: 16, fontSize: 14.5, fontWeight: 500, color: DES.ink, lineHeight: 1.6 }}>{A.resumo}</div>}
             {Array.isArray(A.passos) && A.passos.length > 0 && (
               <div style={{ background: "var(--card)", border: "1px solid " + DES.line, borderRadius: 16, padding: 18, marginBottom: 14 }}>
