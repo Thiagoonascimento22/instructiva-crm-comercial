@@ -5374,6 +5374,31 @@ export function instalarCanalOficial({ app, getDb, saveDB, saveSoon, proximoId, 
     }
     return oficial || outro; // prefere oficial, mas casa não-oficial também
   }
+  // acha o VENDEDOR (user) pelo email/ramal do atendente que fez a ligação (vindo do webhook)
+  function vendedorDaLigacao(call) {
+    const oc = (call.outbound_calls && call.outbound_calls[0]) || {};
+    const email = String(oc.email || call.attendant_email || "").trim().toLowerCase();
+    const ramal = String(oc.extension || call.attendant_extension_number || "").trim();
+    if (!email && !ramal) return null;
+    return (db.users || []).find((u) => {
+      const ue = String(u.atendeEmail || "").trim().toLowerCase();
+      const ur = String(u.atendeRamal || "").trim();
+      return (email && ue && ue === email) || (ramal && ur && ur === ramal);
+    }) || null;
+  }
+  // acha a conversa com esse telefone que pertence a ESSE vendedor (evita duplicar pra outro vendedor)
+  function acharChatDoVendedor(telefone, vendedorId) {
+    const nucleo = _soDig(telefone).slice(-8);
+    if (nucleo.length < 8 || !vendedorId) return null;
+    const instDoVend = new Set(((db.waConfig && db.waConfig.instancias) || []).filter((i) => i.vendedorId === vendedorId).map((i) => i.instance));
+    let oficial = null, outro = null;
+    for (const c of Object.values(db.waChats || {})) {
+      if (_soDig(c.numero).slice(-8) !== nucleo) continue;
+      if (c.canal === "oficial" && c.vendedorId === vendedorId) { if (!oficial) oficial = c; }
+      else if (c.instance && instDoVend.has(c.instance)) { if (!outro) outro = c; }
+    }
+    return oficial || outro;
+  }
 
   // baixa a gravação da ligação, transcreve (Groq) e resume (IA) — estilo "resumo da chamada"
   // baixa um áudio de uma URL e valida que parece áudio (não uma página de erro). Retorna {buf, ct} ou null.
@@ -5452,16 +5477,20 @@ export function instalarCanalOficial({ app, getDb, saveDB, saveSoon, proximoId, 
       // Então juntamos TODOS os telefones do CDR e casamos com o lead/conversa pelo que bater.
       const candidatos = [it.ani, it.customer_phone, it.alt_dnis, it.dnis, it.client_number, it.number, it.customer_number]
         .map((x) => _soDig(x).slice(-8)).filter((x) => x.length >= 8);
-      let lead = null, chat = null, numeroCasado = "";
-      for (const nu of candidatos) {
-        if (!lead && idx[nu]) { lead = idx[nu]; numeroCasado = nu; }
-        if (!chat && idxChat[nu]) { chat = idxChat[nu]; numeroCasado = nu; }
-        if (lead && chat) break;
-      }
-      // PRIORIDADE: se essa ligação foi feita pelo botão a partir de uma conversa específica, usa ELA
-      // (evita registrar na conversa errada quando há duas conversas com o mesmo número)
-      const pend = (a.ligacoesPendentes || []).find((p) => candidatos.includes(p.numero) && Math.abs((p.ts || 0) - (quando || Date.now())) < 2 * 3600 * 1000);
+      let lead = null, chat = null;
+      // identifica o VENDEDOR que atendeu (pela redirect do CDR: user_email / user_extension)
+      const red = (it.redirects && it.redirects[0]) || {};
+      const emailAt = String(red.user_email || "").trim().toLowerCase();
+      const ramalAt = String(red.user_extension || "").trim();
+      const vend = (emailAt || ramalAt) ? (db.users || []).find((u) => { const ue = String(u.atendeEmail || "").trim().toLowerCase(); const ur = String(u.atendeRamal || "").trim(); return (emailAt && ue && ue === emailAt) || (ramalAt && ur && ur === ramalAt); }) : null;
+      // 1) PRIORIDADE: ligação feita pelo botão a partir de uma conversa específica → usa ELA
+      const pend = (a.ligacoesPendentes || []).find((p) => candidatos.includes(p.numero));
       if (pend && db.waChats[pend.chatId]) { chat = db.waChats[pend.chatId]; a.ligacoesPendentes = (a.ligacoesPendentes || []).filter((p) => p !== pend); }
+      // 2) senão, acha a conversa DESSE vendedor (evita duplicar pra outro vendedor com o mesmo cliente)
+      if (!chat && vend) { for (const nu of candidatos) { const c = acharChatDoVendedor(nu, vend.id); if (c) { chat = c; break; } } }
+      // lead: prefere o do vendedor certo; senão o primeiro com o telefone
+      if (vend) for (const nu of candidatos) { if (idx[nu] && idx[nu].vendedorId === vend.id) { lead = idx[nu]; break; } }
+      if (!lead) for (const nu of candidatos) { if (idx[nu]) { lead = idx[nu]; break; } }
       const dur = Math.round(Number(it.duration_call || it.ori_billing_time || it.uraduration || 0)) || 0;
       const status = it.call_status || "";
       const dir = it.direction === "outbound" ? "saída" : "entrante";
@@ -5631,16 +5660,18 @@ export function instalarCanalOficial({ app, getDb, saveDB, saveSoon, proximoId, 
         const candidatos = [call.from_number, call.client_number, call.dnis, call.alt_dnis, call.number]
           .map((x) => _soDig(x).slice(-8)).filter((x) => x.length >= 8);
         let lead = null, chat = null;
-        for (const nu of candidatos) {
-          if (!lead) lead = (db.oficial.crmLeads || []).find((l) => _soDig(l.telefone).slice(-8) === nu) || null;
-          if (!chat) chat = acharChatPorTelefone(nu);
-          if (lead && chat) break;
-        }
-        // PRIORIDADE: se a ligação foi feita pelo botão a partir de uma conversa específica, usa ELA
         const a2 = cfgAtende();
+        // 1) PRIORIDADE MÁXIMA: ligação feita pelo botão a partir de uma conversa específica → usa ELA
         const pend = (a2.ligacoesPendentes || []).find((p) => candidatos.includes(p.numero));
         if (pend && db.waChats[pend.chatId]) { chat = db.waChats[pend.chatId]; a2.ligacoesPendentes = (a2.ligacoesPendentes || []).filter((p) => p !== pend); }
-        if (_logEntry) { _logEntry.casouChat = !!chat; _logEntry.casouLead = !!lead; }
+        // 2) senão, identifica o VENDEDOR que fez a ligação (email/ramal do atendente) e acha a conversa DELE
+        //    isso evita a ligação de um vendedor aparecer na conversa de OUTRO que tem o mesmo cliente
+        const vend = vendedorDaLigacao(call);
+        if (!chat && vend) { for (const nu of candidatos) { const c = acharChatDoVendedor(nu, vend.id); if (c) { chat = c; break; } } }
+        // lead: prefere o do vendedor certo; senão o primeiro com o telefone
+        if (vend) for (const nu of candidatos) { const l = (db.oficial.crmLeads || []).find((x) => _soDig(x.telefone).slice(-8) === nu && x.vendedorId === vend.id); if (l) { lead = l; break; } }
+        if (!lead) for (const nu of candidatos) { const l = (db.oficial.crmLeads || []).find((x) => _soDig(x.telefone).slice(-8) === nu); if (l) { lead = l; break; } }
+        if (_logEntry) { _logEntry.casouChat = !!chat; _logEntry.casouLead = !!lead; _logEntry.vendedor = vend ? vend.nome : "?"; }
         // duração REAL da conversa (não a cobrada, que o Atende arredonda pra 60s no mínimo)
         const durReal = (call.outbound_calls && call.outbound_calls[0] && Number(call.outbound_calls[0].duration))
           || Number(call.inbound_duration) || Number(call.duration_call) || 0;

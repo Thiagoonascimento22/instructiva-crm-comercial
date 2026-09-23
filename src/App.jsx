@@ -449,7 +449,7 @@ export default function App() {
             <span>{theme === "dark" ? "Modo claro" : "Modo escuro"}</span>
           </button>
           <button className="logout" onClick={logout}>Sair</button>
-          <div style={{ textAlign: "center", fontSize: 10, color: "var(--muted)", marginTop: 8, opacity: 0.7 }}>v284 · 23/09 15h20</div>
+          <div style={{ textAlign: "center", fontSize: 10, color: "var(--muted)", marginTop: 8, opacity: 0.7 }}>v286 · 23/09 16h20</div>
         </div>
       </aside>
 
@@ -8688,7 +8688,7 @@ function PainelAtende({ showToast }) {
                   <div style={{ color: "#38bdf8", fontWeight: 700 }}>Webhooks recebidos (últimos):</div>
                   {(!diag.webhooksRecebidos || !diag.webhooksRecebidos.length)
                     ? <div style={{ color: "#fca5a5" }}>⚠️ Nenhum webhook recebido ainda. O Atende não está mandando os eventos pra este sistema (verificar a URL do webhook no Atende).</div>
-                    : diag.webhooksRecebidos.map((w, i) => <div key={i} style={{ marginTop: 3, color: w.casouChat ? "#4ade80" : "#fca5a5" }}>{new Date(w.ts).toLocaleTimeString("pt-BR")} · <b>{w.evento}</b> · callid {w.callid || "—"} · {w.dur}s · áudio:{String(w.temAudio)} · tel:{(w.nums || []).join("/") || "—"} · casou conversa:<b>{String(w.casouChat)}</b>{w.fwd ? " · (repassado)" : ""}</div>)}
+                    : diag.webhooksRecebidos.map((w, i) => <div key={i} style={{ marginTop: 3, color: w.casouChat ? "#4ade80" : "#fca5a5" }}>{new Date(w.ts).toLocaleTimeString("pt-BR")} · <b>{w.evento}</b> · callid {w.callid || "—"} · {w.dur}s · tel:{(w.nums || []).join("/") || "—"} · vend:{w.vendedor || "?"} · casou:<b>{String(w.casouChat)}</b>{w.fwd ? " · (repassado)" : ""}</div>)}
                 </div>
                 {diag.amostraCDRs && diag.amostraCDRs.length > 0 && (
                   <details style={{ marginTop: 8 }}>
@@ -10445,6 +10445,36 @@ function WhatsApp({ user, showToast, target, onTargetUsed, recarregarSol }) {
     try { const r = await api.ofChatObsAdd(sel, obsTexto.trim()); setObsLista(((r && r.notas) || []).filter((n) => n.tipo === "obs")); setObsTexto(""); showToast("✓ Observação salva"); }
     catch (e) { showToast("✗ " + e.message); } finally { setObsSalvando(false); }
   }
+  // ===== Ligação (Atende Simples) na caixa não-oficial =====
+  const [ligando, setLigando] = useState(false);
+  const [chamada, setChamada] = useState(null);
+  const [cronometro, setCronometro] = useState(0);
+  const [confirmarLig, setConfirmarLig] = useState(false);
+  const [voipStatus, setVoipStatus] = useState(null);
+  const [ligDetalhe, setLigDetalhe] = useState(null);
+  const [ligResumoLoading, setLigResumoLoading] = useState(false);
+  const fmtTempo = (s) => String(Math.floor(s / 60)).padStart(2, "0") + ":" + String(s % 60).padStart(2, "0");
+  useEffect(() => { if (!chamada) return; setCronometro(0); const t = setInterval(() => setCronometro((s) => s + 1), 1000); return () => clearInterval(t); }, [chamada]);
+  async function abrirConfirmacaoLigar() {
+    if (!chat) return;
+    setConfirmarLig(true); setVoipStatus(null);
+    try { const s = await api.ofAtendeVoipStatus(); setVoipStatus(s); } catch (_) { setVoipStatus({ disponivel: null }); }
+  }
+  async function ligarAtende() {
+    if (!chat || ligando) return;
+    setConfirmarLig(false); setLigando(true);
+    try { const r = await api.ofAtendeLigar({ telefone: chat.numero, nome: chat.nome, leadId: chat.leadId || chat.id, chatId: chat.id }); setChamada({ nome: chat.nome || chat.numero, numero: chat.numero }); }
+    catch (e) { showToast("✗ " + e.message); } finally { setLigando(false); }
+  }
+  function encerrarChamada() { setChamada(null); [15000, 40000, 90000].forEach((ms) => setTimeout(async () => { try { await api.ofAtendeSincronizarAuto(); } catch (_) {} }, ms)); }
+  async function abrirResumoLigacao(lig) {
+    setLigDetalhe(lig);
+    if (lig && lig.callid && !lig.resumoPronto) {
+      setLigResumoLoading(true);
+      try { const r = await api.ofAtendeResumoLigacao(chat.id, lig.callid); if (r && r.ok) setLigDetalhe({ ...lig, resumo: r.resumo, transcricao: r.transcricao, resumoPronto: true }); else setLigDetalhe({ ...lig, _erro: (r && r.erro) || "não deu pra gerar o resumo agora" }); }
+      catch (e) { setLigDetalhe({ ...lig, _erro: e.message }); } finally { setLigResumoLoading(false); }
+    }
+  }
   const [showEmoji, setShowEmoji] = useState(false);
   const [verArquivadas, setVerArquivadas] = useState(false);
   const [gravando, setGravando] = useState(false);
@@ -10836,6 +10866,7 @@ function WhatsApp({ user, showToast, target, onTargetUsed, recarregarSol }) {
               {chat.nota != null && <span className="nota-badge" title="Nota da pesquisa de satisfação">⭐ {chat.nota}/5</span>}
               {isGer && <button type="button" className="btn-pipe" onClick={() => setCadPipeline(true)} title="Cadastrar este lead no Pipeline"><I.pipe style={{ width: 14, height: 14 }} /> Pipeline</button>}
               <button type="button" className="btn-venda" onClick={() => setRegVenda(true)} title="Registrar uma venda deste cliente"><I.gauge style={{ width: 14, height: 14 }} /> Registrar venda</button>
+              <button type="button" className="btn-pipe" onClick={abrirConfirmacaoLigar} disabled={ligando} title="Ligar para este lead pelo Atende Simples">📞 Ligar</button>
               <button type="button" className="btn-pipe" onClick={abrirObs} title="Adicionar observação (a IA lê e considera na análise)">📝 Observação</button>
               {!isGer && <button type="button" className="btn-suporte" onClick={() => setPedindoSuporte(true)} title="Encaminhar este atendimento para a equipe de suporte"><I.suporte style={{ width: 14, height: 14 }} /> Encaminhar pro suporte</button>}
               {chat.encerrado ? (
@@ -10855,6 +10886,23 @@ function WhatsApp({ user, showToast, target, onTargetUsed, recarregarSol }) {
             </div>
             <div className="wa-msgs" ref={waBoxRef} onScroll={onScrollWaMsgs}>
               {chat.mensagens.map((m, i) => (
+                m.tipo === "ligacao" && m.ligacao ? (
+                  (() => { const naoAtend = m.ligacao.atendida === false && !m.ligacao.pendente; return (
+                  <div key={i} className={"wa-bubble " + (m.role === "me" ? "me" : "them")} style={{ background: "transparent", boxShadow: "none", padding: 0 }}>
+                    <button onClick={() => abrirResumoLigacao(m.ligacao)} title="Ver detalhes da ligação" style={{ display: "flex", alignItems: "center", gap: 10, background: naoAtend ? "#fef2f2" : "#ecfdf3", border: "1px solid " + (naoAtend ? "#fecaca" : "#b7e4c7"), borderRadius: 12, padding: "10px 14px", cursor: "pointer", textAlign: "left", maxWidth: 300 }}>
+                      <div style={{ width: 34, height: 34, borderRadius: "50%", background: naoAtend ? "#fee2e2" : "#d1fae5", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}><span style={{ fontSize: 16 }}>{naoAtend ? "📵" : "📞"}</span></div>
+                      <div style={{ minWidth: 0 }}>
+                        <div style={{ fontSize: 13.5, fontWeight: 700, color: naoAtend ? "#991b1b" : "#065f46" }}>Ligação de voz {m.ligacao.direcao === "entrante" ? "recebida" : ""}</div>
+                        <div style={{ fontSize: 12, color: naoAtend ? "#b91c1c" : "#047857" }}>
+                          {m.ligacao.pendente ? "Chamando…" : naoAtend ? "Não atendida — tentativa de ligação" : m.ligacao.duracao ? "Duração: " + fmtTempo(m.ligacao.duracao) : "—"}
+                          {" · "}{new Date(m.ts).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
+                          {m.ligacao.resumoPronto ? " · 📝 resumo" : (!m.ligacao.pendente && !naoAtend && m.ligacao.audioUrl ? " · toque p/ resumo" : "")}
+                        </div>
+                      </div>
+                    </button>
+                  </div>
+                  ); })()
+                ) : (
                 <div key={i} className={"wa-bubble " + (m.role === "me" ? "me" : "them") + (m.tipo && m.tipo !== "text" ? " com-midia" : "")}>
                   {m.tipo && m.tipo !== "text" ? (
                     <>
@@ -10864,6 +10912,7 @@ function WhatsApp({ user, showToast, target, onTargetUsed, recarregarSol }) {
                   ) : m.content}
                   <span className="t">{new Date(m.ts).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}</span>
                 </div>
+                )
               ))}
               <div ref={msgsEnd} />
             </div>
@@ -10955,6 +11004,67 @@ function WhatsApp({ user, showToast, target, onTargetUsed, recarregarSol }) {
                   </div>
                 </div>
               )}
+            </div>
+          </div>
+        </Portal>
+      )}
+      {confirmarLig && chat && (
+        <Portal>
+          <div className="modal" onClick={(e) => e.target === e.currentTarget && setConfirmarLig(false)}>
+            <div className="onum-modal" style={{ maxWidth: 460, padding: 24 }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
+                <b style={{ fontSize: 18 }}>Realizar ligação</b>
+                <button className="crm-x" onClick={() => setConfirmarLig(false)}>✕</button>
+              </div>
+              <p style={{ fontSize: 13.5, color: "var(--txt)", lineHeight: 1.55, margin: "0 0 14px" }}>
+                Antes de ligar, confirme que você está logado no <a href="https://voip.atendesimples.com" target="_blank" rel="noreferrer" style={{ color: "var(--brand)", fontWeight: 600 }}>voip.atendesimples.com ↗</a> e disponível.
+              </p>
+              <p style={{ fontSize: 12.5, color: "var(--muted)", margin: "0 0 16px", display: "flex", alignItems: "center", gap: 6 }}>
+                {voipStatus && voipStatus.disponivel === true ? <span style={{ color: "#059669", fontWeight: 600 }}>✓ Seu VoIP está disponível.</span> : <>💡 Confira se você está logado e disponível no VoIP.</>}
+              </p>
+              <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
+                <button className="btn" onClick={() => setConfirmarLig(false)}>Cancelar</button>
+                <button className="btn btn-primary" disabled={ligando} onClick={ligarAtende}>{ligando ? "Ligando…" : "📞 Realizar ligação"}</button>
+              </div>
+            </div>
+          </div>
+        </Portal>
+      )}
+      {chamada && (
+        <Portal>
+          <div style={{ position: "fixed", bottom: 24, right: 24, zIndex: 9999, width: 300, background: "var(--card, #fff)", borderRadius: 16, boxShadow: "0 12px 40px rgba(0,0,0,0.25)", border: "1px solid var(--line)", overflow: "hidden", animation: "slideUp 0.25s ease" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "14px 16px" }}>
+              <div style={{ width: 44, height: 44, borderRadius: "50%", background: "#25A06B", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, animation: "callPulse 1.4s ease-in-out infinite" }}><span style={{ fontSize: 20 }}>📞</span></div>
+              <div style={{ minWidth: 0, flex: 1 }}><div style={{ fontSize: 11, color: "#25A06B", fontWeight: 700, letterSpacing: 0.4, textTransform: "uppercase" }}>Em ligação</div><div style={{ fontSize: 14, fontWeight: 700, color: "var(--txt)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{chamada.nome}</div></div>
+              <div style={{ fontSize: 20, fontWeight: 800, fontVariantNumeric: "tabular-nums", color: "var(--txt)", flexShrink: 0 }}>{fmtTempo(cronometro)}</div>
+            </div>
+            <button onClick={() => encerrarChamada()} style={{ width: "100%", border: "none", borderTop: "1px solid var(--line)", background: "transparent", color: "var(--muted)", fontWeight: 600, fontSize: 13, padding: "10px", cursor: "pointer" }}>Fechar (a ligação continua no seu ramal)</button>
+          </div>
+        </Portal>
+      )}
+      {ligDetalhe && (
+        <Portal>
+          <div className="modal" onClick={(e) => e.target === e.currentTarget && setLigDetalhe(null)}>
+            <div className="onum-modal" style={{ maxWidth: 440, maxHeight: "85vh", overflowY: "auto", padding: 0 }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "16px 20px", borderBottom: "1px solid var(--line)" }}>
+                <b style={{ fontSize: 15 }}>Informações da ligação</b>
+                <button className="crm-x" onClick={() => setLigDetalhe(null)}>✕</button>
+              </div>
+              <div style={{ padding: 20, display: "flex", flexDirection: "column", gap: 12 }}>
+                {ligDetalhe.vendedorNome && (<div style={{ background: "#eff6ff", borderRadius: 12, padding: "12px 14px" }}><div style={{ fontSize: 11.5, color: "#2563eb", fontWeight: 600 }}>Realizada por</div><div style={{ fontSize: 15, fontWeight: 700, color: "#1e3a8a" }}>{ligDetalhe.vendedorNome}</div></div>)}
+                <div style={{ display: "flex", gap: 12 }}>
+                  <div style={{ flex: 1, background: "var(--surface-2)", borderRadius: 12, padding: "12px 14px" }}><div style={{ fontSize: 11.5, color: "var(--muted)", fontWeight: 600 }}>Direção</div><div style={{ fontSize: 14, fontWeight: 700 }}>{ligDetalhe.direcao === "entrante" ? "Recebida" : "Realizada"}</div></div>
+                  <div style={{ flex: 1, background: "var(--surface-2)", borderRadius: 12, padding: "12px 14px" }}><div style={{ fontSize: 11.5, color: "var(--muted)", fontWeight: 600 }}>Duração</div><div style={{ fontSize: 14, fontWeight: 700 }}>{ligDetalhe.atendida === false ? "Não atendida" : ligDetalhe.duracao ? fmtTempo(ligDetalhe.duracao) : "—"}</div></div>
+                </div>
+                <div style={{ borderTop: "1px solid var(--line)", paddingTop: 14 }}>
+                  <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 8, display: "flex", alignItems: "center", gap: 6 }}>📝 Resumo da chamada</div>
+                  {ligResumoLoading ? (<div style={{ display: "flex", alignItems: "center", gap: 8, color: "var(--muted)", fontSize: 13 }}><span className="spin" /> Transcrevendo e resumindo a gravação…</div>)
+                    : ligDetalhe.resumo ? (<div style={{ fontSize: 13.5, lineHeight: 1.6, whiteSpace: "pre-wrap", color: "var(--txt)" }}>{ligDetalhe.resumo}</div>)
+                    : ligDetalhe._erro ? (<div style={{ fontSize: 13, color: "var(--muted)", background: "#fffbeb", border: "1px solid #fde68a", borderRadius: 8, padding: "10px 12px" }}>{ligDetalhe._erro}. A gravação do Atende pode levar alguns minutos pra ficar pronta — feche e abra de novo mais tarde.</div>)
+                    : (<div style={{ fontSize: 13, color: "var(--muted)" }}>Sem gravação disponível pra esta ligação.</div>)}
+                  {ligDetalhe.transcricao && (<details style={{ marginTop: 12 }}><summary style={{ cursor: "pointer", fontSize: 12.5, color: "var(--brand)" }}>Ver transcrição completa</summary><div style={{ marginTop: 8, fontSize: 12.5, lineHeight: 1.6, whiteSpace: "pre-wrap", color: "var(--muted)" }}>{ligDetalhe.transcricao}</div></details>)}
+                </div>
+              </div>
             </div>
           </div>
         </Portal>
