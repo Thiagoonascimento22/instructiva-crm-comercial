@@ -449,7 +449,7 @@ export default function App() {
             <span>{theme === "dark" ? "Modo claro" : "Modo escuro"}</span>
           </button>
           <button className="logout" onClick={logout}>Sair</button>
-          <div style={{ textAlign: "center", fontSize: 10, color: "var(--muted)", marginTop: 8, opacity: 0.7 }}>v280 · 23/09 12h00</div>
+          <div style={{ textAlign: "center", fontSize: 10, color: "var(--muted)", marginTop: 8, opacity: 0.7 }}>v281 · 23/09 12h30</div>
         </div>
       </aside>
 
@@ -8657,7 +8657,7 @@ function PainelAtende({ showToast }) {
         )}
         <p className="onum-webhook-fim">Cole o <b>token do discador</b> (peça ao suporte do Atende: token da <b>API Discador</b>, endpoint dialer.atendesimples.com) e preencha o <b>e-mail/ramal</b> de cada vendedor. O vendedor precisa estar <b>logado e disponível</b> no voip.atendesimples.com pra ligar.</p>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-          <button className="onum-btn-save" onClick={() => setForm({ apiKey: (cfg && cfg.apiKey) || "", dialerToken: (cfg && cfg.dialerToken) || "", userId: (cfg && cfg.userId) || "", queueId: (cfg && cfg.queueId) || "", queueToken: (cfg && cfg.queueToken) || "", voipToken: (cfg && cfg.voipToken) || "", ativo: cfg ? !!cfg.ativo : true, vendedores: (cfg && cfg.vendedores) ? cfg.vendedores.map((v) => ({ ...v })) : [] })}>
+          <button className="onum-btn-save" onClick={() => setForm({ apiKey: (cfg && cfg.apiKey) || "", dialerToken: (cfg && cfg.dialerToken) || "", userId: (cfg && cfg.userId) || "", queueId: (cfg && cfg.queueId) || "", queueToken: (cfg && cfg.queueToken) || "", voipToken: (cfg && cfg.voipToken) || "", audioToken: (cfg && cfg.audioToken) || "", ativo: cfg ? !!cfg.ativo : true, vendedores: (cfg && cfg.vendedores) ? cfg.vendedores.map((v) => ({ ...v })) : [] })}>
             {configurado ? "Editar Atende Simples" : "Configurar Atende Simples"}
           </button>
           {cfg && cfg.dialerToken && <button className="btn" onClick={sincronizar} disabled={sincronizando}>{sincronizando ? "Sincronizando…" : "↻ Sincronizar ligações agora"}</button>}
@@ -8688,7 +8688,7 @@ function PainelAtende({ showToast }) {
                   <div style={{ color: "#38bdf8", fontWeight: 700 }}>Webhooks recebidos (últimos):</div>
                   {(!diag.webhooksRecebidos || !diag.webhooksRecebidos.length)
                     ? <div style={{ color: "#fca5a5" }}>⚠️ Nenhum webhook recebido ainda. O Atende não está mandando os eventos pra este sistema (verificar a URL do webhook no Atende).</div>
-                    : diag.webhooksRecebidos.map((w, i) => <div key={i} style={{ marginTop: 3 }}>{new Date(w.ts).toLocaleTimeString("pt-BR")} · <b>{w.evento}</b> · callid {w.callid || "—"} · {w.dur}s · áudio:{String(w.temAudio)} · tel:{(w.nums || []).join("/") || "—"}{w.fwd ? " · (repassado)" : ""}</div>)}
+                    : diag.webhooksRecebidos.map((w, i) => <div key={i} style={{ marginTop: 3, color: w.casouChat ? "#4ade80" : "#fca5a5" }}>{new Date(w.ts).toLocaleTimeString("pt-BR")} · <b>{w.evento}</b> · callid {w.callid || "—"} · {w.dur}s · áudio:{String(w.temAudio)} · tel:{(w.nums || []).join("/") || "—"} · casou conversa:<b>{String(w.casouChat)}</b>{w.fwd ? " · (repassado)" : ""}</div>)}
                 </div>
                 {diag.amostraCDRs && diag.amostraCDRs.length > 0 && (
                   <details style={{ marginTop: 8 }}>
@@ -8715,6 +8715,8 @@ function PainelAtende({ showToast }) {
             <input className="input" value={form.apiKey} onChange={(e) => setForm({ ...form, apiKey: e.target.value })} placeholder="token da API de Clientes" />
             <label className="lbl-mini">token do discador (pro botão "Ligar agora")</label>
             <input className="input" value={form.dialerToken} onChange={(e) => setForm({ ...form, dialerToken: e.target.value })} placeholder="token do discador (API Discador)" />
+            <label className="lbl-mini" style={{ marginTop: 10 }}>token da API de Áudio (pra transcrição — opcional)</label>
+            <input className="input" value={form.audioToken || ""} onChange={(e) => setForm({ ...form, audioToken: e.target.value })} placeholder="Opções da conta → Config. de Acesso à API de Áudio" />
             <details style={{ margin: "10px 0" }}>
               <summary style={{ cursor: "pointer", fontSize: 12.5, color: "var(--muted)", fontWeight: 600 }}>Campos avançados (discador por fila — opcional)</summary>
               <div style={{ marginTop: 8 }}>

@@ -110,7 +110,7 @@ export function instalarCanalOficial({ app, getDb, saveDB, saveSoon, proximoId, 
     }
     // Integração Atende Simples (ligação): chaves globais + controle de sync
     if (!db.oficial.atende || typeof db.oficial.atende !== "object") {
-      db.oficial.atende = { apiKey: "", userId: "", queueId: "", queueToken: "", dialerToken: "", voipToken: "", ativo: false, ultimoSync: 0, callsVistas: [] };
+      db.oficial.atende = { apiKey: "", userId: "", queueId: "", queueToken: "", dialerToken: "", voipToken: "", audioToken: "", ativo: false, ultimoSync: 0, callsVistas: [] };
     }
     if (typeof db.oficial.atende.dialerToken !== "string") db.oficial.atende.dialerToken = "";
     if (!Array.isArray(db.oficial.atende.callsVistas)) db.oficial.atende.callsVistas = [];
@@ -5230,7 +5230,7 @@ export function instalarCanalOficial({ app, getDb, saveDB, saveSoon, proximoId, 
   app.get("/api/oficial/atende", auth, gerenteOnly, (req, res) => {
     const a = cfgAtende();
     res.json({
-      apiKey: a.apiKey || "", userId: a.userId || "", queueId: a.queueId || "", queueToken: a.queueToken || "", dialerToken: a.dialerToken || "", voipToken: a.voipToken || "",
+      apiKey: a.apiKey || "", userId: a.userId || "", queueId: a.queueId || "", queueToken: a.queueToken || "", dialerToken: a.dialerToken || "", voipToken: a.voipToken || "", audioToken: a.audioToken || "",
       ativo: !!a.ativo, ultimoSync: a.ultimoSync || 0,
       // ramais/emails por vendedor, pra tela de config
       vendedores: (db.users || []).filter((u) => u.role === "vendedor" || u.role === "gerente").map((u) => ({ id: u.id, nome: u.nome, atendeEmail: u.atendeEmail || "", atendeRamal: u.atendeRamal || "" })),
@@ -5246,6 +5246,7 @@ export function instalarCanalOficial({ app, getDb, saveDB, saveSoon, proximoId, 
     if (b.queueToken !== undefined) a.queueToken = String(b.queueToken).trim();
     if (b.dialerToken !== undefined) a.dialerToken = String(b.dialerToken).trim();
     if (b.voipToken !== undefined) a.voipToken = String(b.voipToken).trim();
+    if (b.audioToken !== undefined) a.audioToken = String(b.audioToken).trim();
     if (b.ativo !== undefined) a.ativo = !!b.ativo;
     // ramais/emails por vendedor
     if (Array.isArray(b.vendedores)) {
@@ -5394,10 +5395,11 @@ export function instalarCanalOficial({ app, getDb, saveDB, saveSoon, proximoId, 
       if (callid) {
         try {
           const a = cfgAtende();
-          if (a.apiKey) {
+          const chaveAudio = a.audioToken || a.apiKey; // a API de áudio usa token próprio (Config. de Acesso à API de Áudio)
+          if (chaveAudio) {
             const r = await fetch(ATENDE_BASE + "/customers/audio/download", {
               method: "POST", redirect: "manual",
-              headers: { "x-api-key": a.apiKey, "Content-Type": "application/json" },
+              headers: { "x-api-key": chaveAudio, "Content-Type": "application/json" },
               body: JSON.stringify({ callid: String(callid) }),
             });
             const loc = r.headers.get("location");
@@ -5542,7 +5544,7 @@ export function instalarCanalOficial({ app, getDb, saveDB, saveSoon, proximoId, 
             const ra = await fetch(comAudio.public_audio_url, { redirect: "follow" });
             info.urlPublica_http = ra.status; info.urlPublica_contentType = ra.headers.get("content-type");
           }
-          const rd = await fetch(ATENDE_BASE + "/customers/audio/download", { method: "POST", redirect: "manual", headers: { "x-api-key": a.apiKey, "Content-Type": "application/json" }, body: JSON.stringify({ callid: cid }) });
+          const rd = await fetch(ATENDE_BASE + "/customers/audio/download", { method: "POST", redirect: "manual", headers: { "x-api-key": a.audioToken || a.apiKey, "Content-Type": "application/json" }, body: JSON.stringify({ callid: cid }) });
           info.downloadApi_http = rd.status; info.downloadApi_location = rd.headers.get("location") ? "(tem link)" : null;
         } catch (e) { info.erro = e.message; }
         testeGravacao = info;
@@ -5597,11 +5599,13 @@ export function instalarCanalOficial({ app, getDb, saveDB, saveSoon, proximoId, 
       garantirEstrutura();
       const b = req.body || {};
       // REGISTRA o recebimento (pro diagnóstico ver se o Atende está mandando os eventos)
+      let _logEntry = null;
       try {
         const a = cfgAtende();
         a.webhooksLog = (a.webhooksLog || []).slice(-19);
         const c = b.call || {};
-        a.webhooksLog.push({ ts: Date.now(), evento: b.event_code || "?", callid: String(c.call_id || c.callid || ""), fwd: req.query.fwd === "1", temAudio: !!(c.audio_url || c.public_audio_url), dur: c.inbound_duration || c.billed_duration || c.duration_call || 0, nums: [c.from_number, c.client_number, c.dnis, c.alt_dnis].filter(Boolean).map((x) => _soDig(x).slice(-8)) });
+        _logEntry = { ts: Date.now(), evento: b.event_code || "?", callid: String(c.call_id || c.callid || ""), fwd: req.query.fwd === "1", temAudio: !!(c.audio_url || c.public_audio_url), dur: c.inbound_duration || c.billed_duration || c.duration_call || 0, nums: [c.from_number, c.client_number, c.dnis, c.alt_dnis].filter(Boolean).map((x) => _soDig(x).slice(-8)), casouChat: null, casouLead: null };
+        a.webhooksLog.push(_logEntry);
         salvar();
       } catch (_) {}
       // REPASSE ENTRE SISTEMAS: o Atende manda pra UM sistema (Toledo); ele repassa o mesmo evento
@@ -5630,6 +5634,7 @@ export function instalarCanalOficial({ app, getDb, saveDB, saveSoon, proximoId, 
           if (!chat) chat = acharChatPorTelefone(nu);
           if (lead && chat) break;
         }
+        if (_logEntry) { _logEntry.casouChat = !!chat; _logEntry.casouLead = !!lead; }
         const dur = Math.round(Number(call.inbound_duration || call.billed_duration || call.duration_call || 0)) || 0;
         const dir = call.direction === "outbound" ? "saída" : "entrante";
         const atendida = call.status === "answered" || call.status === "handled" || (call.outbound_calls && call.outbound_calls.length);
