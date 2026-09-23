@@ -5535,7 +5535,7 @@ export function instalarCanalOficial({ app, getDb, saveDB, saveSoon, proximoId, 
     a.ultimoSync = Date.now();
     salvar();
     // gera os resumos (transcrição + IA) das gravações disponíveis, sem travar o retorno
-    if (paraResumir.length) {
+    if (paraResumir.length && a.audioToken) {
       (async () => {
         for (const { msg } of paraResumir) {
           try { const rz = await gerarResumoLigacao(msg.ligacao.audioUrl, msg.ligacao.callid); if (rz) { msg.ligacao.transcricao = rz.transcricao || null; msg.ligacao.resumo = rz.resumo || null; msg.ligacao.resumoPronto = true; } else { msg.ligacao.resumoPendente = true; } } catch (_) { msg.ligacao.resumoPendente = true; }
@@ -5637,7 +5637,7 @@ export function instalarCanalOficial({ app, getDb, saveDB, saveSoon, proximoId, 
     try {
       garantirEstrutura();
       const b = req.body || {};
-      // REGISTRA o recebimento (pro diagnóstico ver se o Atende está mandando os eventos)
+      // REGISTRA o recebimento (pro diagnóstico ver se o Atende está mandando os eventos) — só em memória, sem salvar toda hora
       let _logEntry = null;
       try {
         const a = cfgAtende();
@@ -5645,7 +5645,6 @@ export function instalarCanalOficial({ app, getDb, saveDB, saveSoon, proximoId, 
         const c = b.call || {};
         _logEntry = { ts: Date.now(), evento: b.event_code || "?", callid: String(c.call_id || c.callid || ""), fwd: req.query.fwd === "1", temAudio: !!(c.audio_url || c.public_audio_url), dur: c.inbound_duration || c.billed_duration || c.duration_call || 0, nums: [c.from_number, c.client_number, c.dnis, c.alt_dnis].filter(Boolean).map((x) => _soDig(x).slice(-8)), casouChat: null, casouLead: null };
         a.webhooksLog.push(_logEntry);
-        salvar();
       } catch (_) {}
       // REPASSE ENTRE SISTEMAS: o Atende manda pra UM sistema (Toledo); ele repassa o mesmo evento
       // pros outros (Jesuítas), e cada um registra só nas próprias conversas. ?fwd=1 evita loop.
@@ -5732,19 +5731,22 @@ export function instalarCanalOficial({ app, getDb, saveDB, saveSoon, proximoId, 
       if (_sincronizandoAtende) return; // não sobrepõe
       _sincronizandoAtende = true;
       try { await sincronizarLigacoesAtende(Date.now() - 60 * 60 * 1000); } catch (_) {} // janela de 1h (leve)
-      // preenche no MÁXIMO 1 resumo pendente por ciclo, só de conversas mexidas nos últimos 20 min
-      try {
-        const recentes = Object.values(db.waChats || {}).filter((c) => c.canal === "oficial" && (Date.now() - (c.atualizadoEm || 0)) < 20 * 60 * 1000);
-        outer: for (const c of recentes) {
-          for (const m of (c.mensagens || [])) {
-            if (m.tipo === "ligacao" && m.ligacao && !m.ligacao.resumoPronto && (m.ligacao.audioUrl || m.ligacao.callid)) {
-              const rz = await gerarResumoLigacao(m.ligacao.audioUrl, m.ligacao.callid);
-              if (rz) { m.ligacao.transcricao = rz.transcricao || null; m.ligacao.resumo = rz.resumo || null; m.ligacao.resumoPronto = true; m.ligacao.resumoPendente = false; salvar(); }
-              break outer; // só 1 por ciclo
+      // preenche resumos SÓ se a transcrição estiver realmente disponível (token de áudio configurado).
+      // Sem isso, a API de áudio recusa (401) e ficaríamos tentando em vão a cada ciclo — gasta rede e trava.
+      if (a.audioToken) {
+        try {
+          const recentes = Object.values(db.waChats || {}).filter((c) => c.canal === "oficial" && (Date.now() - (c.atualizadoEm || 0)) < 20 * 60 * 1000);
+          outer: for (const c of recentes) {
+            for (const m of (c.mensagens || [])) {
+              if (m.tipo === "ligacao" && m.ligacao && !m.ligacao.resumoPronto && (m.ligacao.audioUrl || m.ligacao.callid)) {
+                const rz = await gerarResumoLigacao(m.ligacao.audioUrl, m.ligacao.callid);
+                if (rz) { m.ligacao.transcricao = rz.transcricao || null; m.ligacao.resumo = rz.resumo || null; m.ligacao.resumoPronto = true; m.ligacao.resumoPendente = false; salvar(); }
+                break outer; // só 1 por ciclo
+              }
             }
           }
-        }
-      } catch (_) {}
+        } catch (_) {}
+      }
       _sincronizandoAtende = false;
     } catch (_) { _sincronizandoAtende = false; }
   }, 3 * 60 * 1000);

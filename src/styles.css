@@ -2513,7 +2513,7 @@ h1, h2, h3, h4, .topbar .greet, .panel-h h3, .login-card .ttl, .login-card h2, .
 .of-tab:hover { border-color: var(--of-green); color: var(--text); }
 .of-tab.on { background: var(--of-green); border-color: var(--of-green); color: #fff; box-shadow: 0 8px 20px -10px var(--of-green); }
 
-.of-grid { display: grid; grid-template-columns: 1.3fr 1fr; gap: 16px; align-items: start; }
+.of-grid { display: grid; grid-template-columns: 360px 1fr; gap: 16px; align-items: start; }
 @media (max-width: 980px) { .of-grid { grid-template-columns: 1fr; } }
 
 /* templates */

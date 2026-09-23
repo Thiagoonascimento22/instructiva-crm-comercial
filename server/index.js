@@ -19,7 +19,7 @@ app.use(express.urlencoded({ extended: false, limit: "10mb" })); // Twilio manda
 // Versão do sistema — pra CONFIRMAR qual código está no ar (abra /api/versao no navegador).
 // Se aqui aparecer a versão nova mas o bug continuar, o problema é outro; se aparecer
 // uma versão antiga (ou 404), o deploy não subiu de verdade.
-const VERSAO_SISTEMA = "v287-numero-9digito";
+const VERSAO_SISTEMA = "v288-perf-dedup";
 
 /* ============================================================
    IDENTIFICAÇÃO DA UNIDADE (mesmo código, deploys separados)
@@ -1320,6 +1320,19 @@ function vendedorDaInstancia(instance) {
   const m = (db.waConfig.instancias || []).find((i) => i.instance === instance);
   return m ? m.vendedorId : null;
 }
+// acha uma conversa Evolution existente TOLERANDO o 9º dígito do celular (mesmo instance, mesmo núcleo de 8 dígitos).
+// Evita criar conversa duplicada quando o WhatsApp manda o número ora com 9, ora sem.
+function acharChatEvo(instance, numero) {
+  const exato = db.waChats[`${instance}::${numero}`];
+  if (exato) return exato;
+  const nucleo = String(numero).replace(/\D/g, "").slice(-8);
+  if (nucleo.length < 8) return null;
+  for (const c of Object.values(db.waChats)) {
+    if (!c || c.instance !== instance) continue;
+    if (String(c.numero).replace(/\D/g, "").slice(-8) === nucleo) return c;
+  }
+  return null;
+}
 async function evo(method, caminho, body) {
   const cfg = db.waConfig;
   if (!cfg.url || !cfg.apiKey) throw new Error("Conexão Evolution não configurada");
@@ -1448,7 +1461,7 @@ app.post("/api/wa/webhook/:token", (req, res) => {
     // hora REAL da mensagem (Evolution manda em segundos); cai pra agora se faltar
     let ts = Number(data.messageTimestamp || (data.key && data.key.timestamp) || 0) * 1000;
     if (!ts || isNaN(ts) || ts > Date.now() + 60000) ts = Date.now();
-    let chat = db.waChats[id];
+    let chat = acharChatEvo(instance, numero);
     if (!chat) {
       chat = {
         id, instance, numero,
@@ -1790,7 +1803,7 @@ app.post("/api/wa/iniciar", auth, async (req, res) => {
   try {
     await evo("POST", `/message/sendText/${inst}`, { number: num, text: texto || "Olá!" });
     const id = `${inst}::${num}`;
-    let chat = db.waChats[id];
+    let chat = acharChatEvo(inst, num);
     if (!chat) {
       chat = { id, instance: inst, numero: num, nome: num, mensagens: [], naoLidas: 0, atualizadoEm: Date.now() };
       db.waChats[id] = chat;
