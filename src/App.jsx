@@ -449,7 +449,7 @@ export default function App() {
             <span>{theme === "dark" ? "Modo claro" : "Modo escuro"}</span>
           </button>
           <button className="logout" onClick={logout}>Sair</button>
-          <div style={{ textAlign: "center", fontSize: 10, color: "var(--muted)", marginTop: 8, opacity: 0.7 }}>v277 · 22/09 17h50</div>
+          <div style={{ textAlign: "center", fontSize: 10, color: "var(--muted)", marginTop: 8, opacity: 0.7 }}>v278 · 22/09 18h10</div>
         </div>
       </aside>
 
@@ -5643,9 +5643,18 @@ function PainelVendas({ showToast, isGer = true, ehLider = false }) {
   }, [vendas, buscaVenda]);
 
   const [exportandoV, setExportandoV] = useState(false);
+  const [expDe, setExpDe] = useState("");
+  const [expAte, setExpAte] = useState("");
   async function exportarVendasPDF() {
-    const lista = vendasFiltradas || [];
-    if (!lista.length) { showToast("Nenhuma venda pra exportar"); return; }
+    let lista = vendasFiltradas || [];
+    // filtro por período escolhido (De / Até) — opcional
+    const tsDe = expDe ? new Date(expDe + "T00:00:00").getTime() : 0;
+    const tsAte = expAte ? new Date(expAte + "T23:59:59").getTime() : 0;
+    if (tsDe || tsAte) lista = lista.filter((v) => { const t = new Date(v.data).getTime(); return (!tsDe || t >= tsDe) && (!tsAte || t <= tsAte); });
+    if (!lista.length) { showToast("Nenhuma venda no período pra exportar"); return; }
+    const periodoTxt = (expDe || expAte)
+      ? ((expDe ? new Date(expDe + "T00:00:00").toLocaleDateString("pt-BR") : "início") + " até " + (expAte ? new Date(expAte + "T00:00:00").toLocaleDateString("pt-BR") : "hoje"))
+      : mesLegivel(mes);
     setExportandoV(true); showToast("Gerando PDF…");
     try {
       const dinBR = (v) => "R$ " + Number(v || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -5665,11 +5674,11 @@ function PainelVendas({ showToast, isGer = true, ehLider = false }) {
       html += '<div style="font-size:24px; font-weight:800; letter-spacing:-.02em;">instructiva</div>';
       html += '<div style="font-size:11px; opacity:.85;">Emitido em ' + esc(new Date().toLocaleString("pt-BR")) + '</div></div>';
       html += '<div style="font-size:19px; font-weight:700; margin-top:14px;">Relatório de Vendas</div>';
-      html += '<div style="font-size:13px; opacity:.9; margin-top:2px;">' + esc(mesLegivel(mes)) + '</div>';
+      html += '<div style="font-size:13px; opacity:.9; margin-top:2px;">' + esc(periodoTxt) + '</div>';
       html += '</div>';
       // KPIs
-      const kpi = (rot, val) => '<div style="flex:1; background:#f6f8fa; border:1px solid #e6eaef; border-radius:12px; padding:13px 16px;"><div style="font-size:11px; color:#67707e; font-weight:600; text-transform:uppercase; letter-spacing:.04em;">' + rot + '</div><div style="font-size:18px; font-weight:800; color:#1f2430; margin-top:3px;">' + val + '</div></div>';
-      html += '<div style="display:flex; gap:12px; margin-bottom:22px;">' + kpi("Vendas", String(lista.length)) + kpi("Total vendido", dinBR(totalGeral)) + kpi("Recebido", dinBR(recebidoGeral)) + kpi("Ticket médio", dinBR(lista.length ? totalGeral / lista.length : 0)) + '</div>';
+      const kpi = (rot, val) => '<div style="flex:1; min-width:150px; background:#f6f8fa; border:1px solid #e6eaef; border-radius:12px; padding:13px 16px; box-sizing:border-box;"><div style="font-size:10.5px; color:#67707e; font-weight:600; text-transform:uppercase; letter-spacing:.04em;">' + rot + '</div><div style="font-size:16px; font-weight:800; color:#1f2430; margin-top:3px; white-space:nowrap;">' + val + '</div></div>';
+      html += '<div style="display:flex; gap:12px; margin-bottom:22px; flex-wrap:wrap;">' + kpi("Vendas", String(lista.length)) + kpi("Total vendido", dinBR(totalGeral)) + kpi("Recebido", dinBR(recebidoGeral)) + kpi("Ticket médio", dinBR(lista.length ? totalGeral / lista.length : 0)) + '</div>';
       // Resumo por vendedor (barras)
       html += '<div style="font-size:15px; font-weight:800; color:#1f2430; margin:0 0 12px;">Resumo por vendedor</div>';
       const maxV = Math.max(...nomes.map((n) => porVend[n].reduce((s, v) => s + Number(v.valor || 0), 0)), 1);
@@ -5950,7 +5959,12 @@ function PainelVendas({ showToast, isGer = true, ehLider = false }) {
           <span>
             <b>{vendasFiltradas.length}</b>{buscaVenda ? ` de ${vendas.length}` : ""} {isGer ? "venda(s) lançada(s)" : "venda(s) sua(s)"} em {mesLegivel(mes)}
           </span>
-          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+          <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+            <span style={{ fontSize: 12, color: "var(--muted)" }}>Exportar de</span>
+            <input type="date" className="vd-data" value={expDe} onChange={(e) => setExpDe(e.target.value)} style={{ padding: "5px 8px", borderRadius: 8, border: "1px solid var(--line)", fontSize: 12.5 }} />
+            <span style={{ fontSize: 12, color: "var(--muted)" }}>até</span>
+            <input type="date" className="vd-data" value={expAte} onChange={(e) => setExpAte(e.target.value)} style={{ padding: "5px 8px", borderRadius: 8, border: "1px solid var(--line)", fontSize: 12.5 }} />
+            {(expDe || expAte) && <button className="vd-busca-x" title="Limpar período" onClick={() => { setExpDe(""); setExpAte(""); }}>✕</button>}
             <button className="crm-lote-del" style={{ background: "var(--card)", color: "var(--ink, #111418)", border: "1px solid var(--line)" }} onClick={exportarVendasPDF} disabled={exportandoV}>
               {exportandoV ? "Gerando…" : "⬇ Exportar PDF"}
             </button>
