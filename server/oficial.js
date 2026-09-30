@@ -4519,7 +4519,7 @@ export function instalarCanalOficial({ app, getDb, saveDB, saveSoon, proximoId, 
       const receita = vendasMes.reduce((s, v) => s + (Number(v.valor) || 0), 0);
       const qtdVendas = vendasMes.length;
       const ticket = qtdVendas ? receita / qtdVendas : 0;
-      const leadsMes = leads.filter((l) => l.vendedorId === u.id && mesDesempenho(l.criadoEm) === mes);
+      const leadsMes = leads.filter((l) => l.vendedorId === u.id && l.criadoEm && mesDesempenho(l.criadoEm) === mes);
       const qtdLeads = leadsMes.length;
       const conversao = qtdLeads ? (qtdVendas / qtdLeads) * 100 : 0;
       const pontos = pontosMes(u.id, pes, mes, vendas, leads);
