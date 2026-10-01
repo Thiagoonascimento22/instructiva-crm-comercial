@@ -209,6 +209,7 @@ export const api = {
   ofAtendeSincronizarAuto: () => req("POST", "/api/oficial/atende/sincronizar-auto", {}),
   ofAtendeResumoLigacao: (chatId, callid) => req("POST", "/api/oficial/atende/resumo-ligacao", { chatId, callid }),
   ofAtendeDiagnostico: () => req("GET", "/api/oficial/atende/diagnostico"),
+  ofDiagnosticoLeads: () => req("GET", "/api/oficial/diagnostico-leads"),
   ofAtendeVoipStatus: () => req("GET", "/api/oficial/atende/voip-status"),
   ofChatObsAdd: (id, texto) => req("POST", "/api/oficial/chats/" + id + "/observacao", { texto }),
   ofChatObsList: (id) => req("GET", "/api/oficial/chats/" + id + "/observacoes"),

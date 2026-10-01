@@ -449,7 +449,7 @@ export default function App() {
             <span>{theme === "dark" ? "Modo claro" : "Modo escuro"}</span>
           </button>
           <button className="logout" onClick={logout}>Sair</button>
-          <div style={{ textAlign: "center", fontSize: 10, color: "var(--muted)", marginTop: 8, opacity: 0.7 }}>v293 · 01/10 08h30</div>
+          <div style={{ textAlign: "center", fontSize: 10, color: "var(--muted)", marginTop: 8, opacity: 0.7 }}>v294 · 01/10 08h50</div>
         </div>
       </aside>
 
@@ -8621,6 +8621,14 @@ function PainelAtende({ showToast }) {
     catch (e) { setDiag({ ok: false, erro: e.message }); }
     finally { setDiagLoading(false); }
   }
+  const [diagLead, setDiagLead] = useState(null);
+  const [diagLeadLoading, setDiagLeadLoading] = useState(false);
+  async function rodarDiagnosticoLeads() {
+    setDiagLeadLoading(true); setDiagLead(null);
+    try { const r = await api.ofDiagnosticoLeads(); setDiagLead(r); }
+    catch (e) { setDiagLead({ ok: false, erro: e.message }); }
+    finally { setDiagLeadLoading(false); }
+  }
   const [testeTel, setTesteTel] = useState("");
   const [testando, setTestando] = useState(false);
   const [testeRes, setTesteRes] = useState(null);
@@ -8673,7 +8681,34 @@ function PainelAtende({ showToast }) {
           </button>
           {cfg && cfg.dialerToken && <button className="btn" onClick={sincronizar} disabled={sincronizando}>{sincronizando ? "Sincronizando…" : "↻ Sincronizar ligações agora"}</button>}
           {cfg && cfg.apiKey && <button className="btn" onClick={rodarDiagnostico} disabled={diagLoading}>{diagLoading ? "Verificando…" : "🔍 Diagnóstico"}</button>}
+          <button className="btn" onClick={rodarDiagnosticoLeads} disabled={diagLeadLoading}>{diagLeadLoading ? "Analisando…" : "📊 Diagnóstico de Leads"}</button>
         </div>
+        {diagLead && (
+          <div style={{ marginTop: 12, padding: 14, borderRadius: 10, background: "#0f172a", color: "#e2e8f0", fontSize: 12, fontFamily: "monospace", maxHeight: 460, overflow: "auto" }}>
+            <div style={{ marginBottom: 8, fontWeight: 700, color: "#38bdf8" }}>Diagnóstico de Leads</div>
+            {!diagLead.ok ? <div style={{ color: "#fca5a5" }}>Erro: {diagLead.erro}</div> : (
+              <div style={{ lineHeight: 1.7 }}>
+                <div>Total de leads no sistema: <b style={{ color: "#fbbf24" }}>{diagLead.totalLeads}</b></div>
+                <div>Com data de criação: <b style={{ color: "#4ade80" }}>{diagLead.comCriadoEm}</b> · SEM data: <b style={{ color: "#fca5a5" }}>{diagLead.semCriadoEm}</b></div>
+                <div>Mês atual: <b>{diagLead.mesAtual}</b></div>
+                <div style={{ marginTop: 8, color: "#38bdf8", fontWeight: 700 }}>Campos de data que os leads têm:</div>
+                <div>{Object.entries(diagLead.camposDeDataExistentes || {}).map(([k, v]) => k + ": " + v).join(" · ") || "nenhum"}</div>
+                <div style={{ marginTop: 8, color: "#38bdf8", fontWeight: 700 }}>Leads por mês (pela data de criação):</div>
+                {Object.entries(diagLead.porMes || {}).sort().reverse().map(([m, n]) => <div key={m}>{m}: <b>{n}</b></div>)}
+                {diagLead.amostraLeadsSemData && diagLead.amostraLeadsSemData.length > 0 && (
+                  <details style={{ marginTop: 8 }}>
+                    <summary style={{ cursor: "pointer", color: "#94a3b8" }}>Amostra de leads SEM data (que campos de data têm?)</summary>
+                    {diagLead.amostraLeadsSemData.map((l, i) => <div key={i} style={{ marginTop: 4 }}>#{i + 1} {l.nome || l.id} → campos: {(l.temCampos || []).join(", ") || "NENHUM campo de data"}</div>)}
+                  </details>
+                )}
+                <details style={{ marginTop: 8 }}>
+                  <summary style={{ cursor: "pointer", color: "#94a3b8" }}>Por vendedor (total · este mês · sem data)</summary>
+                  {Object.entries(diagLead.porVendedor || {}).map(([v, o]) => <div key={v} style={{ marginTop: 3 }}>{v}: total {o.total} · este mês {o.comDataEsteMes} · sem data {o.semData}</div>)}
+                </details>
+              </div>
+            )}
+          </div>
+        )}
         {diag && (
           <div style={{ marginTop: 12, padding: 14, borderRadius: 10, background: "#0f172a", color: "#e2e8f0", fontSize: 12, fontFamily: "monospace", maxHeight: 400, overflow: "auto" }}>
             <div style={{ marginBottom: 8, fontWeight: 700, color: "#38bdf8" }}>Diagnóstico Atende Simples</div>
