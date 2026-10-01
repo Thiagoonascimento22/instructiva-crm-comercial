@@ -5564,6 +5564,37 @@ export function instalarCanalOficial({ app, getDb, saveDB, saveSoon, proximoId, 
   // Sincronização automática disparada ao DESLIGAR uma ligação (qualquer vendedor com CRM pode chamar).
   // Puxa só as ligações das últimas ~2h pra achar a que acabou de terminar e gravar no histórico do lead.
   // DIAGNÓSTICO: mostra os CDRs crus que o Atende devolve nas últimas 24h — pra ver o que está vindo (ou se não vem nada)
+  // DIAGNÓSTICO de leads: mostra como os leads estão distribuídos (com/sem data, por mês, por vendedor)
+  app.get("/api/oficial/diagnostico-leads", auth, gerenteOnly, (req, res) => {
+    try {
+      const leads = db.oficial.crmLeads || [];
+      const mesDe = (ts) => { if (!ts) return null; const d = new Date(ts); if (isNaN(d)) return "data-invalida"; return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0"); };
+      const total = leads.length;
+      let semCriadoEm = 0, comCriadoEm = 0;
+      const porMes = {};
+      const campos = {}; // quais campos de data existem nos leads
+      for (const l of leads) {
+        if (l.criadoEm) { comCriadoEm++; const m = mesDe(l.criadoEm); porMes[m] = (porMes[m] || 0) + 1; }
+        else semCriadoEm++;
+        for (const k of ["criadoEm", "atualizadoEm", "ultimaCaptacaoEm", "importadoEm", "data", "createdAt"]) { if (l[k] != null) campos[k] = (campos[k] || 0) + 1; }
+      }
+      // amostra de 5 leads sem criadoEm (pra ver que outros campos de data têm)
+      const amostraSemData = leads.filter((l) => !l.criadoEm).slice(0, 5).map((l) => ({ id: l.id, nome: l.nome, temCampos: Object.keys(l).filter((k) => /em$|At$|data|Data/.test(k) && l[k] != null) }));
+      // por vendedor: total e com data este mês
+      const mesAtual = mesDe(Date.now());
+      const porVend = {};
+      for (const l of leads) {
+        const v = l.vendedorNome || l.vendedorId || "— sem vendedor —";
+        porVend[v] = porVend[v] || { total: 0, comDataEsteMes: 0, semData: 0 };
+        porVend[v].total++;
+        if (!l.criadoEm) porVend[v].semData++;
+        else if (mesDe(l.criadoEm) === mesAtual) porVend[v].comDataEsteMes++;
+      }
+      res.json({ ok: true, totalLeads: total, comCriadoEm, semCriadoEm, mesAtual, porMes, camposDeDataExistentes: campos, amostraLeadsSemData: amostraSemData, porVendedor: porVend });
+    } catch (e) { res.json({ ok: false, erro: e.message }); }
+  });
+
+  // DIAGNÓSTICO de leads: mostra como os leads estão distribuídos (com/sem data, por mês, por vendedor)
   app.get("/api/oficial/atende/diagnostico", auth, gerenteOnly, async (req, res) => {
     try {
       const a = cfgAtende();
