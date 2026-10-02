@@ -449,7 +449,7 @@ export default function App() {
             <span>{theme === "dark" ? "Modo claro" : "Modo escuro"}</span>
           </button>
           <button className="logout" onClick={logout}>Sair</button>
-          <div style={{ textAlign: "center", fontSize: 10, color: "var(--muted)", marginTop: 8, opacity: 0.7 }}>v294 · 01/10 08h50</div>
+          <div style={{ textAlign: "center", fontSize: 10, color: "var(--muted)", marginTop: 8, opacity: 0.7 }}>v295 · 01/10 09h30</div>
         </div>
       </aside>
 
@@ -7588,8 +7588,10 @@ function OficialCRM({ showToast, isGer = true, onAbrirWhats, onDisparar }) {
   const [showExportar, setShowExportar] = useState(false);
   const [showDistrib, setShowDistrib] = useState(false);
   const [filtroVend, setFiltroVend] = useState("");
+  const [filtroDia, setFiltroDia] = useState("");
   const [dragId, setDragId] = useState(null);
   const [novaNota, setNovaNota] = useState("");
+  const mesmoDia = (ts, diaStr) => { if (!ts || !diaStr) return false; const d = new Date(ts); const dd = String(d.getFullYear()) + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0"); return dd === diaStr; };
 
   const carregar = () => api.ofCRM().then((d) => { setEtapas(d.etapas || []); setLeads(d.leads || []); setVendedores(d.vendedores || []); setCrmVend(d.crmVendedores || []); }).catch((e) => showToast(e.message));
   const versaoCrmRef = useRef("");
@@ -7783,12 +7785,19 @@ function OficialCRM({ showToast, isGer = true, onAbrirWhats, onDisparar }) {
               <option value="__sem">Sem dono</option>
             </select>
           )}
+          <input type="date" className="crm-filtro-vend" value={filtroDia} onChange={(e) => setFiltroDia(e.target.value)} title="Ver só os leads que entraram neste dia" style={{ width: "auto" }} />
+          {filtroDia && <button className="onum-btn-ghost" onClick={() => setFiltroDia("")} title="Limpar o filtro de dia">✕ dia</button>}
         </div>
       </div>
+      {filtroDia && (() => {
+        const n = leads.filter((l) => mesmoDia(l.criadoEm, filtroDia) && (!filtroVend || (filtroVend === "__sem" ? !l.vendedorId : l.vendedorId === filtroVend)) && matchBusca(l)).length;
+        const [a, mes, d] = filtroDia.split("-");
+        return <div style={{ margin: "0 0 10px", padding: "8px 14px", background: "#ecfdf3", border: "1px solid #b7e4c7", borderRadius: 10, fontSize: 13.5, color: "#065f46", fontWeight: 600 }}>📅 {d}/{mes}/{a} — <b>{n} lead(s)</b> entraram neste dia{filtroVend && filtroVend !== "__sem" ? " (deste vendedor)" : ""}.</div>;
+      })()}
 
       <div className="crm-board" ref={boardRef} onDragOver={aoArrastarSobreQuadro} onMouseDown={aoPressionarQuadro}>
         {etapas.map((et) => {
-          const doEt = leads.filter((l) => l.etapa === et.k && (!filtroVend || (filtroVend === "__sem" ? !l.vendedorId : l.vendedorId === filtroVend)) && matchBusca(l));
+          const doEt = leads.filter((l) => l.etapa === et.k && (!filtroVend || (filtroVend === "__sem" ? !l.vendedorId : l.vendedorId === filtroVend)) && (!filtroDia || mesmoDia(l.criadoEm, filtroDia)) && matchBusca(l));
           const totalCol = doEt.reduce((s, l) => s + (Number(l.valor) || 0), 0);
           return (
             <div key={et.k} className="crm-col" onDragOver={(e) => e.preventDefault()} onDrop={(e) => { e.preventDefault(); if (dragId) mover(dragId, et.k); setDragId(null); }}>
