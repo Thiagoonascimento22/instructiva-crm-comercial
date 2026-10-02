@@ -3752,9 +3752,15 @@ export function instalarCanalOficial({ app, getDb, saveDB, saveSoon, proximoId, 
         return ehOficial || ehNaoOficial;
       });
       let convs = [];
+      // CONTAGEM PRECISA das ligações (todas as conversas, não só as 25 msgs visíveis) — a IA não conta certo sozinha
+      let ligTotal = 0, ligAtendidas = 0, ligNaoAtendidas = 0;
       for (const c of chats) {
         const canal = c.canal === "oficial" ? "oficial" : "naoOficial";
         const msgs = (c.mensagens || []).filter((m) => { const ts = m.ts || 0; if (!ts) return false; if (new Date(ts).getDay() === 0) return false; /* ignora DOMINGO (dia de folga) */ return (!de || ts >= de) && (!ate || ts <= ate); });
+        // conta ligações desta conversa no período (independente da janela de 25 msgs)
+        for (const m of msgs) {
+          if (m.tipo === "ligacao" && m.ligacao && !m.ligacao.pendente) { ligTotal++; if (m.ligacao.atendida === false) ligNaoAtendidas++; else ligAtendidas++; }
+        }
         const obs = (c.notas || []).filter((n) => n.tipo === "obs").map((n) => n.texto);
         if (msgs.length) convs.push({ nome: c.nome || c.numero, canal, obs, ult: msgs[msgs.length - 1].ts || 0, msgs });
       }
@@ -3810,7 +3816,8 @@ export function instalarCanalOficial({ app, getDb, saveDB, saveSoon, proximoId, 
         + "Responda SOMENTE com um JSON válido, sem texto fora dele, exatamente nesta estrutura:\n"
         + "{\"nota\":7,\"resumo\":\"4 a 7 frases com uma análise geral aprofundada do comportamento do vendedor no período (padrões reais, tom, ritmo, condução, evolução)\",\"passos\":[{\"n\":1,\"nome\":\"Apresentação\",\"status\":\"ok\",\"comentario\":\"o que o vendedor fez ou deixou de fazer nesse passo, com exemplo real da conversa\"}],\"followup\":{\"status\":\"ok\",\"comentario\":\"avaliação da CADÊNCIA de follow-up: retoma quem não respondeu após ~24h? com que frequência? desiste cedo ou vira spam? MENCIONE as TENTATIVAS DE LIGAÇÃO — ligação não atendida = o vendedor TENTOU ligar (esforço de contato, não abandono); ligação atendida = follow-up ativo. Cite exemplos com horários\"},\"porCanal\":{\"oficial\":\"como o vendedor se sai no WhatsApp OFICIAL especificamente (condução pós-template e follow-up)\",\"naoOficial\":\"como o vendedor se sai no WhatsApp NÃO-OFICIAL especificamente\"},\"bem\":[\"...\"],\"melhorar\":[\"...\"],\"fortes\":[\"...\"],\"fracos\":[\"...\"],\"criticos\":[\"...\"],\"sugestoes\":[\"ações práticas e específicas pra melhorar, ligadas aos 7 passos\"],\"cpc\":{\"comece\":[\"o que o vendedor deve COMEÇAR a fazer\"],\"pare\":[\"o que deve PARAR de fazer\"],\"continue\":[\"o que já faz bem e deve CONTINUAR\"]}}\n"
         + "Regras: \"nota\" é um inteiro de 0 a 10 pra performance geral do vendedor no período (LEMBRE: não rebaixe por causa do template de abertura). Em \"passos\" traga os 7 passos (n de 1 a 7, com o nome certo), e \"status\" é 'ok' (fez bem), 'parcial' (fez pela metade) ou 'nao' (não fez). Cada \"comentario\" deve ser específico e citar o que viu. Em \"followup\" avalie a CADÊNCIA (retomar após ~24h, frequência adequada, nem sumir nem virar spam) — 'ok' se faz bem, 'parcial' se faz pouco/mal, 'nao' se não faz. Em \"porCanal\" comente separadamente o desempenho no oficial e no não-oficial (se não houver conversas de um canal, diga que não houve). \"criticos\" só para coisas graves (cliente sem resposta e sem follow-up, promessa não cumprida, oportunidade claramente perdida, demora excessiva, tom rude). Se não houver, use []. \"sugestoes\" deve ter itens acionáveis. Em \"cpc\" (o fechamento de coaching Comece/Pare/Continue) traga de 1 a 4 itens curtos e diretos em CADA um (comece, pare, continue), específicos pra esse vendedor e baseados nas conversas — é a recomendação final. Escreva tudo em português do Brasil, com profundidade (não seja raso).";
-      const usuario = "Vendedor: " + alvo.nome + "\nConversas analisadas: " + convs.length + " (" + totalOficial + " oficiais + " + totalNaoOficial + " não-oficiais)" + (totalConversas > convs.length ? " — as " + convs.length + " mais recentes de " + totalConversas : "") + "\n\n" + transcript;
+      const usuario = "Vendedor: " + alvo.nome + "\nConversas analisadas: " + convs.length + " (" + totalOficial + " oficiais + " + totalNaoOficial + " não-oficiais)" + (totalConversas > convs.length ? " — as " + convs.length + " mais recentes de " + totalConversas : "") + "\n"
+        + "LIGAÇÕES NO PERÍODO (número exato, já contado — USE este número, não conte você mesmo): " + ligTotal + " ligações no total (" + ligAtendidas + " atendidas, " + ligNaoAtendidas + " não atendidas/tentativas)." + "\n\n" + transcript;
 
       const bruto = await analisarComIA(sistema, usuario, 2800, 0);
       let analise = null;
@@ -3827,7 +3834,7 @@ export function instalarCanalOficial({ app, getDb, saveDB, saveSoon, proximoId, 
         salvar();
       }
 
-      res.json({ ok: true, vendedor: alvo.nome, totalConversas, totalOficial, totalNaoOficial, analisadas: convs.length, analise, bruto: analise ? null : bruto });
+      res.json({ ok: true, vendedor: alvo.nome, totalConversas, totalOficial, totalNaoOficial, analisadas: convs.length, ligTotal, ligAtendidas, ligNaoAtendidas, analise, bruto: analise ? null : bruto });
     } catch (e) { res.status(500).json({ error: e.message || "Falha na análise" }); }
   });
 

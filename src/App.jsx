@@ -449,7 +449,7 @@ export default function App() {
             <span>{theme === "dark" ? "Modo claro" : "Modo escuro"}</span>
           </button>
           <button className="logout" onClick={logout}>Sair</button>
-          <div style={{ textAlign: "center", fontSize: 10, color: "var(--muted)", marginTop: 8, opacity: 0.7 }}>v295 · 01/10 09h30</div>
+          <div style={{ textAlign: "center", fontSize: 10, color: "var(--muted)", marginTop: 8, opacity: 0.7 }}>v296 · 02/10 10h00</div>
         </div>
       </aside>
 
@@ -7095,6 +7095,22 @@ function AnaliseIAVendedor({ showToast, isGer = true }) {
               </div>
               );
             })()}
+            {res.ligTotal != null && res.ligTotal > 0 && (
+              <div style={{ display: "flex", gap: 12, marginBottom: 16, flexWrap: "wrap" }}>
+                <div style={{ flex: "1 1 140px", background: "#eff6ff", border: "1px solid #bfdbfe", borderRadius: 14, padding: 16 }}>
+                  <div style={{ fontSize: 11.5, color: "#1e40af", fontWeight: 600, textTransform: "uppercase", letterSpacing: .04 + "em" }}>📞 Ligações feitas</div>
+                  <div style={{ fontSize: 24, fontWeight: 800, color: "#1e3a8a", marginTop: 2 }}>{res.ligTotal}</div>
+                </div>
+                <div style={{ flex: "1 1 140px", background: "#ecfdf3", border: "1px solid #b7e4c7", borderRadius: 14, padding: 16 }}>
+                  <div style={{ fontSize: 11.5, color: "#166534", fontWeight: 600, textTransform: "uppercase", letterSpacing: .04 + "em" }}>✅ Atendidas</div>
+                  <div style={{ fontSize: 24, fontWeight: 800, color: "#15803d", marginTop: 2 }}>{res.ligAtendidas}</div>
+                </div>
+                <div style={{ flex: "1 1 140px", background: "#fef2f2", border: "1px solid #fecaca", borderRadius: 14, padding: 16 }}>
+                  <div style={{ fontSize: 11.5, color: "#991b1b", fontWeight: 600, textTransform: "uppercase", letterSpacing: .04 + "em" }}>📵 Não atendidas</div>
+                  <div style={{ fontSize: 24, fontWeight: 800, color: "#b91c1c", marginTop: 2 }}>{res.ligNaoAtendidas}</div>
+                </div>
+              </div>
+            )}
             {A.resumo && <div style={{ background: "var(--surface-2)", border: "1px solid " + DES.line, borderRadius: 16, padding: 20, marginBottom: 16, fontSize: 14.5, fontWeight: 500, color: DES.ink, lineHeight: 1.6 }}>{A.resumo}</div>}
             {Array.isArray(A.passos) && A.passos.length > 0 && (
               <div style={{ background: "var(--card)", border: "1px solid " + DES.line, borderRadius: 16, padding: 18, marginBottom: 14 }}>
