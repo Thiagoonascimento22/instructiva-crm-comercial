@@ -63,6 +63,7 @@ const I = {
   brilho: (p) => (<svg {...p} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3c.5 4 2 5.5 6 6-4 .5-5.5 2-6 6-.5-4-2-5.5-6-6 4-.5 5.5-2 6-6z"/><path d="M19 15c.2 1.6.9 2.3 2.5 2.5-1.6.2-2.3.9-2.5 2.5-.2-1.6-.9-2.3-2.5-2.5 1.6-.2 2.3-.9 2.5-2.5z"/></svg>),
   celular: (p) => (<svg {...p} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="5" y="2" width="14" height="20" rx="2.5"/><path d="M11 18h2"/></svg>),
   repetir: (p) => (<svg {...p} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M17 2l4 4-4 4"/><path d="M3 11V9a3 3 0 0 1 3-3h15"/><path d="M7 22l-4-4 4-4"/><path d="M21 13v2a3 3 0 0 1-3 3H3"/></svg>),
+  raio: (p) => (<svg {...p} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M13 2 3 14h9l-1 8 10-12h-9z"/></svg>),
   fone: (p) => (<svg {...p} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1.9.4 1.8.7 2.7a2 2 0 0 1-.5 2.1L8 9.8a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.4c.9.3 1.8.6 2.7.7a2 2 0 0 1 1.7 2z"/></svg>),
   nota: (p) => (<svg {...p} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>),
 };
@@ -157,14 +158,14 @@ function LembreteFoto({ user, setUser, showToast }) {
   }
   return (
     <div className="lembrete-foto">
-      <div className="lembrete-foto-ic">📸</div>
+      <div className="lembrete-foto-ic"><I.image className="ico" /></div>
       <div className="lembrete-foto-txt">
         <b>Novidade: você já pode colocar sua foto de perfil</b>
         <span>Ela aparece nos seus leads no Pipeline. Leva 5 segundos.</span>
       </div>
       <input ref={ref} type="file" accept="image/*" style={{ display: "none" }} onChange={escolher} />
       <button className="btn btn-on btn-sm" onClick={() => ref.current && ref.current.click()}>Adicionar foto</button>
-      <button className="lembrete-foto-x" onClick={() => setDispensado(true)} title="Agora não">✕</button>
+      <button className="lembrete-foto-x" onClick={() => setDispensado(true)} title="Agora não" aria-label="Agora não"><I.x className="ico" /></button>
     </div>
   );
 }
@@ -218,6 +219,7 @@ export default function App() {
   useEffect(() => { try { localStorage.setItem("instructiva_view", view); } catch (e) {} }, [view]);
   const [waTarget, setWaTarget] = useState(null);
   const [disparoPreset, setDisparoPreset] = useState(null); // leads levados do Pipeline pro Disparo
+  const [crmAbrir, setCrmAbrir] = useState(null); // v2.1: lead pra abrir direto no Pipeline (vindo da ficha ou da busca)
   const [minhasSol, setMinhasSol] = useState([]);
   const carregarMinhasSol = () => { api.solicitacoes().then(setMinhasSol).catch(() => {}); };
   const [toast, setToast] = useState(null);
@@ -233,6 +235,18 @@ export default function App() {
       return n;
     });
   }
+
+  // v2.1: busca rápida — Ctrl+K (⌘K no Mac) abre de qualquer tela
+  const [buscaAberta, setBuscaAberta] = useState(false);
+  useEffect(() => {
+    if (!user) return;
+    const aoTeclar = (e) => {
+      if ((e.metaKey || e.ctrlKey) && String(e.key).toLowerCase() === "k") { e.preventDefault(); setBuscaAberta((v) => !v); }
+    };
+    window.addEventListener("keydown", aoTeclar);
+    return () => window.removeEventListener("keydown", aoTeclar);
+  }, [user]);
+  const ehMac = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent || "");
 
   // qual unidade é este sistema (Toledo, Jesuítas...) — vem da variável UNIDADE do servidor
   const [unidade, setUnidade] = useState("");
@@ -355,6 +369,9 @@ export default function App() {
             </div>
           )}
         </div>
+        <button type="button" className="side-busca" onClick={() => setBuscaAberta(true)}>
+          <I.search className="ico" /><span>Buscar</span><kbd>{ehMac ? "⌘K" : "Ctrl K"}</kbd>
+        </button>
         <nav className="nav" aria-label="Menu principal">
           {grupos.map((g) => (
             <div key={g.t} className="nav-grupo">
@@ -376,7 +393,7 @@ export default function App() {
             </div>
             <button className="side-sair" onClick={logout} title="Sair" aria-label="Sair"><I.out className="ico" /></button>
           </div>
-          <div className="side-versao">v2.0</div>
+          <div className="side-versao">v2.1</div>
         </div>
       </aside>
 
@@ -402,11 +419,11 @@ export default function App() {
         </div>
         <div className={"content" + (view === "whatsapp" ? " cheia" : "")}>
           {view !== "whatsapp" && <LembreteFoto user={user} setUser={setUser} showToast={showToast} />}
-          {view === "whatsapp" && !isSuporte && mod("caixa") && <WhatsApp user={user} showToast={showToast} target={waTarget} onTargetUsed={() => setWaTarget(null)} recarregarSol={carregarMinhasSol} />}
+          {view === "whatsapp" && !isSuporte && mod("caixa") && <WhatsApp user={user} showToast={showToast} target={waTarget} onTargetUsed={() => setWaTarget(null)} recarregarSol={carregarMinhasSol} onAbrirLead={(isGer || vendPode("crm")) && mod("crm") ? (id) => { setCrmAbrir(id); setView("crm"); } : null} />}
           {view === "disparo" && (isGer || isVend) && mod("disparo") && <OficialDisparo isGer={isGer} showToast={showToast} preset={disparoPreset} onPresetUsado={() => setDisparoPreset(null)} />}
           {view === "numeros" && isGer && mod("numeros") && <OficialNumeros showToast={showToast} />}
           {view === "vendas" && (isGer || vendPode("vendas")) && mod("vendas") && <PainelVendas showToast={showToast} isGer={isGer} ehLider={ehLider} />}
-          {view === "crm" && (isGer || vendPode("crm")) && mod("crm") && <OficialCRM showToast={showToast} isGer={isGer} onAbrirWhats={(tel, canal, nome) => { setWaTarget({ numero: tel, canal, nome }); setView("whatsapp"); }} onDisparar={(preset) => { setDisparoPreset(preset); setView("disparo"); }} />}
+          {view === "crm" && (isGer || vendPode("crm")) && mod("crm") && <OficialCRM showToast={showToast} isGer={isGer} abrirLeadId={crmAbrir} onLeadAberto={() => setCrmAbrir(null)} onAbrirWhats={(tel, canal, nome) => { setWaTarget({ numero: tel, canal, nome }); setView("whatsapp"); }} onDisparar={(preset) => { setDisparoPreset(preset); setView("disparo"); }} />}
           {view === "desempenho" && (isGer || (isVend && !(acessoVend && acessoVend.desempenhoOculto))) && mod("desempenho") && <Desempenho showToast={showToast} isGer={isGer} ehLider={ehLider} />}
           {view === "analiseia" && (isGer || isVend) && mod("caixa") && <AnaliseIAVendedor showToast={showToast} isGer={isGer} />}
           {view === "minhasSolicitacoes" && !isGer && !isSuporte && <PaginaMinhasSolicitacoes itens={minhasSol} recarregar={carregarMinhasSol} showToast={showToast} />}
@@ -415,8 +432,145 @@ export default function App() {
         </div>
       </main>
 
-      {toast && <div className="toast">{toast}</div>}
+      {buscaAberta && (
+        <BuscaRapida
+          telas={grupos.flatMap((g) => g.itens.map((it) => ({ ...it, grupo: g.t })))}
+          podeCRM={(isGer || vendPode("crm")) && mod("crm")}
+          podeCaixa={!isSuporte && mod("caixa")}
+          onClose={() => setBuscaAberta(false)}
+          onIrTela={(k) => setView(k)}
+          onAbrirLead={(id) => { setCrmAbrir(id); setView("crm"); }}
+          onAbrirConversa={(t) => { setWaTarget(t); setView("whatsapp"); }}
+        />
+      )}
+      {toast && (() => {
+        // v2.1: aviso com ícone e cor (✓ deu certo, ✗ deu errado, resto = informação)
+        const txt = String(toast);
+        const tipo = /^\s*✓/.test(txt) ? "ok" : /^\s*(✗|⚠)/.test(txt) ? "erro" : "info";
+        const limpo = txt.replace(/^\s*(✓|✗|⚠️?)\s*/, "");
+        const Ico = tipo === "ok" ? I.check : tipo === "erro" ? I.alert : I.brilho;
+        return <div className={"toast toast-" + tipo} role="status"><span className="toast-ic"><Ico className="ico" /></span><span>{limpo}</span></div>;
+      })()}
     </div>
+  );
+}
+
+/* ============================ BUSCA RÁPIDA — Ctrl+K (v2.1) ============================ */
+// Acha qualquer lead, conversa ou tela digitando um pedaço do nome ou do telefone.
+const semAcento = (s) => String(s || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
+function BuscaRapida({ telas, podeCRM, podeCaixa, onClose, onIrTela, onAbrirLead, onAbrirConversa }) {
+  const [q, setQ] = useState("");
+  const [leads, setLeads] = useState(null);
+  const [etapas, setEtapas] = useState([]);
+  const [conversas, setConversas] = useState([]);
+  const [buscandoConv, setBuscandoConv] = useState(false);
+  const [ativo, setAtivo] = useState(0);
+  const inputRef = useRef(null);
+  const listaRef = useRef(null);
+
+  useEffect(() => { inputRef.current && inputRef.current.focus(); }, []);
+  useEffect(() => {
+    if (!podeCRM) { setLeads([]); return; }
+    api.ofCRM().then((d) => { setLeads(d.leads || []); setEtapas(d.etapas || []); }).catch(() => setLeads([]));
+  }, [podeCRM]);
+  // conversas: busca no servidor (com uma pausa curta enquanto a pessoa digita)
+  useEffect(() => {
+    const termo = q.trim();
+    if (!podeCaixa || termo.length < 2) { setConversas([]); return; }
+    setBuscandoConv(true);
+    const t = setTimeout(async () => {
+      const lista = (r) => (Array.isArray(r) ? r : (r && (r.chats || r.conversas)) || []);
+      const [of, evo] = await Promise.all([
+        api.ofChats(termo).then(lista).catch(() => []),
+        api.waChats(undefined, termo).then(lista).catch(() => []),
+      ]);
+      const vistos = new Set();
+      const juntas = [...of.map((c) => ({ ...c, canal: "oficial" })), ...evo.map((c) => ({ ...c, canal: "evolution" }))]
+        .filter((c) => { const k = c.canal + (c.numero || c.id); if (vistos.has(k)) return false; vistos.add(k); return true; })
+        .slice(0, 6);
+      setConversas(juntas); setBuscandoConv(false);
+    }, 250);
+    return () => clearTimeout(t);
+  }, [q, podeCaixa]);
+
+  const termo = semAcento(q.trim());
+  const dig = q.replace(/\D/g, "");
+  const etapaDe = (k) => etapas.find((e) => e.k === k);
+  const achadosTelas = telas.filter((t) => !termo || semAcento(t.label).includes(termo)).slice(0, termo ? 4 : 9);
+  const achadosLeads = !termo ? [] : (leads || []).filter((l) =>
+    semAcento(l.nome).includes(termo) || (dig.length >= 3 && String(l.telefone || "").replace(/\D/g, "").includes(dig)) ||
+    semAcento(l.curso).includes(termo) || (l.tags || []).some((t) => semAcento(t).includes(termo))
+  ).slice(0, 6);
+  const itens = [
+    ...achadosLeads.map((l) => ({ tipo: "lead", id: "l" + l.id, l })),
+    ...conversas.map((c) => ({ tipo: "conv", id: "c" + c.canal + c.id, c })),
+    ...achadosTelas.map((t) => ({ tipo: "tela", id: "t" + t.k, t })),
+  ];
+  useEffect(() => { setAtivo(0); }, [q, conversas.length, leads && leads.length]);
+  useEffect(() => {
+    const el = listaRef.current && listaRef.current.querySelector('[data-ativo="1"]');
+    if (el) el.scrollIntoView({ block: "nearest" });
+  }, [ativo]);
+
+  function escolher(it) {
+    if (!it) return;
+    if (it.tipo === "lead") onAbrirLead(it.l.id);
+    else if (it.tipo === "conv") onAbrirConversa({ numero: it.c.numero, canal: it.c.canal, nome: it.c.nome });
+    else onIrTela(it.t.k);
+    onClose();
+  }
+  function teclas(e) {
+    if (e.key === "ArrowDown") { e.preventDefault(); setAtivo((a) => Math.min(itens.length - 1, a + 1)); }
+    else if (e.key === "ArrowUp") { e.preventDefault(); setAtivo((a) => Math.max(0, a - 1)); }
+    else if (e.key === "Enter") { e.preventDefault(); escolher(itens[ativo]); }
+    else if (e.key === "Escape") { e.preventDefault(); onClose(); }
+  }
+  let idx = -1;
+  const linha = (it, conteudo) => { idx++; const meu = idx; return (
+    <button type="button" key={it.id} className={"busca-item" + (meu === ativo ? " on" : "")} data-ativo={meu === ativo ? "1" : "0"}
+      onMouseMove={() => setAtivo(meu)} onClick={() => escolher(it)}>{conteudo}</button>
+  ); };
+
+  return (
+    <Portal>
+      <div className="busca-bg" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
+        <div className="busca-caixa" role="dialog" aria-label="Busca rápida">
+          <div className="busca-campo">
+            <I.search className="ico" />
+            <input ref={inputRef} value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={teclas}
+              placeholder={podeCRM ? "Buscar lead, conversa ou tela…" : "Buscar conversa ou tela…"} aria-label="Buscar" />
+            <kbd>Esc</kbd>
+          </div>
+          <div className="busca-lista" ref={listaRef}>
+            {achadosLeads.length > 0 && <div className="busca-grupo">Leads</div>}
+            {achadosLeads.map((l) => {
+              const et = etapaDe(l.etapa);
+              return linha({ tipo: "lead", id: "l" + l.id, l }, <>
+                <span className="busca-av">{iniciais(l.nome)}</span>
+                <span className="busca-txt"><b>{l.nome}</b><small>{l.telefone}{l.curso ? " · " + l.curso : ""}</small></span>
+                {et && <span className="busca-etapa" style={{ "--c": et.cor }}><i />{et.lb}</span>}
+                {l.vendedorNome && <span className="busca-dono">{l.vendedorNome.split(" ")[0]}</span>}
+              </>);
+            })}
+            {(conversas.length > 0 || buscandoConv) && <div className="busca-grupo">Conversas {buscandoConv && <span className="spin" style={{ width: 12, height: 12, marginLeft: 6 }} />}</div>}
+            {conversas.map((c) => linha({ tipo: "conv", id: "c" + c.canal + c.id, c }, <>
+              <span className="busca-av conv"><I.wa className="ico" /></span>
+              <span className="busca-txt"><b>{c.nome || c.numero}</b><small>{c.numero} · {c.canal === "oficial" ? "Oficial" : "Não oficial"}{c.vendedorNome ? " · " + c.vendedorNome : ""}</small></span>
+            </>))}
+            {achadosTelas.length > 0 && <div className="busca-grupo">{termo ? "Telas" : "Ir para"}</div>}
+            {achadosTelas.map((t) => linha({ tipo: "tela", id: "t" + t.k, t }, <>
+              <span className="busca-av tela"><t.ic className="ico" /></span>
+              <span className="busca-txt"><b>{t.label}</b><small>{t.grupo}</small></span>
+            </>))}
+            {termo && itens.length === 0 && !buscandoConv && (
+              <div className="busca-vazio">Nada encontrado para “{q.trim()}”. Tente outro pedaço do nome ou os últimos dígitos do telefone.</div>
+            )}
+            {podeCRM && leads === null && termo && <div className="busca-vazio">Carregando leads…</div>}
+          </div>
+          <div className="busca-rodape"><span><kbd>↑</kbd><kbd>↓</kbd> navegar</span><span><kbd>Enter</kbd> abrir</span><span><kbd>Esc</kbd> fechar</span></div>
+        </div>
+      </div>
+    </Portal>
   );
 }
 
@@ -2542,38 +2696,138 @@ function ModalImportar({ etapas, onClose, onDone, showToast }) {
 }
 
 // Gerenciador de colunas do Pipeline (criar, renomear, mudar cor, apagar)
-function ModalColunas({ etapas, onClose, onChanged, showToast }) {
+// v2.1 — editor de colunas do Pipeline: arrastar pra ordenar, cores prontas, renomear na hora,
+// contagem de leads e escolha de pra onde vão os leads quando uma coluna é apagada.
+const CORES_COLUNA = ["#8b5cf6", "#6366f1", "#3b82f6", "#0ea5e9", "#14b8a6", "#22c55e", "#84cc16", "#eab308", "#f59e0b", "#f97316", "#ef4444", "#ec4899", "#64748b"];
+function ModalColunas({ etapas, leads = [], onClose, onChanged, showToast }) {
+  const [lista, setLista] = useState(etapas);
   const [novoNome, setNovoNome] = useState("");
-  const [novaCor, setNovaCor] = useState("#3b82f6");
+  const [novaCor, setNovaCor] = useState(CORES_COLUNA[2]);
   const [busy, setBusy] = useState(false);
+  const [corAberta, setCorAberta] = useState(null);
+  const [apagando, setApagando] = useState(null); // { k, destino }
+  const [arrastando, setArrastando] = useState(null);
+  const [nomes, setNomes] = useState({});
+  useEffect(() => { setLista(etapas); }, [etapas]);
+  const qtd = useMemo(() => { const m = {}; leads.forEach((l) => { m[l.etapa] = (m[l.etapa] || 0) + 1; }); return m; }, [leads]);
+
   async function add() {
     if (!novoNome.trim()) { showToast("Dê um nome à coluna"); return; }
     setBusy(true);
-    try { await api.ofCrmEtapaCriar({ lb: novoNome, cor: novaCor }); setNovoNome(""); showToast("✓ Coluna criada"); onChanged(); }
+    try { await api.ofCrmEtapaCriar({ lb: novoNome.trim(), cor: novaCor }); setNovoNome(""); showToast("✓ Coluna criada"); onChanged(); }
     catch (e) { showToast("✗ " + e.message); } finally { setBusy(false); }
   }
-  async function salvar(k, campo, valor) { try { await api.ofCrmEtapaEditar(k, { [campo]: valor }); onChanged(); } catch (e) { showToast("✗ " + e.message); } }
-  async function excluir(k, lb) { if (!window.confirm('Apagar a coluna "' + lb + '"? Os leads dela vão pra primeira coluna.')) return; try { await api.ofCrmEtapaExcluir(k); showToast("✓ Coluna apagada"); onChanged(); } catch (e) { showToast("✗ " + e.message); } }
+  async function salvar(k, campo, valor) {
+    setLista((l) => l.map((e) => (e.k === k ? { ...e, [campo]: valor } : e)));
+    try { await api.ofCrmEtapaEditar(k, { [campo]: valor }); onChanged(); } catch (e) { showToast("✗ " + e.message); onChanged(); }
+  }
+  function salvarNome(e) {
+    const v = (nomes[e.k] !== undefined ? nomes[e.k] : e.lb).trim();
+    if (v && v !== e.lb) { salvar(e.k, "lb", v); showToast("✓ Coluna renomeada"); }
+    setNomes((n) => { const x = { ...n }; delete x[e.k]; return x; });
+  }
+  async function gravarOrdem(nova) {
+    setLista(nova);
+    try { await api.ofReordenarEtapas(nova.map((e) => e.k)); onChanged(); } catch (e) { showToast("✗ " + e.message); onChanged(); }
+  }
+  function mover(i, dir) {
+    const j = i + dir;
+    if (j < 0 || j >= lista.length) return;
+    const nova = lista.slice(); const t = nova[i]; nova[i] = nova[j]; nova[j] = t;
+    gravarOrdem(nova);
+  }
+  function aoArrastarSobre(ev, i) {
+    ev.preventDefault();
+    if (arrastando === null || arrastando === i) return;
+    const nova = lista.slice(); const [item] = nova.splice(arrastando, 1); nova.splice(i, 0, item);
+    setLista(nova); setArrastando(i);
+  }
+  async function confirmarApagar(e) {
+    const n = qtd[e.k] || 0;
+    const destino = apagando && apagando.destino;
+    setBusy(true);
+    try {
+      if (n > 0 && destino) {
+        const ids = leads.filter((l) => l.etapa === e.k).map((l) => l.id);
+        await api.ofCrmLoteEtapa({ ids, etapa: destino });
+      }
+      await api.ofCrmEtapaExcluir(e.k);
+      showToast("✓ Coluna apagada" + (n ? " e " + n + " lead(s) movido(s)" : ""));
+      setApagando(null); onChanged();
+    } catch (er) { showToast("✗ " + er.message); } finally { setBusy(false); }
+  }
+
   return (
     <div className="pop-bg" onClick={(e) => e.target === e.currentTarget && onClose()}>
-      <div className="pop-sheet" style={{ maxWidth: 560 }}>
-        <div className="pop-head"><b>Colunas do Pipeline</b><button className="crm-x" onClick={onClose}>✕</button></div>
-        <div className="pop-body">
-          <div className="col-list">
-            {etapas.map((e) => (
-              <div className="col-item" key={e.k}>
-                <input type="color" className="col-cor" defaultValue={e.cor} onBlur={(ev) => { if (ev.target.value !== e.cor) salvar(e.k, "cor", ev.target.value); }} title="Cor da coluna" />
-                <input className="input col-nome" defaultValue={e.lb} onBlur={(ev) => { const v = ev.target.value.trim(); if (v && v !== e.lb) salvar(e.k, "lb", v); }} />
-                <button className="onum-acao del" onClick={() => excluir(e.k, e.lb)} title="Apagar coluna" disabled={etapas.length <= 1}><I.trash className="ico" /></button>
-              </div>
-            ))}
+      <div className="pop-sheet cols-sheet">
+        <div className="cols-head">
+          <div>
+            <b>Colunas do Pipeline</b>
+            <span>Arraste para mudar a ordem. Clique no nome para renomear e na bolinha para trocar a cor.</span>
           </div>
-          <div className="col-nova">
-            <input type="color" className="col-cor" value={novaCor} onChange={(e) => setNovaCor(e.target.value)} />
-            <input className="input col-nome" value={novoNome} onChange={(e) => setNovoNome(e.target.value)} placeholder="Nome da nova coluna" onKeyDown={(e) => e.key === "Enter" && add()} />
-            <button className="onum-add" disabled={busy} onClick={add}><I.plus className="ico" /> Criar</button>
+          <button className="crm-x" onClick={onClose} aria-label="Fechar"><I.x className="ico" /></button>
+        </div>
+        <div className="cols-body">
+          <ol className="cols-lista">
+            {lista.map((e, i) => {
+              const n = qtd[e.k] || 0;
+              const emApagar = apagando && apagando.k === e.k;
+              return (
+                <li key={e.k} className={"cols-item" + (arrastando === i ? " arrastando" : "")}
+                  draggable={!emApagar} onDragStart={() => setArrastando(i)} onDragOver={(ev) => aoArrastarSobre(ev, i)}
+                  onDragEnd={() => { if (arrastando !== null) gravarOrdem(lista); setArrastando(null); }}>
+                  <div className="cols-linha">
+                    <span className="cols-alca" title="Arraste para mudar a ordem" aria-hidden="true">⋮⋮</span>
+                    <button type="button" className="cols-cor" style={{ background: e.cor }} onClick={() => setCorAberta(corAberta === e.k ? null : e.k)} title="Trocar a cor" aria-label={"Trocar a cor de " + e.lb} />
+                    <input className="cols-nome" value={nomes[e.k] !== undefined ? nomes[e.k] : e.lb} aria-label="Nome da coluna"
+                      onChange={(ev) => setNomes({ ...nomes, [e.k]: ev.target.value })} onBlur={() => salvarNome(e)}
+                      onKeyDown={(ev) => { if (ev.key === "Enter") ev.currentTarget.blur(); }} />
+                    <span className="cols-qtd" title="Leads nesta coluna">{n} {n === 1 ? "lead" : "leads"}</span>
+                    <div className="cols-btns">
+                      <button type="button" onClick={() => mover(i, -1)} disabled={i === 0} title="Subir" aria-label="Subir"><I.chevron className="ico" style={{ transform: "rotate(180deg)" }} /></button>
+                      <button type="button" onClick={() => mover(i, 1)} disabled={i === lista.length - 1} title="Descer" aria-label="Descer"><I.chevron className="ico" /></button>
+                      <button type="button" className="del" disabled={lista.length <= 1} onClick={() => setApagando(emApagar ? null : { k: e.k, destino: (lista.find((x) => x.k !== e.k) || {}).k })} title="Apagar coluna" aria-label="Apagar coluna"><I.trash className="ico" /></button>
+                    </div>
+                  </div>
+                  {corAberta === e.k && (
+                    <div className="cols-paleta">
+                      {CORES_COLUNA.map((c) => (
+                        <button type="button" key={c} className={"cols-sw" + (c.toLowerCase() === String(e.cor).toLowerCase() ? " on" : "")} style={{ background: c }} onClick={() => { salvar(e.k, "cor", c); setCorAberta(null); }} aria-label={"Cor " + c} />
+                      ))}
+                      <label className="cols-sw outra" title="Outra cor"><input type="color" defaultValue={e.cor} onBlur={(ev) => { if (ev.target.value !== e.cor) salvar(e.k, "cor", ev.target.value); setCorAberta(null); }} />+</label>
+                    </div>
+                  )}
+                  {emApagar && (
+                    <div className="cols-apagar">
+                      {n > 0 ? (
+                        <>
+                          <span>Os <b>{n} {n === 1 ? "lead" : "leads"}</b> desta coluna vão para:</span>
+                          <select className="input" value={apagando.destino || ""} onChange={(ev) => setApagando({ ...apagando, destino: ev.target.value })}>
+                            {lista.filter((x) => x.k !== e.k).map((x) => <option key={x.k} value={x.k}>{x.lb}</option>)}
+                          </select>
+                        </>
+                      ) : <span>Esta coluna está vazia. Pode apagar sem medo.</span>}
+                      <div className="cols-apagar-btns">
+                        <button type="button" className="btn btn-sm" onClick={() => setApagando(null)}>Cancelar</button>
+                        <button type="button" className="btn btn-sm btn-danger" disabled={busy} onClick={() => confirmarApagar(e)}>Apagar coluna</button>
+                      </div>
+                    </div>
+                  )}
+                </li>
+              );
+            })}
+          </ol>
+          <div className="cols-nova">
+            <div className="cols-nova-t">Nova coluna</div>
+            <div className="cols-linha">
+              <span className="cols-cor fixa" style={{ background: novaCor }} />
+              <input className="cols-nome" value={novoNome} onChange={(e) => setNovoNome(e.target.value)} placeholder="Ex.: Proposta enviada" onKeyDown={(e) => e.key === "Enter" && add()} />
+              <button className="btn btn-primary btn-sm" disabled={busy || !novoNome.trim()} onClick={add}><I.plus className="ico" style={{ width: 14, height: 14 }} /> Criar</button>
+            </div>
+            <div className="cols-paleta">
+              {CORES_COLUNA.map((c) => <button type="button" key={c} className={"cols-sw" + (c === novaCor ? " on" : "")} style={{ background: c }} onClick={() => setNovaCor(c)} aria-label={"Cor " + c} />)}
+            </div>
           </div>
-          <div className="rsv-hint" style={{ marginTop: 12 }}>Renomeie clicando no nome (sai do campo pra salvar). Mude a cor no quadradinho. Ao apagar uma coluna, os leads dela vão pra primeira coluna — ninguém se perde.</div>
         </div>
       </div>
     </div>
@@ -4834,6 +5088,89 @@ function Stat({ label, valor, cor, borda }) {
   );
 }
 
+/* v2.1 — peças visuais do resultado da Análise IA (seguem o tema claro/escuro) */
+// Semáforo do atendimento: verde = parabéns, amarelo = atenção, vermelho = precisa melhorar.
+// Sempre com uma frase que puxa pra cima (o objetivo é o vendedor evoluir, não desanimar).
+const FRASES_SEMAFORO = {
+  verde: [
+    "Você está mandando muito bem. Continue nesse ritmo: os ajustes abaixo são o que falta para chegar ao topo do ranking.",
+    "Atendimento de alto nível, e o cliente sente isso. Siga assim e use as dicas abaixo para fechar ainda mais.",
+    "Resultado de quem segue o processo certo. Mantenha a consistência e você vira referência no time.",
+  ],
+  amarelo: [
+    "Já existe uma boa base. Com os ajustes abaixo, a próxima análise pode ficar verde.",
+    "Falta pouco para virar o jogo. Escolha 2 pontos abaixo e foque neles nesta semana.",
+    "Você já faz muita coisa certa. Agora é lapidar os detalhes que fazem a venda acontecer.",
+  ],
+  vermelho: [
+    "Todo grande vendedor já passou por aqui. Foque nos primeiros pontos abaixo nesta semana e a evolução vem.",
+    "Nota baixa hoje não define amanhã. Comece pelo básico do processo e peça ajuda ao gestor no que travar.",
+    "Bora recomeçar com método: um passo de cada vez, todo dia. A próxima análise pode ser outra história.",
+  ],
+  verdeTime: ["O time está jogando junto e bem. Mantenham o ritmo e ataquem os pontos abaixo para bater a meta com folga."],
+  amareloTime: ["O time tem base boa. Ajustando os pontos abaixo, a próxima análise fica verde."],
+  vermelhoTime: ["Hora de virar o jogo juntos: escolham 2 pontos abaixo e treinem esta semana. Evolução vem com método."],
+};
+function NotaIA({ nota, nome, ehTime, passos, analisadas }) {
+  const n = Number(nota) || 0;
+  const nivel = n >= 7 ? "verde" : n >= 4 ? "amarelo" : "vermelho";
+  const pNome = primeiroNome(nome);
+  const titulo = nivel === "verde" ? (ehTime ? "Parabéns, time!" : "Parabéns" + (pNome ? ", " + pNome : "") + "!")
+    : nivel === "amarelo" ? (ehTime ? "Atenção, time: estamos no caminho" : "Atenção: você está no caminho")
+    : (ehTime ? "Time, precisamos virar o jogo" : "Precisa melhorar, e dá para virar");
+  const lista = FRASES_SEMAFORO[nivel + (ehTime ? "Time" : "")];
+  const frase = lista[Math.round(n * 10) % lista.length];
+  const st = (p) => p.status || p.nivel;
+  const bons = (passos || []).filter((p) => st(p) === "ok" || st(p) === "bom").length;
+  const ajustar = (passos || []).length - bons;
+  const cor = nivel === "verde" ? "#25d366" : nivel === "amarelo" ? "#f5b82e" : "#ff5a5f";
+  return (
+    <div className={"iax-semaforo " + nivel} style={{ "--sc": cor }}>
+      <div className="iax-sinal" role="img" aria-label={"Sinal " + nivel}>
+        <i className={nivel === "vermelho" ? "on vm" : "vm"} /><i className={nivel === "amarelo" ? "on am" : "am"} /><i className={nivel === "verde" ? "on vd" : "vd"} />
+      </div>
+      <div className="iax-sem-txt">
+        <div className="iax-sem-eyebrow">{nivel === "verde" ? "Sinal verde" : nivel === "amarelo" ? "Sinal amarelo" : "Sinal vermelho"} · semáforo do atendimento</div>
+        <div className="iax-sem-titulo">{titulo}</div>
+        <p className="iax-sem-frase">{frase}</p>
+        <div className="iax-sem-chips">
+          {(passos || []).length > 0 && <span><I.check className="ico" /> {bons} de {(passos || []).length} passos bem feitos</span>}
+          {ajustar > 0 && <span><I.trend className="ico" /> {ajustar} para evoluir</span>}
+          {analisadas ? <span><I.chat className="ico" /> {analisadas} conversas lidas</span> : null}
+        </div>
+      </div>
+      <div className="iax-sem-nota">
+        <AnelPontos pct={n * 10} cor={cor} size={116} stroke={10} dentro={<><b className="iax-nota-n">{String(nota).replace(".", ",")}</b><span className="iax-nota-de">de 10</span></>} />
+      </div>
+    </div>
+  );
+}
+function PassosIA({ passos, titulo }) {
+  if (!Array.isArray(passos) || !passos.length) return null;
+  const st = (p) => {
+    const s = p.status || p.nivel;
+    if (s === "ok" || s === "bom") return { c: "ok", lb: p.nivel ? "Bom" : "Fez", Ic: I.check };
+    if (s === "parcial" || s === "medio" || s === "médio") return { c: "warn", lb: "Parcial", Ic: I.alert };
+    return { c: "late", lb: p.nivel ? "Ruim" : "Não fez", Ic: I.x };
+  };
+  const cont = { ok: 0, warn: 0, late: 0 };
+  passos.forEach((p) => { cont[st(p).c]++; });
+  return (
+    <div className="iax-card">
+      <div className="iax-card-h"><b>{titulo}</b><span>{cont.ok} bons · {cont.warn} parciais · {cont.late} a corrigir</span></div>
+      <div className="iax-passos">
+        {passos.map((p, i) => { const x = st(p); return (
+          <div key={i} className="iax-passo">
+            <span className="iax-passo-n">{p.n || i + 1}</span>
+            <div className="iax-passo-txt"><b>{p.nome}</b>{p.comentario && <span>{p.comentario}</span>}</div>
+            <span className={"iax-selo " + x.c}><x.Ic className="ico" />{x.lb}</span>
+          </div>
+        ); })}
+      </div>
+    </div>
+  );
+}
+
 function AnaliseIAVendedor({ showToast, isGer = true }) {
   const [vendedores, setVendedores] = useState([]);
   const [vendedorId, setVendedorId] = useState("");
@@ -4963,33 +5300,35 @@ function AnaliseIAVendedor({ showToast, isGer = true }) {
     return vendedorId ? ((vendedores.find((v) => v.id === vendedorId) || {}).nome || "Vendedor") : "Eu (gerente)";
   }
   const nivelCor = (n) => { const s = String(n || "").toLowerCase(); if (s === "alta" || s === "ruim") return "#dc2626"; if (s === "média" || s === "media" || s === "regular") return DES.orange; if (s === "baixa" || s === "bom") return DES.green; return DES.mut; };
-  const Bloco = ({ titulo, itens, cor, ico }) => (!itens || !itens.length) ? null : (
-    <div style={{ background: "var(--surface-2)", border: "1px solid var(--line)", borderLeft: "3px solid " + cor, borderRadius: 14, padding: 18, marginBottom: 14 }}>
-      <div style={{ fontSize: 13.5, fontWeight: 700, color: cor, marginBottom: 10, display: "flex", alignItems: "center", gap: 7 }}>{ico} {titulo}</div>
-      <ul style={{ margin: 0, paddingLeft: 20, display: "flex", flexDirection: "column", gap: 7 }}>
-        {itens.map((t, i) => <li key={i} style={{ fontSize: 13.5, color: DES.ink, lineHeight: 1.5 }}>{t}</li>)}
-      </ul>
-    </div>
-  );
+  // v2.1: o tom do bloco sai do título (verde = bom, âmbar = melhorar, vermelho = crítico, azul = informação)
+  const tomDoBloco = (t) => /bem|fortes/i.test(t) ? "ok" : /melhorar|crescer|ajustar|gargalo|fracos/i.test(t) ? "warn" : /atenção|crític|problema|alerta/i.test(t) ? "late" : "info";
+  const Bloco = ({ titulo, itens }) => {
+    if (!itens || !itens.length) return null;
+    const tom = tomDoBloco(titulo);
+    const Ic = tom === "ok" ? I.check : tom === "warn" ? I.trend : tom === "late" ? I.alert : I.brilho;
+    return (
+      <div className={"iax-bloco " + tom}>
+        <div className="iax-bloco-h"><span className="iax-bloco-ic"><Ic className="ico" /></span><b>{titulo}</b></div>
+        <ul>{itens.map((t, i) => <li key={i}>{t}</li>)}</ul>
+      </div>
+    );
+  };
   // Recomendação final de coaching: Comece / Pare / Continue
   const BlocoCPC = ({ cpc }) => {
     if (!cpc || (!cpc.comece && !cpc.pare && !cpc.continue)) return null;
     const cols = [
-      { k: "comece", tit: "COMECE", ico: "🟢", cor: "#16a34a", bg: "rgba(22,163,74,.06)", itens: cpc.comece },
-      { k: "pare", tit: "PARE", ico: "🔴", cor: "#dc2626", bg: "rgba(220,38,38,.06)", itens: cpc.pare },
-      { k: "continue", tit: "CONTINUE", ico: "🔵", cor: "#2563eb", bg: "rgba(37,99,235,.06)", itens: cpc.continue },
+      { k: "comece", tit: "Comece", tom: "info", Ic: I.play, itens: cpc.comece },
+      { k: "pare", tit: "Pare", tom: "late", Ic: I.x, itens: cpc.pare },
+      { k: "continue", tit: "Continue", tom: "ok", Ic: I.check, itens: cpc.continue },
     ];
     return (
-      <div style={{ background: "var(--card)", border: "1px solid " + DES.line, borderRadius: 16, padding: 18, marginBottom: 14 }}>
-        <div style={{ fontSize: 14, fontWeight: 800, color: DES.ink, marginBottom: 4, display: "flex", alignItems: "center", gap: 7, letterSpacing: "-.01em" }}>🎯 Recomendação final — Comece · Pare · Continue</div>
-        <div style={{ fontSize: 12, color: DES.mut, marginBottom: 14 }}>O resumo prático pra evoluir a partir de agora.</div>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 12 }}>
+      <div className="iax-card">
+        <div className="iax-card-h"><b>Recomendação final</b><span>o resumo prático para evoluir a partir de agora</span></div>
+        <div className="iax-cpc">
           {cols.map((c) => (
-            <div key={c.k} style={{ background: c.bg, border: "1px solid " + c.cor + "33", borderRadius: 12, padding: "14px 15px" }}>
-              <div style={{ fontSize: 12.5, fontWeight: 800, color: c.cor, letterSpacing: ".04em", marginBottom: 9, display: "flex", alignItems: "center", gap: 6 }}>{c.ico} {c.tit}</div>
-              {Array.isArray(c.itens) && c.itens.length > 0
-                ? <ul style={{ margin: 0, paddingLeft: 17, display: "flex", flexDirection: "column", gap: 6 }}>{c.itens.map((t, i) => <li key={i} style={{ fontSize: 12.5, color: DES.ink, lineHeight: 1.45 }}>{t}</li>)}</ul>
-                : <div style={{ fontSize: 12, color: DES.mut2, fontStyle: "italic" }}>—</div>}
+            <div key={c.k} className={"iax-cpc-col " + c.tom}>
+              <div className="iax-cpc-t"><span className="iax-bloco-ic"><c.Ic className="ico" /></span>{c.tit}</div>
+              {Array.isArray(c.itens) && c.itens.length > 0 ? <ul>{c.itens.map((t, i) => <li key={i}>{t}</li>)}</ul> : <div className="iax-vazio">—</div>}
             </div>
           ))}
         </div>
@@ -4999,14 +5338,10 @@ function AnaliseIAVendedor({ showToast, isGer = true }) {
 
   return (
     <div style={{ maxWidth: 860, margin: "0 auto" }}>
-      <div style={{ marginBottom: 20, display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12, flexWrap: "wrap" }}>
-        <div>
-          <div style={{ fontSize: 22, fontWeight: 700, color: DES.ink, letterSpacing: "-.01em" }}>Análise IA</div>
-          <div style={{ fontSize: 13, color: DES.mut, marginTop: 2 }}>A IA lê as conversas {isGer ? "do vendedor" : "suas"} no período e aponta o que está bom, o que melhorar, e alertas.</div>
-        </div>
+      <div style={{ marginBottom: 14, display: "flex", justifyContent: "flex-end", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
         {isGer && (
           <button className="btn" onClick={toggleUso} style={{ height: 38, whiteSpace: "nowrap", fontWeight: 600, border: "1px solid " + (verUso ? DES.green : DES.line), background: verUso ? "rgba(37,160,107,.08)" : "var(--card)", color: verUso ? DES.green : DES.ink }}>
-            📊 Quem se autoavaliou
+            <I.users className="ico" style={{ width: 15, height: 15 }} /> Quem se autoavaliou
           </button>
         )}
       </div>
@@ -5109,7 +5444,7 @@ function AnaliseIAVendedor({ showToast, isGer = true }) {
           </>
         )}
         <button className="btn btn-primary" onClick={analisar} disabled={carregando} style={{ height: 40 }}>
-          {carregando ? "Analisando…" : "✨ Analisar"}
+          {carregando ? "Analisando…" : <><I.brilho className="ico" style={{ width: 15, height: 15 }} /> Analisar</>}
         </button>
       </div>
 
@@ -5168,10 +5503,7 @@ function AnaliseIAVendedor({ showToast, isGer = true }) {
         <div>
           <div style={{ fontSize: 12, color: DES.mut2, marginBottom: 14 }}>Relatório geral do time · {res.analisadas} conversa(s) analisada(s){res.totalConversas > res.analisadas ? " (as com mais troca, de " + res.totalConversas + ")" : ""}.</div>
           {(GERAL.notaTime !== undefined && GERAL.notaTime !== null) && (
-            <div style={{ display: "flex", alignItems: "center", gap: 14, background: "var(--card)", border: "1px solid " + DES.line, borderRadius: 16, padding: 18, marginBottom: 16 }}>
-              <div style={{ fontSize: 40, fontWeight: 800, color: (Number(GERAL.notaTime) >= 7 ? DES.green : Number(GERAL.notaTime) >= 5 ? DES.orange : "#dc2626"), lineHeight: 1 }}>{GERAL.notaTime}<span style={{ fontSize: 18, opacity: .5 }}>/10</span></div>
-              <div><div style={{ fontSize: 14, color: DES.ink, fontWeight: 700 }}>Nota geral do time</div><div style={{ fontSize: 12, color: DES.mut, marginTop: 2 }}>estimativa da IA · pode variar um pouco a cada análise</div></div>
-            </div>
+            <NotaIA nota={GERAL.notaTime} ehTime passos={GERAL.porPasso} analisadas={res.analisadas} />
           )}
           {GERAL.resumo && <div style={{ background: "var(--surface-2)", border: "1px solid " + DES.line, borderLeft: "3px solid " + DES.orange, borderRadius: 16, padding: 20, marginBottom: 16, fontSize: 14.5, fontWeight: 500, color: DES.ink, lineHeight: 1.6 }}>{GERAL.resumo}</div>}
           {GERAL.saudeComercial && (
@@ -5180,27 +5512,9 @@ function AnaliseIAVendedor({ showToast, isGer = true }) {
               <div style={{ fontSize: 13.5, color: DES.ink, lineHeight: 1.6 }}>{GERAL.saudeComercial}</div>
             </div>
           )}
-          {Array.isArray(GERAL.porPasso) && GERAL.porPasso.length > 0 && (
-            <div style={{ background: "var(--card)", border: "1px solid " + DES.line, borderRadius: 16, padding: 18, marginBottom: 14 }}>
-              <div style={{ fontSize: 13.5, fontWeight: 700, color: DES.ink, marginBottom: 12, display: "flex", alignItems: "center", gap: 7 }}>🎯 Os 7 passos — desempenho do time</div>
-              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                {GERAL.porPasso.map((p, i) => {
-                  const st = p.nivel === "bom" ? { ic: "✅", cor: DES.green } : p.nivel === "ruim" ? { ic: "❌", cor: "#dc2626" } : { ic: "⚠️", cor: DES.orange };
-                  return (
-                    <div key={i} style={{ display: "flex", gap: 11, padding: "11px 13px", background: "var(--surface-2)", borderRadius: 11, borderLeft: "3px solid " + st.cor }}>
-                      <span style={{ fontSize: 15, flexShrink: 0 }}>{st.ic}</span>
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontSize: 13, fontWeight: 700, color: DES.ink }}>{p.n}. {p.nome}</div>
-                        {p.comentario && <div style={{ fontSize: 12.5, color: DES.mut, marginTop: 3, lineHeight: 1.5 }}>{p.comentario}</div>}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          )}
+          <PassosIA passos={GERAL.porPasso} titulo="Os 7 passos — desempenho do time" />
           <Bloco titulo="O que o time faz bem" itens={GERAL.oQueVaiBem} cor={DES.green} ico="✅" />
-          <Bloco titulo="Problemas do time" itens={GERAL.problemas} cor="#dc2626" ico="🚨" />
+          <Bloco titulo="Pontos de atenção do time" itens={GERAL.problemas} />
           <Bloco titulo="Gargalos — onde o time perde venda" itens={GERAL.gargalos} cor={DES.orange} ico="⛔" />
           {Array.isArray(GERAL.objecoesComuns) && GERAL.objecoesComuns.length > 0 && (
             <div style={{ background: "var(--card)", border: "1px solid " + DES.line, borderRadius: 16, padding: 18, marginBottom: 14 }}>
@@ -5282,97 +5596,40 @@ function AnaliseIAVendedor({ showToast, isGer = true }) {
         <div>
           <div style={{ fontSize: 12, color: DES.mut2, marginBottom: 14 }}>Analisadas {res.analisadas} conversa(s){res.totalOficial != null && res.totalNaoOficial != null ? " (" + res.totalOficial + " oficiais + " + res.totalNaoOficial + " não-oficiais)" : ""}{res.totalConversas > res.analisadas ? " · as " + res.analisadas + " mais recentes de " + res.totalConversas : ""}{isGer && res.vendedor ? " · " + res.vendedor : ""}.</div>
           {A ? <>
-            {(A.nota !== undefined && A.nota !== null) && (() => {
-              const n = Number(A.nota);
-              const cor = n >= 7 ? DES.green : n >= 4 ? DES.orange : "#dc2626";
-              const lampada = (ativa, corLamp) => (<div style={{ width: 18, height: 18, borderRadius: "50%", background: ativa ? corLamp : "var(--surface-2)", border: "1px solid " + (ativa ? corLamp : DES.line), boxShadow: ativa ? "0 0 8px " + corLamp : "none", opacity: ativa ? 1 : 0.35 }} />);
-              const nivel = n >= 7 ? "Bom desempenho" : n >= 4 ? "Desempenho mediano — precisa melhorar" : "Desempenho baixo — atenção";
-              return (
-              <div style={{ display: "flex", alignItems: "center", gap: 16, background: "var(--card)", border: "1px solid " + DES.line, borderRadius: 16, padding: 18, marginBottom: 16 }}>
-                <div style={{ fontSize: 40, fontWeight: 800, color: cor, lineHeight: 1 }}>{A.nota}<span style={{ fontSize: 18, opacity: .5 }}>/10</span></div>
-                <div style={{ display: "flex", flexDirection: "column", gap: 5, padding: "8px 10px", background: "var(--surface-2)", borderRadius: 12, border: "1px solid " + DES.line }}>
-                  {lampada(n <= 3, "#dc2626")}
-                  {lampada(n >= 4 && n <= 6, DES.orange)}
-                  {lampada(n >= 7, DES.green)}
-                </div>
-                <div><div style={{ fontSize: 14, color: DES.ink, fontWeight: 700 }}>Nota{isGer && res.vendedor ? " de " + res.vendedor : ""}</div><div style={{ fontSize: 13, color: cor, fontWeight: 600, marginTop: 2 }}>{nivel}</div><div style={{ fontSize: 11.5, color: DES.mut, marginTop: 2 }}>estimativa da IA · pode variar um pouco a cada análise</div></div>
-              </div>
-              );
-            })()}
+            {(A.nota !== undefined && A.nota !== null) && (
+              <NotaIA nota={A.nota} nome={res.vendedor || ""} passos={A.passos} analisadas={res.analisadas} />
+            )}
             {res.ligTotal != null && res.ligTotal > 0 && (
-              <div style={{ display: "flex", gap: 12, marginBottom: 16, flexWrap: "wrap" }}>
-                <div style={{ flex: "1 1 140px", background: "#eff6ff", border: "1px solid #bfdbfe", borderRadius: 14, padding: 16 }}>
-                  <div style={{ fontSize: 11.5, color: "#1e40af", fontWeight: 600, textTransform: "uppercase", letterSpacing: .04 + "em" }}>📞 Ligações feitas</div>
-                  <div style={{ fontSize: 24, fontWeight: 800, color: "#1e3a8a", marginTop: 2 }}>{res.ligTotal}</div>
-                </div>
-                <div style={{ flex: "1 1 140px", background: "#ecfdf3", border: "1px solid #b7e4c7", borderRadius: 14, padding: 16 }}>
-                  <div style={{ fontSize: 11.5, color: "#166534", fontWeight: 600, textTransform: "uppercase", letterSpacing: .04 + "em" }}>✅ Atendidas</div>
-                  <div style={{ fontSize: 24, fontWeight: 800, color: "#15803d", marginTop: 2 }}>{res.ligAtendidas}</div>
-                </div>
-                <div style={{ flex: "1 1 140px", background: "#fef2f2", border: "1px solid #fecaca", borderRadius: 14, padding: 16 }}>
-                  <div style={{ fontSize: 11.5, color: "#991b1b", fontWeight: 600, textTransform: "uppercase", letterSpacing: .04 + "em" }}>📵 Não atendidas</div>
-                  <div style={{ fontSize: 24, fontWeight: 800, color: "#b91c1c", marginTop: 2 }}>{res.ligNaoAtendidas}</div>
-                </div>
+              <div className="iax-stats">
+                <div className="iax-stat info"><span><I.fone className="ico" /> Ligações feitas</span><b>{res.ligTotal}</b></div>
+                <div className="iax-stat ok"><span><I.check className="ico" /> Atendidas</span><b>{res.ligAtendidas}</b></div>
+                <div className="iax-stat late"><span><I.x className="ico" /> Não atendidas</span><b>{res.ligNaoAtendidas}</b></div>
               </div>
             )}
-            {A.resumo && <div style={{ background: "var(--surface-2)", border: "1px solid " + DES.line, borderRadius: 16, padding: 20, marginBottom: 16, fontSize: 14.5, fontWeight: 500, color: DES.ink, lineHeight: 1.6 }}>{A.resumo}</div>}
-            {Array.isArray(A.passos) && A.passos.length > 0 && (
-              <div style={{ background: "var(--card)", border: "1px solid " + DES.line, borderRadius: 16, padding: 18, marginBottom: 14 }}>
-                <div style={{ fontSize: 13.5, fontWeight: 700, color: DES.ink, marginBottom: 12, display: "flex", alignItems: "center", gap: 7 }}>🎯 Avaliação dos 7 passos</div>
-                <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                  {A.passos.map((p, i) => {
-                    const st = p.status === "ok" ? { ic: "✅", cor: DES.green, lb: "Fez bem" } : p.status === "parcial" ? { ic: "⚠️", cor: DES.orange, lb: "Parcial" } : { ic: "❌", cor: "#dc2626", lb: "Não fez" };
-                    return (
-                      <div key={i} style={{ display: "flex", gap: 11, padding: "11px 13px", background: DES.bg, borderRadius: 11, borderLeft: "3px solid " + st.cor }}>
-                        <span style={{ fontSize: 16, flexShrink: 0 }}>{st.ic}</span>
-                        <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ fontSize: 13, fontWeight: 700, color: DES.ink }}>{p.n}. {p.nome} <span style={{ fontSize: 11, fontWeight: 600, color: st.cor }}>· {st.lb}</span></div>
-                          {p.comentario && <div style={{ fontSize: 12.5, color: DES.mut, marginTop: 3, lineHeight: 1.5 }}>{p.comentario}</div>}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
+            {A.resumo && <div className="iax-resumo"><div className="iax-resumo-t"><I.brilho className="ico" /> Resumo</div>{A.resumo}</div>}
+            <PassosIA passos={A.passos} titulo="Os 7 passos da venda" />
             {A.followup && A.followup.comentario && (() => {
-              const st = A.followup.status === "ok" ? { ic: "✅", cor: DES.green, lb: "Bom" } : A.followup.status === "parcial" ? { ic: "⚠️", cor: DES.orange, lb: "Precisa melhorar" } : { ic: "❌", cor: "#dc2626", lb: "Não faz" };
+              const tom = A.followup.status === "ok" ? "ok" : A.followup.status === "parcial" ? "warn" : "late";
+              const lb = tom === "ok" ? "Bom" : tom === "warn" ? "Precisa melhorar" : "Não faz";
               return (
-                <div style={{ background: "var(--surface-2)", border: "1px solid var(--line)", borderLeft: "3px solid " + st.cor, borderRadius: 14, padding: 16, marginBottom: 14 }}>
-                  <div style={{ fontSize: 13.5, fontWeight: 700, color: st.cor, marginBottom: 6, display: "flex", alignItems: "center", gap: 7 }}>{st.ic} Follow-up <span style={{ fontSize: 11, fontWeight: 600 }}>· {st.lb}</span></div>
-                  <div style={{ fontSize: 13, color: DES.ink, lineHeight: 1.55 }}>{A.followup.comentario}</div>
+                <div className={"iax-bloco " + tom}>
+                  <div className="iax-bloco-h"><span className="iax-bloco-ic"><I.clock className="ico" /></span><b>Follow-up</b><span className={"iax-selo " + tom}>{lb}</span></div>
+                  <p>{A.followup.comentario}</p>
                 </div>
               );
             })()}
             {A.porCanal && (A.porCanal.oficial || A.porCanal.naoOficial) && (
-              <div style={{ display: "flex", gap: 12, marginBottom: 14, flexWrap: "wrap" }}>
-                {A.porCanal.oficial && (
-                  <div style={{ flex: "1 1 260px", background: "#eff6ff", border: "1px solid #bfdbfe", borderRadius: 14, padding: 16 }}>
-                    <div style={{ fontSize: 13, fontWeight: 700, color: "#1e40af", marginBottom: 6 }}>📱 WhatsApp Oficial{res.totalOficial != null ? " · " + res.totalOficial + " conversa(s)" : ""}</div>
-                    <div style={{ fontSize: 13, color: DES.ink, lineHeight: 1.55 }}>{A.porCanal.oficial}</div>
-                  </div>
-                )}
-                {A.porCanal.naoOficial && (
-                  <div style={{ flex: "1 1 260px", background: "#f0fdf4", border: "1px solid #bbf7d0", borderRadius: 14, padding: 16 }}>
-                    <div style={{ fontSize: 13, fontWeight: 700, color: "#166534", marginBottom: 6 }}>💬 WhatsApp Não-oficial{res.totalNaoOficial != null ? " · " + res.totalNaoOficial + " conversa(s)" : ""}</div>
-                    <div style={{ fontSize: 13, color: DES.ink, lineHeight: 1.55 }}>{A.porCanal.naoOficial}</div>
-                  </div>
-                )}
+              <div className="iax-canais">
+                {A.porCanal.oficial && <div className="iax-canal"><div className="iax-canal-t"><I.send className="ico" /> WhatsApp oficial{res.totalOficial != null ? " · " + res.totalOficial + " conversa(s)" : ""}</div><p>{A.porCanal.oficial}</p></div>}
+                {A.porCanal.naoOficial && <div className="iax-canal"><div className="iax-canal-t"><I.wa className="ico" /> WhatsApp do vendedor{res.totalNaoOficial != null ? " · " + res.totalNaoOficial + " conversa(s)" : ""}</div><p>{A.porCanal.naoOficial}</p></div>}
               </div>
             )}
-            <Bloco titulo="O que está indo bem" itens={A.bem} cor={DES.green} bg="#f0fdf4" ico="✅" />
-            <Bloco titulo="O que precisa melhorar" itens={A.melhorar} cor={DES.orange} bg="#fff7ed" ico="⚠️" />
-            <Bloco titulo="Pontos fortes" itens={A.fortes} cor="#2563eb" bg="#eff6ff" ico="💪" />
-            <Bloco titulo="Pontos fracos" itens={A.fracos} cor={DES.mut} bg="#f8fafc" ico="📉" />
-            <Bloco titulo="Alertas críticos" itens={A.criticos} cor="#dc2626" bg="#fef2f2" ico="🚨" />
-            {Array.isArray(A.sugestoes) && A.sugestoes.length > 0 && (
-              <div style={{ background: "var(--surface-2)", border: "1px solid var(--line)", borderRadius: 14, padding: 18, marginBottom: 14 }}>
-                <div style={{ fontSize: 13.5, fontWeight: 700, color: "#2563eb", marginBottom: 10, display: "flex", alignItems: "center", gap: 7 }}>💡 Sugestões</div>
-                <ul style={{ margin: 0, paddingLeft: 20, display: "flex", flexDirection: "column", gap: 8 }}>
-                  {A.sugestoes.map((t, i) => <li key={i} style={{ fontSize: 13.5, color: DES.ink, lineHeight: 1.55 }}>{t}</li>)}
-                </ul>
-              </div>
-            )}
+            <Bloco titulo="O que está indo bem" itens={A.bem} />
+            <Bloco titulo="Seus pontos fortes" itens={A.fortes} />
+            <Bloco titulo="Onde dá para crescer" itens={A.melhorar} />
+            <Bloco titulo="Para ajustar" itens={A.fracos} />
+            <Bloco titulo="Atenção agora" itens={A.criticos} />
+            <Bloco titulo="Sugestões" itens={A.sugestoes} />
             <BlocoCPC cpc={A.cpc} />
           </> : (
             <div style={{ background: "var(--card)", border: "1px solid " + DES.line, borderRadius: 16, padding: 20, fontSize: 14, color: DES.ink, whiteSpace: "pre-wrap", lineHeight: 1.6 }}>{res.bruto}</div>
@@ -5756,7 +6013,39 @@ function DetalheVendedor({ v, dados, mes, isGer, showToast, onClose, onMudou, ca
   );
 }
 
-function OficialCRM({ showToast, isGer = true, onAbrirWhats, onDisparar }) {
+// v2.1 — ao mandar um lead pra "Perdido", pergunta o motivo (vira nota no lead).
+// Serve pra entender por que se perde venda e pra montar campanhas de reativação depois.
+const MOTIVOS_PERDA = ["Achou caro / sem dinheiro agora", "Sem tempo agora", "Escolheu outro curso ou escola", "Parou de responder", "Sem interesse no curso", "Já fez o curso"];
+function ModalMotivoPerda({ nome, onEscolher, onPular }) {
+  const [outro, setOutro] = useState("");
+  return (
+    <Portal>
+      <div className="modal" onClick={(e) => e.target === e.currentTarget && onPular()}>
+        <div className="onum-modal perda-modal">
+          <div className="perda-ic"><I.alert className="ico" /></div>
+          <b className="perda-t">Por que {nome ? nome.split(" ")[0] : "o lead"} não fechou?</b>
+          <span className="perda-s">Leva 2 segundos e ajuda a entender onde a venda escapa.</span>
+          <div className="perda-lista">
+            {MOTIVOS_PERDA.map((m) => <button type="button" key={m} onClick={() => onEscolher(m)}>{m}</button>)}
+          </div>
+          <div className="perda-outro">
+            <input className="input" placeholder="Outro motivo…" value={outro} onChange={(e) => setOutro(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && outro.trim()) onEscolher(outro.trim()); }} />
+            <button type="button" className="btn btn-primary btn-sm" disabled={!outro.trim()} onClick={() => onEscolher(outro.trim())}>Salvar</button>
+          </div>
+          <button type="button" className="perda-pular" onClick={onPular}>Agora não</button>
+        </div>
+      </div>
+    </Portal>
+  );
+}
+function diasDesde(ts) { return ts ? Math.floor((Date.now() - ts) / 86400000) : 0; }
+function tarefaUrgente(t) {
+  if (!t || t.feito || !t.quando) return false;
+  const fim = new Date(); fim.setHours(23, 59, 59, 999);
+  return t.quando <= fim.getTime();
+}
+
+function OficialCRM({ showToast, isGer = true, onAbrirWhats, onDisparar, abrirLeadId, onLeadAberto }) {
   // relógio vivo: o "entrou há X min" dos cards se atualiza sozinho
   const [, setTique] = useState(0);
   useEffect(() => {
@@ -5785,6 +6074,8 @@ function OficialCRM({ showToast, isGer = true, onAbrirWhats, onDisparar }) {
   const autoScrollRef = useRef(0);
   const [marcados, setMarcados] = useState({});
   const [selN, setSelN] = useState({}); // quantidade digitada por coluna, pra selecionar os N primeiros
+  const [perda, setPerda] = useState(null); // v2.1: lead que acabou de ir pra "Perdido" (pergunta o motivo)
+  const [soTarefas, setSoTarefas] = useState(false); // v2.1: mostrar só leads com tarefa atrasada ou de hoje
   const [tarefaTexto, setTarefaTexto] = useState("");
   const [tarefaQuando, setTarefaQuando] = useState("");
   useEffect(() => {
@@ -5842,6 +6133,14 @@ function OficialCRM({ showToast, isGer = true, onAbrirWhats, onDisparar }) {
   }, [waMenu]);
 
   const leadSel = sel ? leads.find((l) => l.id === sel) : null;
+  // v2.1: chegou pedindo pra abrir um lead (da ficha da conversa ou da busca rápida)
+  useEffect(() => {
+    if (!abrirLeadId || !leads.length) return;
+    if (leads.some((l) => l.id === abrirLeadId)) { setSel(abrirLeadId); abrirLead(abrirLeadId); }
+    else showToast("Esse lead não aparece no seu Pipeline");
+    onLeadAberto && onLeadAberto();
+    // eslint-disable-next-line
+  }, [abrirLeadId, leads.length]);
 
   async function mover(id, etapa) {
     const l = leads.find((x) => x.id === id); if (!l || l.etapa === etapa) return;
@@ -5850,6 +6149,7 @@ function OficialCRM({ showToast, isGer = true, onAbrirWhats, onDisparar }) {
     const col = etapas.find((e) => e.k === etapa);
     const tipo = tipoDaColuna(col && col.lb);
     if (tipo) setComemora({ tipo, nome: l.nome, valor: l.valor || 0, vendedor: l.vendedorNome || "", foto: l.vendedorFoto || "" });
+    if (tipo === "perda") setPerda({ id, nome: l.nome });
     try { await api.ofCrmEditar(id, { etapa }); } catch (e) { showToast(e.message); carregar(); }
   }
   async function salvarCampo(id, campo, valor) {
@@ -5986,6 +6286,16 @@ function OficialCRM({ showToast, isGer = true, onAbrirWhats, onDisparar }) {
   }
   const etapaDe = (k) => etapas.find((e) => e.k === k) || { lb: k, cor: "#64748b" };
   const fmtData = (ts) => new Date(ts).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
+  // v2.1: tarefas atrasadas e de hoje (dos leads que a pessoa está vendo)
+  const leadsDoFiltro = leads.filter((l) => !filtroVend || (filtroVend === "__sem" ? !l.vendedorId : l.vendedorId === filtroVend));
+  const tarefasAtrasadas = leadsDoFiltro.filter((l) => l.tarefa && !l.tarefa.feito && l.tarefa.quando && l.tarefa.quando < Date.now()).length;
+  const tarefasHoje = leadsDoFiltro.filter((l) => tarefaUrgente(l.tarefa)).length - tarefasAtrasadas;
+  async function salvarMotivoPerda(motivo) {
+    const alvo = perda; setPerda(null);
+    if (!alvo) return;
+    try { const r = await api.ofCrmNota(alvo.id, "Motivo da perda: " + motivo); if (r && r.lead) setLeads((ls) => ls.map((x) => x.id === alvo.id ? { ...x, notas: r.lead.notas } : x)); showToast("✓ Motivo registrado"); }
+    catch (e) { showToast("✗ " + e.message); }
+  }
 
   return (
     <div className="crm-wrap">
@@ -5997,6 +6307,11 @@ function OficialCRM({ showToast, isGer = true, onAbrirWhats, onDisparar }) {
         {isGer && <button className="onum-btn-ghost" onClick={() => setShowImportar(true)} title="Importar leads de uma planilha CSV"><I.clip className="ico" /> Importar</button>}
         <button className="onum-btn-ghost" onClick={() => setShowExportar(true)} title="Exportar seus leads (dá pra escolher por tag)"><I.download className="ico" /> Exportar</button>
         <div className="crm-top-right">
+          <button type="button" className={"crm-tarefas" + (soTarefas ? " on" : "") + (tarefasAtrasadas ? " tem-atraso" : "")} onClick={() => setSoTarefas((v) => !v)}
+            title={soTarefas ? "Mostrar todos os leads" : "Mostrar só quem tem tarefa atrasada ou para hoje"}>
+            <I.clock className="ico" />
+            {tarefasAtrasadas + tarefasHoje === 0 ? "Sem tarefas para hoje" : <>{tarefasAtrasadas > 0 && <b>{tarefasAtrasadas} atrasada{tarefasAtrasadas > 1 ? "s" : ""}</b>}{tarefasAtrasadas > 0 && tarefasHoje > 0 && " · "}{tarefasHoje > 0 && <span>{tarefasHoje} para hoje</span>}</>}
+          </button>
           <div className="crm-busca"><I.search className="ico" /><input value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Buscar por nome, telefone, curso, tag..." /></div>
           {isGer && vendedores.length > 0 && (
             <select className="crm-filtro-vend" value={filtroVend} onChange={(e) => setFiltroVend(e.target.value)}>
@@ -6017,7 +6332,8 @@ function OficialCRM({ showToast, isGer = true, onAbrirWhats, onDisparar }) {
 
       <div className="crm-board" ref={boardRef} onDragOver={aoArrastarSobreQuadro} onMouseDown={aoPressionarQuadro}>
         {etapas.map((et) => {
-          const doEt = leads.filter((l) => l.etapa === et.k && (!filtroVend || (filtroVend === "__sem" ? !l.vendedorId : l.vendedorId === filtroVend)) && (!filtroDia || mesmoDia(l.criadoEm, filtroDia)) && matchBusca(l));
+          const doEt = leads.filter((l) => l.etapa === et.k && (!filtroVend || (filtroVend === "__sem" ? !l.vendedorId : l.vendedorId === filtroVend)) && (!filtroDia || mesmoDia(l.criadoEm, filtroDia)) && (!soTarefas || tarefaUrgente(l.tarefa)) && matchBusca(l));
+          const colunaFinal = tipoDaColuna(et.lb) !== null; // ganho/perdido: não cobra tarefa nem acusa "parado"
           const totalCol = doEt.reduce((s, l) => s + (Number(l.valor) || 0), 0);
           return (
             <div key={et.k} className="crm-col" onDragOver={(e) => e.preventDefault()} onDrop={(e) => { e.preventDefault(); if (dragId) mover(dragId, et.k); setDragId(null); }}>
@@ -6073,12 +6389,17 @@ function OficialCRM({ showToast, isGer = true, onAbrirWhats, onDisparar }) {
                       </div>
                     )}
                     <div className="crm-card-foot">
-                      {l.criadoEm && (
+                      {!colunaFinal && diasDesde(l.atualizadoEm || l.criadoEm) >= 3 ? (
+                        <span className="crm-card-parado" title={"Sem movimentação desde " + new Date(l.atualizadoEm || l.criadoEm).toLocaleString("pt-BR")}>
+                          <I.alert className="ico-inline" /> parado há {diasDesde(l.atualizadoEm || l.criadoEm)}d
+                        </span>
+                      ) : l.criadoEm && (
                         <span className={"crm-card-idade" + idadeClasse(l.criadoEm)}
                           title={"Lead entrou em " + new Date(l.criadoEm).toLocaleString("pt-BR")}>
                           <I.clock className="ico-inline" /> entrou {tempoDesde(l.criadoEm)}
                         </span>
                       )}
+                      {!colunaFinal && !infoTarefa(l.tarefa) && <span className="crm-card-semtarefa" title="Sem próxima tarefa — abra o lead para agendar"><I.calendar className="ico-inline" /></span>}
                       {l.origem === "ligacao" && <span className="crm-tag-lig"><I.suporte className="ico-inline" /> Ligação</span>}
                       {l.recorrente && <span className="crm-tag-lig crm-tag-recorrente" title="Este contato voltou a se cadastrar por uma nova captação"><I.repetir className="ico-inline" /> Lead atualizado</span>}
                       <div className="crm-card-vend">
@@ -6120,7 +6441,7 @@ function OficialCRM({ showToast, isGer = true, onAbrirWhats, onDisparar }) {
               </div>
               <div className="crm-f2">
                 <div><label className="lbl-mini">Etapa</label>
-                  <select className="input" value={leadSel.etapa} onChange={(e) => salvarCampo(sel, "etapa", e.target.value)}>
+                  <select className="input" value={leadSel.etapa} onChange={(e) => { const k = e.target.value; salvarCampo(sel, "etapa", k); const c = etapas.find((x) => x.k === k); if (tipoDaColuna(c && c.lb) === "perda") setPerda({ id: sel, nome: leadSel.nome }); }}>
                     {etapas.map((e) => <option key={e.k} value={e.k}>{e.lb}</option>)}
                   </select>
                 </div>
@@ -6284,7 +6605,8 @@ function OficialCRM({ showToast, isGer = true, onAbrirWhats, onDisparar }) {
 
       {/* comemoração (confete/som/popup de ganho e perdido) desativada a pedido */}
 
-      {showColunas && <ModalColunas etapas={etapas} onClose={() => setShowColunas(false)} onChanged={carregar} showToast={showToast} />}
+      {perda && <ModalMotivoPerda nome={perda.nome} onEscolher={salvarMotivoPerda} onPular={() => setPerda(null)} />}
+      {showColunas && <ModalColunas etapas={etapas} leads={leads} onClose={() => setShowColunas(false)} onChanged={carregar} showToast={showToast} />}
       {showExportar && <ModalExportar leads={leads} etapas={etapas} onClose={() => setShowExportar(false)} showToast={showToast} />}
       {showImportar && <ModalImportar etapas={etapas} onClose={() => setShowImportar(false)} onDone={carregar} showToast={showToast} />}
       {showDistrib && (
@@ -7166,7 +7488,347 @@ function OfMidia({ chatId, m }) {
     : <button className="of-midia-btn" onClick={carregar}>{carregando ? "Carregando…" : "📄 " + (m.filename || "Baixar documento")}</button>;
 }
 
-function InboxOficial({ isGer, ehLider, showToast, onIrParaEvolution, target, onTargetUsed }) {
+/* ============================ RESPOSTAS RÁPIDAS (v2.1) ============================ */
+// Na caixa de digitar, "/" abre os textos prontos da equipe. {nome} vira o primeiro nome do contato
+// e {vendedor} o primeiro nome de quem está atendendo.
+let _cacheRespostas = null;
+function carregarRespostas(forcar) {
+  if (_cacheRespostas && !forcar) return Promise.resolve(_cacheRespostas);
+  return api.ofRespostasRapidas().then((r) => { _cacheRespostas = (r && r.lista) || []; return _cacheRespostas; }).catch(() => []);
+}
+const primeiroNome = (n) => { const p = String(n || "").trim().split(/\s+/)[0] || ""; return p ? p.charAt(0).toUpperCase() + p.slice(1).toLowerCase() : ""; };
+function preencherResposta(texto, contato, vendedor) {
+  return String(texto || "").replace(/\{nome\}/gi, primeiroNome(contato) || "tudo bem").replace(/\{vendedor\}/gi, primeiroNome(vendedor) || "");
+}
+function useRespostasRapidas({ texto, setTexto, contatoNome, meuNome, taRef, isGer, showToast }) {
+  const [lista, setLista] = useState(_cacheRespostas || []);
+  const [ativo, setAtivo] = useState(0);
+  const [gerenciar, setGerenciar] = useState(false);
+  const [fechadoPara, setFechadoPara] = useState(null);
+  useEffect(() => { carregarRespostas().then(setLista); }, []);
+  const m = /^\/([\w-]*)$/.exec(texto || "");
+  const termo = m ? semAcento(m[1]) : null;
+  const achadas = termo === null ? [] : lista.filter((r) => !termo || r.atalho.includes(termo) || semAcento(r.texto).includes(termo)).slice(0, 7);
+  const aberto = termo !== null && fechadoPara !== texto;
+  useEffect(() => { setAtivo(0); }, [termo]);
+  function escolher(r) {
+    if (!r) return;
+    const final = preencherResposta(r.texto, contatoNome, meuNome);
+    setTexto(final);
+    setTimeout(() => { const ta = taRef && taRef.current; if (ta) { ta.focus(); ta.style.height = "auto"; ta.style.height = Math.min(ta.scrollHeight, 140) + "px"; ta.setSelectionRange(final.length, final.length); } }, 0);
+  }
+  // devolve true quando a tecla foi usada pelo menu (aí a caixa de texto não envia a mensagem)
+  function teclado(e) {
+    if (!aberto) return false;
+    if (e.key === "ArrowDown") { e.preventDefault(); setAtivo((a) => Math.min(achadas.length - 1, a + 1)); return true; }
+    if (e.key === "ArrowUp") { e.preventDefault(); setAtivo((a) => Math.max(0, a - 1)); return true; }
+    if ((e.key === "Enter" || e.key === "Tab") && achadas.length) { e.preventDefault(); escolher(achadas[ativo]); return true; }
+    if (e.key === "Escape") { e.preventDefault(); setFechadoPara(texto); return true; }
+    return false;
+  }
+  function abrir() { setFechadoPara(null); setTexto("/"); setTimeout(() => taRef && taRef.current && taRef.current.focus(), 0); }
+  const popup = (
+    <>
+      {aberto && (
+        <div className="rr-pop" role="listbox" aria-label="Respostas rápidas">
+          <div className="rr-pop-h"><I.raio className="ico" /> Respostas rápidas <span>{termo ? "/" + termo : "digite para filtrar"}</span></div>
+          {achadas.length === 0 ? (
+            <div className="rr-vazio">{lista.length ? "Nenhuma resposta com esse atalho." : "Nenhuma resposta cadastrada ainda."}</div>
+          ) : achadas.map((r, i) => (
+            <button type="button" key={r.id} className={"rr-item" + (i === ativo ? " on" : "")} onMouseDown={(e) => { e.preventDefault(); escolher(r); }} onMouseMove={() => setAtivo(i)}>
+              <b>/{r.atalho}</b><span>{preencherResposta(r.texto, contatoNome, meuNome)}</span>
+            </button>
+          ))}
+          <div className="rr-pop-f">
+            <span><kbd>↑</kbd><kbd>↓</kbd> escolher · <kbd>Enter</kbd> inserir · <kbd>Esc</kbd> fechar</span>
+            {isGer && <button type="button" onMouseDown={(e) => { e.preventDefault(); setGerenciar(true); }}>Gerenciar respostas</button>}
+          </div>
+        </div>
+      )}
+      {gerenciar && <ModalRespostas onClose={() => setGerenciar(false)} onSalvo={(l) => { setLista(l); setGerenciar(false); }} showToast={showToast} />}
+    </>
+  );
+  return { teclado, popup, abrir };
+}
+function ModalRespostas({ onClose, onSalvo, showToast }) {
+  const [itens, setItens] = useState(null);
+  const [salvando, setSalvando] = useState(false);
+  useEffect(() => { carregarRespostas(true).then((l) => setItens(l.map((r) => ({ ...r })))); }, []);
+  const mudar = (i, campo, v) => setItens((xs) => xs.map((x, j) => (j === i ? { ...x, [campo]: v } : x)));
+  async function salvar() {
+    setSalvando(true);
+    try { const r = await api.ofSalvarRespostasRapidas(itens); _cacheRespostas = r.lista || []; showToast("✓ Respostas rápidas salvas"); onSalvo(_cacheRespostas); }
+    catch (e) { showToast("✗ " + e.message); } finally { setSalvando(false); }
+  }
+  return (
+    <Portal>
+      <div className="modal" onClick={(e) => e.target === e.currentTarget && onClose()}>
+        <div className="onum-modal rr-modal">
+          <div className="cols-head">
+            <div><b>Respostas rápidas da equipe</b><span>Na conversa, digite <kbd>/</kbd> e o atalho. Use {"{nome}"} para o nome do contato e {"{vendedor}"} para o seu.</span></div>
+            <button className="crm-x" onClick={onClose} aria-label="Fechar"><I.x className="ico" /></button>
+          </div>
+          <div className="rr-modal-corpo">
+            {itens === null ? <div className="ficha-carregando"><span className="skel" /><span className="skel" /></div> : (
+              <>
+                {itens.map((r, i) => (
+                  <div className="rr-linha" key={r.id || i}>
+                    <div className="rr-atalho"><span>/</span><input value={r.atalho} placeholder="atalho" aria-label="Atalho" onChange={(e) => mudar(i, "atalho", e.target.value.toLowerCase().replace(/\s+/g, "-"))} /></div>
+                    <textarea rows={2} value={r.texto} placeholder="Texto da resposta" aria-label="Texto da resposta" onChange={(e) => mudar(i, "texto", e.target.value)} />
+                    <button type="button" className="rr-del" onClick={() => setItens((xs) => xs.filter((_, j) => j !== i))} title="Apagar" aria-label="Apagar resposta"><I.trash className="ico" /></button>
+                  </div>
+                ))}
+                <button type="button" className="rr-add" onClick={() => setItens((xs) => [...xs, { id: "rr_" + Date.now().toString(36), atalho: "", texto: "" }])}><I.plus className="ico" /> Nova resposta</button>
+              </>
+            )}
+          </div>
+          <div className="rr-modal-pe">
+            <button className="btn" onClick={onClose}>Cancelar</button>
+            <button className="btn btn-primary" disabled={salvando || itens === null} onClick={salvar}>{salvando ? "Salvando…" : "Salvar respostas"}</button>
+          </div>
+        </div>
+      </div>
+    </Portal>
+  );
+}
+
+/* ============================ FICHA DO LEAD (v2.1) ============================ */
+// Painel ao lado da conversa — tudo do lead num lugar só, como os "dados do contato" do WhatsApp.
+// Abre clicando na foto ou no nome do lead. Observações escritas aqui ficam na conversa (a IA lê).
+const FICHA_ICONE_HIST = { ligacao: "fone", etapa: "pipe", atribuido: "user", captacao: "repetir", criado: "plus", lista: "chat" };
+function quandoAmigavel(ts) {
+  if (!ts) return "";
+  const d = new Date(ts), hoje = new Date();
+  const amanha = new Date(); amanha.setDate(hoje.getDate() + 1);
+  const ontem = new Date(); ontem.setDate(hoje.getDate() - 1);
+  const hh = d.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+  if (d.toDateString() === hoje.toDateString()) return "hoje, " + hh;
+  if (d.toDateString() === amanha.toDateString()) return "amanhã, " + hh;
+  if (d.toDateString() === ontem.toDateString()) return "ontem, " + hh;
+  return d.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" }) + ", " + hh;
+}
+function presetTarefa(tipo) {
+  const d = new Date();
+  if (tipo === "hoje") { d.setHours(18, 0, 0, 0); if (d.getTime() < Date.now()) d.setTime(Date.now() + 3600000); }
+  if (tipo === "amanha") { d.setDate(d.getDate() + 1); d.setHours(9, 0, 0, 0); }
+  if (tipo === "2dias") { d.setDate(d.getDate() + 2); d.setHours(9, 0, 0, 0); }
+  if (tipo === "semana") { d.setDate(d.getDate() + 7); d.setHours(9, 0, 0, 0); }
+  return d.getTime();
+}
+
+function FichaLead({ chatId, telefone, nome, isGer, foco, onFechar, onRegistrarVenda, onLigar, onCadastrar, onAbrirPipeline, showToast }) {
+  const [carregando, setCarregando] = useState(true);
+  const [lead, setLead] = useState(null);
+  const [etapas, setEtapas] = useState([]);
+  const [semAcesso, setSemAcesso] = useState(false);
+  const [vendedores, setVendedores] = useState([]);
+  const [obs, setObs] = useState([]);
+  const [obsTexto, setObsTexto] = useState("");
+  const [salvandoObs, setSalvandoObs] = useState(false);
+  const [tarefaTexto, setTarefaTexto] = useState("");
+  const [tarefaData, setTarefaData] = useState("");
+  const [rascunho, setRascunho] = useState({});
+  const obsRef = useRef(null);
+
+  async function carregar() {
+    setCarregando(true);
+    try {
+      const r = await api.ofLeadPorTelefone(telefone);
+      setLead(r.lead || null); setEtapas(r.etapas || []); setSemAcesso(!!r.semAcesso);
+    } catch (e) { setLead(null); if (e.status === 403) setSemAcesso("crm"); }
+    try { const o = await api.ofChatObsList(chatId); setObs(((o && o.notas) || []).filter((n) => n.tipo === "obs")); } catch (_) { setObs([]); }
+    setRascunho({});
+    setCarregando(false);
+  }
+  useEffect(() => { carregar(); /* eslint-disable-next-line */ }, [chatId, telefone]);
+  useEffect(() => { if (isGer) api.ofVendedoresLista().then((l) => setVendedores(Array.isArray(l) ? l : [])).catch(() => {}); }, [isGer]);
+  useEffect(() => { if (!carregando && foco === "obs" && obsRef.current) obsRef.current.focus(); }, [foco, carregando]);
+
+  async function salvar(campos, aviso) {
+    if (!lead) return;
+    try { const r = await api.ofCrmEditar(lead.id, campos); if (r && r.lead) setLead(r.lead); if (aviso) showToast("✓ " + aviso); }
+    catch (e) { showToast("✗ " + e.message); }
+  }
+  function campoTexto(k) { return rascunho[k] !== undefined ? rascunho[k] : (lead && lead[k] != null ? String(lead[k]) : ""); }
+  function aoSairDoCampo(k) {
+    if (rascunho[k] === undefined || !lead) return;
+    const novo = rascunho[k];
+    if (String(lead[k] == null ? "" : lead[k]) === novo) return;
+    salvar({ [k]: k === "valor" ? (Number(String(novo).replace(/\./g, "").replace(",", ".")) || 0) : novo }, "Salvo");
+  }
+  async function salvarObs() {
+    const t = obsTexto.trim();
+    if (!t) return;
+    setSalvandoObs(true);
+    try { const r = await api.ofChatObsAdd(chatId, t); setObs(((r && r.notas) || []).filter((n) => n.tipo === "obs")); setObsTexto(""); showToast("✓ Observação salva"); }
+    catch (e) { showToast("✗ " + e.message); } finally { setSalvandoObs(false); }
+  }
+  function agendar(quando) {
+    if (!quando) return;
+    salvar({ tarefa: { texto: tarefaTexto.trim() || "Retornar contato", quando, feito: false } }, "Tarefa agendada");
+    setTarefaTexto(""); setTarefaData("");
+  }
+
+  const etapaAtual = lead ? etapas.find((e) => e.k === lead.etapa) : null;
+  const tarefa = lead && lead.tarefa && !lead.tarefa.feito ? lead.tarefa : null;
+  const tInfo = tarefa ? infoTarefa(tarefa) : null;
+  const linhaTempo = [
+    ...obs.map((n) => ({ texto: n.texto, por: n.por, ts: n.ts, origem: "Conversa" })),
+    ...((lead && lead.notas) || []).map((n) => ({ texto: n.texto, por: n.por, ts: n.ts, origem: "Pipeline" })),
+  ].sort((a, b) => (b.ts || 0) - (a.ts || 0));
+  const historico = ((lead && lead.historico) || []).slice().reverse().slice(0, 8);
+
+  return (
+    <aside className="ficha" aria-label="Ficha do lead">
+      <div className="ficha-topo">
+        <button type="button" className="ficha-x" onClick={onFechar} title="Fechar ficha" aria-label="Fechar ficha"><I.x className="ico" /></button>
+        <div className="ficha-av">{iniciais((lead && lead.nome) || nome)}</div>
+        <div className="ficha-nome">{(lead && lead.nome) || nome || "Contato"}</div>
+        <div className="ficha-tel">{(lead && lead.telefone) || telefone}</div>
+        <div className="ficha-chips">
+          {etapaAtual && <span className="ficha-chip" style={{ "--c": etapaAtual.cor }}><i />{etapaAtual.lb}</span>}
+          {lead && lead.recorrente && <span className="ficha-chip info"><I.repetir className="ico-inline" /> Lead atualizado</span>}
+          {lead && (lead.tags || []).slice(0, 2).map((t, i) => <span key={i} className="ficha-chip neutro">{t}</span>)}
+        </div>
+        <div className="ficha-acoes">
+          {onLigar && <button type="button" className="ficha-acao" onClick={onLigar}><I.fone className="ico" /><span>Ligar</span></button>}
+          {onRegistrarVenda && <button type="button" className="ficha-acao" onClick={onRegistrarVenda}><I.cash className="ico" /><span>Venda</span></button>}
+          {lead && onAbrirPipeline && <button type="button" className="ficha-acao" onClick={() => onAbrirPipeline(lead.id)}><I.pipe className="ico" /><span>Pipeline</span></button>}
+        </div>
+      </div>
+
+      <div className="ficha-corpo">
+        {carregando ? (
+          <div className="ficha-carregando"><span className="skel" /><span className="skel" /><span className="skel curto" /></div>
+        ) : !lead ? (
+          <div className="ficha-vazio">
+            <I.pipe className="ico" />
+            <b>{semAcesso === "crm" ? "Sua conta não tem acesso ao Pipeline" : semAcesso ? "Este lead é de outro vendedor" : "Ainda não está no Pipeline"}</b>
+            <span>{semAcesso === "crm" ? "Peça para o gerente liberar o Pipeline para você ver a ficha completa." : semAcesso ? "Você vê a conversa, mas a ficha completa fica com o responsável." : "Cadastre o contato para acompanhar etapa, tarefas e histórico."}</span>
+            {!semAcesso && onCadastrar && <button type="button" className="btn btn-primary btn-sm" onClick={onCadastrar}><I.plus className="ico" style={{ width: 14, height: 14 }} /> Cadastrar no Pipeline</button>}
+          </div>
+        ) : (
+          <>
+            <section className="ficha-sec">
+              <div className="ficha-sec-t">Etapa do funil</div>
+              <div className="ficha-etapas">
+                {etapas.map((e) => (
+                  <button type="button" key={e.k} className={"ficha-etapa" + (lead.etapa === e.k ? " on" : "")} style={{ "--c": e.cor }}
+                    onClick={() => lead.etapa !== e.k && salvar({ etapa: e.k }, "Movido para " + e.lb)}>
+                    <i />{e.lb}
+                  </button>
+                ))}
+              </div>
+            </section>
+
+            <section className="ficha-sec">
+              <div className="ficha-sec-t">Próxima tarefa</div>
+              {tarefa ? (
+                <div className={"ficha-tarefa " + (tInfo ? tInfo.classe : "")}>
+                  <span className="ficha-tarefa-ic"><I.clock className="ico" /></span>
+                  <div className="ficha-tarefa-txt"><b>{tarefa.texto || "Tarefa"}</b><span>{quandoAmigavel(tarefa.quando)}</span></div>
+                  <button type="button" className="ficha-mini ok" title="Concluir" aria-label="Concluir tarefa" onClick={() => salvar({ tarefa: { ...tarefa, feito: true } }, "Tarefa concluída")}><I.check className="ico" /></button>
+                  <button type="button" className="ficha-mini" title="Remover" aria-label="Remover tarefa" onClick={() => salvar({ tarefa: null }, "Tarefa removida")}><I.x className="ico" /></button>
+                </div>
+              ) : (
+                <div className="ficha-tarefa-nova">
+                  <input className="input" placeholder="O que fazer? Ex.: Retornar com a proposta" value={tarefaTexto} onChange={(e) => setTarefaTexto(e.target.value)} />
+                  <div className="ficha-presets">
+                    <button type="button" onClick={() => agendar(presetTarefa("hoje"))}>Hoje 18h</button>
+                    <button type="button" onClick={() => agendar(presetTarefa("amanha"))}>Amanhã 9h</button>
+                    <button type="button" onClick={() => agendar(presetTarefa("2dias"))}>Em 2 dias</button>
+                    <button type="button" onClick={() => agendar(presetTarefa("semana"))}>Próx. semana</button>
+                  </div>
+                  <div className="ficha-data">
+                    <input className="input" type="datetime-local" value={tarefaData} onChange={(e) => setTarefaData(e.target.value)} aria-label="Data e hora da tarefa" />
+                    <button type="button" className="btn btn-sm" disabled={!tarefaData} onClick={() => agendar(new Date(tarefaData).getTime())}>Agendar</button>
+                  </div>
+                </div>
+              )}
+            </section>
+
+            <section className="ficha-sec">
+              <div className="ficha-sec-t">Dados do lead</div>
+              <div className="ficha-campos">
+                <label className="ficha-campo"><span>Responsável</span>
+                  {isGer ? (
+                    <select className="input" value={lead.vendedorId || ""} onChange={(e) => salvar({ vendedorId: e.target.value }, "Responsável alterado")}>
+                      <option value="">Sem dono</option>
+                      {vendedores.map((v) => <option key={v.id} value={v.id}>{v.nome}</option>)}
+                      {lead.vendedorId && !vendedores.some((v) => v.id === lead.vendedorId) && <option value={lead.vendedorId}>{lead.vendedorNome || "Atual"}</option>}
+                    </select>
+                  ) : <b>{lead.vendedorNome || "Sem dono"}</b>}
+                </label>
+                <label className="ficha-campo"><span>Curso</span>
+                  <input className="input" value={campoTexto("curso")} placeholder="Qual curso?" onChange={(e) => setRascunho({ ...rascunho, curso: e.target.value })} onBlur={() => aoSairDoCampo("curso")} />
+                </label>
+                <div className="ficha-campo-duplo">
+                  <label className="ficha-campo"><span>Valor (R$)</span>
+                    <input className="input" inputMode="decimal" value={campoTexto("valor") === "0" ? "" : campoTexto("valor")} placeholder="0" onChange={(e) => setRascunho({ ...rascunho, valor: e.target.value })} onBlur={() => aoSairDoCampo("valor")} />
+                  </label>
+                  <label className="ficha-campo"><span>Pagamento</span>
+                    <input className="input" value={campoTexto("formaPagamento")} placeholder="Pix, cartão…" onChange={(e) => setRascunho({ ...rascunho, formaPagamento: e.target.value })} onBlur={() => aoSairDoCampo("formaPagamento")} />
+                  </label>
+                </div>
+                <label className="ficha-campo"><span>E-mail</span>
+                  <input className="input" type="email" value={campoTexto("email")} placeholder="email@exemplo.com" onChange={(e) => setRascunho({ ...rascunho, email: e.target.value })} onBlur={() => aoSairDoCampo("email")} />
+                </label>
+                <div className="ficha-info">
+                  <div><span>Origem</span><b>{lead.reservaNome || lead.origem || "—"}</b></div>
+                  <div><span>Entrou</span><b>{lead.criadoEm ? quandoAmigavel(lead.criadoEm) : "—"}</b></div>
+                </div>
+              </div>
+            </section>
+          </>
+        )}
+
+        <section className="ficha-sec">
+          <div className="ficha-sec-t">Observações <small>a IA lê e considera na análise</small></div>
+          <div className="ficha-obs-nova">
+            <textarea ref={obsRef} rows={2} value={obsTexto} placeholder="Registre o que rolou fora do chat: ligou, fechou presencial, pediu pra chamar depois…"
+              onChange={(e) => setObsTexto(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); salvarObs(); } }} />
+            <button type="button" className="btn btn-primary btn-sm" disabled={salvandoObs || !obsTexto.trim()} onClick={salvarObs}>{salvandoObs ? "Salvando…" : "Salvar"}</button>
+          </div>
+          {linhaTempo.length === 0 ? (
+            <div className="ficha-dica">Nenhuma observação ainda.</div>
+          ) : (
+            <ul className="ficha-linha">
+              {linhaTempo.map((n, i) => (
+                <li key={i}>
+                  <span className="ficha-ponto" />
+                  <div>
+                    <div className="ficha-linha-txt">{n.texto}</div>
+                    <div className="ficha-linha-meta">{n.por || ""}{n.ts ? " · " + quandoAmigavel(n.ts) : ""} · {n.origem}</div>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+
+        {lead && historico.length > 0 && (
+          <section className="ficha-sec">
+            <div className="ficha-sec-t">Histórico</div>
+            <ul className="ficha-hist">
+              {historico.map((h, i) => {
+                const Ico = I[FICHA_ICONE_HIST[h.tipo]] || I.clock;
+                return (
+                  <li key={i}>
+                    <span className="ficha-hist-ic"><Ico className="ico" /></span>
+                    <div><div className="ficha-linha-txt">{h.texto}</div><div className="ficha-linha-meta">{quandoAmigavel(h.ts)}</div></div>
+                  </li>
+                );
+              })}
+            </ul>
+          </section>
+        )}
+      </div>
+    </aside>
+  );
+}
+
+function InboxOficial({ isGer, ehLider, showToast, onIrParaEvolution, target, onTargetUsed, onAbrirLead, meuNome }) {
   const [chats, setChats] = useState([]);
   const [carregou, setCarregou] = useState(false);
   const [regVenda, setRegVenda] = useState(false);
@@ -7189,10 +7851,7 @@ function InboxOficial({ isGer, ehLider, showToast, onIrParaEvolution, target, on
   const [obsTexto, setObsTexto] = useState("");
   const [obsLista, setObsLista] = useState([]);
   const [obsSalvando, setObsSalvando] = useState(false);
-  async function abrirObs() {
-    setObsAberta(true); setObsTexto("");
-    try { const r = await api.ofChatObsList(conversa.id); setObsLista(((r && r.notas) || []).filter((n) => n.tipo === "obs")); } catch (_) { setObsLista([]); }
-  }
+  function abrirObs() { setFicha("obs"); } // v2.1: observações ficam na ficha do lead
   async function salvarObs() {
     if (!obsTexto.trim()) return;
     setObsSalvando(true);
@@ -7305,6 +7964,7 @@ function InboxOficial({ isGer, ehLider, showToast, onIrParaEvolution, target, on
   const [showTransfer, setShowTransfer] = useState(false);
   const [pedindoSuporte, setPedindoSuporte] = useState(false);
   const [cadPipeline, setCadPipeline] = useState(false);
+  const [ficha, setFicha] = useState(null); // v2.1: ficha do lead aberta ao lado da conversa ("info" | "obs")
   const [showEmojiOf, setShowEmojiOf] = useState(false);
   const [gravandoOf, setGravandoOf] = useState(false);
   const [pausadoOf, setPausadoOf] = useState(false);
@@ -7316,6 +7976,7 @@ function InboxOficial({ isGer, ehLider, showToast, onIrParaEvolution, target, on
   const fimRef = useRef(null);
   const msgsBoxRef = useRef(null);   // container rolável das mensagens
   const taOfRef = useRef(null);      // campo de digitação (textarea multi-linha)
+  const rapidasOf = useRespostasRapidas({ texto, setTexto, contatoNome: conversa && conversa.nome, meuNome, taRef: taOfRef, isGer, showToast });
   useEffect(() => { const el = taOfRef.current; if (el && !texto) el.style.height = "auto"; }, [texto]);
   const [, forcarTick] = useState(0); // faz a contagem de 24h atualizar sozinha
   useEffect(() => { const t = setInterval(() => forcarTick((x) => x + 1), 30000); return () => clearInterval(t); }, []);
@@ -7637,7 +8298,7 @@ function InboxOficial({ isGer, ehLider, showToast, onIrParaEvolution, target, on
   }
 
   return (
-    <div className={"of-inbox" + (sel || novaConv ? " tem-conversa" : "")}>
+    <div className={"of-inbox" + (sel || novaConv ? " tem-conversa" : "") + (ficha && conversa && !novaConv ? " com-ficha" : "")}>
       <div className="of-inbox-list">
         <div className="of-inbox-search">
           <I.search className="ico" />
@@ -7775,6 +8436,7 @@ function InboxOficial({ isGer, ehLider, showToast, onIrParaEvolution, target, on
           <>
             <div className="of-conv-head">
               <button className="of-conv-voltar" onClick={() => { setSel(null); setNovaConv(null); }} title="Voltar para a lista" aria-label="Voltar">‹</button>
+              <button type="button" className="conv-quem" onClick={() => setFicha(ficha ? null : "info")} title="Ver ficha do lead">
               <div className="of-chat-av">{iniciais(conversa.nome)}</div>
               <div className="of-conv-info">
                 <b>{conversa.nome}</b>
@@ -7784,6 +8446,7 @@ function InboxOficial({ isGer, ehLider, showToast, onIrParaEvolution, target, on
                     : (conversa.numero + (conversa.vendedorNome ? " · com " + conversa.vendedorNome : ""))}
                 </span>
               </div>
+              </button>
               {conversa.canal === "instagram" && <span className="of-pill" style={{ background: "linear-gradient(45deg,#F58529,#DD2A7B,#8134AF)", color: "#fff", borderColor: "transparent" }}>📸 Instagram</span>}
               {conversa.origemDisparo && conversa.campanha && <span className="of-pill">{conversa.campanha}</span>}
               {(() => {
@@ -8108,6 +8771,8 @@ function InboxOficial({ isGer, ehLider, showToast, onIrParaEvolution, target, on
                 <input ref={fileRefOf} type="file" hidden onChange={(e) => { onArquivoOf(e.target.files[0]); e.target.value = ""; }} accept="image/*,video/*,audio/*,application/pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.zip" />
                 {conversa.canal !== "instagram" && <button type="button" className="of-comp-ico" onClick={() => fileRefOf.current && fileRefOf.current.click()} disabled={enviandoMidiaOf} title="Anexar arquivo"><I.clip className="ico" /></button>}
                 <button type="button" className="of-comp-ico" onClick={() => setShowEmojiOf((v) => !v)} title="Emojis">😊</button>
+                <button type="button" className="of-comp-ico rr-btn" onClick={rapidasOf.abrir} title="Respostas rápidas (digite /)"><I.raio className="ico" /></button>
+                {rapidasOf.popup}
                 <textarea
                   ref={taOfRef}
                   className="of-conv-ta"
@@ -8116,6 +8781,7 @@ function InboxOficial({ isGer, ehLider, showToast, onIrParaEvolution, target, on
                   value={texto}
                   onChange={(e) => { setTexto(e.target.value); e.target.style.height = "auto"; e.target.style.height = Math.min(e.target.scrollHeight, 140) + "px"; }}
                   onKeyDown={(e) => {
+                    if (rapidasOf.teclado(e)) return;
                     if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); enviar(); setShowEmojiOf(false); if (taOfRef.current) taOfRef.current.style.height = "auto"; }
                     // Shift+Enter -> quebra de linha (padrão do textarea)
                   }}
@@ -8151,6 +8817,14 @@ function InboxOficial({ isGer, ehLider, showToast, onIrParaEvolution, target, on
         />
       )}
 
+      {ficha && conversa && !novaConv && (
+        <FichaLead chatId={conversa.id} telefone={conversa.numero} nome={conversa.nome} isGer={isGer} foco={ficha}
+          onFechar={() => setFicha(null)} showToast={showToast}
+          onLigar={conversa.canal !== "instagram" ? abrirConfirmacaoLigar : null}
+          onRegistrarVenda={() => setRegVenda(true)}
+          onCadastrar={() => setCadPipeline(true)}
+          onAbrirPipeline={onAbrirLead} />
+      )}
       {regVenda && conversa && (
         <ModalRegistrarVenda prefill={{ nome: conversa.nome, telefone: conversa.numero }} isGer={isGer}
           onClose={() => setRegVenda(false)} showToast={showToast} />
@@ -8167,7 +8841,7 @@ function InboxOficial({ isGer, ehLider, showToast, onIrParaEvolution, target, on
   );
 }
 
-function WhatsApp({ user, showToast, target, onTargetUsed, recarregarSol }) {
+function WhatsApp({ user, showToast, target, onTargetUsed, recarregarSol, onAbrirLead }) {
   const isGer = user.role === "gerente";
   const ehLider = user.role === "vendedor" && Array.isArray(user.lideradosIds) && user.lideradosIds.length > 0;
   const podeFiltrar = isGer || ehLider;
@@ -8195,14 +8869,12 @@ function WhatsApp({ user, showToast, target, onTargetUsed, recarregarSol }) {
   const [pedindoSuporte, setPedindoSuporte] = useState(false);
   const [regVenda, setRegVenda] = useState(false);
   const [cadPipeline, setCadPipeline] = useState(false);
+  const [ficha, setFicha] = useState(null); // v2.1: ficha do lead aberta ao lado da conversa ("info" | "obs")
   const [obsAberta, setObsAberta] = useState(false);
   const [obsTexto, setObsTexto] = useState("");
   const [obsLista, setObsLista] = useState([]);
   const [obsSalvando, setObsSalvando] = useState(false);
-  async function abrirObs() {
-    setObsAberta(true); setObsTexto("");
-    try { const r = await api.ofChatObsList(sel); setObsLista(((r && r.notas) || []).filter((n) => n.tipo === "obs")); } catch (_) { setObsLista([]); }
-  }
+  function abrirObs() { setFicha("obs"); } // v2.1: observações ficam na ficha do lead
   async function salvarObs() {
     if (!obsTexto.trim() || !sel) return;
     setObsSalvando(true);
@@ -8254,6 +8926,7 @@ function WhatsApp({ user, showToast, target, onTargetUsed, recarregarSol }) {
   const msgsEnd = useRef(null);
   const waBoxRef = useRef(null);
   const taWaRef = useRef(null);
+  const rapidasWa = useRespostasRapidas({ texto, setTexto, contatoNome: chat && chat.nome, meuNome: user.nome, taRef: taWaRef, isGer, showToast });
   useEffect(() => { const el = taWaRef.current; if (el && !texto) el.style.height = "auto"; }, [texto]);
   const waNearBottom = useRef(true);
   const waConvId = useRef(null);
@@ -8563,7 +9236,7 @@ function WhatsApp({ user, showToast, target, onTargetUsed, recarregarSol }) {
       </div>
 
       {canalAba === "oficial" ? (
-        <InboxOficial isGer={isGer} ehLider={ehLider} showToast={showToast} onIrParaEvolution={() => setCanalAba("evolution")} target={target && target.canal === "oficial" ? target : null} onTargetUsed={onTargetUsed} />
+        <InboxOficial isGer={isGer} ehLider={ehLider} showToast={showToast} onAbrirLead={onAbrirLead} meuNome={user.nome} onIrParaEvolution={() => setCanalAba("evolution")} target={target && target.canal === "oficial" ? target : null} onTargetUsed={onTargetUsed} />
       ) : semEvolution ? (
         <div className="wa-grid"><div className="wa-none">
           <I.wa className="ico" />
@@ -8624,11 +9297,13 @@ function WhatsApp({ user, showToast, target, onTargetUsed, recarregarSol }) {
         ) : (
           <div className="wa-chat">
             <div className="wa-chat-h">
-              <div className="av">{iniciais(chat.nome)}</div>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div className="nm">{chat.nome}</div>
-                <div className="num">{chat.numero}</div>
-              </div>
+              <button type="button" className="conv-quem" onClick={() => setFicha(ficha ? null : "info")} title="Ver ficha do lead">
+                <div className="av">{iniciais(chat.nome)}</div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div className="nm">{chat.nome}</div>
+                  <div className="num">{chat.numero}</div>
+                </div>
+              </button>
               {chat.nota != null && <span className="nota-badge" title="Nota da pesquisa de satisfação">⭐ {chat.nota}/5</span>}
               {isGer && <button type="button" className="btn-pipe" onClick={() => setCadPipeline(true)} title="Cadastrar este lead no Pipeline"><I.pipe style={{ width: 14, height: 14 }} /> Pipeline</button>}
               <button type="button" className="btn-venda" onClick={() => setRegVenda(true)} title="Registrar uma venda deste cliente"><I.gauge style={{ width: 14, height: 14 }} /> Registrar venda</button>
@@ -8703,13 +9378,15 @@ function WhatsApp({ user, showToast, target, onTargetUsed, recarregarSol }) {
                   <input ref={fileRef} type="file" hidden onChange={onArquivoSelecionado} accept="image/*,video/*,application/pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.zip" />
                   <button type="button" className="wa-comp-ico" onClick={() => fileRef.current && fileRef.current.click()} disabled={enviandoMidia} title="Anexar arquivo"><I.clip style={{ width: 20, height: 20 }} /></button>
                   <button type="button" className="wa-comp-ico" onClick={() => setShowEmoji((v) => !v)} title="Emojis">😊</button>
+                  <button type="button" className="wa-comp-ico rr-btn" onClick={rapidasWa.abrir} title="Respostas rápidas (digite /)"><I.raio style={{ width: 19, height: 19 }} /></button>
+                  {rapidasWa.popup}
                   <textarea
                     ref={taWaRef}
                     className="wa-comp-input wa-comp-ta"
                     rows={1}
                     value={texto}
                     onChange={(e) => { setTexto(e.target.value); e.target.style.height = "auto"; e.target.style.height = Math.min(e.target.scrollHeight, 140) + "px"; }}
-                    onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); enviar(); setShowEmoji(false); if (taWaRef.current) taWaRef.current.style.height = "auto"; } }}
+                    onKeyDown={(e) => { if (rapidasWa.teclado(e)) return; if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); enviar(); setShowEmoji(false); if (taWaRef.current) taWaRef.current.style.height = "auto"; } }}
                     placeholder={enviandoMidia ? "Enviando…" : "Escreva uma mensagem...  (Shift+Enter pula linha)"}
                     disabled={enviandoMidia}
                   />
@@ -8726,6 +9403,14 @@ function WhatsApp({ user, showToast, target, onTargetUsed, recarregarSol }) {
               </div>
             )}
           </div>
+        )}
+        {chat && !nova && ficha && (
+          <FichaLead chatId={chat.id} telefone={chat.numero} nome={chat.nome} isGer={isGer} foco={ficha}
+            onFechar={() => setFicha(null)} showToast={showToast}
+            onLigar={abrirConfirmacaoLigar}
+            onRegistrarVenda={() => setRegVenda(true)}
+            onCadastrar={() => setCadPipeline(true)}
+            onAbrirPipeline={onAbrirLead} />
         )}
       </div>
 

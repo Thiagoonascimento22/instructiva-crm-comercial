@@ -2106,6 +2106,51 @@ export function instalarCanalOficial({ app, getDb, saveDB, saveSoon, proximoId, 
     res.json({ lead: crmLeadPublico(l) });
   });
 
+  // v2.1 — RESPOSTAS RÁPIDAS: textos prontos que o vendedor insere digitando "/" na conversa.
+  // Lista da equipe (o gerente edita, todo mundo usa). {nome} e {vendedor} são trocados na hora.
+  const RESPOSTAS_PADRAO = [
+    { id: "rr_oi", atalho: "oi", texto: "Olá, {nome}! Aqui é {vendedor}, da Escola Instructiva. Tudo bem?" },
+    { id: "rr_retorno", atalho: "retorno", texto: "Oi, {nome}! Passando para saber se você conseguiu ver as informações que te mandei. Posso te ajudar com alguma dúvida?" },
+    { id: "rr_link", atalho: "link", texto: "Perfeito, {nome}! Vou te mandar o link de pagamento agora. Qualquer dúvida, estou por aqui." },
+    { id: "rr_obrigado", atalho: "obrigado", texto: "Obrigado pela confiança, {nome}! Seja muito bem-vindo(a) à Escola Instructiva." },
+  ];
+  function respostasRapidas() {
+    if (!Array.isArray(db.oficial.respostasRapidas)) return RESPOSTAS_PADRAO;
+    return db.oficial.respostasRapidas;
+  }
+  app.get("/api/oficial/respostas-rapidas", auth, (req, res) => {
+    res.json({ lista: respostasRapidas() });
+  });
+  app.put("/api/oficial/respostas-rapidas", auth, gerenteOnly, (req, res) => {
+    const entrada = (req.body && Array.isArray(req.body.lista)) ? req.body.lista : null;
+    if (!entrada) return res.status(400).json({ error: "Lista inválida" });
+    const vistos = new Set();
+    const lista = [];
+    for (const r of entrada.slice(0, 100)) {
+      const atalho = String((r && r.atalho) || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9_-]/g, "").slice(0, 30);
+      const texto = String((r && r.texto) || "").trim().slice(0, 1000);
+      if (!atalho || !texto || vistos.has(atalho)) continue;
+      vistos.add(atalho);
+      lista.push({ id: String((r && r.id) || ("rr_" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6))).slice(0, 40), atalho, texto });
+    }
+    db.oficial.respostasRapidas = lista;
+    salvar();
+    res.json({ ok: true, lista });
+  });
+
+  // v2.1 — ficha do lead dentro da conversa: acha o lead pelo telefone (últimos 8 dígitos).
+  // Só LEITURA: não cria nem altera nada.
+  app.get("/api/oficial/crm/lead-por-telefone", auth, permiteVend("crm"), (req, res) => {
+    garantirCRM();
+    const nuc = String((req.query && req.query.tel) || "").replace(/\D/g, "").slice(-8);
+    const etapas = etapasCRM();
+    if (nuc.length < 8) return res.json({ lead: null, etapas });
+    const l = (db.oficial.crmLeads || []).find((x) => String(x.telefone || "").replace(/\D/g, "").slice(-8) === nuc);
+    if (!l) return res.json({ lead: null, etapas });
+    if (req.user.role === "vendedor" && !podeVerVend(req.user, l.vendedorId)) return res.json({ lead: null, semAcesso: true, etapas });
+    res.json({ lead: crmLeadPublico(l), etapas });
+  });
+
   app.put("/api/oficial/crm/lead/:id", auth, permiteVend("crm"), (req, res) => {
     garantirCRM();
     const l = (db.oficial.crmLeads || []).find((x) => x.id === req.params.id);
