@@ -37,6 +37,7 @@ export const api = {
   getModulos: () => req("GET", "/api/modulos"),
   setModulos: (modulos) => req("PUT", "/api/modulos", { modulos }),
   updateMe: (dados) => req("PUT", "/api/me", dados),
+  marcarNovidades: (versao) => req("POST", "/api/me/novidades", { versao }),
 
   listUsers: () => req("GET", "/api/users"),
   createUser: (dados) => req("POST", "/api/users", dados),

@@ -207,6 +207,119 @@ function fmtEspera(seg) {
   return Math.floor(seg / 86400) + "d";
 }
 
+/* ============================ ATUALIZAÇÃO AUTOMÁTICA (v2.2) ============================ */
+// Compara o pacote que este navegador abriu com o que está no ar. Se subiu versão nova,
+// avisa e recarrega sozinho — mas espera a pessoa terminar de digitar ou fechar uma janela aberta.
+function useVersaoNova() {
+  const [nova, setNova] = useState(false);
+  useEffect(() => {
+    const tag = document.querySelector('script[src*="/assets/index-"]');
+    const meu = tag ? String(tag.getAttribute("src") || "").split("/").pop() : "";
+    if (!meu) return; // modo de desenvolvimento: não tem pacote pra comparar
+    let parado = false;
+    const checar = () => {
+      if (parado) return;
+      fetch("/api/versao", { cache: "no-store" }).then((r) => r.json()).then((j) => {
+        if (!parado && j && j.build && j.build !== meu) { parado = true; setNova(true); }
+      }).catch(() => {});
+    };
+    const aoVoltar = () => { if (!document.hidden) checar(); };
+    const t0 = setTimeout(checar, 15000);
+    const t = setInterval(aoVoltar, 120000);
+    document.addEventListener("visibilitychange", aoVoltar);
+    window.addEventListener("focus", aoVoltar);
+    return () => { parado = true; clearTimeout(t0); clearInterval(t); document.removeEventListener("visibilitychange", aoVoltar); window.removeEventListener("focus", aoVoltar); };
+  }, []);
+  return nova;
+}
+function AvisoAtualizacao() {
+  const [seg, setSeg] = useState(10);
+  const [esperando, setEsperando] = useState(false);
+  useEffect(() => {
+    const ocupado = () => {
+      const el = document.activeElement;
+      const campo = el && (el.tagName === "TEXTAREA" || el.isContentEditable || (el.tagName === "INPUT" && !["button", "checkbox", "radio", "submit", "range", "color", "file"].includes(el.type)));
+      const digitando = campo && String(el.value || el.textContent || "").trim().length > 0;
+      return digitando || !!document.querySelector(".modal, .pop-bg, .rec-bg, .nov-bg");
+    };
+    let restante = 10;
+    const t = setInterval(() => {
+      if (ocupado()) { setEsperando(true); return; }
+      setEsperando(false);
+      if (document.hidden) { window.location.reload(); return; }
+      restante -= 1; setSeg(restante);
+      if (restante <= 0) window.location.reload();
+    }, 1000);
+    return () => clearInterval(t);
+  }, []);
+  return (
+    <div className="atualiza" role="status">
+      <span className="atualiza-ic"><I.repetir className="ico" /></span>
+      <div className="atualiza-txt">
+        <b>Saiu uma versão nova do sistema</b>
+        <span>{esperando ? "Atualiza assim que você terminar o que está fazendo." : `Atualizando em ${Math.max(0, seg)}s…`}</span>
+      </div>
+      <button className="btn btn-primary btn-sm" onClick={() => window.location.reload()}>Atualizar agora</button>
+    </div>
+  );
+}
+
+/* ============================ NOVIDADES DA VERSÃO (v2.2) ============================ */
+// Aparece uma vez só pra cada pessoa (fica marcado no servidor). Dá pra rever clicando na versão, no rodapé do menu.
+const VERSAO_NOVIDADES = "v2.2";
+function Novidades({ user, perfil, pode, ehMac, onClose }) {
+  const itens = [
+    { ic: I.brilho, t: "Visual novo", d: "Cores grafite e esmeralda, modo claro e escuro e um menu que recolhe pra sobrar mais espaço na tela.", para: "todos" },
+    { ic: I.trend, t: "Painel de Vendas", d: "Veja na hora se está acima do ritmo da meta, quanto precisa vender por dia e qual foi o melhor dia do mês.", para: "comercial", se: pode.vendas },
+    { ic: I.user, t: "Ficha do lead na conversa", d: "Clique na foto ou no nome do contato e veja etapa, tarefas e anotações sem sair do chat.", para: "comercial", se: pode.caixa && pode.crm },
+    { ic: I.raio, t: "Respostas rápidas", d: "Na caixa de mensagem, digite a barra e escolha um texto pronto. O nome do cliente entra sozinho.", para: "comercial", se: pode.caixa, teclas: ["/"] },
+    { ic: I.search, t: "Busca rápida", d: "Ache qualquer lead, conversa ou tela em segundos, de qualquer lugar do sistema.", para: "comercial", teclas: ehMac ? ["⌘", "K"] : ["Ctrl", "K"] },
+    { ic: I.list, t: "Pipeline mais esperto", d: "Filtro de tarefas do dia, aviso de lead parado e o motivo da perda quando o negócio não fecha.", para: "comercial", se: pode.crm },
+    { ic: I.spark, t: "Análise IA com semáforo", d: "Verde, amarelo ou vermelho, sempre com dicas práticas pra atender ainda melhor.", para: "comercial", se: pode.caixa },
+    { ic: I.celular, t: "Disparo, Números e Solicitações", d: "Resultado de cada campanha, a qualidade de cada número num cartão e a fila de pedidos organizada.", para: "gerente" },
+    { ic: I.suporte, t: "Solicitações organizadas", d: "Fila com cor por urgência, contadores no topo e a análise da IA ao lado.", para: "suporte" },
+    { ic: I.olho, t: "Login novo", d: "Tela cheia e um olhinho pra conferir a senha antes de entrar.", para: "todos" },
+  ].filter((it) => it.se !== false && (it.para === "todos"
+    || (it.para === "comercial" && perfil !== "suporte")
+    || it.para === perfil));
+  useEffect(() => {
+    const esc = (e) => { if (e.key === "Escape") onClose(); };
+    window.addEventListener("keydown", esc);
+    return () => window.removeEventListener("keydown", esc);
+  }, [onClose]);
+  const nome = primeiroNome(user && user.nome);
+  return (
+    <Portal>
+      <div className="nov-bg" onClick={(e) => e.target === e.currentTarget && onClose()}>
+        <div className="nov" role="dialog" aria-modal="true" aria-labelledby="nov-tit">
+          <div className="nov-topo">
+            <button type="button" className="nov-x" onClick={onClose} aria-label="Fechar"><I.x className="ico" /></button>
+            <span className="nov-selo"><I.brilho className="ico" /> Novidades · versão 2.2</span>
+            <h2 id="nov-tit">O sistema ficou de cara nova</h2>
+            <p>{nome ? "Oi, " + nome + "! " : ""}Separamos o que mudou pra deixar o seu dia mais fácil e as vendas mais rápidas.</p>
+          </div>
+          <div className="nov-grade">
+            {itens.map((it, i) => (
+              <div key={it.t} className="nov-item" style={{ animationDelay: 80 + i * 45 + "ms" }}>
+                <span className="nov-ic"><it.ic className="ico" /></span>
+                <div className="nov-item-txt">
+                  <b>{it.t}</b>
+                  <p>{it.d}</p>
+                  {it.teclas && <span className="nov-teclas">{it.teclas.map((k) => <kbd key={k}>{k}</kbd>)}</span>}
+                </div>
+              </div>
+            ))}
+          </div>
+          <div className="nov-pe">
+            <span>Pra ver de novo, clique em <b>v2.2</b> no rodapé do menu.</span>
+            <button type="button" className="btn btn-primary nov-btn" onClick={onClose}>{perfil === "suporte" ? "Entendi, vamos lá" : "Bora vender!"}</button>
+          </div>
+        </div>
+      </div>
+    </Portal>
+  );
+}
+
 /* ============================ APP ============================ */
 export default function App() {
   const [booting, setBooting] = useState(true);
@@ -215,6 +328,8 @@ export default function App() {
   const [ehDono, setEhDono] = useState(false);
   const [acessoVend, setAcessoVend] = useState({});
   const [aviso, setAviso] = useState(null);
+  const novaVersao = useVersaoNova();   // v2.2: saiu versão nova? (aí todo mundo se atualiza sozinho)
+  const [novidades, setNovidades] = useState(false);
   const carregarModulos = () => api.getModulos().then((r) => { setModulos(r.modulos); setEhDono(!!r.dono); }).catch(() => {});
   const carregarAcessoVend = () => api.ofAcessoVend().then((r) => setAcessoVend(r.acessoVend || {})).catch(() => {});
   useEffect(() => { if (user) api.aviso().then(setAviso).catch(() => {}); }, [user]);
@@ -299,6 +414,23 @@ export default function App() {
     // eslint-disable-next-line
   }, [user]);
 
+  // v2.2: tela de novidades — aparece uma vez só pra cada pessoa (marcado no servidor e no navegador)
+  useEffect(() => {
+    if (!user || user.precisaOnboarding) return;
+    let local = "";
+    try { local = localStorage.getItem("instructiva_novidades_" + user.id) || ""; } catch (_) {}
+    if (user.novidadesVistas !== VERSAO_NOVIDADES && local !== VERSAO_NOVIDADES) setNovidades(true);
+  }, [user]);
+  function fecharNovidades() {
+    setNovidades(false);
+    if (!user) return;
+    try { localStorage.setItem("instructiva_novidades_" + user.id, VERSAO_NOVIDADES); } catch (_) {}
+    if (user.novidadesVistas !== VERSAO_NOVIDADES) {
+      api.marcarNovidades(VERSAO_NOVIDADES).catch(() => {});
+      setUser((u) => (u ? { ...u, novidadesVistas: VERSAO_NOVIDADES } : u));
+    }
+  }
+
   function showToast(msg) {
     setToast(msg);
     clearTimeout(toastT.current);
@@ -311,8 +443,8 @@ export default function App() {
   }
 
   if (booting) return <div className="login-wrap"><div className="spin" /></div>;
-  if (!user) return <Login onDone={(u) => setUser(u)} unidade={unidade} />;
-  if (user.precisaOnboarding) return <Onboarding user={user} onDone={setUser} unidade={unidade} />;
+  if (!user) return <>{novaVersao && <AvisoAtualizacao />}<Login onDone={(u) => setUser(u)} unidade={unidade} /></>;
+  if (user.precisaOnboarding) return <>{novaVersao && <AvisoAtualizacao />}<Onboarding user={user} onDone={setUser} unidade={unidade} /></>;
 
   const isGer = user.role === "gerente";
   const isSuporte = user.role === "suporte";
@@ -364,7 +496,7 @@ export default function App() {
 
   return (
     <div className={"shell" + (menuRecolhido ? " menu-recolhido" : "")}>
-      <RecadoDoDia />
+      {!novidades && <RecadoDoDia />}
       <aside className="sidebar">
         <div className="side-topo">
           <div className="brand"><img src={theme === "dark" ? LOGO_LIGHT : LOGO_FULL} alt="Instructiva" /></div>
@@ -407,7 +539,7 @@ export default function App() {
             </div>
             <button className="side-sair" onClick={logout} title="Sair" aria-label="Sair"><I.out className="ico" /></button>
           </div>
-          <div className="side-versao">v2.2</div>
+          <button type="button" className="side-versao" onClick={() => setNovidades(true)} title="Ver as novidades desta versão">v2.2 · novidades</button>
         </div>
       </aside>
 
@@ -457,6 +589,11 @@ export default function App() {
           onAbrirConversa={(t) => { setWaTarget(t); setView("whatsapp"); }}
         />
       )}
+      {novidades && (
+        <Novidades user={user} perfil={isGer ? "gerente" : isSuporte ? "suporte" : "vendedor"} ehMac={ehMac} onClose={fecharNovidades}
+          pode={{ vendas: (isGer || vendPode("vendas")) && mod("vendas"), crm: (isGer || vendPode("crm")) && mod("crm"), caixa: !isSuporte && mod("caixa") }} />
+      )}
+      {novaVersao && <AvisoAtualizacao />}
       {toast && (() => {
         // v2.1: aviso com ícone e cor (✓ deu certo, ✗ deu errado, resto = informação)
         const txt = String(toast);

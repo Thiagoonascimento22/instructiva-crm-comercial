@@ -19,7 +19,7 @@ app.use(express.urlencoded({ extended: false, limit: "10mb" })); // Twilio manda
 // Versão do sistema — pra CONFIRMAR qual código está no ar (abra /api/versao no navegador).
 // Se aqui aparecer a versão nova mas o bug continuar, o problema é outro; se aparecer
 // uma versão antiga (ou 404), o deploy não subiu de verdade.
-const VERSAO_SISTEMA = "v2.2-grafite-dashboard";
+const VERSAO_SISTEMA = "v2.2-novidades-autoatualiza";
 
 /* ============================================================
    IDENTIFICAÇÃO DA UNIDADE (mesmo código, deploys separados)
@@ -44,8 +44,20 @@ if (!UNIDADE_INFO.configurada) {
   console.log("==> Unidade:", UNIDADE_INFO.unidade, "(via variável de ambiente)");
 }
 
-app.get("/api/versao", (req, res) => res.json({
+// Qual pacote do site está no ar (o nome do arquivo que o index.html carrega).
+// O navegador de cada pessoa compara com o que ele abriu: se mudou, saiu versão nova e ele se atualiza sozinho.
+let _buildNoAr = null;
+function buildNoAr() {
+  if (_buildNoAr !== null) return _buildNoAr;
+  try {
+    const m = /assets\/(index-[\w-]+\.js)/.exec(fs.readFileSync(path.join(__dirname, "..", "dist", "index.html"), "utf8"));
+    _buildNoAr = m ? m[1] : "";
+  } catch (_) { _buildNoAr = ""; }
+  return _buildNoAr;
+}
+app.get("/api/versao", (req, res) => res.set("Cache-Control", "no-store").json({
   versao: VERSAO_SISTEMA,
+  build: buildNoAr(),
   unidade: UNIDADE_INFO.unidade,
   unidadeConfigurada: UNIDADE_INFO.configurada,
   unidadeOrigem: UNIDADE_INFO.origem,
@@ -679,6 +691,12 @@ app.put("/api/me", auth, (req, res) => {
   req.user.precisaOnboarding = false;
   saveSoon();
   res.json(semSenha(req.user));
+});
+// marca que a pessoa já viu a tela de novidades dessa versão (assim ela aparece uma vez só, em qualquer computador)
+app.post("/api/me/novidades", auth, (req, res) => {
+  const v = String((req.body && req.body.versao) || "").slice(0, 40);
+  if (v) { req.user.novidadesVistas = v; saveSoon(); }
+  res.json({ ok: true, novidadesVistas: req.user.novidadesVistas || "" });
 });
 
 /* ============================================================
