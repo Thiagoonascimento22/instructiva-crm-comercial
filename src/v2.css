@@ -1,0 +1,639 @@
+/* ============================================================
+   INSTRUCTIVA CRM — VERSÃO 2.0
+   Visual com as cores do WhatsApp, mais limpo e mais leve.
+   Este arquivo vem DEPOIS do styles.css e sobrescreve o visual antigo.
+   Regra: cor nunca fixa em componente — sempre pelas variáveis abaixo.
+   ============================================================ */
+
+/* ---------- TOKENS: claro ---------- */
+:root {
+  --brand: #008069;
+  --brand-2: #00a884;
+  --brand-hover: #006e5a;
+  --on-brand: #ffffff;
+  --brand-soft: #e3f4ec;
+  --brand-soft-ink: #00664f;
+  --laranja: #008069;
+  --grad: linear-gradient(0deg, #008069, #008069);
+  --grad-violet: linear-gradient(0deg, #008069, #008069);
+  --ia-hero-bg: #0d211c;
+
+  --indigo: #008069;
+  --indigo-600: #006e5a;
+  --violet: #00a884;
+  --mint: #1daa61;
+  --coral: #e5484d;
+  --amber: #d99a1e;
+  --cyan: #0ea5e9;
+
+  --bg: #f3f5f4;
+  --card: #ffffff;
+  --raised: #ffffff;
+  --sunk: #ecf0ee;
+  --surface-2: #eef2f0;
+  --line: #e2e8e5;
+  --line-2: #ecf0ee;
+  --line-forte: #d2dad6;
+  --text: #0b141a;
+  --muted: #54656f;
+  --faint: #66767f;
+
+  --ok-bg: #e3f4ec; --ok-ink: #00664f;
+  --warn-bg: #fff3d6; --warn-ink: #875a00;
+  --late-bg: #fdebec; --late-ink: #b3262f;
+  --info-bg: #e6f0fc; --info-ink: #1c5da8;
+
+  /* menu lateral: escuro nos dois temas */
+  --side-1: #0b1a17;
+  --side-2: #0b1a17;
+  --side-line: rgba(255, 255, 255, 0.07);
+  --side-text: #b4c4be;
+  --side-muted: #7e918b;
+  --side-shadow: none;
+
+  --lead: #64748b;
+  --contato: #008069;
+  --negociando: #d99a1e;
+  --fechou: #1daa61;
+  --perdeu: #e5484d;
+
+  --glass: #ffffff;
+  --glass-2: #ffffff;
+  --glass-border: #e2e8e5;
+  --glass-blur: 0px;
+  --aurora: none;
+  --grain-opacity: 0;
+
+  --shadow-sm: 0 1px 2px rgba(11, 20, 26, 0.05);
+  --shadow: 0 1px 2px rgba(11, 20, 26, 0.05);
+  --shadow-lg: 0 24px 48px -16px rgba(11, 20, 26, 0.22);
+  --card-hover-shadow: 0 8px 20px -10px rgba(11, 20, 26, 0.18);
+  --glow-violet: none;
+  --glow-brand: none;
+  --num-glow: none;
+  --sheen: none;
+
+  --nav-hover: rgba(0, 128, 105, 0.08);
+  --input-bg: #ffffff;
+  --input-focus-ring: rgba(0, 128, 105, 0.18);
+  --bubble-them: #ffffff;
+  --th-bg: #f5f7f6;
+  --row-hover: rgba(0, 128, 105, 0.05);
+  --scrim: rgba(11, 20, 26, 0.35);
+  --modal-bg: #ffffff;
+  --scroll-thumb: rgba(11, 20, 26, 0.18);
+  --scroll-thumb-hover: rgba(11, 20, 26, 0.3);
+  --selection: rgba(0, 168, 132, 0.2);
+
+  /* conversa (WhatsApp) */
+  --chat-bg: #efeae2;
+  --chat-dot: rgba(11, 20, 26, 0.07);
+  --bolha-them: #ffffff;
+  --bolha-me: #d9fdd3;
+  --bolha-meta: #667781;
+  --bolha-me-meta: #5b7065;
+  --tick: #3b9fd6;
+  --bolha-inset: rgba(11, 20, 26, 0.05);
+  --pill: #ffffff;
+
+  --r: 16px;
+  --r-sm: 10px;
+  --fonte: "Geist", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --fonte-mono: "Geist Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+/* ---------- TOKENS: escuro (tema escuro do WhatsApp Web) ---------- */
+:root[data-theme="dark"] {
+  --brand: #00a884;
+  --brand-2: #06cf9c;
+  --brand-hover: #06cf9c;
+  --on-brand: #0b141a;
+  --brand-soft: rgba(0, 168, 132, 0.16);
+  --brand-soft-ink: #3fd3ab;
+  --grad: linear-gradient(0deg, #00a884, #00a884);
+  --grad-violet: linear-gradient(0deg, #00a884, #00a884);
+  --ia-hero-bg: #111b21;
+  --indigo: #00a884;
+  --indigo-600: #06cf9c;
+  --violet: #06cf9c;
+  --mint: #25d366;
+  --coral: #ff6b73;
+  --amber: #f2b544;
+  --cyan: #53bdeb;
+
+  --bg: #0b141a;
+  --card: #111b21;
+  --raised: #1a262d;
+  --sunk: #0e181e;
+  --surface-2: #17232a;
+  --line: #222e35;
+  --line-2: #1b272e;
+  --line-forte: #2e3d46;
+  --text: #e9edef;
+  --muted: #aebac1;
+  --faint: #8696a0;
+
+  --ok-bg: rgba(0, 168, 132, 0.16); --ok-ink: #3fd3ab;
+  --warn-bg: rgba(245, 170, 30, 0.14); --warn-ink: #f2b544;
+  --late-bg: rgba(240, 80, 90, 0.15); --late-ink: #ff8a92;
+  --info-bg: rgba(83, 150, 240, 0.15); --info-ink: #8ab8ff;
+
+  --side-1: #070f13;
+  --side-2: #070f13;
+  --side-line: rgba(255, 255, 255, 0.06);
+  --side-text: #aebac1;
+  --side-muted: #7a8b93;
+
+  --lead: #8696a0;
+  --contato: #00a884;
+  --negociando: #f2b544;
+  --fechou: #25d366;
+  --perdeu: #ff6b73;
+
+  --glass: #111b21;
+  --glass-2: #111b21;
+  --glass-border: #222e35;
+
+  --shadow-sm: none;
+  --shadow: none;
+  --shadow-lg: 0 24px 48px -16px rgba(0, 0, 0, 0.6);
+  --card-hover-shadow: 0 8px 20px -10px rgba(0, 0, 0, 0.6);
+
+  --nav-hover: rgba(255, 255, 255, 0.05);
+  --input-bg: #111b21;
+  --input-focus-ring: rgba(0, 168, 132, 0.28);
+  --bubble-them: #202c33;
+  --th-bg: #17232a;
+  --row-hover: rgba(255, 255, 255, 0.04);
+  --scrim: rgba(0, 0, 0, 0.55);
+  --modal-bg: #111b21;
+  --scroll-thumb: rgba(255, 255, 255, 0.12);
+  --scroll-thumb-hover: rgba(255, 255, 255, 0.2);
+  --selection: rgba(0, 168, 132, 0.35);
+
+  --chat-bg: #0b141a;
+  --chat-dot: rgba(233, 237, 239, 0.05);
+  --bolha-them: #202c33;
+  --bolha-me: #005c4b;
+  --bolha-meta: #8696a0;
+  --bolha-me-meta: rgba(233, 237, 239, 0.66);
+  --tick: #53bdeb;
+  --bolha-inset: rgba(255, 255, 255, 0.07);
+  --pill: #182229;
+}
+
+/* ============================================================
+   LEVEZA: desliga os efeitos pesados do visual antigo
+   (fundo animado sem parar, ruído, vidro com desfoque, animação de entrada)
+   ============================================================ */
+body::before, body::after { content: none !important; display: none !important; animation: none !important; }
+*, *::before, *::after { -webkit-backdrop-filter: none !important; backdrop-filter: none !important; }
+.content > *, .stats > .stat { animation: none !important; }
+.panel:hover, .stat:hover, .onum-card:hover, .mon-card:hover, .vd-card:hover,
+.crm-card:hover, .btn:hover, .btn-primary:hover, .nav button:hover, .nav button:not(.active):hover { transform: none !important; }
+html, body, .sidebar, .stat, .panel, .btn, .input, .select, .textarea { transition: none; }
+
+/* ============================================================
+   BASE
+   ============================================================ */
+body { font-family: var(--fonte); background: var(--bg); background-image: none; color: var(--text); font-size: 14px; }
+h1, h2, h3, h4, .topbar .greet, .panel-h h3, .login-card .ttl, .login-card h2, .ia-hero h2 {
+  font-family: var(--fonte); letter-spacing: -0.02em;
+}
+.mono { font-family: var(--fonte-mono); font-variant-numeric: tabular-nums; }
+.stat .val, .stat-ico .info .val, .mon-mini .num, .det-k .num { font-family: var(--fonte) !important; text-shadow: none; }
+::selection { background: var(--selection); color: var(--text); }
+*::-webkit-scrollbar { width: 10px; height: 10px; }
+*::-webkit-scrollbar-thumb { background: var(--scroll-thumb); border-radius: 99px; border: 3px solid transparent; background-clip: padding-box; opacity: 1; }
+*::-webkit-scrollbar-thumb:hover { background: var(--scroll-thumb-hover); background-clip: padding-box; }
+*::-webkit-scrollbar-track { background: transparent; }
+/* números grandes: firmes, sem exagero */
+.stat .n, .stat .num, .mon-card .n, .kpi .v, .vd-card-valor, .vd-big, .an-nota-num, .ia-nota-num {
+  font-size: 30px !important; font-weight: 650 !important; letter-spacing: -0.03em !important; line-height: 1.05 !important;
+}
+
+/* ============================================================
+   ESTRUTURA: menu lateral + topo
+   ============================================================ */
+.shell { background: var(--bg); }
+.sidebar {
+  width: 252px;
+  background: var(--side-1) !important;
+  border-right: 1px solid var(--side-line);
+  box-shadow: none !important;
+  padding: 22px 14px 14px;
+  gap: 0;
+}
+.brand { padding: 2px 6px 0; }
+.brand img { width: 148px; }
+.brand .tag { display: none; }
+.unidade-chip {
+  margin: 16px 0 0; display: flex; align-items: center; gap: 10px;
+  padding: 10px 12px; border-radius: 12px;
+  background: rgba(255, 255, 255, 0.04); border: 1px solid var(--side-line);
+}
+.unidade-dot { width: 8px; height: 8px; border-radius: 50%; background: #25d366; box-shadow: 0 0 0 4px rgba(37, 211, 102, 0.16); flex: none; }
+.unidade-nm { color: #fff; font-weight: 600; font-size: 13px; line-height: 1.2; }
+.unidade-s { color: var(--side-muted); font-size: 11.5px; }
+
+.nav { gap: 18px; margin-top: 22px; overflow-y: auto; min-height: 0; padding-right: 2px; }
+.nav::-webkit-scrollbar { width: 6px; }
+.nav::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.12); border: 0; }
+.nav-grupo { display: flex; flex-direction: column; gap: 2px; }
+.nav-grupo-t {
+  font-size: 10.5px; font-weight: 600; letter-spacing: 0.09em; text-transform: uppercase;
+  color: var(--side-muted); padding: 0 12px 6px;
+}
+.nav button {
+  height: 40px; padding: 0 12px !important; border-radius: 10px !important; gap: 12px;
+  color: var(--side-text); font-size: 14px; font-weight: 500 !important;
+  background: transparent; box-shadow: none !important;
+}
+.nav button:hover { background: rgba(255, 255, 255, 0.05) !important; color: #fff !important; }
+.nav button.active { background: rgba(37, 211, 102, 0.13) !important; color: #fff !important; box-shadow: none !important; }
+.nav button.active .ico { color: #25d366; }
+.nav .ico { width: 18px; height: 18px; }
+.nav .nav-badge {
+  margin-left: auto; min-width: 22px; height: 20px; padding: 0 7px; border-radius: 999px;
+  background: #25d366; color: #052e16; font-size: 11px; font-weight: 700;
+  display: inline-flex; align-items: center; justify-content: center;
+}
+
+.side-foot { border-top: 0; margin-top: 12px; padding-top: 0; display: flex; flex-direction: column; gap: 12px; }
+.tema-seg { display: flex; padding: 3px; border-radius: 11px; background: rgba(255, 255, 255, 0.05); border: 1px solid var(--side-line); }
+.tema-seg button {
+  flex: 1; height: 32px; border: 0; border-radius: 8px; background: transparent; color: var(--side-text);
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px; font-size: 12.5px; font-weight: 500; cursor: pointer;
+}
+.tema-seg button.on { background: rgba(255, 255, 255, 0.11); color: #fff; }
+.tema-seg .ico { width: 15px; height: 15px; }
+.side-user { display: flex; align-items: center; gap: 10px; padding: 12px 4px 0; border-top: 1px solid var(--side-line); }
+.side-user .nm { color: #fff; font-size: 13px; font-weight: 600; line-height: 1.2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.side-user .rl { color: var(--side-muted); font-size: 11.5px; }
+.side-sair {
+  margin-left: auto; width: 34px; height: 34px; flex: none; border-radius: 9px; border: 0; background: transparent;
+  color: var(--side-text); display: inline-flex; align-items: center; justify-content: center; cursor: pointer;
+}
+.side-sair:hover { background: rgba(255, 255, 255, 0.07); color: #fff; }
+.side-sair .ico { width: 17px; height: 17px; }
+.side-versao { font-family: var(--fonte-mono); font-size: 10.5px; color: var(--side-muted); text-align: center; }
+.sidebar .uav-ini { background: #1f6f78; color: #fff; }
+
+.main { background: var(--bg); }
+.topbar { padding: 26px 32px 16px; }
+.topbar .crumb { font-size: 12px; font-weight: 500; color: var(--faint); margin-bottom: 6px; }
+.topbar .greet { font-size: 28px; line-height: 1.1; font-weight: 650; letter-spacing: -0.03em; color: var(--text); }
+.topbar .sub { font-size: 14px; color: var(--faint); margin-top: 6px; }
+.content { padding: 4px 32px 32px; }
+.aviso-manut { background: var(--warn-bg); color: var(--warn-ink); border-bottom: 1px solid var(--line); }
+
+/* ============================================================
+   CONTROLES
+   ============================================================ */
+.btn, button.btn {
+  border-radius: 10px; font-weight: 500; background: var(--card); color: var(--text);
+  border: 1px solid var(--line); box-shadow: var(--shadow-sm);
+}
+.btn:hover { background: var(--surface-2); border-color: var(--line-forte); }
+.btn-primary, .btn-on, .btn-hero, .onum-add {
+  background: var(--brand) !important; color: var(--on-brand) !important; border: 1px solid var(--brand) !important;
+  box-shadow: none !important; font-weight: 600; filter: none !important;
+}
+.btn-primary:hover, .btn-on:hover, .btn-hero:hover, .onum-add:hover { background: var(--brand-hover) !important; border-color: var(--brand-hover) !important; }
+.btn-danger { background: var(--late-bg); color: var(--late-ink); border: 1px solid transparent; }
+.btn-danger:hover { background: var(--late-bg); border-color: var(--late-ink); }
+.onum-btn-ghost {
+  background: transparent; border: 1px solid transparent; color: var(--muted); border-radius: 9px; box-shadow: none;
+}
+.onum-btn-ghost:hover { background: var(--surface-2); color: var(--text); border-color: transparent; }
+
+.input, .select, .textarea, .wa-search input, .wa-input input {
+  background: var(--input-bg); border: 1px solid var(--line); color: var(--text); border-radius: 10px;
+}
+.input::placeholder, .textarea::placeholder, input::placeholder, textarea::placeholder { color: var(--faint); }
+.input:focus, .select:focus, .textarea:focus, input:focus-visible, select:focus-visible, textarea:focus-visible,
+.wa-search input:focus, .wa-input input:focus {
+  border-color: var(--brand) !important; box-shadow: 0 0 0 3px var(--input-focus-ring) !important; outline: none;
+}
+.select option, select option { background: var(--card); color: var(--text); }
+input[type="checkbox"], input[type="radio"] { accent-color: var(--brand); }
+
+/* cartões e painéis: brancos, borda fina, sem sombra pesada */
+.panel, .stat, .onum-card, .mon-card, .disp-camp-card, .sol-row, .ia-card, .vd-card, .mon-strip, .det-k, .qr-box, .mon-tabela {
+  background: var(--card); border: 1px solid var(--line); border-radius: 16px; box-shadow: var(--shadow-sm);
+}
+.panel:hover, .stat:hover, .onum-card:hover, .mon-card:hover, .vd-card:hover { box-shadow: var(--shadow-sm); }
+.stat::before { content: none; }
+.panel-h { padding: 18px 20px; border-bottom-color: var(--line); }
+.panel-h h3 { font-size: 16px; font-weight: 650; letter-spacing: -0.015em; }
+.content h1, .view-title, .painel-titulo { font-size: 26px; font-weight: 650; letter-spacing: -0.03em; }
+
+/* janelas (modais) */
+.modal { background: var(--scrim); }
+.modal-box { background: var(--modal-bg); border: 1px solid var(--line); border-radius: 18px; box-shadow: var(--shadow-lg); }
+.toast { background: #0b141a; color: #fff; border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 12px; box-shadow: var(--shadow-lg); font-weight: 500; }
+:root[data-theme="dark"] .toast { background: #e9edef; color: #0b141a; }
+.badge { background: var(--surface-2); color: var(--muted); }
+.spin { border-color: var(--line); border-top-color: var(--brand); }
+
+/* login */
+.login-wrap { background: var(--side-1); }
+.login-card { background: var(--card); border: 1px solid var(--line); border-radius: 20px; box-shadow: var(--shadow-lg); }
+.login-card .ttl { color: var(--brand); }
+.login-card h2 { font-weight: 650; }
+
+/* lembrete de foto */
+.lembrete-foto { background: var(--card); border: 1px solid var(--line); border-radius: 14px; box-shadow: var(--shadow-sm); }
+
+/* ============================================================
+   PIPELINE
+   ============================================================ */
+.crm-wrap { padding: 0 0 20px; }
+.crm-top {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 4px;
+  padding: 6px; margin-bottom: 14px;
+  background: var(--card); border: 1px solid var(--line); border-radius: 14px; box-shadow: var(--shadow-sm);
+}
+.crm-top .onum-add, .crm-top .onum-btn-ghost {
+  height: 36px; padding: 0 12px; display: inline-flex; align-items: center; gap: 7px; font-size: 13px; border-radius: 9px;
+}
+.crm-top .ico { width: 15px; height: 15px; }
+.crm-top-right { margin-left: auto; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.crm-busca {
+  height: 36px; display: flex; align-items: center; gap: 8px; padding: 0 12px; min-width: 260px;
+  background: var(--input-bg); border: 1px solid var(--line); border-radius: 9px; color: var(--faint);
+}
+.crm-busca input { border: 0 !important; box-shadow: none !important; background: transparent; outline: none; color: var(--text); flex: 1; min-width: 0; font-size: 13px; }
+.crm-busca .ico { width: 15px; height: 15px; }
+.crm-filtro-vend { height: 36px; border-radius: 9px; border: 1px solid var(--line); background: var(--input-bg); color: var(--text); padding: 0 10px; font-size: 13px; }
+.crm-faixa-dia {
+  margin: 0 0 12px; padding: 9px 14px; border-radius: 12px; font-size: 13.5px; font-weight: 500;
+  background: var(--ok-bg); color: var(--ok-ink); display: flex; align-items: center; gap: 8px;
+}
+
+.crm-board { gap: 14px; padding: 2px 2px 14px; }
+.crm-col {
+  flex: 0 0 290px; width: 290px; background: var(--sunk); border: 1px solid var(--line); border-radius: 16px;
+}
+.crm-col-bar { display: none; }
+.crm-col-head { padding: 12px 12px 10px 14px; gap: 8px; }
+.crm-col-head-l { gap: 8px; min-width: 0; }
+.crm-col-dot { width: 9px; height: 9px; border-radius: 3px; flex: none; }
+.crm-col-nome { font-weight: 600; font-size: 13.5px; color: var(--text); letter-spacing: -0.005em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.crm-col-n {
+  height: 22px; padding: 0 8px; border-radius: 999px; display: inline-flex; align-items: center;
+  background: var(--card); border: 1px solid var(--line); color: var(--muted); font-size: 12px; font-weight: 600;
+}
+.crm-col-total { font-size: 12px; color: var(--muted); font-weight: 500; }
+.crm-col-seta { border: 0; background: transparent; cursor: pointer; color: var(--faint); font-size: 15px; padding: 0 3px; line-height: 1; font-weight: 700; }
+.crm-col-seta:hover { color: var(--text); }
+.crm-selN { display: flex; align-items: center; gap: 6px; padding: 0 10px 8px; }
+.crm-selN .input { width: 70px; height: 30px; padding: 4px 8px; font-size: 12.5px; }
+.crm-selN .btn { height: 30px; padding: 0 10px; font-size: 12.5px; }
+.crm-col-body { padding: 2px 8px 10px; gap: 8px; }
+.crm-col-vazio { color: var(--faint); font-size: 13px; text-align: center; padding: 18px 8px; }
+
+.crm-card {
+  background: var(--raised); border: 1px solid var(--line); border-radius: 12px; padding: 12px;
+  box-shadow: var(--shadow-sm); display: flex; flex-direction: column; gap: 8px;
+}
+.crm-card:hover { border-color: var(--line-forte); box-shadow: var(--card-hover-shadow); }
+.crm-card.marcado { border-color: var(--brand); box-shadow: 0 0 0 3px var(--input-focus-ring); }
+.crm-card-top { display: flex; align-items: flex-start; gap: 10px; }
+.crm-card-av {
+  width: 34px; height: 34px; border-radius: 50%; flex: none; display: inline-flex; align-items: center; justify-content: center;
+  background: var(--surface-2); color: var(--muted); font-size: 12px; font-weight: 600;
+}
+.crm-card .crm-check { display: none; width: 34px; height: 34px; justify-content: center; align-items: center; flex: none; padding: 0; }
+.crm-card:hover .crm-check, .crm-card.marcado .crm-check { display: inline-flex; }
+.crm-card:hover .crm-card-av, .crm-card.marcado .crm-card-av { display: none; }
+@media (hover: none) { .crm-card .crm-check { display: inline-flex; width: 22px; } }
+.crm-card-id { flex: 1; min-width: 0; }
+.crm-card-nome { font-weight: 600; font-size: 13.5px; line-height: 1.3; color: var(--text); letter-spacing: -0.005em; }
+.crm-card-tel { font-family: var(--fonte-mono); font-size: 11.5px; color: var(--faint); margin-top: 2px; }
+.crm-wa {
+  width: 30px; height: 30px; flex: none; border-radius: 9px; border: 0 !important;
+  background: var(--brand-soft) !important; color: var(--brand-soft-ink) !important;
+  display: inline-flex; align-items: center; justify-content: center; cursor: pointer;
+}
+.crm-wa:hover { background: var(--brand) !important; color: var(--on-brand) !important; }
+.crm-wa .ico { width: 15px; height: 15px; }
+.crm-card-curso { font-size: 12.5px; color: var(--muted); }
+.crm-card-pay { display: flex; flex-wrap: wrap; gap: 4px; }
+.crm-card-valor, .crm-card-forma, .crm-tag {
+  display: inline-flex; align-items: center; height: 22px; padding: 0 8px; border-radius: 999px;
+  font-size: 11.5px; font-weight: 500; background: var(--surface-2); color: var(--muted); border: 0;
+}
+.crm-card-valor { background: var(--ok-bg); color: var(--ok-ink); font-weight: 600; }
+.crm-card-tags { display: flex; flex-wrap: wrap; gap: 4px; }
+.crm-card-tarefa { display: inline-flex; align-items: center; gap: 5px; font-size: 11.5px; font-weight: 500; padding: 4px 8px; border-radius: 8px; background: var(--info-bg); color: var(--info-ink); }
+.crm-card-tarefa.hoje { background: var(--warn-bg); color: var(--warn-ink); }
+.crm-card-tarefa.venceu { background: var(--late-bg); color: var(--late-ink); }
+.crm-card-foot { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding-top: 9px; border-top: 1px dashed var(--line); }
+.crm-card-idade {
+  display: inline-flex; align-items: center; gap: 4px; height: 22px; padding: 0 8px; border-radius: 999px;
+  font-size: 11.5px; font-weight: 500; background: var(--ok-bg); color: var(--ok-ink);
+}
+.crm-card-idade.novo { background: var(--ok-bg); color: var(--ok-ink); }
+.crm-card-idade.morno { background: var(--warn-bg); color: var(--warn-ink); }
+.crm-card-idade.frio { background: var(--late-bg); color: var(--late-ink); }
+.crm-tag-lig {
+  display: inline-flex; align-items: center; gap: 4px; height: 22px; padding: 0 8px; border-radius: 999px;
+  font-size: 11.5px; font-weight: 500; background: var(--ok-bg); color: var(--ok-ink); border: 0;
+}
+.crm-tag-recorrente { background: var(--info-bg); color: var(--info-ink); }
+.crm-card-vend { margin-left: auto; display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); font-weight: 500; }
+.crm-card-semvend { font-size: 11.5px; color: var(--faint); font-style: normal; }
+.crm-card-notas { display: inline-flex; align-items: center; gap: 3px; font-size: 11.5px; color: var(--faint); }
+.crm-card .ico-inline, .crm-card-foot .ico-inline { width: 12px; height: 12px; }
+.crm-vermais {
+  width: 100%; padding: 9px; margin-top: 2px; border: 1px dashed var(--line-forte); border-radius: 10px;
+  background: transparent; color: var(--muted); font-weight: 500; font-size: 12.5px; cursor: pointer;
+}
+.crm-vermais:hover { color: var(--text); border-color: var(--faint); }
+
+/* detalhe do lead: abre como painel lateral */
+.crm-modal-bg { justify-content: flex-end; align-items: stretch; padding: 0; overflow: hidden; background: var(--scrim); }
+.crm-modal {
+  max-width: 460px; height: 100%; max-height: none; border-radius: 0; border-left: 1px solid var(--line);
+  box-shadow: var(--shadow-lg); background: var(--card); display: flex; flex-direction: column; overflow: hidden;
+}
+.crm-modal-head { padding: 18px 18px 14px 20px; border-bottom: 1px solid var(--line); }
+.crm-modal-nome { font-size: 18px !important; font-weight: 650 !important; letter-spacing: -0.015em; color: var(--text); background: transparent; }
+.crm-modal-body { padding: 16px 20px 24px; overflow-y: auto; flex: 1; }
+.crm-sec-t { font-size: 11.5px; font-weight: 600; color: var(--faint); text-transform: uppercase; letter-spacing: 0.08em; }
+.crm-nota { background: var(--sunk); border: 1px solid var(--line); border-radius: 10px; }
+.crm-x { border-radius: 10px; color: var(--faint); }
+.crm-x:hover { background: var(--surface-2); color: var(--text); }
+
+/* ============================================================
+   CAIXA DE ENTRADA — com a cara do WhatsApp (oficial e não oficial)
+   ============================================================ */
+:root { --of-green: #008069; --of-green-d: #00664f; --of-green-soft: #e3f4ec; }
+:root[data-theme="dark"] { --of-green: #00a884; --of-green-d: #3fd3ab; --of-green-soft: rgba(0, 168, 132, 0.16); }
+
+/* abas Oficial / Não oficial */
+.canal-abas { gap: 4px; margin-bottom: 14px; border-bottom: 1px solid var(--line); }
+.canal-aba { padding: 10px 14px; font-weight: 500; color: var(--muted); border-bottom-width: 2px; }
+.canal-aba.on, .canal-aba.oficial.on { color: var(--text); border-bottom-color: var(--brand); font-weight: 600; }
+
+/* moldura das duas colunas */
+.wa-list, .wa-chat, .of-inbox {
+  background: var(--card); border: 1px solid var(--line); border-radius: 18px; box-shadow: var(--shadow-sm);
+}
+.of-inbox { grid-template-columns: 340px minmax(0, 1fr); }
+
+/* lista de conversas */
+.wa-list-h, .of-inbox-search { border-bottom: 1px solid var(--line); }
+.wa-search input, .of-inbox-search {
+  background: var(--surface-2) !important; border: 1px solid transparent !important; border-radius: 999px !important;
+}
+.of-inbox-search { margin: 12px 14px; padding: 0 14px; height: 40px; }
+.wa-conv, .of-chat-item { padding: 11px 14px; border-bottom: 1px solid var(--line-2); border-radius: 0; background: transparent; }
+.wa-conv:hover, .of-chat-item:hover { background: var(--sunk); }
+.wa-conv.active, .of-chat-item.on { background: var(--surface-2); border-color: var(--line-2); }
+.wa-conv .av, .of-chat-av {
+  width: 46px; height: 46px; border-radius: 50%; background: var(--surface-2) !important; color: var(--muted) !important;
+  font-weight: 600; font-size: 15px;
+}
+.wa-conv .mid .nm, .of-chat-nm { font-weight: 600; font-size: 14.5px; color: var(--text); letter-spacing: -0.005em; }
+.wa-conv .mid .last, .of-chat-last { color: var(--faint); font-size: 13px; }
+.wa-time, .of-chat-hora { font-size: 11.5px; color: var(--faint); }
+.wa-badge, .of-chat-badge {
+  background: #25d366 !important; color: #052e16 !important; font-weight: 700; font-size: 11px;
+  min-width: 20px; height: 20px; border-radius: 999px; box-shadow: none;
+}
+.seller-tag, .of-chat-vend { background: transparent; color: var(--muted); font-weight: 500; font-size: 11.5px; padding: 0; }
+.wait-tag { background: var(--warn-bg); color: var(--warn-ink); border-radius: 999px; font-weight: 500; }
+.of-pill { background: var(--info-bg); color: var(--info-ink); border-radius: 999px; font-weight: 600; }
+.wa-filtros button, .wa-filtros .on { border-radius: 999px; }
+
+/* cabeçalho da conversa */
+.wa-chat-h, .of-conv-head {
+  background: var(--card); border-bottom: 1px solid var(--line); padding: 10px 14px;
+  flex-wrap: wrap; row-gap: 8px;
+}
+.wa-chat-h .av { width: 40px; height: 40px; border-radius: 50%; background: var(--surface-2); color: var(--muted); font-weight: 600; }
+.wa-chat-h .nm, .of-conv-info b { font-weight: 600; font-size: 15px; color: var(--text); }
+.wa-chat-h .num, .of-conv-info span { font-family: var(--fonte-mono); font-size: 12px; color: var(--faint); }
+.btn-pipe, .btn-venda, .btn-suporte, .btn-encerrar, .of-acao-btn {
+  display: inline-flex; align-items: center; gap: 6px; height: 34px; padding: 0 11px; border-radius: 9px;
+  font-size: 13px; font-weight: 500; background: var(--card); color: var(--text); border: 1px solid var(--line); box-shadow: none; cursor: pointer;
+}
+.btn-pipe:hover, .btn-venda:hover, .btn-suporte:hover, .btn-encerrar:hover, .of-acao-btn:hover { background: var(--surface-2); border-color: var(--line-forte); }
+.btn-encerrar, .of-acao-btn.fim { background: var(--brand-soft); color: var(--brand-soft-ink); border-color: transparent; font-weight: 600; }
+.btn-encerrar:hover, .of-acao-btn.fim:hover { background: var(--brand); color: var(--on-brand); }
+.of-acao-btn .ico { width: 15px; height: 15px; }
+.wa-ico-btn { width: 36px; height: 36px; border-radius: 50%; color: var(--muted); background: transparent; border: 0; }
+.wa-ico-btn:hover { background: var(--surface-2); color: var(--text); }
+.of-origem-bar { background: var(--sunk); border-bottom: 1px solid var(--line); }
+.of-origem-tag { background: var(--card); border: 1px solid var(--line); color: var(--muted); border-radius: 999px; }
+
+/* área das mensagens: fundo de chat do WhatsApp */
+.wa-msgs, .of-conv-msgs {
+  background-color: var(--chat-bg) !important;
+  background-image: radial-gradient(var(--chat-dot) 1.1px, transparent 1.3px) !important;
+  background-size: 18px 18px !important;
+  padding: 18px 6% 22px; gap: 4px;
+}
+.wa-bubble, .of-msg-bubble {
+  border-radius: 10px !important; padding: 7px 10px 6px !important; font-size: 14px; line-height: 1.42;
+  box-shadow: 0 1px 0.5px rgba(11, 20, 26, 0.13) !important; border: 0 !important; max-width: min(560px, 78%);
+}
+.wa-bubble.them, .of-msg.them .of-msg-bubble, [data-theme="dark"] .of-msg.them .of-msg-bubble {
+  background: var(--bolha-them) !important; color: var(--text) !important; border-top-left-radius: 3px !important;
+}
+.wa-bubble.me, .of-msg.me .of-msg-bubble, [data-theme="dark"] .of-msg.me .of-msg-bubble {
+  background: var(--bolha-me) !important; color: var(--text) !important; border-top-right-radius: 3px !important;
+}
+.wa-bubble .t, .of-msg-hora { color: var(--bolha-meta) !important; opacity: 1 !important; font-size: 11px; }
+.wa-bubble.me .t, .of-msg.me .of-msg-hora { color: var(--bolha-me-meta) !important; }
+.of-msg-tpl { color: var(--brand-soft-ink); }
+.wa-bubble.me .midia-doc { background: var(--bolha-inset); border-color: transparent; }
+.wa-bubble.me .midia-doc-nome { color: var(--text); }
+.wa-bubble.me .midia-doc-baixar { color: var(--brand); }
+.of-midia-transc { color: var(--muted); border-top-color: var(--bolha-inset); }
+.of-nota { background: var(--warn-bg); color: var(--text); border-radius: 10px; }
+
+/* barra de digitar */
+.wa-compose, .of-conv-input { background: var(--card); border-top: 1px solid var(--line); padding: 10px 12px; }
+.wa-comp-input, .of-conv-ta {
+  background: var(--surface-2) !important; border: 1px solid transparent !important; border-radius: 12px !important; color: var(--text);
+}
+.wa-comp-send, .wa-comp-mic {
+  background: var(--brand) !important; color: var(--on-brand) !important; border-radius: 50% !important; box-shadow: none !important;
+}
+.wa-comp-ico, .of-comp-ico { color: var(--muted); border-radius: 50%; }
+.wa-comp-ico:hover, .of-comp-ico:hover { background: var(--surface-2); color: var(--text); }
+.wa-readonly { background: var(--card); border-top: 1px solid var(--line); color: var(--faint); }
+.of-janela { background: var(--card); color: var(--faint); border-top: 1px solid var(--line); }
+.wa-none, .of-inbox-empty { color: var(--faint); background: transparent; }
+
+/* ============================================================
+   VENDAS — placar do mês (uma peça escura e lisa, sem degradê)
+   ============================================================ */
+.vd-placar {
+  --pl-txt: #ffffff; --pl-mut: #9db3ab; --pl-line: rgba(255, 255, 255, 0.09);
+  background: #0d211c !important; border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 22px; box-shadow: none;
+}
+:root[data-theme="dark"] .vd-placar { background: #111b21 !important; border-color: var(--line); }
+.vd-eyebrow, .vd-kpis span { font-weight: 600; letter-spacing: 0.09em; font-size: 11px; }
+.vd-placar-vl { font-weight: 650; letter-spacing: -0.04em; }
+.vd-selo { font-weight: 600; letter-spacing: 0.04em; text-transform: none; font-size: 12px; padding: 5px 11px; }
+.vd-leds-trilho { height: 12px; border-radius: 999px; background: rgba(255, 255, 255, 0.09); }
+.vd-leds-trilho::after { content: none; }
+.vd-leds-fill { background: #25d366; border-radius: 999px; box-shadow: none; }
+.vd-leds-marca { background: #fff; width: 2px; top: -5px; }
+.vd-leds-marca b { color: var(--pl-mut); font-weight: 500; font-size: 11px; }
+.vd-kpis b { font-weight: 600; letter-spacing: -0.02em; }
+.vd-kpis b.verde { color: #4be08a; }
+.vd-placar .vd-graf-barra { background: #25d366 !important; opacity: 0.55; border-radius: 4px 4px 0 0; }
+.vd-placar .vd-graf-col.hoje .vd-graf-barra { opacity: 1; }
+.vd-placar .vd-graf-col.sel .vd-graf-barra { opacity: 1; box-shadow: 0 0 0 2px #0d211c, 0 0 0 3px #ffffff; }
+.vd-placar .vd-data { background: rgba(255, 255, 255, 0.06); border-color: rgba(255, 255, 255, 0.14); color: #e9edef; }
+.vd-placar .vd-proj b { font-weight: 600; }
+
+/* ============================================================
+   CAIXA DE ENTRADA EM TELA CHEIA (v2.0)
+   A conversa ocupa quase a tela toda: sem título grande em cima,
+   abas + filtros numa linha só e os filtros dentro da lista.
+   ============================================================ */
+.shell:has(.content.cheia) .topbar { display: none; }
+.content.cheia { padding: 14px 16px 14px; }
+.content.cheia > .wa-page { min-height: 0; }
+.content.cheia .canal-abas { display: flex; align-items: center; flex-wrap: wrap; gap: 4px; margin-bottom: 12px; }
+.content.cheia .canal-aba { padding: 10px 14px; }
+.canal-abas .wa-toolbar { margin: 0 0 4px auto; gap: 8px; flex-wrap: wrap; }
+.canal-abas .wa-toolbar .select, .canal-abas .wa-toolbar .btn { height: 36px; padding-top: 0; padding-bottom: 0; font-size: 13px; }
+.canal-abas .wa-toolbar .btn { display: inline-flex; align-items: center; gap: 7px; padding: 0 12px; }
+
+/* duas colunas esticadas até o rodapé */
+.content.cheia .wa-grid, .content.cheia .of-inbox { flex: 1; min-height: 0; height: auto; }
+.wa-grid { background: var(--card); border: 1px solid var(--line); border-radius: 18px; box-shadow: var(--shadow-sm); }
+.wa-grid .wa-list, .wa-grid .wa-chat { border: 0; border-radius: 0; box-shadow: none; }
+.wa-list { width: 340px; background: var(--card); border-right: 1px solid var(--line) !important; }
+@media (min-width: 1600px) { .wa-list { width: 370px; } }
+
+/* filtros dentro da lista, como no WhatsApp */
+.wa-list-h { gap: 10px; padding: 12px 12px 10px; }
+.wa-list-h .wa-filtros { display: flex; flex-wrap: wrap; gap: 6px; padding: 0; margin: 0; background: transparent; border-radius: 0; }
+.wa-list-h .wa-filtro {
+  height: 30px; padding: 0 12px; border-radius: 999px; border: 1px solid var(--line); background: var(--card);
+  color: var(--muted); font-size: 12.5px; font-weight: 500; box-shadow: none;
+}
+.wa-list-h .wa-filtro:hover { border-color: var(--line-forte); color: var(--text); }
+.wa-list-h .wa-filtro.on { background: var(--brand-soft); border-color: transparent; color: var(--brand-soft-ink); box-shadow: none; }
+.wa-list-h .wa-filtro-cnt { background: #25d366; color: #052e16; }
+
+/* celular: lista e conversa continuam usáveis */
+@media (max-width: 860px) {
+  .content.cheia { padding: 10px; }
+  .canal-abas .wa-toolbar { margin-left: 0; width: 100%; }
+  .content.cheia { overflow-y: auto; }
+  .wa-grid { flex-direction: column; flex: none; }
+  .wa-list { width: 100%; max-height: 45vh; border-right: 0 !important; border-bottom: 1px solid var(--line); }
+  .wa-chat { min-height: 70vh; }
+}
+/* nome do contato nunca fica espremido pelos botões: os botões descem pra linha de baixo */
+.wa-chat-h > .av + div, .of-conv-head .of-conv-info { min-width: 170px !important; }
+.wa-chat-h .nm, .wa-chat-h .num, .of-conv-info b, .of-conv-info span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

@@ -19,7 +19,7 @@ app.use(express.urlencoded({ extended: false, limit: "10mb" })); // Twilio manda
 // Versão do sistema — pra CONFIRMAR qual código está no ar (abra /api/versao no navegador).
 // Se aqui aparecer a versão nova mas o bug continuar, o problema é outro; se aparecer
 // uma versão antiga (ou 404), o deploy não subiu de verdade.
-const VERSAO_SISTEMA = "v296-conta-ligacoes";
+const VERSAO_SISTEMA = "v2.0-visual-novo";
 
 /* ============================================================
    IDENTIFICAÇÃO DA UNIDADE (mesmo código, deploys separados)
@@ -2442,7 +2442,8 @@ aguardarVolume().then(() => {
       if (!db || !db.users) return; // não faz backup de banco vazio/sem carregar
       const dir = path.dirname(DB_PATH);
       const nome = "crm.backup." + new Date().toISOString().replace(/[:.]/g, "-") + ".json";
-      fs.writeFileSync(path.join(dir, nome), JSON.stringify(db, null, 2));
+      // v2.0: grava compacto (sem espaços) — mesmos dados, arquivo ~40% menor e menos CPU a cada 10 min
+      fs.writeFileSync(path.join(dir, nome), JSON.stringify(db));
       // limpa backups antigos (mantém os 12 mais recentes)
       const backups = fs.readdirSync(dir).filter((f) => f.startsWith("crm.backup.")).sort();
       while (backups.length > 12) {

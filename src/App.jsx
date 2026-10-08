@@ -3,93 +3,6 @@ import { createPortal } from "react-dom";
 import { api, getToken, setToken } from "./api.js";
 import { LOGO_FULL, LOGO_LIGHT } from "./logos.js";
 
-const AGX_CSS = `
-.agx-overlay{position:fixed;inset:0;background:rgba(20,20,30,.55);display:flex;align-items:center;justify-content:center;z-index:9999;padding:24px}
-.agx-modal{width:min(1180px,96vw);height:min(860px,94vh);background:var(--card,#fff);border-radius:18px;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 24px 80px rgba(0,0,0,.35)}
-.agx-head{display:flex;align-items:center;justify-content:space-between;padding:16px 20px;border-bottom:1px solid var(--border,#ececf0)}
-.agx-head-l{display:flex;align-items:center;gap:12px}
-.agx-avatar{width:44px;height:44px;border-radius:12px;background:linear-gradient(135deg,#7c5cf0,#6347e8);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:15px}
-.agx-title{font-size:18px;font-weight:700;color:var(--text,#1a1a1a)}
-.agx-sub{font-size:12.5px;color:var(--muted,#8a8a92);margin-top:1px}
-.agx-head-r{display:flex;align-items:center;gap:10px}
-.agx-btn-ghost{background:var(--bg2,#f4f4f6);border:1px solid var(--border,#e6e6ea);color:var(--text,#333);padding:9px 14px;border-radius:10px;font-size:13.5px;font-weight:600;cursor:pointer}
-.agx-btn-ghost:hover{background:var(--bg3,#ececef)}
-.agx-btn-primary{background:#6347e8;border:none;color:#fff;padding:9px 16px;border-radius:10px;font-size:13.5px;font-weight:600;cursor:pointer}
-.agx-btn-primary:hover{background:#5638d8}
-.agx-btn-primary:disabled,.agx-btn-ghost:disabled{opacity:.6;cursor:default}
-.agx-x{width:36px;height:36px;border-radius:9px;border:1px solid var(--border,#e6e6ea);background:var(--card,#fff);font-size:18px;color:var(--muted,#888);cursor:pointer;display:flex;align-items:center;justify-content:center}
-.agx-x:hover{background:var(--bg2,#f4f4f6)}
-.agx-progress{display:flex;align-items:center;gap:12px;padding:11px 20px;border-bottom:1px solid var(--border,#ececf0)}
-.agx-progress-lb{font-size:13px;color:var(--muted,#8a8a92);min-width:80px}
-.agx-progress-bar{flex:1;height:7px;background:var(--bg3,#ededf0);border-radius:99px;overflow:hidden}
-.agx-progress-fill{height:100%;background:#6347e8;border-radius:99px;transition:width .3s}
-.agx-progress-pct{font-size:13px;font-weight:700;color:#6347e8;min-width:38px;text-align:right}
-.agx-body{flex:1;display:grid;grid-template-columns:212px 1fr 300px;min-height:0}
-.agx-side{border-right:1px solid var(--border,#ececf0);padding:14px 12px;overflow-y:auto;background:var(--bg1,#fafafb)}
-.agx-side-grupo{margin-bottom:14px}
-.agx-side-g{font-size:11px;font-weight:700;letter-spacing:.04em;color:var(--muted,#a0a0a8);padding:6px 10px 4px}
-.agx-side-item{display:flex;align-items:center;gap:9px;width:100%;padding:9px 10px;border:none;background:transparent;border-radius:10px;cursor:pointer;color:var(--text,#3a3a3a);font-size:14px;text-align:left;margin-bottom:2px}
-.agx-side-item:hover{background:var(--bg2,#f0f0f3)}
-.agx-side-item.on{background:#fff;color:#6347e8;font-weight:600;box-shadow:0 1px 3px rgba(0,0,0,.06)}
-.agx-side-ico{width:17px;height:17px;flex-shrink:0}
-.agx-side-lb{flex:1}
-.agx-dot{width:20px;height:20px;border-radius:50%;background:var(--bg3,#e8e8ec);color:var(--muted,#a8a8b0);font-size:11px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
-.agx-dot.ok{background:#d9f5e4;color:#1a9d54}
-.agx-main{padding:22px 26px;overflow-y:auto;min-width:0}
-.agx-preview{border-left:1px solid var(--border,#ececf0);display:flex;flex-direction:column;background:var(--bg1,#fafafb);min-width:0}
-.agx-preview-head{display:flex;align-items:center;justify-content:space-between;padding:14px 16px;border-bottom:1px solid var(--border,#ececf0);font-size:14px;font-weight:600;color:var(--text,#333)}
-.agx-reset{background:var(--bg2,#f0f0f3);border:1px solid var(--border,#e6e6ea);color:var(--muted,#888);font-size:12px;padding:5px 10px;border-radius:8px;cursor:default}
-.agx-preview-body{flex:1;padding:18px 16px;overflow-y:auto}
-.agx-preview-empty{font-size:13px;color:var(--muted,#9a9aa2);text-align:center;margin-top:30px;line-height:1.6}
-.agx-preview-input{display:flex;gap:8px;padding:12px;border-top:1px solid var(--border,#ececf0)}
-.agx-preview-input .agx-input{flex:1;margin:0}
-.agx-send{width:40px;background:#6347e8;border:none;border-radius:10px;color:#fff;cursor:default;opacity:.6}
-.agx-h{font-size:16px;font-weight:700;color:var(--text,#1a1a1a);margin:0 0 4px}
-.agx-psub{font-size:13px;color:var(--muted,#8a8a92);margin:0 0 14px}
-.agx-field{margin-bottom:14px}
-.agx-field label{display:block;font-size:13px;font-weight:600;color:var(--text2,#555);margin-bottom:5px}
-.agx-input{width:100%;border:1px solid var(--border,#e2e2e8);background:var(--bg1,#fafafb);border-radius:10px;padding:10px 12px;font-size:14px;color:var(--text,#222);font-family:inherit;box-sizing:border-box;resize:vertical}
-.agx-input:focus{outline:none;border-color:#6347e8;background:var(--card,#fff)}
-.agx-grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
-.agx-sep{height:1px;background:var(--border,#ececf0);margin:18px 0}
-.agx-up{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;border:1.5px dashed var(--border2,#d2d2da);border-radius:14px;padding:26px;cursor:pointer;background:var(--bg1,#fafafb);transition:.15s}
-.agx-up:hover{border-color:var(--brand);background:var(--surface-2)}
-.agx-up-ic{width:30px;height:30px;color:var(--muted,#7a7a82);margin-bottom:4px}
-.agx-up-t{font-size:15px;font-weight:700;color:var(--text,#333)}
-.agx-up-s{font-size:12.5px;color:var(--muted,#9a9aa2)}
-.agx-ou{text-align:center;font-size:11.5px;font-weight:700;letter-spacing:.05em;color:var(--muted,#a8a8b0);margin:20px 0;position:relative}
-.agx-ou::before,.agx-ou::after{content:"";position:absolute;top:50%;width:30%;height:1px;background:var(--border,#ececf0)}
-.agx-ou::before{left:0}.agx-ou::after{right:0}
-.agx-card{border:1px solid var(--border,#e6e6ea);border-radius:14px;padding:16px;margin-bottom:14px;background:var(--bg1,#fbfbfc)}
-.agx-card-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
-.agx-card-tag{font-size:11px;font-weight:700;letter-spacing:.04em;color:#6347e8;background:#efeaff;padding:4px 10px;border-radius:7px}
-.agx-card-x{width:28px;height:28px;border-radius:8px;border:1px solid var(--border,#e6e6ea);background:var(--card,#fff);font-size:16px;color:var(--muted,#999);cursor:pointer}
-.agx-card-x:hover{background:#fdecec;color:#d04545;border-color:#f3caca}
-.agx-add{width:100%;border:1.5px dashed var(--border2,#cdcdd6);background:transparent;color:#6347e8;font-size:14px;font-weight:600;padding:13px;border-radius:12px;cursor:pointer}
-.agx-add:hover{background:var(--surface-2);border-color:var(--brand)}
-.agx-ofertas-tit{font-size:11.5px;font-weight:700;letter-spacing:.04em;color:#1a9d54;border-left:3px solid #1a9d54;padding-left:8px;margin:16px 0 10px}
-.agx-oferta{border:1px solid var(--border,#eaeaee);border-radius:10px;padding:12px;margin-bottom:10px;background:var(--card,#fff)}
-.agx-add-oferta{width:100%;border:1.5px dashed #aee3c4;background:#f3fbf6;color:#1a9d54;font-size:13.5px;font-weight:600;padding:11px;border-radius:10px;cursor:pointer}
-.agx-add-oferta:hover{background:#e9f7ef}
-.agx-rem-link{background:none;border:none;color:#d04545;font-size:12px;cursor:pointer;padding:4px 0;margin-top:2px}
-.agx-kb-list{margin-top:12px;display:flex;flex-direction:column;gap:8px}
-.agx-kb-item{display:flex;align-items:center;gap:10px;border:1px solid var(--border,#e6e6ea);border-radius:10px;padding:10px 12px;background:var(--card,#fff)}
-.agx-kb-ic{width:18px;height:18px;color:#6347e8;flex-shrink:0}
-.agx-kb-info{flex:1;min-width:0}
-.agx-kb-info b{display:block;font-size:13.5px;color:var(--text,#333);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.agx-kb-info span{font-size:12px;color:var(--muted,#9a9aa2)}
-.agx-kb-x{width:26px;height:26px;border-radius:7px;border:1px solid var(--border,#e6e6ea);background:var(--card,#fff);font-size:15px;color:var(--muted,#999);cursor:pointer}
-.agx-kb-x:hover{background:#fdecec;color:#d04545}
-@media (prefers-color-scheme:dark){
-.agx-modal{--card:#1c1c22;--bg1:#222228;--bg2:#26262e;--bg3:#2e2e36;--border:#33333d;--border2:#3d3d47;--text:#e8e8ec;--text2:#c2c2ca;--muted:#8a8a94}
-.agx-side-item.on{background:#2a2a33;color:#a899f5}
-.agx-card-tag{background:#2e2747;color:#a899f5}
-.agx-up:hover,.agx-add:hover{background:#26213d}
-}
-`;
-
-
-/* Portal: renderiza no <body> pra modais cobrirem a tela toda (sem ficar presos a containers com overflow) */
 function Portal({ children }) {
   return createPortal(children, document.body);
 }
@@ -147,25 +60,14 @@ const I = {
   alert: (p) => (<svg {...p} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3l9 16H3z"/><path d="M12 9v5M12 17.5v.5"/></svg>),
   gauge: (p) => (<svg {...p} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M4 20a8 8 0 1 1 16 0"/><path d="M12 20l4-6"/></svg>),
   user: (p) => (<svg {...p} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="8" r="3.5"/><path d="M5 20a7 7 0 0 1 14 0"/></svg>),
+  brilho: (p) => (<svg {...p} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3c.5 4 2 5.5 6 6-4 .5-5.5 2-6 6-.5-4-2-5.5-6-6 4-.5 5.5-2 6-6z"/><path d="M19 15c.2 1.6.9 2.3 2.5 2.5-1.6.2-2.3.9-2.5 2.5-.2-1.6-.9-2.3-2.5-2.5 1.6-.2 2.3-.9 2.5-2.5z"/></svg>),
+  celular: (p) => (<svg {...p} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="5" y="2" width="14" height="20" rx="2.5"/><path d="M11 18h2"/></svg>),
+  repetir: (p) => (<svg {...p} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M17 2l4 4-4 4"/><path d="M3 11V9a3 3 0 0 1 3-3h15"/><path d="M7 22l-4-4 4-4"/><path d="M21 13v2a3 3 0 0 1-3 3H3"/></svg>),
+  fone: (p) => (<svg {...p} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1.9.4 1.8.7 2.7a2 2 0 0 1-.5 2.1L8 9.8a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.4c.9.3 1.8.6 2.7.7a2 2 0 0 1 1.7 2z"/></svg>),
+  nota: (p) => (<svg {...p} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>),
 };
 
 /* ============================ HELPERS ============================ */
-const ETAPAS = [
-  { id: "lead", nome: "Lead Novo", cor: "var(--lead)" },
-  { id: "contato", nome: "Em Contato", cor: "var(--contato)" },
-  { id: "sem_resposta", nome: "Sem Resposta", cor: "#aab2c7" },
-  { id: "negociando", nome: "Negociando", cor: "var(--negociando)" },
-  { id: "fechou", nome: "Fechou", cor: "var(--fechou)" },
-  { id: "perdeu", nome: "Perdeu", cor: "var(--perdeu)" },
-];
-const corEtapa = (id) => (ETAPAS.find((e) => e.id === id) || ETAPAS[0]).cor;
-// Link pra abrir a conversa no WhatsApp (garante DDI 55 do Brasil se faltar)
-function linkWhats(tel) {
-  const d = String(tel || "").replace(/\D/g, "");
-  if (!d) return "#";
-  return "https://wa.me/" + (d.startsWith("55") ? d : "55" + d);
-}
-// Formata a tarefa (follow-up) do lead e diz se venceu / é hoje / é futura
 function infoTarefa(t) {
   if (!t || t.feito || !t.quando) return null;
   const d = new Date(t.quando);
@@ -182,9 +84,6 @@ function tsParaInput(ts) {
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
 }
 
-function fmtMoney(n) {
-  return "R$ " + (Number(n) || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-}
 function iniciais(nome) {
   const p = (nome || "?").trim().split(/\s+/);
   return ((p[0]?.[0] || "") + (p[1]?.[0] || "")).toUpperCase() || "?";
@@ -269,9 +168,6 @@ function LembreteFoto({ user, setUser, showToast }) {
     </div>
   );
 }
-const limpaInst = (s) => (s || "").trim();
-
-// hora estilo WhatsApp: hoje -> HH:MM, ontem -> "ontem", senão -> DD/MM
 function horaCurta(ts) {
   if (!ts) return "";
   const d = new Date(ts), now = new Date();
@@ -297,8 +193,6 @@ function dentroPeriodo(criadoEm, periodo, cde, cate) {
   return true;
 }
 const PERIODOS = [["tudo", "Tudo"], ["hoje", "Hoje"], ["semana", "Essa semana"], ["mes", "Esse mês"], ["custom", "Personalizado"]];
-function dataInputHoje() { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; }
-// tempo de espera curto: 45s, 12min, 2h10, 3d
 function fmtEspera(seg) {
   seg = Math.max(0, Math.round(seg || 0));
   if (seg < 60) return seg + "s";
@@ -340,6 +234,12 @@ export default function App() {
     });
   }
 
+  // qual unidade é este sistema (Toledo, Jesuítas...) — vem da variável UNIDADE do servidor
+  const [unidade, setUnidade] = useState("");
+  useEffect(() => {
+    fetch("/api/versao").then((r) => r.json()).then((j) => setUnidade(String(j.unidade || ""))).catch(() => {});
+  }, []);
+
   useEffect(() => {
     if (!getToken()) { setBooting(false); return; }
     api.me().then(setUser).catch(() => setToken("")).finally(() => setBooting(false));
@@ -349,7 +249,7 @@ export default function App() {
     carregarModulos(); carregarAcessoVend();
     // Reconsulta ao vivo: quando o dono libera/tira um acesso, aparece pra todo mundo
     // em poucos segundos, SEM precisar deslogar. Também atualiza ao voltar pra aba.
-    const t = setInterval(() => { carregarModulos(); carregarAcessoVend(); }, 15000);
+    const t = setInterval(() => { if (document.hidden) return; carregarModulos(); carregarAcessoVend(); }, 15000);
     const aoVoltar = () => { if (!document.hidden) { carregarModulos(); carregarAcessoVend(); } };
     document.addEventListener("visibilitychange", aoVoltar);
     return () => { clearInterval(t); document.removeEventListener("visibilitychange", aoVoltar); };
@@ -361,17 +261,17 @@ export default function App() {
     vistaInicial.current = true;
     // valida a aba restaurada: se não for permitida pro perfil, cai numa aba segura
     const porRole = {
-      gerente: ["whatsapp", "disparo", "numeros", "crm", "solicitacoes", "config"],
+      gerente: ["whatsapp", "disparo", "numeros", "crm", "vendas", "desempenho", "analiseia", "solicitacoes", "config"],
       suporte: ["solicitacoes", "config"],
     };
-    const permitidas = porRole[user.role] || ["whatsapp", "disparo", "minhasSolicitacoes", "config", "crm"];
+    const permitidas = porRole[user.role] || ["whatsapp", "disparo", "minhasSolicitacoes", "config", "crm", "vendas", "desempenho", "analiseia"];
     if (!permitidas.includes(view)) setView(user.role === "suporte" ? "solicitacoes" : "whatsapp");
   }, [user]);
 
   useEffect(() => {
     if (!user || user.role === "gerente" || user.role === "suporte") return;
     carregarMinhasSol();
-    const t = setInterval(carregarMinhasSol, 8000);
+    const t = setInterval(() => { if (!document.hidden) carregarMinhasSol(); }, 8000);
     return () => clearInterval(t);
     // eslint-disable-next-line
   }, [user]);
@@ -413,43 +313,70 @@ export default function App() {
     equipe: { t: "Equipe & Acessos", s: "Gerencie os atendentes e seus acessos" },
     config: { t: "Configurações", s: "Seus dados de acesso" },
   };
-  const hora = new Date().getHours();
-  const saud = hora < 12 ? "Bom dia" : hora < 18 ? "Boa tarde" : "Boa noite";
+
+  // menu em grupos (só aparece o grupo que tiver pelo menos uma aba liberada pro perfil)
+  const grupos = [
+    { t: "Comercial", itens: [
+      (isGer || vendPode("crm")) && mod("crm") && { k: "crm", ic: I.pipe, label: "Pipeline" },
+      (isGer || vendPode("vendas")) && mod("vendas") && { k: "vendas", ic: I.trend, label: "Vendas" },
+      (isGer || (isVend && !(acessoVend && acessoVend.desempenhoOculto))) && mod("desempenho") && { k: "desempenho", ic: I.medal, label: "Desempenho" },
+    ] },
+    { t: "Atendimento", itens: [
+      !isSuporte && mod("caixa") && { k: "whatsapp", ic: I.wa, label: "Caixa de entrada" },
+      (isGer || isVend) && mod("disparo") && { k: "disparo", ic: I.send, label: "Disparo" },
+      (isGer || isVend) && mod("caixa") && { k: "analiseia", ic: I.brilho, label: "Análise IA" },
+    ] },
+    { t: "Gestão", itens: [
+      isGer && mod("numeros") && { k: "numeros", ic: I.celular, label: "Números" },
+      !isGer && !isSuporte && { k: "minhasSolicitacoes", ic: I.suporte, label: "Minhas solicitações", badge: badgeSol },
+      (isGer || isSuporte) && mod("solicitacoes") && { k: "solicitacoes", ic: I.suporte, label: "Solicitações" },
+      { k: "config", ic: I.cog, label: "Configurações" },
+    ] },
+  ].map((g) => ({ ...g, itens: g.itens.filter(Boolean) })).filter((g) => g.itens.length);
+  const grupoAtual = (grupos.find((g) => g.itens.some((it) => it.k === view)) || {}).t || "";
+  const tit = titulos[view] || { t: "", s: "" };
+  const nomeUnidade = unidade && unidade !== "nao-configurada"
+    ? ({ toledo: "Toledo", jesuitas: "Jesuítas" }[unidade] || unidade.charAt(0).toUpperCase() + unidade.slice(1))
+    : "";
 
   return (
     <div className="shell">
       <RecadoDoDia />
       <aside className="sidebar">
         <div className="brand">
-          <img src={theme === "dark" ? LOGO_LIGHT : LOGO_FULL} alt="Instructiva" />
-          <div className="tag">Sistema Comercial</div>
+          <img src={LOGO_LIGHT} alt="Instructiva" />
+          {nomeUnidade && (
+            <div className="unidade-chip">
+              <span className="unidade-dot" />
+              <div>
+                <div className="unidade-nm">Unidade {nomeUnidade}</div>
+                <div className="unidade-s">Sistema comercial</div>
+              </div>
+            </div>
+          )}
         </div>
-        <nav className="nav">
-          {(isGer || vendPode("crm")) && mod("crm") && <NavBtn ic={I.pipe} label="Pipeline" active={view === "crm"} onClick={() => setView("crm")} />}
-          {(isGer || vendPode("vendas")) && mod("vendas") && <NavBtn ic={I.gauge} label="Vendas" active={view === "vendas"} onClick={() => setView("vendas")} />}
-          {(isGer || (isVend && !(acessoVend && acessoVend.desempenhoOculto))) && mod("desempenho") && <NavBtn ic={I.spark} label="Desempenho" active={view === "desempenho"} onClick={() => setView("desempenho")} />}
-          {(isGer || isVend) && mod("caixa") && <NavBtn ic={I.spark} label="Análise IA" active={view === "analiseia"} onClick={() => setView("analiseia")} />}
-          {!isSuporte && mod("caixa") && <NavBtn ic={I.wa} label="Caixa de entrada" active={view === "whatsapp"} onClick={() => setView("whatsapp")} />}
-          {(isGer || isVend) && mod("disparo") && <NavBtn ic={I.send} label="Disparo" active={view === "disparo"} onClick={() => setView("disparo")} />}
-          {isGer && mod("numeros") && <NavBtn ic={I.wa} label="Números" active={view === "numeros"} onClick={() => setView("numeros")} />}
-          {!isGer && !isSuporte && <NavBtn ic={I.suporte} label="Minhas solicitações" active={view === "minhasSolicitacoes"} badge={badgeSol} onClick={() => setView("minhasSolicitacoes")} />}
-          {(isGer || isSuporte) && mod("solicitacoes") && <NavBtn ic={I.suporte} label="Solicitações" active={view === "solicitacoes"} onClick={() => setView("solicitacoes")} />}
-          <NavBtn ic={I.cog} label="Configurações" active={view === "config"} onClick={() => setView("config")} />
+        <nav className="nav" aria-label="Menu principal">
+          {grupos.map((g) => (
+            <div key={g.t} className="nav-grupo">
+              <div className="nav-grupo-t">{g.t}</div>
+              {g.itens.map((it) => <NavBtn key={it.k} ic={it.ic} label={it.label} badge={it.badge} active={view === it.k} onClick={() => setView(it.k)} />)}
+            </div>
+          ))}
         </nav>
         <div className="side-foot">
+          <div className="tema-seg" role="group" aria-label="Tema">
+            <button type="button" className={theme !== "dark" ? "on" : ""} onClick={() => theme === "dark" && toggleTheme()}><I.sun className="ico" />Claro</button>
+            <button type="button" className={theme === "dark" ? "on" : ""} onClick={() => theme !== "dark" && toggleTheme()}><I.moon className="ico" />Escuro</button>
+          </div>
           <div className="side-user">
-            <Avatar nome={user.nome} foto={user.foto} size={40} />
-            <div>
+            <Avatar nome={user.nome} foto={user.foto} size={36} />
+            <div style={{ minWidth: 0 }}>
               <div className="nm">{user.nome}</div>
               <div className="rl">{isGer ? "Gerente comercial" : isSuporte ? "Suporte" : "Vendedor"}</div>
             </div>
+            <button className="side-sair" onClick={logout} title="Sair" aria-label="Sair"><I.out className="ico" /></button>
           </div>
-          <button className="theme-toggle" onClick={toggleTheme}>
-            {theme === "dark" ? <I.sun className="ico" /> : <I.moon className="ico" />}
-            <span>{theme === "dark" ? "Modo claro" : "Modo escuro"}</span>
-          </button>
-          <button className="logout" onClick={logout}>Sair</button>
-          <div style={{ textAlign: "center", fontSize: 10, color: "var(--muted)", marginTop: 8, opacity: 0.7 }}>v296 · 02/10 10h00</div>
+          <div className="side-versao">v2.0</div>
         </div>
       </aside>
 
@@ -468,12 +395,13 @@ export default function App() {
         )}
         <div className="topbar">
           <div>
-            <div className="greet">{view === "painel" ? `${saud}, ${user.nome.split(" ")[0]} 👋` : titulos[view].t}</div>
-            <div className="sub">{titulos[view].s}</div>
+            {grupoAtual && <div className="crumb">{grupoAtual}</div>}
+            <div className="greet">{tit.t}</div>
+            <div className="sub">{tit.s}</div>
           </div>
         </div>
         <div className={"content" + (view === "whatsapp" ? " cheia" : "")}>
-          <LembreteFoto user={user} setUser={setUser} showToast={showToast} />
+          {view !== "whatsapp" && <LembreteFoto user={user} setUser={setUser} showToast={showToast} />}
           {view === "whatsapp" && !isSuporte && mod("caixa") && <WhatsApp user={user} showToast={showToast} target={waTarget} onTargetUsed={() => setWaTarget(null)} recarregarSol={carregarMinhasSol} />}
           {view === "disparo" && (isGer || isVend) && mod("disparo") && <OficialDisparo isGer={isGer} showToast={showToast} preset={disparoPreset} onPresetUsado={() => setDisparoPreset(null)} />}
           {view === "numeros" && isGer && mod("numeros") && <OficialNumeros showToast={showToast} />}
@@ -588,472 +516,6 @@ function Onboarding({ user, onDone }) {
 }
 
 /* ============================ PIPELINE (KANBAN) ============================ */
-function Pipeline({ user, showToast, irParaWhatsApp }) {
-  const isGer = user.role === "gerente";
-  const ehLider = user.role === "vendedor" && Array.isArray(user.lideradosIds) && user.lideradosIds.length > 0;
-  const podeFiltrar = isGer || ehLider; // líder também filtra por vendedor (só os que ele lidera)
-  const [cards, setCards] = useState([]);
-  const [users, setUsers] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [filtro, setFiltro] = useState("todos");
-  const [overCol, setOverCol] = useState(null);
-  const [dragId, setDragId] = useState(null);
-  const [sel, setSel] = useState(null); // card aberto no drawer
-  const [novo, setNovo] = useState(false); // modal novo lead
-  const [importar, setImportar] = useState(false); // modal importar lista
-  const [fechar, setFechar] = useState(null); // { card } -> modal valor final
-  const [modoSel, setModoSel] = useState(false); // seleção em massa
-  const [selSet, setSelSet] = useState(() => new Set());
-  const [expandidas, setExpandidas] = useState(() => new Set()); // colunas mostrando todos os cards
-  const LIMITE_COL = 40; // quantos cards desenhar por coluna (o resto entra no "ver mais") — deixa o Pipeline leve
-
-  const usersMap = useMemo(() => {
-    const m = {};
-    users.forEach((u) => (m[u.id] = u));
-    m[user.id] = m[user.id] || user;
-    return m;
-  }, [users, user]);
-
-  async function carregar() {
-    setLoading(true);
-    try {
-      const cs = await api.listCards(podeFiltrar ? filtro : null);
-      setCards(cs);
-      if (users.length === 0) setUsers(await api.listVendedores());
-    } catch (e) {
-      showToast("✗ " + e.message);
-    } finally { setLoading(false); }
-  }
-  useEffect(() => { carregar(); /* eslint-disable-next-line */ }, [filtro]);
-
-  function nomeResp(id) {
-    return usersMap[id]?.nome || "—";
-  }
-
-  async function moverPara(card, etapa) {
-    if (card.etapa === etapa) return;
-    if (etapa === "fechou") { setFechar({ card }); return; }
-    try {
-      await api.updateCard(card.id, { etapa });
-      setCards((cs) => cs.map((c) => (c.id === card.id ? { ...c, etapa } : c)));
-    } catch (e) { showToast("✗ " + e.message); }
-  }
-
-  // ---- drag handlers ----
-  function onDrop(e, etapa) {
-    e.preventDefault();
-    setOverCol(null);
-    const id = e.dataTransfer.getData("id") || dragId;
-    const card = cards.find((c) => c.id === id);
-    if (card) moverPara(card, etapa);
-    setDragId(null);
-  }
-
-  // ---- seleção em massa ----
-  const toggleSel = (id) => setSelSet((s) => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
-  const limparSel = () => setSelSet(new Set());
-  const sairSel = () => { setModoSel(false); setSelSet(new Set()); };
-  const allSel = cards.length > 0 && selSet.size === cards.length;
-  const toggleTodos = () => setSelSet(allSel ? new Set() : new Set(cards.map((c) => c.id)));
-  function toggleColuna(etapaId) {
-    const ids = cards.filter((c) => c.etapa === etapaId).map((c) => c.id);
-    setSelSet((s) => {
-      const n = new Set(s);
-      const todos = ids.length > 0 && ids.every((id) => n.has(id));
-      ids.forEach((id) => (todos ? n.delete(id) : n.add(id)));
-      return n;
-    });
-  }
-  async function bulk(acao, extra) {
-    if (selSet.size === 0) return;
-    if (acao === "excluir" && !confirm(`Excluir ${selSet.size} lead(s)? Eles serão arquivados.`)) return;
-    try {
-      const r = await api.bulkCards({ ids: [...selSet], acao, ...(extra || {}) });
-      showToast(`✓ ${r.afetados} lead(s) atualizado(s)`);
-      setSelSet(new Set());
-      carregar();
-    } catch (e) { showToast("✗ " + e.message); }
-  }
-
-  const stats = useMemo(() => {
-    const ativos = cards.filter((c) => !["fechou", "perdeu"].includes(c.etapa));
-    const fechados = cards.filter((c) => c.etapa === "fechou");
-    const inicioMes = new Date(); inicioMes.setDate(1); inicioMes.setHours(0, 0, 0, 0);
-    const fechadosMes = fechados.filter((c) => (c.atualizadoEm || 0) >= inicioMes.getTime());
-    const totalMes = fechadosMes.reduce((s, c) => s + (c.valorFinal || 0), 0);
-    const totalNeg = cards.filter((c) => c.etapa === "negociando").reduce((s, c) => s + (c.valorEstimado || 0), 0);
-    return { abertos: ativos.length, fechadosMes: fechadosMes.length, totalMes, totalNeg };
-  }, [cards]);
-
-  if (loading) return <div className="spin" />;
-
-  return (
-    <>
-      {/* AÇÕES */}
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, marginBottom: 18, flexWrap: "wrap" }}>
-        {podeFiltrar ? (
-          <select className="select" style={{ width: 230 }} value={filtro} onChange={(e) => setFiltro(e.target.value)}>
-            <option value="todos">Todos os vendedores</option>
-            {users.map((u) => (
-              <option key={u.id} value={u.id}>{u.nome}</option>
-            ))}
-          </select>
-        ) : <div />}
-        <div style={{ display: "flex", gap: 8 }}>
-          <button className={"btn" + (modoSel ? " btn-primary" : "")} onClick={() => (modoSel ? sairSel() : setModoSel(true))}>
-            <I.check style={{ width: 16, height: 16 }} /> {modoSel ? "Cancelar seleção" : "Selecionar"}
-          </button>
-          <button className="btn" onClick={() => setImportar(true)}>
-            <I.out style={{ width: 16, height: 16, transform: "rotate(180deg)" }} /> Importar lista
-          </button>
-          <button className="btn btn-primary" onClick={() => setNovo(true)}>
-            <I.plus style={{ width: 16, height: 16 }} /> Novo lead
-          </button>
-        </div>
-      </div>
-
-      {modoSel && (
-        <div className="bulk-bar">
-          <label className="bulk-all">
-            <input type="checkbox" checked={allSel} onChange={toggleTodos} /> Todos ({cards.length})
-          </label>
-          <span className="bulk-count">{selSet.size} selecionado{selSet.size === 1 ? "" : "s"}</span>
-          <div className="bulk-actions">
-            <select className="select bulk-sel" value="" disabled={selSet.size === 0} onChange={(e) => { if (e.target.value) bulk("mover", { etapa: e.target.value }); }}>
-              <option value="">Mover para…</option>
-              {ETAPAS.map((et) => <option key={et.id} value={et.id}>{et.nome}</option>)}
-            </select>
-            <select className="select bulk-sel" value="" disabled={selSet.size === 0} onChange={(e) => { if (e.target.value) bulk("atribuir", { responsavelId: e.target.value }); }}>
-              <option value="">Atribuir a…</option>
-              {users.map((u) => <option key={u.id} value={u.id}>{u.nome}</option>)}
-            </select>
-            <button className="btn btn-danger btn-sm" disabled={selSet.size === 0} onClick={() => bulk("excluir")}><I.trash style={{ width: 14, height: 14 }} /> Excluir</button>
-          </div>
-        </div>
-      )}
-
-      {/* STATS */}
-      <div className="stats">
-        <div className="stat">
-          <div className="lab"><span className="dot" style={{ background: "var(--contato)" }} /> Em aberto</div>
-          <div className="val">{stats.abertos}</div>
-        </div>
-        <div className="stat">
-          <div className="lab"><span className="dot" style={{ background: "var(--negociando)" }} /> Em negociação</div>
-          <div className="val money">{fmtMoney(stats.totalNeg)}</div>
-        </div>
-        <div className="stat">
-          <div className="lab"><span className="dot" style={{ background: "var(--fechou)" }} /> Fechados no mês</div>
-          <div className="val">{stats.fechadosMes}</div>
-        </div>
-        <div className="stat">
-          <div className="lab"><span className="dot" style={{ background: "var(--fechou)" }} /> Vendido no mês</div>
-          <div className="val money">{fmtMoney(stats.totalMes)}</div>
-        </div>
-      </div>
-
-      {/* KANBAN */}
-      <div className="board">
-        {ETAPAS.map((et) => {
-          const listaFull = cards.filter((c) => c.etapa === et.id);
-          // desenha só os mais recentes; o resto fica no "ver mais" (deixa a tela leve)
-          const expandida = expandidas.has(et.id);
-          const listaOrd = expandida ? listaFull : [...listaFull].sort((a, b) => (b.atualizadoEm || b.criadoEm || 0) - (a.atualizadoEm || a.criadoEm || 0));
-          const lista = expandida ? listaFull : listaOrd.slice(0, LIMITE_COL);
-          const ocultos = listaFull.length - lista.length;
-          return (
-            <div
-              key={et.id}
-              className={"col" + (overCol === et.id ? " over" : "")}
-              onDragOver={(e) => { e.preventDefault(); setOverCol(et.id); }}
-              onDragLeave={(e) => { if (e.currentTarget === e.target) setOverCol(null); }}
-              onDrop={(e) => onDrop(e, et.id)}
-            >
-              <div className="col-h">
-                <div className="nm">
-                  {modoSel && <input type="checkbox" className="col-check" checked={listaFull.length > 0 && listaFull.every((c) => selSet.has(c.id))} onChange={() => toggleColuna(et.id)} />}
-                  <span className="bar" style={{ background: et.cor }} /> {et.nome}
-                </div>
-                <span className="cnt">{listaFull.length}</span>
-              </div>
-              <div className="col-body">
-                {lista.length === 0 && <div className="col-empty">Arraste cards pra cá</div>}
-                {lista.map((c) => (
-                  <div
-                    key={c.id}
-                    className={"kcard" + (dragId === c.id ? " dragging" : "") + (modoSel && selSet.has(c.id) ? " sel" : "")}
-                    style={{ borderLeftColor: et.cor }}
-                    draggable={!modoSel}
-                    onDragStart={(e) => { e.dataTransfer.setData("id", c.id); setDragId(c.id); }}
-                    onDragEnd={() => { setDragId(null); setOverCol(null); }}
-                    onClick={() => (modoSel ? toggleSel(c.id) : setSel(c))}
-                  >
-                    {modoSel && <span className={"kcheck" + (selSet.has(c.id) ? " on" : "")}>{selSet.has(c.id) ? "✓" : ""}</span>}
-                    <div className="nm">{c.cliente}</div>
-                    {c.curso && <div className="kcurso">{c.curso}</div>}
-                    <div className={"val" + (c.etapa === "fechou" ? " win" : "")}>
-                      {c.etapa === "fechou" ? fmtMoney(c.valorFinal) : fmtMoney(c.valorEstimado)}
-                    </div>
-                    {c.origem && <span className="origem-tag">{c.origem}</span>}
-                    <div className="meta">
-                      {isGer && (
-                        <span className="seller"><span className="mini-av">{iniciais(nomeResp(c.responsavelId))}</span>{nomeResp(c.responsavelId).split(" ")[0]}</span>
-                      )}
-                      {c.telefone && !modoSel && (
-                        <button className="wa-btn" title="Abrir conversa no sistema" onClick={(e) => { e.stopPropagation(); irParaWhatsApp && irParaWhatsApp(c.telefone, c.cliente); }}>
-                          <I.wa style={{ width: 16, height: 16 }} />
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                ))}
-                {ocultos > 0 && (
-                  <button className="col-vermais" onClick={() => setExpandidas((s) => { const n = new Set(s); n.add(et.id); return n; })}
-                    style={{ width: "100%", padding: "10px", marginTop: 6, border: "1px dashed var(--line)", borderRadius: 10, background: "var(--card)", color: "var(--muted)", fontWeight: 600, fontSize: 13, cursor: "pointer" }}>
-                    ↓ Ver mais {ocultos} {ocultos === 1 ? "card" : "cards"}
-                  </button>
-                )}
-              </div>
-            </div>
-          );
-        })}
-      </div>
-
-      {sel && (
-        <CardDrawer
-          card={sel}
-          isGer={isGer}
-          users={users}
-          nomeResp={nomeResp}
-          onClose={() => setSel(null)}
-          onSaved={(c) => { setCards((cs) => cs.map((x) => (x.id === c.id ? c : x))); setSel(null); showToast("✓ Card atualizado"); }}
-          onDeleted={(id) => { setCards((cs) => cs.filter((x) => x.id !== id)); setSel(null); showToast("✓ Card removido"); }}
-        />
-      )}
-
-      {novo && (
-        <NovoLead
-          isGer={isGer}
-          users={users}
-          meId={user.id}
-          onClose={() => setNovo(false)}
-          onCreated={(c) => { setCards((cs) => [...cs, c]); setNovo(false); showToast("✓ Lead criado"); }}
-        />
-      )}
-
-      {importar && (
-        <ImportarLeads
-          isGer={isGer}
-          users={users}
-          meId={user.id}
-          onClose={() => setImportar(false)}
-          onImported={(n) => { setImportar(false); carregar(); showToast(`✓ ${n} lead${n === 1 ? "" : "s"} importado${n === 1 ? "" : "s"}`); }}
-        />
-      )}
-
-      {fechar && (
-        <FecharModal
-          card={fechar.card}
-          onClose={() => setFechar(null)}
-          onDone={(c) => { setCards((cs) => cs.map((x) => (x.id === c.id ? c : x))); setFechar(null); showToast("🎉 Venda registrada!"); }}
-        />
-      )}
-    </>
-  );
-}
-
-/* ---------- DRAWER DO CARD ---------- */
-function CardDrawer({ card, isGer, users, nomeResp, onClose, onSaved, onDeleted }) {
-  const [f, setF] = useState({
-    cliente: card.cliente, telefone: card.telefone, valorEstimado: card.valorEstimado,
-    valorFinal: card.valorFinal, etapa: card.etapa, obs: card.obs, responsavelId: card.responsavelId,
-    curso: card.curso || "", origem: card.origem || "",
-  });
-  const [saving, setSaving] = useState(false);
-  const set = (k, v) => setF((s) => ({ ...s, [k]: v }));
-
-  async function salvar() {
-    setSaving(true);
-    try {
-      const c = await api.updateCard(card.id, f);
-      onSaved(c);
-    } catch (e) { alert(e.message); setSaving(false); }
-  }
-  async function excluir() {
-    if (!confirm(`Remover o card de "${card.cliente}"?`)) return;
-    try { await api.deleteCard(card.id); onDeleted(card.id); } catch (e) { alert(e.message); }
-  }
-
-  return (
-    <>
-      <div className="scrim" onClick={onClose} />
-      <div className="drawer">
-        <div className="drawer-h">
-          <h3>Detalhes do lead</h3>
-          <button className="x-btn" onClick={onClose}><I.x style={{ width: 18, height: 18 }} /></button>
-        </div>
-        <div className="drawer-body">
-          <div className="field">
-            <label>Cliente</label>
-            <input className="input" value={f.cliente} onChange={(e) => set("cliente", e.target.value)} />
-          </div>
-          <div className="field">
-            <label>WhatsApp / Telefone</label>
-            <input className="input" value={f.telefone} onChange={(e) => set("telefone", e.target.value)} placeholder="Ex: 55 44 99999-9999" />
-          </div>
-          <div className="row2">
-            <div className="field">
-              <label>Curso de interesse</label>
-              <input className="input" value={f.curso} onChange={(e) => set("curso", e.target.value)} placeholder="Ex: Eletrônica" />
-            </div>
-            <div className="field">
-              <label>Origem do lead</label>
-              <input className="input" value={f.origem} onChange={(e) => set("origem", e.target.value)} placeholder="Ex: Lista Instagram" />
-            </div>
-          </div>
-          <div className="row2">
-            <div className="field">
-              <label>Valor estimado (R$)</label>
-              <input className="input mono" type="number" step="0.01" value={f.valorEstimado} onChange={(e) => set("valorEstimado", e.target.value)} />
-            </div>
-            <div className="field">
-              <label>Etapa</label>
-              <select className="select" value={f.etapa} onChange={(e) => set("etapa", e.target.value)}>
-                {ETAPAS.map((et) => <option key={et.id} value={et.id}>{et.nome}</option>)}
-              </select>
-            </div>
-          </div>
-          {f.etapa === "fechou" && (
-            <div className="field">
-              <label>Valor final da venda (R$)</label>
-              <input className="input mono" type="number" step="0.01" value={f.valorFinal} onChange={(e) => set("valorFinal", e.target.value)} />
-            </div>
-          )}
-          <div className="field">
-            <label>{isGer ? "Vendedor responsável" : "Transferir para"}</label>
-            <select className="select" value={f.responsavelId} onChange={(e) => set("responsavelId", e.target.value)}>
-              {users.map((u) => <option key={u.id} value={u.id}>{u.nome}</option>)}
-            </select>
-          </div>
-          <div className="field">
-            <label>Observações</label>
-            <textarea className="textarea" value={f.obs} onChange={(e) => set("obs", e.target.value)} placeholder="Anotações sobre a negociação..." />
-          </div>
-          <button className="btn btn-danger btn-sm" onClick={excluir}><I.trash style={{ width: 15, height: 15 }} /> Remover lead</button>
-        </div>
-        <div className="drawer-foot">
-          <button className="btn full" onClick={onClose}>Cancelar</button>
-          <button className="btn btn-primary full" onClick={salvar} disabled={saving}>{saving ? "Salvando..." : "Salvar"}</button>
-        </div>
-      </div>
-    </>
-  );
-}
-
-/* ---------- NOVO LEAD ---------- */
-function NovoLead({ isGer, users, meId, prefill, onClose, onCreated }) {
-  const [f, setF] = useState({
-    cliente: (prefill && prefill.cliente) || "",
-    telefone: (prefill && prefill.telefone) || "",
-    valorEstimado: "", curso: "", origem: (prefill && prefill.origem) || "",
-    responsavelId: meId,
-  });
-  const [saving, setSaving] = useState(false);
-  const set = (k, v) => setF((s) => ({ ...s, [k]: v }));
-
-  async function criar() {
-    if (!f.cliente.trim()) return;
-    setSaving(true);
-    try {
-      const c = await api.createCard(f);
-      onCreated(c);
-    } catch (e) { alert(e.message); setSaving(false); }
-  }
-
-  return (
-    <div className="modal" onClick={(e) => e.target === e.currentTarget && onClose()}>
-      <div className="modal-box">
-        <div className="mh">
-          <h3>{prefill ? "Cadastrar lead" : "Novo lead"}</h3>
-          <p>{prefill ? "Confirme os dados e escolha o curso de interesse." : "Adicione um cliente ao topo do funil."}</p>
-        </div>
-        <div className="mb">
-          <div className="field">
-            <label>Cliente *</label>
-            <input className="input" value={f.cliente} onChange={(e) => set("cliente", e.target.value)} autoFocus placeholder="Nome do cliente" />
-          </div>
-          <div className="field">
-            <label>WhatsApp / Telefone</label>
-            <input className="input" value={f.telefone} onChange={(e) => set("telefone", e.target.value)} placeholder="Ex: 55 44 99999-9999" />
-          </div>
-          <div className="row2">
-            <div className="field">
-              <label>Curso de interesse</label>
-              <input className="input" value={f.curso} onChange={(e) => set("curso", e.target.value)} placeholder="Ex: Eletrônica" />
-            </div>
-            <div className="field">
-              <label>Origem</label>
-              <input className="input" value={f.origem} onChange={(e) => set("origem", e.target.value)} placeholder="Ex: WhatsApp" />
-            </div>
-          </div>
-          <div className="field">
-            <label>Valor estimado (R$)</label>
-            <input className="input mono" type="number" step="0.01" value={f.valorEstimado} onChange={(e) => set("valorEstimado", e.target.value)} placeholder="0,00" />
-          </div>
-          {isGer && (
-            <div className="field">
-              <label>Vendedor responsável</label>
-              <select className="select" value={f.responsavelId} onChange={(e) => set("responsavelId", e.target.value)}>
-                {users.map((u) => <option key={u.id} value={u.id}>{u.nome}</option>)}
-              </select>
-            </div>
-          )}
-        </div>
-        <div className="mf">
-          <button className="btn full" onClick={onClose}>Cancelar</button>
-          <button className="btn btn-primary full" onClick={criar} disabled={saving || !f.cliente.trim()}>{saving ? "Criando..." : "Criar lead"}</button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-/* ---------- MODAL FECHOU (valor final) ---------- */
-function FecharModal({ card, onClose, onDone }) {
-  const [valor, setValor] = useState(card.valorEstimado || "");
-  const [saving, setSaving] = useState(false);
-
-  async function confirmar() {
-    setSaving(true);
-    try {
-      const c = await api.updateCard(card.id, { etapa: "fechou", valorFinal: Number(valor) || 0 });
-      onDone(c);
-    } catch (e) { alert(e.message); setSaving(false); }
-  }
-
-  return (
-    <div className="modal" onClick={(e) => e.target === e.currentTarget && onClose()}>
-      <div className="modal-box">
-        <div className="mh">
-          <h3>🎉 Venda fechada!</h3>
-          <p>Qual foi o valor final da venda de <b>{card.cliente}</b>?</p>
-        </div>
-        <div className="mb">
-          <div className="field">
-            <label>Valor final (R$)</label>
-            <input className="input mono" type="number" step="0.01" value={valor} onChange={(e) => setValor(e.target.value)} autoFocus style={{ fontSize: 18 }} />
-          </div>
-        </div>
-        <div className="mf">
-          <button className="btn full" onClick={onClose}>Cancelar</button>
-          <button className="btn btn-primary full" onClick={confirmar} disabled={saving}>{saving ? "Salvando..." : "Confirmar venda"}</button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-/* ============================ EQUIPE ============================ */
 function Equipe({ showToast, meId }) {
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -1440,716 +902,6 @@ const EMOJIS = ["😀","😅","😂","🙂","😉","😍","😎","🤝","👍","
 /* ============================================================
    CANAL OFICIAL — TELAS (gerente: disparo/vendedores/números)
    ============================================================ */
-function PaginaOficial({ user, showToast }) {
-  const isGer = !user || user.role === "gerente";
-  const [aba, setAba] = useState("disparo");
-  return (
-    <div className="of-wrap">
-      <div className="of-tabs">
-        <button className={aba === "disparo" ? "of-tab on" : "of-tab"} onClick={() => setAba("disparo")}>
-          <I.send className="ico" /> Disparo
-        </button>
-        {isGer && (
-          <button className={aba === "vendedores" ? "of-tab on" : "of-tab"} onClick={() => setAba("vendedores")}>
-            <I.users className="ico" /> Vendedores
-          </button>
-        )}
-        <button className={aba === "templates" ? "of-tab on" : "of-tab"} onClick={() => setAba("templates")}>
-          <I.chat className="ico" /> Templates
-        </button>
-        {isGer && (
-          <button className={aba === "numeros" ? "of-tab on" : "of-tab"} onClick={() => setAba("numeros")}>
-            <I.wa className="ico" /> Números
-          </button>
-        )}
-        <button className={aba === "metricas" ? "of-tab on" : "of-tab"} onClick={() => setAba("metricas")}>
-          <I.cash className="ico" /> Métricas
-        </button>
-      </div>
-      <div className="of-body">
-        {aba === "disparo" && <OficialDisparo isGer={isGer} showToast={showToast} />}
-        {isGer && aba === "vendedores" && <OficialVendedores showToast={showToast} />}
-        {aba === "templates" && <OficialTemplates isGer={isGer} showToast={showToast} />}
-        {isGer && aba === "numeros" && <OficialNumeros showToast={showToast} />}
-        {aba === "metricas" && <OficialMetricas showToast={showToast} />}
-      </div>
-    </div>
-  );
-}
-
-/* ---------- IA: cérebro do canal oficial (Fase 1: cadastro) ---------- */
-function OficialIAs({ showToast }) {
-  const [ias, setIas] = useState(null);
-  const [editar, setEditar] = useState(null); // objeto IA em edição, ou {} pra nova
-  const [globalAtiva, setGlobalAtiva] = useState(true);
-  const [pendentes, setPendentes] = useState(0);
-  const [pausandoAtuais, setPausandoAtuais] = useState(false);
-  const [respondendoPend, setRespondendoPend] = useState(false);
-
-  const carregar = () => api.ofIAs().then(setIas).catch(() => setIas([]));
-  const carregarPendentes = () => api.ofIAPendentes().then((r) => setPendentes(r.total || 0)).catch(() => {});
-  useEffect(() => {
-    carregar();
-    api.ofIAGlobal().then((r) => setGlobalAtiva(r.ativa !== false)).catch(() => {});
-    carregarPendentes();
-    const t = setInterval(carregarPendentes, 15000); // atualiza a contagem a cada 15s
-    return () => clearInterval(t);
-  }, []);
-
-  async function responderPendentes() {
-    if (!confirm(`A IA vai responder ${pendentes} lead(s) que estão esperando.\n\nUse isso depois de recarregar o crédito, pra ela responder quem ficou sem resposta. Continuar?`)) return;
-    setRespondendoPend(true);
-    try {
-      const r = await api.ofResponderPendentes();
-      showToast("✓ " + (r.mensagem || "IA respondendo os pendentes"));
-      setTimeout(carregarPendentes, 3000);
-    } catch (e) { showToast("✗ " + e.message); }
-    finally { setRespondendoPend(false); }
-  }
-
-  async function alternarGlobal() {
-    const nova = !globalAtiva;
-    if (!nova && !confirm("PARAR TODAS as IAs agora?\n\nNenhuma IA vai responder leads em conversa nenhuma até você religar. Os leads continuam chegando, mas ficam sem resposta automática.")) return;
-    try {
-      const r = await api.ofSetIAGlobal(nova);
-      setGlobalAtiva(r.ativa);
-      showToast(r.ativa ? "✓ IAs religadas" : "⏸ TODAS as IAs foram paradas");
-    } catch (e) { showToast("✗ " + e.message); }
-  }
-
-  async function excluir(ia) {
-    if (!confirm(`Excluir a IA "${ia.nome}"?`)) return;
-    try { await api.ofExcluirIA(ia.id); showToast("IA excluída"); carregar(); }
-    catch (e) { showToast("✗ " + e.message); }
-  }
-  async function duplicar(ia) {
-    const nome = prompt(`Vai criar uma cópia idêntica de "${ia.nome}" (mesma base de conhecimento).\n\nQual o nome da nova IA?`, "Clara");
-    if (nome === null) return; // cancelou
-    const nomeFinal = nome.trim() || (ia.nome + " (cópia)");
-    try { await api.ofDuplicarIA(ia.id, nomeFinal); showToast(`✓ IA "${nomeFinal}" criada`); carregar(); }
-    catch (e) { showToast("✗ " + e.message); }
-  }
-  async function alternarAtiva(ia) {
-    try { await api.ofEditarIA(ia.id, { ativa: !ia.ativa }); carregar(); }
-    catch (e) { showToast("✗ " + e.message); }
-  }
-  function exportarBase(ia) {
-    // abre o download da base de conhecimento (.json) em nova aba
-    window.open(api.ofUrlExportarIA(ia.id), "_blank");
-  }
-  async function pausarConversasAtuais() {
-    const ok = window.confirm(
-      "Isso vai PAUSAR a IA em TODAS as conversas que já existem agora.\n\n" +
-      "As conversas antigas ficam congeladas (a IA não responde mais nelas).\n" +
-      "As conversas NOVAS de um próximo disparo continuam com a IA respondendo normalmente.\n\n" +
-      "Quer continuar?"
-    );
-    if (!ok) return;
-    setPausandoAtuais(true);
-    try {
-      const r = await api.ofPausarTodasAtuais();
-      showToast(`✓ IA pausada em ${r.pausadas} conversa(s) atual(is)`);
-      carregar();
-    } catch (e) { showToast("✗ " + e.message); }
-    finally { setPausandoAtuais(false); }
-  }
-
-  return (
-    <div>
-      <div className="panel">
-        <div className="panel-h">
-          <h3>Atendentes de IA<span className="panel-sub">o cérebro que conversa com os leads do disparo</span></h3>
-          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-            {pendentes > 0 && (
-              <button
-                className="btn btn-sm"
-                onClick={responderPendentes}
-                disabled={respondendoPend}
-                title="Faz a IA responder todos os leads que ficaram esperando (ex: depois que o crédito acabou e voltou)"
-                style={{ background: "#fff7e6", color: "#b9770e", border: "1px solid #f0d088", fontWeight: 600 }}
-              >
-                {respondendoPend ? "Respondendo…" : `🔔 IA responder pendentes (${pendentes})`}
-              </button>
-            )}
-            <button
-              className="btn btn-sm"
-              onClick={alternarGlobal}
-              title={globalAtiva ? "Para TODAS as IAs de uma vez (botão de emergência)" : "Religa as IAs"}
-              style={globalAtiva
-                ? { background: "#fff0f0", color: "#c0392b", border: "1px solid #f1b0b0" }
-                : { background: "#eafaf0", color: "#1a9d54", border: "1px solid #aee3c4" }}
-            >
-              {globalAtiva ? "⏸ Parar todas as IAs" : "▶ Religar IAs"}
-            </button>
-            <button
-              className="btn btn-sm"
-              onClick={pausarConversasAtuais}
-              disabled={pausandoAtuais}
-              title="Pausa a IA em todas as conversas que já existem agora. Útil antes de um disparo novo: as antigas ficam quietas, as novas respondem."
-              style={{ background: "#fff7e6", color: "#b9770e", border: "1px solid #f0d088", fontWeight: 600 }}
-            >
-              {pausandoAtuais ? "Pausando…" : "⏸ Pausar IA nas conversas atuais"}
-            </button>
-            <button className="btn btn-primary btn-sm" onClick={() => setEditar({})}><I.plus className="ico" /> Nova IA</button>
-          </div>
-        </div>
-        {!globalAtiva && (
-          <div style={{ margin: "0 18px 14px", background: "#fff0f0", color: "#c0392b", border: "1px solid #f1b0b0", borderRadius: 10, padding: "10px 12px", fontSize: 13, fontWeight: 600 }}>
-            ⚠️ Todas as IAs estão PARADAS. Nenhum lead recebe resposta automática até você religar.
-          </div>
-        )}
-        <div style={{ padding: "0 18px 18px" }}>
-          <div className="ia-aviso" style={{ marginBottom: 14, fontSize: 13, color: "var(--muted)", background: "var(--bg2)", border: "1px solid var(--border)", borderRadius: 10, padding: "10px 12px" }}>
-            Configure tudo que a IA precisa saber. No <b>Preview ao vivo</b> (direita) você testa a conversa na hora. Cada IA é ligada a um disparo na hora de criar a campanha.
-          </div>
-          {!ias && <div className="spin" />}
-          {ias && ias.length === 0 && <div className="dash-empty">Nenhuma IA ainda. Clique em <b>Nova IA</b> pra criar a primeira.</div>}
-          {(ias || []).map((ia) => (
-            <div className="sol-row big" key={ia.id} style={{ alignItems: "center" }}>
-              <div className="sol-info">
-                <div className="sol-top">
-                  <span className={"sol-st " + (ia.ativa ? "resolvida" : "aberta")}>{ia.ativa ? "ativa" : "pausada"}</span>
-                  <span className="of-pill">{ia.modo === "qualifica" ? "Qualifica → vendedor" : "Fecha sozinha"}</span>
-                  <b className="sol-quem">{ia.nome}</b>
-                </div>
-                <div className="sol-meta" style={{ marginTop: 4 }}>
-                  {(ia.config && ia.config.quemEla) ? "Persona definida" : "Sem persona"} · {(ia.config && (ia.config.pbAbertura || ia.config.pbQualificacao)) ? "playbook definido" : "sem playbook"}
-                  {ia.modo === "qualifica" && ((ia.config && ia.config.escQuando) ? " · gatilho definido" : " · sem gatilho de entrega")}
-                  {(ia.conhecimento && ia.conhecimento.length > 0) ? ` · ${ia.conhecimento.length} arquivo(s)` : ""}
-                </div>
-              </div>
-              <div className="sol-acoes">
-                <button className="btn btn-sm" onClick={() => alternarAtiva(ia)}>{ia.ativa ? "Pausar" : "Ativar"}</button>
-                <button className="btn btn-sm" onClick={() => setEditar(ia)}>Editar</button>
-                <button className="btn btn-sm" onClick={() => duplicar(ia)} title="Criar uma cópia desta IA com outro nome">Duplicar</button>
-                <button className="btn btn-sm" onClick={() => exportarBase(ia)} title="Baixar a base de conhecimento desta IA (backup do treinamento)">Exportar</button>
-                <button className="btn btn-sm" onClick={() => excluir(ia)}><I.trash style={{ width: 14, height: 14 }} /></button>
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-      {editar && <ModalIA ia={editar} showToast={showToast} onClose={() => setEditar(null)} onSaved={() => { setEditar(null); carregar(); }} />}
-    </div>
-  );
-}
-
-function ModalIA({ ia, showToast, onClose, onSaved }) {
-  const editando = !!ia.id;
-  const [secao, setSecao] = useState("identidade");
-  const [saving, setSaving] = useState(false);
-  const [docs, setDocs] = useState(ia.docs || []);
-  const [voiceId, setVoiceId] = useState(ia.voiceId || "");
-  const [voiceNome, setVoiceNome] = useState(ia.voiceNome || "");
-  const [vozes, setVozes] = useState([]);
-  const [vozErro, setVozErro] = useState("");
-  const audioPrev = useRef(null);
-  useEffect(() => { api.ofVozes().then((r) => setVozes(r.vozes || [])).catch((e) => setVozErro(e.message)); }, []);
-  function ouvirPreview(url) {
-    if (!url) return;
-    try { if (audioPrev.current) { audioPrev.current.pause(); } audioPrev.current = new Audio(url); audioPrev.current.play().catch(() => {}); } catch (_) {}
-  }
-  const [subindoDoc, setSubindoDoc] = useState(false);
-  const [filaDoc, setFilaDoc] = useState({ feitos: 0, total: 0, atual: "" });
-
-  async function subirDocs(fileList) {
-    const arr = Array.from(fileList || []).filter((f) => /\.(docx?|pdf|txt|md|csv)$/i.test(f.name));
-    if (!arr.length) { alert("Envie arquivos DOCX, PDF, TXT, MD ou CSV."); return; }
-    if (!ia.id) { alert("Salve a IA primeiro (aba Identidade) pra depois anexar os documentos."); setSecao("identidade"); return; }
-    setSubindoDoc(true);
-    let feitos = 0;
-    for (const file of arr) {
-      setFilaDoc({ feitos, total: arr.length, atual: file.name });
-      if (file.size > 20 * 1024 * 1024) { alert(`"${file.name}" passa de 20MB.`); feitos++; continue; }
-      try {
-        const base64 = await new Promise((res, rej) => {
-          const rd = new FileReader();
-          rd.onload = () => res(String(rd.result).split(",")[1] || "");
-          rd.onerror = () => rej(new Error("Falha ao ler o arquivo"));
-          rd.readAsDataURL(file);
-        });
-        const r = await api.ofUploadDocIA(ia.id, { nome: file.name, base64 });
-        setDocs((d) => [...d, r.doc]);
-      } catch (e) { alert(`"${file.name}": ${e.message}`); }
-      feitos++;
-      setFilaDoc({ feitos, total: arr.length, atual: "" });
-    }
-    setSubindoDoc(false);
-    setFilaDoc({ feitos: 0, total: 0, atual: "" });
-    showToast(`${feitos} documento(s) processado(s)`);
-  }
-  async function removerDoc(docId) {
-    if (!confirm("Remover este documento da base de conhecimento da IA?")) return;
-    try { await api.ofDelDocIA(ia.id, docId); setDocs((d) => d.filter((x) => x.id !== docId)); showToast("Documento removido"); }
-    catch (e) { alert(e.message); }
-  }
-  const [nome, setNome] = useState(ia.nome || "");
-  const [modo, setModo] = useState(ia.modo || "fecha");
-  const cfg0 = ia.config || {};
-  const [c, setC] = useState({
-    tomVoz: cfg0.tomVoz || "amigavel", objetivo: cfg0.objetivo || "",
-    agentePadrao: !!cfg0.agentePadrao, autoResponder: !!cfg0.autoResponder,
-    quemEla: cfg0.quemEla || "", comoEscreve: cfg0.comoEscreve || "",
-    sempreFaz: cfg0.sempreFaz || "", nuncaFaz: cfg0.nuncaFaz || "",
-    cursos: Array.isArray(cfg0.cursos) ? cfg0.cursos : [],
-    objecoes: Array.isArray(cfg0.objecoes) ? cfg0.objecoes : [],
-    faq: Array.isArray(cfg0.faq) ? cfg0.faq : [],
-    pbAbertura: cfg0.pbAbertura || "", pbQualificacao: cfg0.pbQualificacao || "",
-    pbApresentacao: cfg0.pbApresentacao || "", pbPreco: cfg0.pbPreco || "",
-    pbFechamento: cfg0.pbFechamento || "", pbRecuperacao: cfg0.pbRecuperacao || "",
-    escQuando: cfg0.escQuando || "", escFrase: cfg0.escFrase || "",
-    escNome: cfg0.escNome || "", escTelefone: cfg0.escTelefone || "",
-    encerrarCriterios: cfg0.encerrarCriterios || "",
-  });
-  const [kb, setKb] = useState(ia.conhecimento ? ia.conhecimento.map((k) => ({ ...k, texto: "" })) : []);
-  const set = (k, v) => setC((s) => ({ ...s, [k]: v }));
-
-  // preview ao vivo
-  const [pvMsgs, setPvMsgs] = useState([]);
-  const [pvInput, setPvInput] = useState("");
-  const [pvLoad, setPvLoad] = useState(false);
-  const pvFimRef = useRef(null);
-  useEffect(() => { if (pvFimRef.current) pvFimRef.current.scrollIntoView({ behavior: "smooth" }); }, [pvMsgs, pvLoad]);
-
-  async function pvEnviar() {
-    const txt = pvInput.trim();
-    if (!txt || pvLoad) return;
-    const novas = [...pvMsgs, { role: "them", content: txt }];
-    setPvMsgs(novas); setPvInput(""); setPvLoad(true);
-    try {
-      const r = await api.ofPreviewIA({
-        nome: nome.trim(), modo, config: c,
-        conhecimento: kb.filter((x) => x.texto).map((x) => ({ id: x.id, secao: x.secao, nome: x.nome, texto: x.texto })),
-        historico: novas,
-      });
-      const add = [];
-      if (r.resposta) add.push({ role: "me", content: r.resposta });
-      if (r.passar) add.push({ role: "sys", content: "→ Aqui a IA passaria a conversa pro vendedor." });
-      setPvMsgs([...novas, ...add]);
-    } catch (e) {
-      setPvMsgs([...novas, { role: "sys", content: "Erro: " + e.message }]);
-    } finally { setPvLoad(false); }
-  }
-
-  const SECOES = [
-    { g: "GERAL", itens: [
-      { k: "identidade", lb: "Identidade", ic: I.estrela },
-      { k: "persona", lb: "Persona", ic: I.users },
-    ]},
-    { g: "CONHECIMENTO", itens: [
-      { k: "documentos", lb: "Documentos", ic: I.download },
-      { k: "cursos", lb: "Cursos", ic: I.pipe },
-      { k: "objecoes", lb: "Objeções", ic: I.suporte },
-      { k: "faq", lb: "FAQ", ic: I.chat },
-    ]},
-    { g: "FLUXO", itens: [
-      { k: "playbook", lb: "Playbook", ic: I.send },
-      { k: "escalacao", lb: "Escalação", ic: I.out },
-    ]},
-  ];
-
-  function secaoPreenchida(k) {
-    if (k === "identidade") return !!(nome.trim() && c.objetivo.trim());
-    if (k === "documentos") return docs.length > 0;
-    if (k === "persona") return !!(c.quemEla.trim() || c.comoEscreve.trim());
-    if (k === "cursos") return c.cursos.length > 0 || kb.some((x) => x.secao === "cursos");
-    if (k === "objecoes") return c.objecoes.length > 0 || kb.some((x) => x.secao === "objecoes");
-    if (k === "faq") return c.faq.length > 0 || kb.some((x) => x.secao === "faq");
-    if (k === "playbook") return !!(c.pbAbertura.trim() || c.pbQualificacao.trim() || kb.some((x) => x.secao === "playbook"));
-    if (k === "escalacao") return !!(c.escQuando.trim() || c.encerrarCriterios.trim());
-    return false;
-  }
-  const totalSecoes = 7;
-  const feitas = ["identidade", "persona", "cursos", "objecoes", "faq", "playbook", "escalacao"].filter(secaoPreenchida).length;
-  const pct = Math.round((feitas / totalSecoes) * 100);
-
-  async function anexar(secaoKey, fileList) {
-    const arr = Array.from(fileList || []);
-    for (const file of arr) {
-      if (file.size > 6 * 1024 * 1024) { alert(`"${file.name}" passa de 6MB.`); continue; }
-      const reader = new FileReader();
-      reader.onload = async () => {
-        const base64 = String(reader.result).split(",")[1] || "";
-        try {
-          const r = await api.ofExtrairArquivo(file.name, base64);
-          setKb((k) => [...k, { id: "kb_" + Date.now() + Math.random().toString(36).slice(2, 6), secao: secaoKey, nome: r.nome, texto: r.texto, chars: (r.texto || "").length, criadoEm: Date.now() }]);
-          showToast("✓ " + file.name + " adicionado ao conhecimento");
-        } catch (e) { alert(e.message); }
-      };
-      reader.readAsDataURL(file);
-    }
-  }
-  const removerKb = (id) => setKb((k) => k.filter((x) => x.id !== id));
-
-  async function salvar() {
-    if (!nome.trim()) { alert("Dê um nome pra IA"); setSecao("identidade"); return; }
-    setSaving(true);
-    const conhecimentoNovo = kb.filter((x) => x.texto).map((x) => ({ id: x.id, secao: x.secao, nome: x.nome, texto: x.texto, criadoEm: x.criadoEm }));
-    const conhecimentoExistente = (ia.conhecimento || []).filter((old) => kb.some((x) => x.id === old.id && !x.texto));
-    const dados = { nome: nome.trim(), modo, config: c, conhecimento: [...conhecimentoExistente, ...conhecimentoNovo], voiceId: voiceId || null, voiceNome };
-    try {
-      if (editando) await api.ofEditarIA(ia.id, dados);
-      else await api.ofCriarIA(dados);
-      showToast(editando ? "✓ Agente salvo" : "✓ Agente criado");
-      onSaved();
-    } catch (e) { alert(e.message); setSaving(false); }
-  }
-
-  const kbDaSecao = (s) => kb.filter((x) => x.secao === s);
-
-  const Upload = ({ sec, titulo, sub }) => (
-    <label className="agx-up">
-      <input type="file" accept=".txt,.md,.csv,.pdf,.doc,.docx" multiple style={{ display: "none" }} onChange={(e) => { anexar(sec, e.target.files); e.target.value = ""; }} />
-      <I.out className="agx-up-ic" />
-      <div className="agx-up-t">{titulo || "Anexar PDF, DOC ou TXT"}</div>
-      <div className="agx-up-s">{sub || "Clique para selecionar"}</div>
-    </label>
-  );
-
-  const ListaKb = ({ sec }) => (
-    kbDaSecao(sec).length > 0 ? (
-      <div className="agx-kb-list">
-        {kbDaSecao(sec).map((k) => (
-          <div className="agx-kb-item" key={k.id}>
-            <I.pipe className="agx-kb-ic" />
-            <div className="agx-kb-info"><b>{k.nome}</b><span>{(k.chars || 0).toLocaleString("pt-BR")} caracteres lidos</span></div>
-            <button className="agx-kb-x" onClick={() => removerKb(k.id)} aria-label="Remover">×</button>
-          </div>
-        ))}
-      </div>
-    ) : null
-  );
-
-  return createPortal(
-    <div className="agx-overlay" onClick={(e) => e.target === e.currentTarget && onClose()}>
-      <style>{AGX_CSS}</style>
-      <div className="agx-modal">
-        <div className="agx-head">
-          <div className="agx-head-l">
-            <div className="agx-avatar">IA</div>
-            <div>
-              <div className="agx-title">{editando ? "Editar Agente" : "Criar Agente"}</div>
-              <div className="agx-sub">{feitas}/{totalSecoes} seções preenchidas</div>
-            </div>
-          </div>
-          <div className="agx-head-r">
-            <button className="agx-btn-ghost" onClick={salvar} disabled={saving} title="Salva no sistema">⤓ Exportar</button>
-            <button className="agx-btn-primary" onClick={salvar} disabled={saving}>{saving ? "Salvando..." : "✓ Salvar agente"}</button>
-            <button className="agx-x" onClick={onClose} aria-label="Fechar">×</button>
-          </div>
-        </div>
-
-        <div className="agx-progress">
-          <span className="agx-progress-lb">Completude</span>
-          <div className="agx-progress-bar"><div className="agx-progress-fill" style={{ width: pct + "%" }} /></div>
-          <span className="agx-progress-pct">{pct}%</span>
-        </div>
-
-        <div className="agx-body">
-          <aside className="agx-side">
-            {SECOES.map((grupo) => (
-              <div key={grupo.g} className="agx-side-grupo">
-                <div className="agx-side-g">{grupo.g}</div>
-                {grupo.itens.map((it) => {
-                  const Ico = it.ic;
-                  const on = secao === it.k;
-                  const ok = secaoPreenchida(it.k);
-                  return (
-                    <button key={it.k} className={"agx-side-item" + (on ? " on" : "")} onClick={() => setSecao(it.k)}>
-                      <Ico className="agx-side-ico" />
-                      <span className="agx-side-lb">{it.lb}</span>
-                      <span className={"agx-dot" + (ok ? " ok" : "")}>{ok ? "✓" : "−"}</span>
-                    </button>
-                  );
-                })}
-              </div>
-            ))}
-          </aside>
-
-          <main className="agx-main">
-            {secao === "identidade" && (
-              <div>
-                <h4 className="agx-h">Identificação</h4>
-                <div className="agx-grid2">
-                  <div className="agx-field">
-                    <label>Nome do agente *</label>
-                    <input className="agx-input" value={nome} onChange={(e) => setNome(e.target.value)} placeholder="Ex: Clara — Inversor Solar" />
-                  </div>
-                  <div className="agx-field">
-                    <label>Tom de voz</label>
-                    <select className="agx-input" value={c.tomVoz} onChange={(e) => set("tomVoz", e.target.value)}>
-                      <option value="amigavel">Amigável e próximo</option>
-                      <option value="profissional">Profissional</option>
-                      <option value="descontraido">Descontraído</option>
-                      <option value="consultivo">Consultivo</option>
-                      <option value="direto">Direto e objetivo</option>
-                    </select>
-                  </div>
-                </div>
-                <div className="agx-field">
-                  <label>Objetivo principal *</label>
-                  <input className="agx-input" value={c.objetivo} onChange={(e) => set("objetivo", e.target.value)} placeholder="Ex: Conduzir o lead até a matrícula no curso de Reparo de Inversor" />
-                </div>
-                <div className="agx-field">
-                  <label>Voz da ligação (ElevenLabs)</label>
-                  {vozErro ? (
-                    <div className="onum-dica" style={{ color: "#dc2626" }}>{vozErro}</div>
-                  ) : (
-                    <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-                      <select className="agx-input" style={{ flex: 1, minWidth: 180 }} value={voiceId}
-                        onChange={(e) => { const v = vozes.find((x) => x.voiceId === e.target.value); setVoiceId(e.target.value); setVoiceNome(v ? v.nome : ""); }}>
-                        <option value="">Voz padrão do sistema</option>
-                        {vozes.map((v) => <option key={v.voiceId} value={v.voiceId}>{v.nome}{v.genero ? " · " + v.genero : ""}{v.idioma ? " · " + v.idioma : ""}</option>)}
-                      </select>
-                      {(() => { const vv = vozes.find((v) => v.voiceId === voiceId); return vv && vv.preview ? (
-                        <button type="button" className="btn btn-sm" onClick={() => ouvirPreview(vv.preview)}>▶ Ouvir</button>
-                      ) : null; })()}
-                    </div>
-                  )}
-                  <span className="agx-psub">A voz que essa IA usa nas ligações. A lista vem da sua conta ElevenLabs — clica em Ouvir pra testar.</span>
-                </div>
-                <div className="agx-sep" />
-                <h4 className="agx-h">O que ela faz</h4>
-                <div className="agx-field">
-                  <select className="agx-input" value={modo} onChange={(e) => setModo(e.target.value)}>
-                    <option value="fecha">Fecha a venda sozinha (não passa pro vendedor)</option>
-                    <option value="qualifica">Qualifica e passa pro vendedor quando o lead esquenta</option>
-                  </select>
-                </div>
-              </div>
-            )}
-
-            {secao === "persona" && (
-              <div>
-                <h4 className="agx-h">Personalidade</h4>
-                <div className="agx-field">
-                  <label>Quem ela é</label>
-                  <textarea className="agx-input" rows={4} value={c.quemEla} onChange={(e) => set("quemEla", e.target.value)} placeholder="Ex: Você é a Clara, consultora de vendas da Escola Instructiva..." />
-                </div>
-                <div className="agx-field">
-                  <label>Como escreve</label>
-                  <textarea className="agx-input" rows={3} value={c.comoEscreve} onChange={(e) => set("comoEscreve", e.target.value)} placeholder="Ex: Mensagens curtas, máx 3 linhas. Usa você. Sem formalidade." />
-                </div>
-                <div className="agx-sep" />
-                <h4 className="agx-h">Regras</h4>
-                <div className="agx-grid2">
-                  <div className="agx-field">
-                    <label>SEMPRE faz</label>
-                    <textarea className="agx-input" rows={5} value={c.sempreFaz} onChange={(e) => set("sempreFaz", e.target.value)} placeholder="- Pergunta o nome no começo&#10;- Confirma interesse antes do preço" />
-                  </div>
-                  <div className="agx-field">
-                    <label>NUNCA faz</label>
-                    <textarea className="agx-input" rows={5} value={c.nuncaFaz} onChange={(e) => set("nuncaFaz", e.target.value)} placeholder="- Inventa CPF ou e-mail&#10;- Promete o que não está no material" />
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {secao === "documentos" && (
-              <div>
-                <h4 className="agx-h">Base de conhecimento (documentos)</h4>
-                <p className="agx-psub">Anexe <b>todos os materiais de treinamento</b> (DOCX, PDF, TXT). A IA lê tudo e, em cada conversa, consulta automaticamente os trechos relevantes — pode subir muita coisa sem pesar no custo.</p>
-
-                <label className={"agx-drop" + (subindoDoc ? " off" : "")}>
-                  <input type="file" multiple accept=".doc,.docx,.pdf,.txt,.md,.csv" style={{ display: "none" }} disabled={subindoDoc}
-                    onChange={(e) => { subirDocs(e.target.files); e.target.value = ""; }} />
-                  {subindoDoc
-                    ? <span><span className="spin" /> Lendo e indexando {filaDoc.atual ? "“" + filaDoc.atual + "”" : ""} … ({filaDoc.feitos}/{filaDoc.total})</span>
-                    : <span><I.download className="ico" /> Clique pra anexar documentos (pode selecionar vários)</span>}
-                </label>
-
-                {docs.length === 0 ? (
-                  <div className="agx-vazio-doc">Nenhum documento ainda. Anexe os arquivos que o professor preparou.</div>
-                ) : (
-                  <div className="agx-doclist">
-                    <div className="agx-doclist-top">{docs.length} documento(s) · {docs.reduce((s, d) => s + (d.nChunks || 0), 0)} trechos indexados</div>
-                    {docs.map((d) => (
-                      <div className="agx-docrow" key={d.id}>
-                        <I.chat className="ico agx-docico" />
-                        <div className="agx-docinfo">
-                          <b>{d.nome}</b>
-                          <span>{d.nChunks} trecho(s) · {Math.max(1, Math.round((d.tamanho || 0) / 1024))} KB</span>
-                        </div>
-                        <button className="agx-docdel" title="Remover" onClick={() => removerDoc(d.id)}><I.trash className="ico" /></button>
-                      </div>
-                    ))}
-                  </div>
-                )}
-                <p className="agx-psub" style={{ marginTop: 14 }}>Dica: dá pra misturar com as outras abas (Cursos, Objeções, FAQ) — mas se o professor já colocou tudo nos documentos, pode deixar só aqui.</p>
-              </div>
-            )}
-
-            {secao === "cursos" && (
-              <div>
-                <h4 className="agx-h">Cursos e ofertas</h4>
-                <p className="agx-psub">Anexe materiais (PDF, DOC, TXT) ou cadastre manualmente.</p>
-                <Upload sec="cursos" />
-                <ListaKb sec="cursos" />
-                <div className="agx-ou">OU CADASTRE MANUALMENTE</div>
-                {c.cursos.map((cur, i) => (
-                  <div className="agx-card" key={i}>
-                    <div className="agx-card-top"><span className="agx-card-tag">CURSO #{i + 1}</span>
-                      <button className="agx-card-x" onClick={() => set("cursos", c.cursos.filter((_, idx) => idx !== i))} aria-label="Remover">×</button>
-                    </div>
-                    {[["nome", "Nome do curso"], ["carga", "Carga horária"], ["garantia", "Garantia"], ["certificado", "Certificado"]].reduce((rows, _, idx, a) => { if (idx % 2 === 0) rows.push(a.slice(idx, idx + 2)); return rows; }, []).map((par, ri) => (
-                      <div className="agx-grid2" key={ri}>
-                        {par.map(([f, lb]) => (
-                          <div className="agx-field" key={f}><label>{lb}</label>
-                            <input className="agx-input" value={cur[f] || ""} onChange={(e) => set("cursos", c.cursos.map((x, idx) => idx === i ? { ...x, [f]: e.target.value } : x))} />
-                          </div>
-                        ))}
-                      </div>
-                    ))}
-                    <div className="agx-field"><label>Para quem é</label>
-                      <input className="agx-input" value={cur.paraQuem || ""} onChange={(e) => set("cursos", c.cursos.map((x, idx) => idx === i ? { ...x, paraQuem: e.target.value } : x))} />
-                    </div>
-                    <div className="agx-field"><label>Diferencial</label>
-                      <input className="agx-input" value={cur.diferencial || ""} onChange={(e) => set("cursos", c.cursos.map((x, idx) => idx === i ? { ...x, diferencial: e.target.value } : x))} />
-                    </div>
-                    <div className="agx-field"><label>Descrição completa</label>
-                      <textarea className="agx-input" rows={3} value={cur.descricao || ""} onChange={(e) => set("cursos", c.cursos.map((x, idx) => idx === i ? { ...x, descricao: e.target.value } : x))} />
-                    </div>
-                    <div className="agx-ofertas-tit">OFERTAS DISPONÍVEIS</div>
-                    {(cur.ofertas || []).map((of, oi) => (
-                      <div className="agx-oferta" key={oi}>
-                        <div className="agx-grid2">
-                          <div className="agx-field"><label>Nome da oferta</label><input className="agx-input" value={of.nome || ""} onChange={(e) => set("cursos", c.cursos.map((x, idx) => idx === i ? { ...x, ofertas: x.ofertas.map((y, yi) => yi === oi ? { ...y, nome: e.target.value } : y) } : x))} placeholder="Ex: À vista PIX" /></div>
-                          <div className="agx-field"><label>Valor</label><input className="agx-input" value={of.valor || ""} onChange={(e) => set("cursos", c.cursos.map((x, idx) => idx === i ? { ...x, ofertas: x.ofertas.map((y, yi) => yi === oi ? { ...y, valor: e.target.value } : y) } : x))} placeholder="Ex: R$ 1.497" /></div>
-                        </div>
-                        <div className="agx-field"><label>Link de pagamento</label><input className="agx-input" value={of.link || ""} onChange={(e) => set("cursos", c.cursos.map((x, idx) => idx === i ? { ...x, ofertas: x.ofertas.map((y, yi) => yi === oi ? { ...y, link: e.target.value } : y) } : x))} placeholder="https://..." /></div>
-                        <div className="agx-field"><label>Observação (parcelas, condições)</label><input className="agx-input" value={of.obs || ""} onChange={(e) => set("cursos", c.cursos.map((x, idx) => idx === i ? { ...x, ofertas: x.ofertas.map((y, yi) => yi === oi ? { ...y, obs: e.target.value } : y) } : x))} placeholder="Ex: ou 18x R$ 107,93" /></div>
-                        <button className="agx-rem-link" onClick={() => set("cursos", c.cursos.map((x, idx) => idx === i ? { ...x, ofertas: x.ofertas.filter((_, yi) => yi !== oi) } : x))}>remover oferta</button>
-                      </div>
-                    ))}
-                    <button className="agx-add-oferta" onClick={() => set("cursos", c.cursos.map((x, idx) => idx === i ? { ...x, ofertas: [...(x.ofertas || []), {}] } : x))}>+ Adicionar Oferta</button>
-                  </div>
-                ))}
-                <button className="agx-add" onClick={() => set("cursos", [...c.cursos, { ofertas: [] }])}>+ Adicionar Curso</button>
-              </div>
-            )}
-
-            {secao === "objecoes" && (
-              <div>
-                <h4 className="agx-h">Contorno de objeções</h4>
-                <p className="agx-psub">Ensine a IA a responder as objeções mais comuns.</p>
-                <Upload sec="objecoes" />
-                <ListaKb sec="objecoes" />
-                <div className="agx-ou">OU ADICIONE MANUALMENTE</div>
-                {c.objecoes.map((o, i) => (
-                  <div className="agx-card" key={i}>
-                    <div className="agx-card-top"><span className="agx-card-tag">OBJEÇÃO #{i + 1}</span>
-                      <button className="agx-card-x" onClick={() => set("objecoes", c.objecoes.filter((_, idx) => idx !== i))} aria-label="Remover">×</button>
-                    </div>
-                    <div className="agx-field"><label>O que o lead diz</label><input className="agx-input" value={o.objecao || ""} onChange={(e) => set("objecoes", c.objecoes.map((x, idx) => idx === i ? { ...x, objecao: e.target.value } : x))} placeholder='Ex: "Tá caro"' /></div>
-                    <div className="agx-field"><label>Como a IA responde</label><textarea className="agx-input" rows={3} value={o.resposta || ""} onChange={(e) => set("objecoes", c.objecoes.map((x, idx) => idx === i ? { ...x, resposta: e.target.value } : x))} /></div>
-                  </div>
-                ))}
-                <button className="agx-add" onClick={() => set("objecoes", [...c.objecoes, {}])}>+ Adicionar Objeção</button>
-              </div>
-            )}
-
-            {secao === "faq" && (
-              <div>
-                <h4 className="agx-h">Perguntas frequentes</h4>
-                <p className="agx-psub">Perguntas que sempre aparecem nos atendimentos.</p>
-                <Upload sec="faq" />
-                <ListaKb sec="faq" />
-                <div className="agx-ou">OU ADICIONE MANUALMENTE</div>
-                {c.faq.map((q, i) => (
-                  <div className="agx-card" key={i}>
-                    <div className="agx-card-top"><span className="agx-card-tag">PERGUNTA #{i + 1}</span>
-                      <button className="agx-card-x" onClick={() => set("faq", c.faq.filter((_, idx) => idx !== i))} aria-label="Remover">×</button>
-                    </div>
-                    <div className="agx-field"><label>Pergunta</label><input className="agx-input" value={q.pergunta || ""} onChange={(e) => set("faq", c.faq.map((x, idx) => idx === i ? { ...x, pergunta: e.target.value } : x))} /></div>
-                    <div className="agx-field"><label>Resposta</label><textarea className="agx-input" rows={3} value={q.resposta || ""} onChange={(e) => set("faq", c.faq.map((x, idx) => idx === i ? { ...x, resposta: e.target.value } : x))} /></div>
-                  </div>
-                ))}
-                <button className="agx-add" onClick={() => set("faq", [...c.faq, {}])}>+ Adicionar Pergunta</button>
-              </div>
-            )}
-
-            {secao === "playbook" && (
-              <div>
-                <h4 className="agx-h">Script de vendas</h4>
-                <p className="agx-psub">Como conduzir a venda do começo ao fim.</p>
-                <Upload sec="playbook" titulo="Anexar PDF, DOC ou TXT" />
-                <ListaKb sec="playbook" />
-                <div className="agx-ou">OU PREENCHA AS ETAPAS</div>
-                {[["pbAbertura", "1. Primeira mensagem (abertura)"], ["pbQualificacao", "2. Qualificação (perguntas-chave)"], ["pbApresentacao", "3. Apresentação do curso"], ["pbPreco", "4. Quando soltar o preço"], ["pbFechamento", "5. Fechamento"], ["pbRecuperacao", "6. Recuperação (se ele sumir)"]].map(([f, lb]) => (
-                  <div className="agx-field" key={f}><label>{lb}</label>
-                    <textarea className="agx-input" rows={3} value={c[f]} onChange={(e) => set(f, e.target.value)} />
-                  </div>
-                ))}
-              </div>
-            )}
-
-            {secao === "escalacao" && (
-              <div>
-                <h4 className="agx-h">Escalação e encerramento</h4>
-                <p className="agx-psub">Quando a IA deve passar para um humano ou encerrar.</p>
-                {modo === "qualifica" && (
-                  <>
-                    <div className="agx-field"><label>Quando passar pra humano</label>
-                      <textarea className="agx-input" rows={4} value={c.escQuando} onChange={(e) => set("escQuando", e.target.value)} placeholder="Ex: quando o lead pedir preço/link, demonstrar que quer comprar, ou pedir pra falar com um humano." />
-                    </div>
-                    <div className="agx-field"><label>Como passar (frase padrão)</label>
-                      <textarea className="agx-input" rows={2} value={c.escFrase} onChange={(e) => set("escFrase", e.target.value)} placeholder="Ex: Vou te passar agora pro nosso especialista, só um instante 😊" />
-                    </div>
-                    <div className="agx-grid2">
-                      <div className="agx-field"><label>Nome do humano</label><input className="agx-input" value={c.escNome} onChange={(e) => set("escNome", e.target.value)} /></div>
-                      <div className="agx-field"><label>Telefone/WhatsApp</label><input className="agx-input" value={c.escTelefone} onChange={(e) => set("escTelefone", e.target.value)} /></div>
-                    </div>
-                    <div className="agx-sep" />
-                  </>
-                )}
-                <h4 className="agx-h">Encerramento</h4>
-                <div className="agx-field"><label>Critérios de encerramento</label>
-                  <textarea className="agx-input" rows={4} value={c.encerrarCriterios} onChange={(e) => set("encerrarCriterios", e.target.value)} placeholder="Ex: encerra quando o lead comprar, dizer que não tem interesse, ou ficar 2 dias sem responder após o follow-up." />
-                </div>
-              </div>
-            )}
-          </main>
-
-          <aside className="agx-preview">
-            <div className="agx-preview-head">
-              <span>▷ Preview ao vivo</span>
-              <button className="agx-reset" onClick={() => setPvMsgs([])} style={{ cursor: "pointer" }}>↻ Resetar</button>
-            </div>
-            <div className="agx-preview-body">
-              {pvMsgs.length === 0 && (
-                <div className="agx-preview-empty">
-                  Mande uma mensagem como se fosse o lead e veja a {nome.trim() || "IA"} responder em tempo real, usando tudo que você configurou.
-                </div>
-              )}
-              {pvMsgs.map((m, i) => (
-                m.role === "sys" ? (
-                  <div key={i} style={{ textAlign: "center", fontSize: 12, color: "var(--muted,#999)", margin: "10px 0" }}>{m.content}</div>
-                ) : (
-                  <div key={i} style={{ display: "flex", justifyContent: m.role === "them" ? "flex-end" : "flex-start", marginBottom: 8 }}>
-                    <div style={{ maxWidth: "82%", padding: "8px 11px", borderRadius: 12, fontSize: 13.5, lineHeight: 1.5, whiteSpace: "pre-wrap", background: m.role === "them" ? "#6347e8" : "var(--bg3,#ececf0)", color: m.role === "them" ? "#fff" : "var(--text,#222)" }}>{m.content}</div>
-                  </div>
-                )
-              ))}
-              {pvLoad && <div style={{ fontSize: 12.5, color: "var(--muted,#999)", padding: "4px 2px" }}>{(nome.trim() || "IA")} digitando…</div>}
-              <div ref={pvFimRef} />
-            </div>
-            <div className="agx-preview-input">
-              <input className="agx-input" placeholder="Digite como o lead..." value={pvInput} onChange={(e) => setPvInput(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") pvEnviar(); }} disabled={pvLoad} />
-              <button className="agx-send" onClick={pvEnviar} disabled={pvLoad || !pvInput.trim()} style={{ cursor: "pointer", opacity: pvLoad || !pvInput.trim() ? 0.5 : 1 }}>➤</button>
-            </div>
-          </aside>
-        </div>
-      </div>
-    </div>,
-    document.body
-  );
-}
-
-
-/* ---------- DISPARO EM MASSA ---------- */
-/* ---------- DISPARO EM MASSA (assistente em etapas) ---------- */
-/* ---------- DISPARO (aba de abertura + modal moderno) ---------- */
-/* traduz os erros mais comuns da Meta num aviso claro (com o caminho da correção) */
 function explicaErroMeta(msg) {
   const m = String(msg || "");
   if (/131030|not in allowed list|allowed recipient|recipient.*not.*list/i.test(m))
@@ -3401,16 +2153,6 @@ function OficialTemplates({ isGer = true, showToast }) {
    Escolhe quem recebe e em que tom. O texto muda todo dia
    e usa os números reais da pessoa.
    ============================================================ */
-const TONS_RECADO = [
-  ["nenhum", "Não recebe", "A pessoa não vê nada ao entrar."],
-  ["elogio", "Parabéns", "Pra quem está indo bem — reconhecimento pelo resultado."],
-  ["crescimento", "Crescente", "Pra quem vem melhorando mês a mês."],
-  ["incentivo", "Bom dia", "Motivação leve pro começo do dia."],
-  ["virada", "Virada", "Pra quem está atrás — encorajar sem cobrar."],
-  ["custom", "Escrever eu mesmo", "Você escreve o texto. Use {nome} pro primeiro nome."],
-];
-
-/* Recado do dia: aparece na primeira entrada de cada dia */
 function RecadoDoDia() {
   const [recado, setRecado] = useState(null);
   const [saindo, setSaindo] = useState(false);
@@ -3450,344 +2192,6 @@ function RecadoDoDia() {
    ANÁLISE IA DO ATENDIMENTO (só o dono vê)
    Números reais + leitura das conversas pela IA.
    ============================================================ */
-function PainelAtendimento({ showToast }) {
-  const [modo, setModo] = useState("equipe");        // equipe | pessoa
-  const [dias, setDias] = useState(15);
-  const [de, setDe] = useState("");
-  const [ate, setAte] = useState("");
-  const [dados, setDados] = useState(null);
-  const [analises, setAnalises] = useState({});
-  const [rodando, setRodando] = useState("");
-  const [sel, setSel] = useState(null);              // vendedor aberto
-  const temPeriodo = !!(de && ate);
-
-  const PERIODOS = [[0, "Hoje"], [-1, "Ontem"], [7, "7 dias"], [15, "15 dias"], [30, "30 dias"], [90, "90 dias"]];
-
-  const carregar = () => {
-    setDados(null);
-    api.atdMetricas(dias, de, ate).then(setDados).catch((e) => showToast(e.message));
-    api.atdAnalises().then((r) => setAnalises(r.analises || {})).catch(() => {});
-  };
-  useEffect(() => { carregar(); }, [dias, de, ate]);
-
-  async function analisarPessoa(v) {
-    setRodando(v.vendedorId);
-    try {
-      const r = await api.atdAnalisar(v.vendedorId, dias, de, ate);
-      setAnalises((a) => ({ ...a, [v.vendedorId]: r.analise }));
-      showToast("✓ Análise de " + v.nome.split(" ")[0] + " pronta");
-    } catch (e) { showToast("✗ " + e.message); }
-    setRodando("");
-  }
-  async function analisarEquipe() {
-    setRodando("__equipe");
-    try {
-      const r = await api.atdAnalisarEquipe(dias, de, ate);
-      setAnalises((a) => ({ ...a, __equipe: r.analise }));
-      showToast("✓ Relatório da equipe pronto");
-    } catch (e) { showToast("✗ " + e.message); }
-    setRodando("");
-  }
-
-  const alerta = (v) => {
-    if (v.pctSemResposta >= 25) return { cor: "ruim", txt: `${v.pctSemResposta}% sem retorno` };
-    if (v.pctAbandonadas >= 30) return { cor: "atencao", txt: `${v.pctAbandonadas}% param no meio` };
-    if (v.pctSemResposta >= 10) return { cor: "atencao", txt: `${v.pctSemResposta}% sem retorno` };
-    return { cor: "bom", txt: "acompanha bem" };
-  };
-  const corNota = (n) => (n == null ? "" : n >= 8 ? " bom" : n >= 6 ? " ok" : " ruim");
-  // blindagem: se vier objeto da IA, vira texto em vez de quebrar a tela
-  const txt = (v) => {
-    if (v == null) return "";
-    if (typeof v === "string") return v;
-    if (typeof v === "number" || typeof v === "boolean") return String(v);
-    if (Array.isArray(v)) return v.map(txt).filter(Boolean).join(" · ");
-    try { return Object.values(v).map(txt).filter(Boolean).join(" — "); } catch (_) { return ""; }
-  };
-  const lista = (v) => (Array.isArray(v) ? v : v ? [v] : []).map(txt).filter(Boolean);
-  const Bloco = ({ tit, itens, cls }) => {
-    const arr = lista(itens);
-    if (!arr.length) return null;
-    return (
-      <div className={"at-bloco " + (cls || "")}>
-        <span className="at-bloco-tit">{tit}</span>
-        <ul>{arr.map((x, i) => <li key={i}>{x}</li>)}</ul>
-      </div>
-    );
-  };
-
-  const eq = analises.__equipe;
-  const aSel = sel ? analises[sel.vendedorId] : null;
-
-  return (
-    <div className="panel ia">
-      <div className="ia-head">
-        <div className="ia-tit"><I.spark className="ico" /> Análise Inteligente</div>
-        <div className="ia-sub">A IA lê os atendimentos e aponta o que está funcionando e o que não está</div>
-      </div>
-
-      <div className="ia-modos">
-        <button className={modo === "equipe" ? "on" : ""} onClick={() => { setModo("equipe"); setSel(null); }}>
-          <I.users className="ico" /> Equipe inteira
-        </button>
-        <button className={modo === "pessoa" ? "on" : ""} onClick={() => setModo("pessoa")}>
-          <I.medal className="ico" /> Vendedor específico
-        </button>
-      </div>
-
-      <div className="at-periodo">
-        <span className="at-periodo-lb">Período</span>
-        <div className="at-dias">
-          {PERIODOS.map(([d, lb]) => (
-            <button key={d} className={!temPeriodo && dias === d ? "on" : ""}
-              onClick={() => { setDe(""); setAte(""); setDias(d); }}>{lb}</button>
-          ))}
-        </div>
-        <div className="at-datas">
-          <input type="date" className="vd-data" value={de} onChange={(e) => setDe(e.target.value)} />
-          <span>até</span>
-          <input type="date" className="vd-data" value={ate} onChange={(e) => setAte(e.target.value)} />
-          {temPeriodo && <button className="mt-limpar" onClick={() => { setDe(""); setAte(""); }}>✕ limpar</button>}
-        </div>
-      </div>
-
-      {!dados && <div className="panel-sub"><span className="spin" /> Lendo as conversas…</div>}
-
-      {dados && !dados.temIA && (
-        <div className="at-aviso">Falta a <b>OPENAI_API_KEY</b> no Railway — os números aparecem, mas a leitura por IA não roda.</div>
-      )}
-
-      {/* ---------- EQUIPE ---------- */}
-      {dados && modo === "equipe" && (
-        <>
-          <div className="ia-hero">
-            <span className="ia-chip"><I.spark className="ico" /> Inteligência Artificial</span>
-            <div className="ia-hero-tit">Relatório gerencial da equipe</div>
-            <div className="ia-hero-txt">
-              A IA compara os vendedores, mostra quem puxa o resultado, quem está travando e o que é
-              problema de processo — com trechos reais das conversas.
-            </div>
-            <div className="ia-hero-nums">
-              <b>{dados.time.conversas}</b> conversas <i>·</i>
-              <b>{dados.vendedores.length}</b> vendedores <i>·</i>
-              <b className={dados.time.pctSemResposta >= 20 ? "ruim" : ""}>{dados.time.pctSemResposta}%</b> sem resposta
-            </div>
-            <button className="ia-btn" disabled={rodando === "__equipe" || !dados.temIA} onClick={analisarEquipe}>
-              <I.spark className="ico" /> {rodando === "__equipe" ? "Analisando o time…" : eq ? "Gerar de novo" : "Gerar análise da equipe"}
-            </button>
-          </div>
-
-          {eq && (
-            <div className="ia-rel">
-              {eq.notaTime != null && (
-                <div className={"ia-nota" + corNota(eq.notaTime)}>
-                  <b>{eq.notaTime}<i>/10</i></b><span>nota do time</span>
-                </div>
-              )}
-              <p className="at-resumo">{txt(eq.resumo)}</p>
-              <Bloco tit="O que vai bem" itens={eq.oQueVaiBem} cls="bom" />
-              <Bloco tit="Problemas" itens={eq.problemas} cls="ruim" />
-              <Bloco tit="Falhas de processo" itens={eq.processo} cls="" />
-              {Array.isArray(eq.porPessoa) && eq.porPessoa.length > 0 && (
-                <div className="ia-pessoas">
-                  <span className="at-bloco-tit">Leitura de cada um <small style={{textTransform:"none",letterSpacing:0,fontWeight:600}}>· a nota de cada um sai na análise individual</small></span>
-                  {eq.porPessoa.map((p, i) => (
-                    <div key={i} className="ia-pessoa">
-                      <div className="ia-pessoa-top">
-                        <b>{txt(p.nome)}</b>
-                      </div>
-                      <p>{txt(p.leitura)}</p>
-                      {p.prioridade && <div className="ia-prio">Prioridade: {txt(p.prioridade)}</div>}
-                    </div>
-                  ))}
-                </div>
-              )}
-              <Bloco tit="O que fazer agora" itens={eq.sugestoes} cls="acao" />
-              <div className="at-quando">gerado em {new Date(eq.em).toLocaleString("pt-BR")} · {eq.periodo}</div>
-            </div>
-          )}
-        </>
-      )}
-
-      {/* ---------- VENDEDOR ---------- */}
-      {dados && modo === "pessoa" && !sel && (
-        <div className="ia-grade">
-          {dados.vendedores.length === 0 && <div className="crm-col-vazio">Nenhuma conversa no período.</div>}
-          {dados.vendedores.map((v) => {
-            const al = alerta(v);
-            const a = analises[v.vendedorId];
-            return (
-              <button key={v.vendedorId} className="ia-card" onClick={() => setSel(v)}>
-                <div className="ia-card-top">
-                  <b>{v.nome}</b>
-                  {a && a.nota != null && <span className={"ia-mini-nota" + corNota(a.nota)}>{a.nota}</span>}
-                </div>
-                <span className={"at-selo " + al.cor}>{al.txt}</span>
-                <div className="ia-card-nums">
-                  <span>{v.conversas} conversas</span>
-                  <span>{v.leadsQueResponderam} responderam</span>
-                  <span>{v.semResposta} sem resposta</span>
-                </div>
-                <span className="ia-card-ver">{a ? "ver análise →" : "abrir →"}</span>
-              </button>
-            );
-          })}
-        </div>
-      )}
-
-      {dados && modo === "pessoa" && sel && (() => {
-        const v = dados.vendedores.find((x) => x.vendedorId === sel.vendedorId) || sel;
-        return (
-          <div className="ia-detalhe">
-            <div className="ia-det-top">
-              <button className="btn btn-sm" onClick={() => setSel(null)}>← Voltar</button>
-              <div className="ia-det-nome">{v.nome}</div>
-              <button className="ia-btn peq" disabled={rodando === v.vendedorId || !dados.temIA} onClick={() => analisarPessoa(v)}>
-                <I.spark className="ico" /> {rodando === v.vendedorId ? "Analisando…" : aSel ? "Analisar de novo" : "Analisar com IA"}
-              </button>
-            </div>
-
-            <div className="at-nums">
-              <div><span>Conversas</span><b>{v.conversas}</b></div>
-              <div><span>Sem resposta</span><b className={v.pctSemResposta >= 25 ? "ruim" : ""}>{v.semResposta} ({v.pctSemResposta}%)</b></div>
-              <div><span>Param no meio</span><b>{v.abandonadas} ({v.pctAbandonadas}%)</b></div>
-              <div><span>Msgs por conversa</span><b>{v.msgsPorConversa}</b></div>
-            </div>
-
-            {!aSel && <div className="ia-vazio">Clique em <b>Analisar com IA</b> pra ela ler as conversas dele e dar o parecer.</div>}
-
-            {aSel && (
-              <div className="ia-rel">
-                {aSel.nota != null && (
-                  <div className={"ia-nota" + corNota(aSel.nota)}>
-                    <b>{aSel.nota}<i>/10</i></b><span>{txt(aSel.notaPorque) || "nota do atendimento"}</span>
-                  </div>
-                )}
-                <p className="at-resumo">{txt(aSel.resumo)}</p>
-                <Bloco tit="O que funciona" itens={aSel.fortes} cls="bom" />
-                <Bloco tit="Onde está pecando" itens={aSel.falhas} cls="ruim" />
-                <Bloco tit="Padrões que se repetem" itens={aSel.padroes} cls="" />
-                <Bloco tit="Vendas que dava pra ter fechado" itens={aSel.oportunidades} cls="ruim" />
-                {lista(aSel.frasesBoas).length > 0 && (
-                  <div className="at-frases">
-                    <span className="at-bloco-tit">Trechos que funcionaram</span>
-                    {lista(aSel.frasesBoas).map((f, i) => <div key={i} className="at-frase bom">“{f}”</div>)}
-                  </div>
-                )}
-                {lista(aSel.frasesRuins).length > 0 && (
-                  <div className="at-frases">
-                    <span className="at-bloco-tit">Trechos que atrapalharam</span>
-                    {lista(aSel.frasesRuins).map((f, i) => <div key={i} className="at-frase ruim">“{f}”</div>)}
-                  </div>
-                )}
-                <Bloco tit="O que fazer agora" itens={aSel.sugestoes} cls="acao" />
-                <div className="at-quando">gerado em {new Date(aSel.em).toLocaleString("pt-BR")} · {aSel.periodo || `últimos ${aSel.dias} dias`}</div>
-              </div>
-            )}
-          </div>
-        );
-      })()}
-    </div>
-  );
-}
-
-function PainelRecados({ showToast }) {
-  const [dados, setDados] = useState(null);
-  const [salvando, setSalvando] = useState("");
-  const [editando, setEditando] = useState(null);
-
-  const carregar = () => api.recadosConfig().then(setDados).catch((e) => showToast(e.message));
-  useEffect(() => { carregar(); }, []);
-
-  async function salvar(userId, campos) {
-    setSalvando(userId);
-    try { await api.recadoSalvar(userId, campos); await carregar(); }
-    catch (e) { showToast(e.message); }
-    finally { setSalvando(""); }
-  }
-  async function alternarMural(v) {
-    try { await api.recadosAtivo(v); await carregar(); showToast(v ? "✓ Mural ligado" : "Mural desligado"); }
-    catch (e) { showToast(e.message); }
-  }
-  async function reenviar(userId, nome) {
-    try {
-      await api.recadoReenviar(userId);
-      await carregar();
-      showToast(userId ? `✓ ${nome.split(" ")[0]} vai ver de novo hoje` : "✓ Todos vão ver de novo hoje");
-    } catch (e) { showToast(e.message); }
-  }
-
-  if (!dados) return <div className="panel-sub"><span className="spin" /> Carregando…</div>;
-  const recebendo = dados.pessoas.filter((p) => p.tom !== "nenhum").length;
-
-  return (
-    <div className="panel">
-      <div className="panel-h">
-        <I.spark className="ico" /> Recados do time
-        <div style={{ marginLeft: "auto", display: "flex", gap: 8, alignItems: "center" }}>
-          <button className="btn btn-sm" onClick={() => reenviar(null)}>Reenviar pra todos hoje</button>
-          <button className={dados.ativo ? "of-switch on" : "of-switch"} onClick={() => alternarMural(!dados.ativo)} title={dados.ativo ? "Mural ligado" : "Mural desligado"}><span className="of-switch-dot" /></button>
-        </div>
-      </div>
-      <div className="panel-sub" style={{ marginBottom: 14 }}>
-        Na primeira vez que a pessoa entrar no sistema a cada dia, aparece um recado com o nome dela e os números reais do mês.
-        O texto muda sozinho todo dia. <b>{recebendo} de {dados.pessoas.length}</b> recebendo.
-        {!dados.ativo && <> · <b style={{ color: "var(--brand)" }}>Mural desligado no momento.</b></>}
-      </div>
-
-      <div className="rec-lista">
-        {dados.pessoas.map((p) => (
-          <div key={p.userId} className={"rec-card" + (p.tom === "nenhum" ? " off" : "")}>
-            <div className="rec-topo">
-              <Avatar nome={p.nome} foto={p.foto} size={38} />
-              <div className="rec-id">
-                <b>{p.nome}</b>
-                <span>
-                  {p.role === "vendedor" ? "Vendedor" : p.role === "suporte" ? "Suporte" : "Gerente"}
-                  {p.resumo ? ` · ${dinheiroCurto(p.resumo.venda)} no mês${p.resumo.pct ? ` · ${p.resumo.pct}% da meta` : ""}` : ""}
-                  {p.vistoHoje && p.tom !== "nenhum" ? " · já viu hoje" : ""}
-                </span>
-              </div>
-              {p.vistoHoje && p.tom !== "nenhum" && (
-                <button className="btn btn-sm" onClick={() => reenviar(p.userId, p.nome)}>Mostrar de novo</button>
-              )}
-            </div>
-
-            <div className="rec-tons">
-              {TONS_RECADO.map(([k, lb, dica]) => (
-                <button key={k} title={dica} disabled={salvando === p.userId}
-                  className={p.tom === k ? "rec-tom on" : "rec-tom"}
-                  onClick={() => { salvar(p.userId, { tom: k }); if (k === "custom") setEditando(p.userId); }}>
-                  {lb}
-                </button>
-              ))}
-            </div>
-
-            {p.tom === "custom" && (
-              <div className="rec-custom">
-                <textarea className="textarea" rows={3} defaultValue={p.texto}
-                  placeholder="Ex: Parabéns {nome} pelo seu desempenho até aqui! Você vem demonstrando uma crescente muito bacana. Boas vendas hoje e vamos pra cima!"
-                  onBlur={(e) => e.target.value !== p.texto && salvar(p.userId, { texto: e.target.value })} />
-                <span className="panel-sub" style={{ fontSize: 11.5 }}>Use <code>{"{nome}"}</code> pro primeiro nome. Salva ao clicar fora.</span>
-              </div>
-            )}
-
-            {p.previa && (
-              <div className="rec-previa">
-                <span className="rec-previa-lb">Como ela vai ver hoje</span>
-                <b>{p.previa.titulo}</b>
-                <p>{p.previa.corpo}</p>
-              </div>
-            )}
-          </div>
-        ))}
-        {dados.pessoas.length === 0 && <div className="panel-sub">Nenhuma pessoa cadastrada ainda.</div>}
-      </div>
-    </div>
-  );
-}
-
-
 function PainelSistema({ modulos, onSalvo, showToast }) {
   const LISTA = [
     ["caixa", "Caixa de entrada", "Todas as conversas de WhatsApp num só lugar (oficial e vendedores)."],
@@ -4538,185 +2942,6 @@ function tipoDaColuna(lb) {
   return null;
 }
 // Frases que aparecem na comemoração (sorteia uma a cada venda)
-const FRASES_GANHO = [
-  "Isso é resultado de quem não desiste no primeiro não!",
-  "Quem trabalha o funil todo dia, colhe assim!",
-  "Mais um cliente que vai mudar de vida com a Instructiva!",
-  "Persistência vira comissão. Bora pra próxima!",
-  "Foi no detalhe, no follow-up e no atendimento. Merecido!",
-  "É assim que se faz! O time todo agradece.",
-  "Cada venda dessas é uma família com uma profissão nova.",
-  "Ninguém segura esse time. Próximo!",
-  "Fechou! Agora repete a dose.",
-  "Talento é bom, mas insistência fecha contrato. Parabéns!",
-];
-const FRASES_PERDA = [
-  "Faz parte. O próximo é seu.",
-  "Não foi dessa vez — mas o aprendizado fica.",
-  "Um não te aproxima do próximo sim.",
-  "Bola pra frente, tem lead esperando.",
-  "Anota o motivo e volta mais forte na próxima.",
-];
-// Som gerado na hora pelo navegador (não precisa de arquivo de áudio)
-function tocarSom(tipo) {
-  try {
-    const AC = window.AudioContext || window.webkitAudioContext;
-    if (!AC) return;
-    const ctx = new AC();
-    const t0 = ctx.currentTime + 0.05;
-    const master = ctx.createGain(); master.gain.value = 0.9; master.connect(ctx.destination);
-
-    if (tipo === "ganho") {
-      // --- nota de metal (trompete): 2 osciladores desafinados + filtro ---
-      const metal = (freq, inicio, dur, vol) => {
-        const g = ctx.createGain();
-        const f = ctx.createBiquadFilter();
-        f.type = "lowpass";
-        f.frequency.setValueAtTime(900, inicio);
-        f.frequency.linearRampToValueAtTime(4200, inicio + 0.05);
-        f.frequency.linearRampToValueAtTime(2200, inicio + dur);
-        g.gain.setValueAtTime(0.0001, inicio);
-        g.gain.linearRampToValueAtTime(vol, inicio + 0.025);       // ataque seco = "tan"
-        g.gain.setValueAtTime(vol, inicio + dur * 0.55);
-        g.gain.exponentialRampToValueAtTime(0.0001, inicio + dur);
-        [0, 4, -5].forEach((cent, i) => {
-          const o = ctx.createOscillator();
-          o.type = i === 2 ? "square" : "sawtooth";
-          o.frequency.value = freq;
-          o.detune.value = cent;
-          const gv = ctx.createGain(); gv.gain.value = i === 2 ? 0.18 : 0.5;
-          o.connect(gv); gv.connect(f);
-          o.start(inicio); o.stop(inicio + dur + 0.05);
-        });
-        f.connect(g); g.connect(master);
-      };
-      // --- pancada grave (timbale) em cada nota ---
-      const tambor = (inicio, vol) => {
-        const o = ctx.createOscillator(), g = ctx.createGain();
-        o.type = "sine";
-        o.frequency.setValueAtTime(150, inicio);
-        o.frequency.exponentialRampToValueAtTime(48, inicio + 0.16);
-        g.gain.setValueAtTime(vol, inicio);
-        g.gain.exponentialRampToValueAtTime(0.001, inicio + 0.24);
-        o.connect(g); g.connect(master);
-        o.start(inicio); o.stop(inicio + 0.26);
-      };
-      // FANFARRA: tan-tan-tan-tan  ...  TAN-TAN-TAAAN (acorde final segurado)
-      const G4 = 392.00, C5 = 523.25, E5 = 659.25, G5 = 783.99, C6 = 1046.50;
-      const bat = 0.17;
-      const seq = [
-        [G4, 0, bat * 0.8, 0.30], [G4, bat, bat * 0.8, 0.30],
-        [C5, bat * 2, bat * 0.8, 0.34], [E5, bat * 3, bat * 0.8, 0.34],
-        [G5, bat * 4, bat * 1.6, 0.38],
-      ];
-      seq.forEach(([f, off, d, v]) => { metal(f, t0 + off, d, v); tambor(t0 + off, 0.5); });
-      // acorde final triunfal
-      const fim = t0 + bat * 6;
-      [C5, E5, G5, C6].forEach((f, i) => metal(f, fim, 1.5 - i * 0.05, 0.26));
-      metal(G4 / 2, fim, 1.6, 0.30); // baixo
-      tambor(fim, 0.75); tambor(fim + 0.18, 0.45); tambor(fim + 0.34, 0.3);
-
-      // --- plateia batendo palmas depois da fanfarra ---
-      const dur = 2.6, inicioPalmas = t0 + bat * 5.2;
-      const buf = ctx.createBuffer(1, Math.floor(ctx.sampleRate * dur), ctx.sampleRate);
-      const dados = buf.getChannelData(0);
-      for (let i = 0; i < dados.length; i++) {
-        const t = i / ctx.sampleRate;
-        const sobe = Math.min(1, t / 0.25);
-        const desce = Math.max(0, 1 - Math.max(0, t - 1.4) / 1.2);
-        const batida = Math.random() < 0.02 ? 1 : 0.12;
-        dados[i] = (Math.random() * 2 - 1) * sobe * desce * batida;
-      }
-      const src = ctx.createBufferSource(); src.buffer = buf;
-      const bp = ctx.createBiquadFilter(); bp.type = "bandpass"; bp.frequency.value = 1700; bp.Q.value = 0.6;
-      const gp = ctx.createGain(); gp.gain.value = 0.55;
-      src.connect(bp); bp.connect(gp); gp.connect(master);
-      src.start(inicioPalmas);
-      setTimeout(() => { try { ctx.close(); } catch (e) {} }, 5200);
-    } else {
-      // "ahhh" triste descendo
-      const o = ctx.createOscillator(), g = ctx.createGain();
-      o.type = "sawtooth";
-      o.frequency.setValueAtTime(392, t0);
-      o.frequency.exponentialRampToValueAtTime(155, t0 + 1.05);
-      g.gain.setValueAtTime(0.001, t0);
-      g.gain.linearRampToValueAtTime(0.2, t0 + 0.09);
-      g.gain.exponentialRampToValueAtTime(0.001, t0 + 1.15);
-      const lp = ctx.createBiquadFilter(); lp.type = "lowpass"; lp.frequency.value = 950;
-      o.connect(lp); lp.connect(g); g.connect(master);
-      o.start(t0); o.stop(t0 + 1.2);
-      setTimeout(() => { try { ctx.close(); } catch (e) {} }, 1700);
-    }
-  } catch (e) { /* sem som, sem problema */ }
-}
-function Comemoracao({ tipo, nome, valor, vendedor, foto, onClose }) {
-  const frase = useMemo(() => {
-    const lista = tipo === "ganho" ? FRASES_GANHO : FRASES_PERDA;
-    return lista[Math.floor(Math.random() * lista.length)];
-    // eslint-disable-next-line
-  }, []);
-  useEffect(() => {
-    tocarSom(tipo);
-    const t = setTimeout(onClose, tipo === "ganho" ? 6000 : 2800);
-    return () => clearTimeout(t);
-    // eslint-disable-next-line
-  }, []);
-  const confetes = tipo === "ganho"
-    ? Array.from({ length: 90 }, (_, i) => ({
-        i,
-        left: Math.random() * 100,
-        atraso: Math.random() * 1.6,
-        dur: 2.4 + Math.random() * 1.8,
-        cor: ["#F26522", "#25A06B", "#facc15", "#3b82f6", "#ec4899", "#10b981"][i % 6],
-        gira: Math.round(Math.random() * 720 - 360),
-        tam: 7 + Math.random() * 8,
-      }))
-    : [];
-  const primeiro = (vendedor || "").trim().split(/\s+/)[0] || "";
-  return (
-    <Portal>
-      <div className={"comemora " + tipo} onClick={onClose}>
-        {confetes.map((c) => (
-          <span key={c.i} className="confete" style={{
-            left: c.left + "%", background: c.cor, width: c.tam, height: c.tam * 1.5,
-            animationDelay: c.atraso + "s", animationDuration: c.dur + "s", "--gira": c.gira + "deg",
-          }} />
-        ))}
-        <div className="comemora-card">
-          {tipo === "ganho" ? (
-            <>
-              <div className="comemora-emoji">🏆</div>
-              <div className="comemora-tit">PARABÉNS{primeiro ? ", " + primeiro.toUpperCase() : ""}!</div>
-              {vendedor && (
-                <div className="comemora-vend">
-                  <Avatar nome={vendedor} foto={foto} size={44} />
-                  <span>{vendedor}</span>
-                </div>
-              )}
-              <div className="comemora-venda">
-                Venda fechada com <b>{nome}</b>
-                {valor > 0 && <div className="comemora-valor">R$ {Number(valor).toLocaleString("pt-BR")}</div>}
-              </div>
-              <div className="comemora-frase">“{frase}”</div>
-            </>
-          ) : (
-            <>
-              <div className="comemora-emoji">😞</div>
-              <div className="comemora-tit">Que pena…</div>
-              <div className="comemora-venda">O lead <b>{nome}</b> foi pra perdido.</div>
-              <div className="comemora-frase">“{frase}”</div>
-            </>
-          )}
-          <div className="comemora-dica">clique pra fechar</div>
-        </div>
-      </div>
-    </Portal>
-  );
-}
-
-/* ============ VENDAS — metas, pódio e lançamentos ============ */
-// Cursos vendidos — lista única, usada aqui e no sistema do suporte.
-// Padronizada (tudo em caixa alta, sem ponto sobrando) pra depois dar métrica certa por curso.
 const CURSOS = [
   "AMPLIFICADORES",
   "ANÁLISE DC AVANÇADA",
@@ -5202,27 +3427,6 @@ function ModalPessoaRapida({ pessoa, pessoas, mes, isGer = true, onVerPainel, on
 }
 
 // Anel de progresso da meta
-function Anel({ pct }) {
-  const r = 52, c = 2 * Math.PI * r;
-  const p = Math.max(0, Math.min(100, pct || 0));
-  return (
-    <div className="vd-anel">
-      <svg width="128" height="128" viewBox="0 0 128 128">
-        <defs>
-          <linearGradient id="gAnel" x1="0" y1="0" x2="1" y2="1">
-            <stop offset="0%" stopColor="#F26522" /><stop offset="100%" stopColor="#25A06B" />
-          </linearGradient>
-        </defs>
-        <circle cx="64" cy="64" r={r} fill="none" stroke="var(--surface-2)" strokeWidth="12" />
-        <circle cx="64" cy="64" r={r} fill="none" stroke="url(#gAnel)" strokeWidth="12" strokeLinecap="round"
-          strokeDasharray={c} strokeDashoffset={c - (c * p) / 100} transform="rotate(-90 64 64)"
-          style={{ transition: "stroke-dashoffset .8s ease" }} />
-      </svg>
-      <div className="vd-anel-txt"><b>{Math.round(pct || 0)}%</b><span>da meta</span></div>
-    </div>
-  );
-}
-// Gráfico de barras: quanto vendeu em cada dia do mês
 function GraficoDias({ porDia, diaHoje, diaSel, onDia }) {
   const max = porDia.reduce((m, d) => Math.max(m, d.venda), 0) || 1;
   return (
@@ -6588,7 +4792,7 @@ function extDeAudio(mime) {
 
 const fmtMoneyD = (v) => "R$ " + (Number(v) || 0).toLocaleString("pt-BR", { maximumFractionDigits: 0 });
 const fmtPctD = (v) => (Number(v) || 0).toLocaleString("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + "%";
-const DES = { ink: "var(--text)", mut: "var(--muted)", mut2: "var(--faint)", line: "var(--line)", bg: "var(--surface-2)", card: "var(--card)", orange: "#F26522", green: "#16a34a", purple: "#8b5cf6", gold: "#f59e0b" };
+const DES = { ink: "var(--text)", mut: "var(--muted)", mut2: "var(--faint)", line: "var(--line)", bg: "var(--surface-2)", card: "var(--card)", orange: "var(--brand)", green: "var(--mint)", purple: "#8b5cf6", gold: "#f59e0b" };
 
 // cinturão (faixa) desenhado, com graus/estrelas = meses seguidos rumo à próxima
 function Cinturao({ faixa, graus = 0, alt = 24 }) {
@@ -6608,7 +4812,7 @@ function AnelPontos({ pct, cor, size = 108, stroke = 9, dentro }) {
   return (
     <div style={{ position: "relative", width: size, height: size, flexShrink: 0 }}>
       <svg width={size} height={size} style={{ transform: "rotate(-90deg)", display: "block" }}>
-        <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="#eef1f4" strokeWidth={stroke} />
+        <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="var(--line)" strokeWidth={stroke} />
         <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke={cor} strokeWidth={stroke} strokeDasharray={c} strokeDashoffset={off} strokeLinecap="round" style={{ transition: "stroke-dashoffset .6s cubic-bezier(.4,0,.2,1)" }} />
       </svg>
       <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", lineHeight: 1.05 }}>{dentro}</div>
@@ -7618,6 +5822,7 @@ function OficialCRM({ showToast, isGer = true, onAbrirWhats, onDisparar }) {
     api.ofCrmVersao().then((r) => { if (r && vivo) versaoCrmRef.current = r.v; }).catch(() => {});
     // a cada 10s pergunta só o carimbo leve; só recarrega a lista se MUDOU (lead novo/movido/editado)
     const t = setInterval(async () => {
+      if (document.hidden) return; // v2.0: aba escondida não fica consultando o servidor
       try { const r = await api.ofCrmVersao(); if (vivo && r && r.v !== versaoCrmRef.current) { versaoCrmRef.current = r.v; carregar(); } } catch (_) {}
     }, 10000);
     return () => { vivo = false; clearInterval(t); };
@@ -7789,7 +5994,6 @@ function OficialCRM({ showToast, isGer = true, onAbrirWhats, onDisparar }) {
         {isGer && <button className="onum-btn-ghost" onClick={() => setShowDistrib(true)}><I.users className="ico" /> Quem recebe os leads</button>}
         {isGer && <button className="onum-btn-ghost" onClick={() => setShowReserva(true)}><I.chat className="ico" /> Listas de reserva</button>}
         {isGer && <button className="onum-btn-ghost" onClick={() => setShowColunas(true)}><I.cog className="ico" /> Colunas</button>}
-        {isGer && <button className="onum-btn-ghost" onClick={() => setConfig(true)}><I.suporte className="ico" /> Distribuição das ligações</button>}
         {isGer && <button className="onum-btn-ghost" onClick={() => setShowImportar(true)} title="Importar leads de uma planilha CSV"><I.clip className="ico" /> Importar</button>}
         <button className="onum-btn-ghost" onClick={() => setShowExportar(true)} title="Exportar seus leads (dá pra escolher por tag)"><I.download className="ico" /> Exportar</button>
         <div className="crm-top-right">
@@ -7808,7 +6012,7 @@ function OficialCRM({ showToast, isGer = true, onAbrirWhats, onDisparar }) {
       {filtroDia && (() => {
         const n = leads.filter((l) => mesmoDia(l.criadoEm, filtroDia) && (!filtroVend || (filtroVend === "__sem" ? !l.vendedorId : l.vendedorId === filtroVend)) && matchBusca(l)).length;
         const [a, mes, d] = filtroDia.split("-");
-        return <div style={{ margin: "0 0 10px", padding: "8px 14px", background: "#ecfdf3", border: "1px solid #b7e4c7", borderRadius: 10, fontSize: 13.5, color: "#065f46", fontWeight: 600 }}>📅 {d}/{mes}/{a} — <b>{n} lead(s)</b> entraram neste dia{filtroVend && filtroVend !== "__sem" ? " (deste vendedor)" : ""}.</div>;
+        return <div className="crm-faixa-dia"><I.calendar className="ico-inline" /> {d}/{mes}/{a} — <b>{n} lead(s)</b> entraram neste dia{filtroVend && filtroVend !== "__sem" ? " (deste vendedor)" : ""}.</div>;
       })()}
 
       <div className="crm-board" ref={boardRef} onDragOver={aoArrastarSobreQuadro} onMouseDown={aoPressionarQuadro}>
@@ -7821,20 +6025,21 @@ function OficialCRM({ showToast, isGer = true, onAbrirWhats, onDisparar }) {
               <div className="crm-col-head">
                 <div className="crm-col-head-l">
                   {doEt.length > 0 && <input type="checkbox" className="crm-check-col" checked={doEt.every((l) => marcados[l.id])} onChange={(e) => marcarColuna(doEt.map((l) => l.id), e.target.checked)} title="Selecionar todos desta coluna" />}
+                  <span className="crm-col-dot" style={{ background: et.cor }} />
                   <span className="crm-col-nome">{et.lb}</span>
                   <span className="crm-col-n">{doEt.length}</span>
                   {isGer && (
                     <span onClick={(e) => e.stopPropagation()} style={{ display: "inline-flex", gap: 1, marginLeft: 2 }}>
-                      <button type="button" title="Mover coluna para a esquerda" onClick={() => moverEtapa(et.k, -1)} style={{ border: "none", background: "transparent", cursor: "pointer", color: "#94a3b8", fontSize: 15, padding: "0 2px", lineHeight: 1, fontWeight: 700 }}>‹</button>
-                      <button type="button" title="Mover coluna para a direita" onClick={() => moverEtapa(et.k, 1)} style={{ border: "none", background: "transparent", cursor: "pointer", color: "#94a3b8", fontSize: 15, padding: "0 2px", lineHeight: 1, fontWeight: 700 }}>›</button>
+                      <button type="button" className="crm-col-seta" title="Mover coluna para a esquerda" onClick={() => moverEtapa(et.k, -1)}>‹</button>
+                      <button type="button" className="crm-col-seta" title="Mover coluna para a direita" onClick={() => moverEtapa(et.k, 1)}>›</button>
                     </span>
                   )}
                 </div>
                 {totalCol > 0 && <span className="crm-col-total">R$ {totalCol.toLocaleString("pt-BR")}</span>}
               </div>
               {doEt.length > 1 && (
-                <div onClick={(e) => e.stopPropagation()} style={{ display: "flex", alignItems: "center", gap: 6, padding: "0 10px 8px" }} title={"Selecionar os primeiros N de " + et.lb}>
-                  <input type="number" min="1" max={doEt.length} value={selN[et.k] || ""} placeholder="qtd" className="input" style={{ width: 74, padding: "5px 8px", fontSize: 13 }}
+                <div className="crm-selN" onClick={(e) => e.stopPropagation()} title={"Selecionar os primeiros N de " + et.lb}>
+                  <input type="number" min="1" max={doEt.length} value={selN[et.k] || ""} placeholder="qtd" className="input"
                     onChange={(e) => setSelN({ ...selN, [et.k]: e.target.value })}
                     onKeyDown={(e) => { if (e.key === "Enter") marcarPrimeirosN(doEt.map((l) => l.id), selN[et.k]); }} />
                   <button type="button" className="btn btn-sm" onClick={() => marcarPrimeirosN(doEt.map((l) => l.id), selN[et.k])}>Selecionar</button>
@@ -7845,12 +6050,15 @@ function OficialCRM({ showToast, isGer = true, onAbrirWhats, onDisparar }) {
                   <div key={l.id} className={"crm-card" + (marcados[l.id] ? " marcado" : "")} draggable onDragStart={() => setDragId(l.id)} onDragEnd={() => setDragId(null)} onClick={() => { setSel(l.id); setNovaNota(""); abrirLead(l.id); }}>
                     <div className="crm-card-top">
                       <label className="crm-check" onClick={(e) => e.stopPropagation()}><input type="checkbox" checked={!!marcados[l.id]} onChange={() => toggleMarcado(l.id)} /></label>
-                      <div className="crm-card-nome">{l.nome}</div>
+                      <span className="crm-card-av">{iniciais(l.nome)}</span>
+                      <div className="crm-card-id">
+                        <div className="crm-card-nome">{l.nome}</div>
+                        {l.telefone && <div className="crm-card-tel">{l.telefone}</div>}
+                      </div>
                       {l.telefone && (
                         <button className="crm-wa" onClick={(e) => { e.stopPropagation(); const r = e.currentTarget.getBoundingClientRect(); setWaMenu(waMenu && waMenu.id === l.id ? null : { id: l.id, tel: l.telefone, nome: l.nome, x: r.right, y: r.bottom, yt: r.top }); }} title="Chamar no WhatsApp"><I.wa className="ico" /></button>
                       )}
                     </div>
-                    {l.telefone && <div className="crm-card-tel">{l.telefone}</div>}
                     {l.curso && <div className="crm-card-curso">{l.curso}</div>}
                     {(l.valor > 0 || l.formaPagamento) && (
                       <div className="crm-card-pay">
@@ -7872,19 +6080,18 @@ function OficialCRM({ showToast, isGer = true, onAbrirWhats, onDisparar }) {
                         </span>
                       )}
                       {l.origem === "ligacao" && <span className="crm-tag-lig"><I.suporte className="ico-inline" /> Ligação</span>}
-                      {l.recorrente && <span className="crm-tag-lig" style={{ background: "#25A06B", color: "#fff", borderColor: "#25A06B" }} title="Este contato voltou a se cadastrar por uma nova captação">🔁 Lead Atualizado</span>}
+                      {l.recorrente && <span className="crm-tag-lig crm-tag-recorrente" title="Este contato voltou a se cadastrar por uma nova captação"><I.repetir className="ico-inline" /> Lead atualizado</span>}
                       <div className="crm-card-vend">
                         {l.vendedorNome
                           ? <><Avatar nome={l.vendedorNome} foto={l.vendedorFoto} size={22} /><span className="crm-card-vend-nm">{l.vendedorNome.split(" ").slice(0, 2).join(" ")}</span></>
                           : <span className="crm-card-semvend">sem dono</span>}
                       </div>
-                      {(l.notas || []).length > 0 && <span className="crm-card-notas">📝 {l.notas.length}</span>}
+                      {(l.notas || []).length > 0 && <span className="crm-card-notas" title="Notas"><I.nota className="ico-inline" /> {l.notas.length}</span>}
                     </div>
                   </div>
                 ))}
                 {!verTudoCol[et.k] && doEt.length > LIMITE_COL_CRM && (
-                  <button type="button" className="crm-vermais" onClick={() => setVerTudoCol((v) => ({ ...v, [et.k]: true }))}
-                    style={{ width: "100%", padding: "10px", marginTop: 4, border: "1px dashed var(--line)", borderRadius: 11, background: "var(--card)", color: "var(--muted)", fontWeight: 600, fontSize: 13, cursor: "pointer" }}>
+                  <button type="button" className="crm-vermais" onClick={() => setVerTudoCol((v) => ({ ...v, [et.k]: true }))}>
                     ↓ Ver mais {doEt.length - LIMITE_COL_CRM} {doEt.length - LIMITE_COL_CRM === 1 ? "lead" : "leads"}
                   </button>
                 )}
@@ -8092,521 +6299,6 @@ function OficialCRM({ showToast, isGer = true, onAbrirWhats, onDisparar }) {
   );
 }
 
-function OficialLigacoes({ showToast }) {
-  const [ias, setIas] = useState([]);
-  const [ligacoes, setLigacoes] = useState([]);
-  const [tel, setTel] = useState("");
-  const [nome, setNome] = useState("");
-  const [iaId, setIaId] = useState("");
-  const [ligando, setLigando] = useState(false);
-  const [aberta, setAberta] = useState(null);
-  const [massa, setMassa] = useState("");
-  const [massaIa, setMassaIa] = useState("");
-  const [intervalo, setIntervalo] = useState(45);
-  const [campanhas, setCampanhas] = useState([]);
-  const [enviandoMassa, setEnviandoMassa] = useState(false);
-  const [custo, setCusto] = useState(null);
-  const [editRate, setEditRate] = useState(false);
-  const [rateTmp, setRateTmp] = useState("");
-  const carregarCusto = () => api.ofCustoLigacoes().then(setCusto).catch(() => {});
-  async function salvarRate() {
-    try { const r = await api.ofSetCustoLigacoes(parseFloat(rateTmp) || 0); setEditRate(false); carregarCusto(); showToast("Valor por minuto atualizado"); }
-    catch (e) { showToast(e.message); }
-  }
-
-  function parseLista(txt) {
-    return (txt || "").split("\n").map((linha) => {
-      const l = linha.trim();
-      if (!l) return null;
-      const partes = l.split(/[,;\t]/).map((x) => x.trim()).filter(Boolean);
-      if (partes.length === 1) { const tel = partes[0].replace(/\D/g, ""); return tel.length >= 10 ? { telefone: tel, nome: "" } : null; }
-      // acha a parte com mais dígitos = telefone, o resto = nome
-      let tel = "", nome = "";
-      for (const p of partes) { const d = p.replace(/\D/g, ""); if (d.length >= 8 && d.length >= tel.replace(/\D/g, "").length) tel = d; else nome = nome ? nome + " " + p : p; }
-      return tel.length >= 10 ? { telefone: tel, nome } : null;
-    }).filter(Boolean);
-  }
-  const contatosMassa = parseLista(massa);
-
-  async function dispararMassa() {
-    if (!contatosMassa.length) { showToast("Cole ao menos um telefone válido (com DDD)"); return; }
-    if (!massaIa) { showToast("Escolha a IA da campanha"); return; }
-    if (!confirm(`Disparar ligações pra ${contatosMassa.length} contato(s)? Vai ligar 1 a cada ${intervalo}s. Isso gera custo por ligação.`)) return;
-    setEnviandoMassa(true);
-    try {
-      const r = await api.ofCampLigacaoCriar({ nome: "Campanha " + new Date().toLocaleDateString("pt-BR"), iaId: massaIa, intervalo, contatos: contatosMassa });
-      showToast(`Campanha criada: ${r.total} ligações na fila`);
-      setMassa("");
-      carregarCamp();
-    } catch (e) { showToast(e.message); }
-    finally { setEnviandoMassa(false); }
-  }
-  const carregarCamp = () => api.ofCampLigacoes().then(setCampanhas).catch(() => {});
-  async function pausarCamp(id) { try { await api.ofCampLigacaoPausar(id); carregarCamp(); } catch (e) { showToast(e.message); } }
-
-  const carregar = () => api.ofLigacoes().then(setLigacoes).catch(() => {});
-  useEffect(() => {
-    api.ofIAs().then((l) => setIas((l || []).filter((x) => x.ativa))).catch(() => {});
-    carregar();
-    carregarCamp();
-    const t = setInterval(() => { carregar(); carregarCamp(); }, 5000); // atualiza o status ao vivo
-    return () => clearInterval(t);
-  }, []);
-
-  async function ligar() {
-    const t = tel.replace(/\D/g, "");
-    if (t.length < 10) { showToast("Telefone inválido (com DDD)"); return; }
-    if (!iaId) { showToast("Escolha a IA"); return; }
-    setLigando(true);
-    try { await api.ofIniciarLigacao({ telefone: t, nome, iaId }); showToast("Ligação iniciada — acompanhe abaixo"); setTel(""); setNome(""); carregar(); }
-    catch (e) { showToast(e.message); }
-    finally { setLigando(false); }
-  }
-
-  const statusInfo = (l) => {
-    const m = {
-      discando: { t: "Discando…", c: "#b45309", bg: "rgba(245,158,11,.14)" },
-      em_conversa: { t: "Em conversa", c: "#059669", bg: "rgba(16,185,129,.14)" },
-      finalizada: { t: "Finalizada", c: "var(--muted)", bg: "var(--surface-2)" },
-      nao_atendeu: { t: "Não atendeu", c: "#64748b", bg: "var(--surface-2)" },
-      ocupado: { t: "Ocupado", c: "#64748b", bg: "var(--surface-2)" },
-      sem_resposta: { t: "Sem resposta", c: "#64748b", bg: "var(--surface-2)" },
-      erro: { t: "Erro", c: "#dc2626", bg: "rgba(244,63,94,.12)" },
-      failed: { t: "Falhou", c: "#dc2626", bg: "rgba(244,63,94,.12)" },
-    };
-    return m[l.status] || { t: l.status, c: "var(--muted)", bg: "var(--surface-2)" };
-  };
-  const classeInfo = (c) => ({
-    qualificado: { t: "✓ Qualificado", c: "#059669" },
-    callback: { t: "↻ Retornar", c: "#b45309" },
-    nao_qualificado: { t: "✕ Não qualificado", c: "#64748b" },
-  }[c]);
-
-  return (
-    <div className="onum-wrap">
-      <div className="disp-box" style={{ marginBottom: 18 }}>
-        <div style={{ padding: "16px 18px" }}>
-          <h3 style={{ margin: "0 0 4px", fontSize: 15 }}>Ligar pra um lead com a IA</h3>
-          <p className="panel-sub" style={{ margin: "0 0 14px" }}>A IA liga, conversa, qualifica e — se der certo — passa a conversa pro vendedor.</p>
-          <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "flex-end" }}>
-            <div style={{ flex: "1 1 160px" }}>
-              <label className="lbl-mini">Telefone (com DDD)</label>
-              <input className="input mono" placeholder="44 99999-9999" value={tel} onChange={(e) => setTel(e.target.value)} />
-            </div>
-            <div style={{ flex: "1 1 140px" }}>
-              <label className="lbl-mini">Nome (opcional)</label>
-              <input className="input" placeholder="Nome do lead" value={nome} onChange={(e) => setNome(e.target.value)} />
-            </div>
-            <div style={{ flex: "1 1 180px" }}>
-              <label className="lbl-mini">IA</label>
-              <select className="input" value={iaId} onChange={(e) => setIaId(e.target.value)}>
-                <option value="">Escolher IA…</option>
-                {ias.map((ia) => <option key={ia.id} value={ia.id}>{ia.nome}</option>)}
-              </select>
-            </div>
-            <button className="onum-add" disabled={ligando} onClick={ligar} style={{ height: 44 }}>
-              {ligando ? <span className="spin" /> : <I.suporte className="ico" />} Ligar agora
-            </button>
-          </div>
-          {ias.length === 0 && <div className="onum-dica" style={{ marginTop: 10 }}>Você precisa de uma IA ativa (aba Atendente IA) pra ligar. A IA usa a mesma personalidade e base de conhecimento.</div>}
-        </div>
-      </div>
-
-      <div className="disp-box" style={{ marginBottom: 18 }}>
-        <div style={{ padding: "16px 18px" }}>
-          <h3 style={{ margin: "0 0 4px", fontSize: 15 }}>Disparo em massa de ligações</h3>
-          <p className="panel-sub" style={{ margin: "0 0 14px" }}>Cole a lista (um por linha: <b>nome, telefone</b> — ou só o telefone). O sistema liga pra todos, um a cada intervalo.</p>
-          <textarea className="input" rows={5} style={{ width: "100%", resize: "vertical", fontFamily: "inherit" }}
-            placeholder={"João, 44 99999-8888\nMaria, 44 98888-7777\n44 97777-6666"}
-            value={massa} onChange={(e) => setMassa(e.target.value)} />
-          <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "flex-end", marginTop: 10 }}>
-            <div style={{ flex: "1 1 180px" }}>
-              <label className="lbl-mini">IA da campanha</label>
-              <select className="input" value={massaIa} onChange={(e) => setMassaIa(e.target.value)}>
-                <option value="">Escolher IA…</option>
-                {ias.map((ia) => <option key={ia.id} value={ia.id}>{ia.nome}</option>)}
-              </select>
-            </div>
-            <div style={{ flex: "0 0 150px" }}>
-              <label className="lbl-mini">Intervalo (segundos)</label>
-              <input className="input" type="number" min={15} value={intervalo} onChange={(e) => setIntervalo(e.target.value)} />
-            </div>
-            <button className="onum-add" disabled={enviandoMassa} onClick={dispararMassa} style={{ height: 44 }}>
-              {enviandoMassa ? <span className="spin" /> : <I.megaphone className="ico" />} Disparar {contatosMassa.length > 0 ? `(${contatosMassa.length})` : ""}
-            </button>
-          </div>
-          {massa.trim() && <div className="onum-dica" style={{ marginTop: 8 }}>{contatosMassa.length} telefone(s) válido(s) detectado(s) na lista.</div>}
-        </div>
-      </div>
-
-      {campanhas.length > 0 && (
-        <div style={{ marginBottom: 18 }}>
-          <h3 style={{ margin: "0 0 10px", fontSize: 14 }}>Campanhas de ligação</h3>
-          <div className="disp-lista">
-            {campanhas.map((c) => {
-              const pct = c.total ? Math.round((c.feitas / c.total) * 100) : 0;
-              return (
-                <div key={c.id} className="disp-row" style={{ cursor: "default" }}>
-                  <span className="disp-row-main">
-                    <span className="disp-row-nome">{c.nome}</span>
-                    <span className="disp-row-meta">{c.feitas}/{c.total} ligadas · 1 a cada {c.intervalo}s</span>
-                    <span style={{ display: "block", height: 5, background: "var(--surface-2)", borderRadius: 4, marginTop: 6, overflow: "hidden" }}>
-                      <span style={{ display: "block", height: "100%", width: pct + "%", background: "var(--brand)", borderRadius: 4 }} />
-                    </span>
-                  </span>
-                  <span className="disp-row-pill" style={{ background: c.status === "rodando" ? "rgba(16,185,129,.14)" : "var(--surface-2)", color: c.status === "rodando" ? "#059669" : "var(--muted)" }}>{c.status === "rodando" ? "Rodando" : c.status === "concluida" ? "Concluída" : "Pausada"}</span>
-                  {c.status !== "concluida" && <button className="btn btn-sm" onClick={() => pausarCamp(c.id)}>{c.status === "rodando" ? "Pausar" : "Retomar"}</button>}
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
-
-      <h3 style={{ margin: "0 0 12px", fontSize: 15 }}>Ligações recentes</h3>
-      {ligacoes.length === 0 ? (
-        <div className="disp-vazio">Nenhuma ligação ainda. Faça a primeira acima.</div>
-      ) : (
-        <div className="disp-lista">
-          {ligacoes.map((l) => {
-            const si = statusInfo(l), ci = classeInfo(l.classificacao);
-            const ab = aberta === l.id;
-            return (
-              <div key={l.id}>
-                <button className="disp-row" onClick={() => setAberta(ab ? null : l.id)}>
-                  <span className="disp-row-main">
-                    <span className="disp-row-nome">{l.nome || l.telefone}</span>
-                    <span className="disp-row-meta">{l.telefone}{l.duracao ? " · " + l.duracao + "s" : ""} · {new Date(l.criadoEm).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}</span>
-                  </span>
-                  {ci && <span style={{ fontSize: 11.5, fontWeight: 700, color: ci.c }}>{ci.t}</span>}
-                  <span className="disp-row-pill" style={{ background: si.bg, color: si.c }}>{si.t}</span>
-                  <I.chevron className="disp-row-arrow" style={{ transform: ab ? "rotate(0deg)" : "rotate(-90deg)" }} />
-                </button>
-                {ab && (
-                  <div style={{ padding: "12px 16px 16px", background: "var(--surface-2)", borderRadius: "0 0 12px 12px", marginTop: -4 }}>
-                    {l.erro && <div style={{ color: "#dc2626", fontSize: 12.5, marginBottom: 8 }}>Erro: {l.erro}</div>}
-                    {(l.transcricao || []).length === 0 ? (
-                      <div style={{ fontSize: 12.5, color: "var(--muted)" }}>Sem transcrição (a ligação não chegou a conversar).</div>
-                    ) : (
-                      <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                        {l.transcricao.map((t, i) => (
-                          <div key={i} style={{ fontSize: 13, lineHeight: 1.4 }}>
-                            <b style={{ color: t.role === "ia" ? "var(--brand)" : "var(--text)" }}>{t.role === "ia" ? "IA" : "Lead"}:</b> <span style={{ color: "var(--text)" }}>{t.content}</span>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function OficialTemperatura({ showToast }) {
-  const [dados, setDados] = useState(null);
-  const [carregando, setCarregando] = useState(true);
-  const [dias, setDias] = useState(30);
-  const PERIODOS = [{ v: 7, l: "7 dias" }, { v: 30, l: "30 dias" }, { v: 90, l: "90 dias" }, { v: 0, l: "Tudo" }];
-  const DIAS = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
-
-  useEffect(() => {
-    setCarregando(true);
-    api.ofTemperatura(dias).then((d) => { setDados(d); setCarregando(false); }).catch((e) => { showToast(e.message); setCarregando(false); });
-  }, [dias]);
-
-  // escala de calor: verde (pouco) -> amarelo -> laranja -> vermelho (muito)
-  const heat = (ratio) => {
-    if (ratio <= 0) return "#f1f5f9";
-    const hue = 140 - ratio * 140;
-    const light = 82 - ratio * 34;
-    return `hsl(${Math.round(hue)}, 78%, ${Math.round(light)}%)`;
-  };
-  const h2 = (h) => String(h).padStart(2, "0") + "h";
-
-  if (carregando) return <div className="dash-empty"><p>Carregando temperatura…</p></div>;
-  if (!dados || dados.total === 0) {
-    return (
-      <div className="dash-empty">
-        <I.trend className="ico-empty" />
-        <p>Ainda não há respostas de leads suficientes pra montar o mapa. Assim que os leads começarem a responder, o horário quente aparece aqui.</p>
-      </div>
-    );
-  }
-
-  const maxHora = Math.max(...dados.byHour, 1);
-  const maxCel = Math.max(...dados.grid.flat(), 1);
-  const maxDia = Math.max(...dados.byDia, 1);
-  const cardStyle = { background: "var(--card,#fff)", border: "1px solid var(--linha,#eef0f4)", borderRadius: 14, padding: 16, marginBottom: 14 };
-
-  return (
-    <div className="of-temp">
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 8, marginBottom: 14 }}>
-        <div>
-          <h2 style={{ margin: 0, fontSize: 20 }}>🌡️ Temperatura — quando os leads respondem</h2>
-          <p style={{ margin: "4px 0 0", color: "var(--muted)", fontSize: 13 }}>Horário (do Brasil) em que os leads mais mandam mensagem. Quanto mais vermelho, mais quente.</p>
-        </div>
-        <div style={{ display: "inline-flex", background: "var(--soft,#f1f3f8)", borderRadius: 10, padding: 3 }}>
-          {PERIODOS.map((p) => (
-            <button key={p.v} onClick={() => setDias(p.v)}
-              style={{ border: "none", cursor: "pointer", padding: "6px 12px", borderRadius: 8, fontSize: 13, fontFamily: "inherit",
-                background: dias === p.v ? "var(--brand,#4f46e5)" : "transparent", color: dias === p.v ? "#fff" : "var(--muted)", fontWeight: dias === p.v ? 600 : 500 }}>{p.l}</button>
-          ))}
-        </div>
-      </div>
-
-      {/* destaques */}
-      <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 14 }}>
-        <div style={{ ...cardStyle, marginBottom: 0, flex: 1, minWidth: 150, textAlign: "center", background: "linear-gradient(135deg,#fee2e2,#fff)" }}>
-          <div style={{ fontSize: 12, color: "var(--muted)" }}>HORÁRIO MAIS QUENTE</div>
-          <div style={{ fontSize: 26, fontWeight: 800, color: "#dc2626" }}>{h2(dados.picoHora)}</div>
-          <div style={{ fontSize: 12, color: "var(--muted)" }}>{dados.byHour[dados.picoHora]} respostas</div>
-        </div>
-        <div style={{ ...cardStyle, marginBottom: 0, flex: 1, minWidth: 150, textAlign: "center" }}>
-          <div style={{ fontSize: 12, color: "var(--muted)" }}>DIA MAIS QUENTE</div>
-          <div style={{ fontSize: 26, fontWeight: 800, color: "var(--brand,#4f46e5)" }}>{DIAS[dados.picoDia]}</div>
-          <div style={{ fontSize: 12, color: "var(--muted)" }}>{dados.byDia[dados.picoDia]} respostas</div>
-        </div>
-        <div style={{ ...cardStyle, marginBottom: 0, flex: 1, minWidth: 150, textAlign: "center" }}>
-          <div style={{ fontSize: 12, color: "var(--muted)" }}>TOTAL DE RESPOSTAS</div>
-          <div style={{ fontSize: 26, fontWeight: 800 }}>{dados.total}</div>
-          <div style={{ fontSize: 12, color: "var(--muted)" }}>no período</div>
-        </div>
-      </div>
-
-      {/* barras por hora (0-23) */}
-      <div style={cardStyle}>
-        <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 12 }}>Respostas por hora do dia</div>
-        <div style={{ display: "flex", alignItems: "flex-end", gap: 3, height: 130 }}>
-          {dados.byHour.map((v, h) => {
-            const r = v / maxHora;
-            return (
-              <div key={h} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "flex-end", height: "100%" }} title={`${h2(h)}: ${v} respostas`}>
-                <div style={{ fontSize: 9, color: "var(--muted)", marginBottom: 2 }}>{v > 0 && h === dados.picoHora ? v : ""}</div>
-                <div style={{ width: "100%", height: Math.max(v > 0 ? 4 : 0, r * 100) + "px", background: heat(r), borderRadius: "4px 4px 0 0", border: h === dados.picoHora ? "2px solid #dc2626" : "none" }} />
-                <div style={{ fontSize: 9, color: "var(--muted)", marginTop: 3 }}>{h % 3 === 0 ? h : ""}</div>
-              </div>
-            );
-          })}
-        </div>
-        <div style={{ textAlign: "center", fontSize: 11, color: "var(--muted)", marginTop: 4 }}>hora do dia (0–23)</div>
-      </div>
-
-      {/* heatmap dia da semana x hora */}
-      <div style={cardStyle}>
-        <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 12 }}>Mapa de calor — dia da semana × hora</div>
-        <div style={{ overflowX: "auto" }}>
-          <div style={{ display: "inline-block", minWidth: 640 }}>
-            {/* cabeçalho de horas */}
-            <div style={{ display: "flex", gap: 2, marginLeft: 42, marginBottom: 3 }}>
-              {Array.from({ length: 24 }, (_, h) => (
-                <div key={h} style={{ flex: 1, fontSize: 9, color: "var(--muted)", textAlign: "center" }}>{h % 3 === 0 ? h : ""}</div>
-              ))}
-            </div>
-            {dados.grid.map((linha, d) => (
-              <div key={d} style={{ display: "flex", alignItems: "center", gap: 2, marginBottom: 2 }}>
-                <div style={{ width: 40, fontSize: 11, color: "var(--muted)", textAlign: "right", paddingRight: 4, fontWeight: d === dados.picoDia ? 700 : 400 }}>{DIAS[d]}</div>
-                {linha.map((v, h) => (
-                  <div key={h} title={`${DIAS[d]} ${h2(h)}: ${v} respostas`}
-                    style={{ flex: 1, aspectRatio: "1", minWidth: 18, height: 20, background: heat(v / maxCel), borderRadius: 4, cursor: "default" }} />
-                ))}
-              </div>
-            ))}
-          </div>
-        </div>
-        {/* legenda */}
-        <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 12, fontSize: 11, color: "var(--muted)" }}>
-          <span>menos</span>
-          {[0, 0.25, 0.5, 0.75, 1].map((r) => <span key={r} style={{ width: 18, height: 14, borderRadius: 3, background: heat(r), display: "inline-block" }} />)}
-          <span>mais</span>
-        </div>
-      </div>
-
-      <p style={{ fontSize: 12, color: "var(--muted)" }}>Dica: concentre os disparos um pouco antes do horário mais quente pra pegar o lead no momento que ele costuma responder.</p>
-    </div>
-  );
-}
-
-function OficialMetricas({ showToast }) {
-  const [dados, setDados] = useState(null); // { numeros, total }
-  const [carregando, setCarregando] = useState(true);
-  const [vals, setVals] = useState({});     // edições locais dos campos de R$
-  const [puxando, setPuxando] = useState(null);
-  const [dias, setDias] = useState(30);     // período: 1 (hoje) / 7 / 30 / 90 / 0 (tudo)
-
-  const PERIODOS = [{ v: 1, l: "Hoje" }, { v: 7, l: "7 dias" }, { v: 30, l: "30 dias" }, { v: 90, l: "90 dias" }, { v: 0, l: "Tudo" }];
-
-  const carregar = () => {
-    setCarregando(true);
-    api.ofMetricas(dias)
-      .then((d) => { setDados(d); setCarregando(false); })
-      .catch((e) => { showToast(e.message); setCarregando(false); });
-  };
-  useEffect(() => { carregar(); }, [dias]);
-  // sincroniza os inputs de R$ com o que veio do servidor
-  useEffect(() => {
-    if (!dados) return;
-    const v = {};
-    for (const m of dados.numeros) v[m.id] = { faturamento: m.faturamento, gasto: m.gasto };
-    setVals(v);
-  }, [dados]);
-
-  const brl = (n) => "R$ " + (Number(n) || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-  const parseNum = (s) => Math.max(0, Number(String(s).replace(/\./g, "").replace(",", ".").replace(/[^\d.]/g, "")) || 0);
-
-  async function salvar(id, campo) {
-    const valor = parseNum((vals[id] || {})[campo]);
-    try { await api.ofSalvarMetricas(id, { [campo]: valor }); carregar(); }
-    catch (e) { showToast(e.message); }
-  }
-  async function puxarGasto(id) {
-    setPuxando(id);
-    try {
-      const r = await api.ofPuxarGastoMeta(id, dias || 30);
-      if (r.gasto > 0) showToast("Gasto puxado da Meta (" + (dias || 30) + " dias): " + brl(r.gasto));
-      else if (r.aviso) showToast(r.aviso);
-      carregar();
-      return r;
-    } catch (e) {
-      showToast("Não deu pra puxar da Meta: " + e.message + ". Digite o gasto na mão.");
-    } finally { setPuxando(null); }
-  }
-  async function puxarTodos() {
-    if (!dados) return;
-    let achou = 0;
-    for (const m of dados.numeros) {
-      setPuxando(m.id);
-      try { const r = await api.ofPuxarGastoMeta(m.id, dias || 30); if (r && r.gasto > 0) achou++; }
-      catch (e) { /* segue os outros */ }
-    }
-    setPuxando(null);
-    carregar();
-    showToast(achou > 0 ? ("Gasto puxado de " + achou + " número(s).") : "A Meta devolveu R$ 0 pra todos (atraso de 1–3 dias ou conta não expõe custo). Pode digitar na mão.");
-  }
-
-  const roiTxt = (roi) => roi === null ? "—" : (roi >= 0 ? "+" : "") + Math.round(roi * 100) + "%";
-  const corValor = (v) => (v > 0 ? "#16a34a" : v < 0 ? "#dc2626" : "var(--muted)");
-
-  if (carregando) return <div className="dash-empty"><p>Carregando métricas…</p></div>;
-  if (!dados || !dados.numeros.length) {
-    return (
-      <div className="dash-empty">
-        <I.cash className="ico-empty" />
-        <p>Nenhum número pra mostrar métricas ainda.</p>
-      </div>
-    );
-  }
-
-  const t = dados.total || {};
-  const mostrarTotais = dados.numeros.length > 1;
-  const cardStyle = { background: "var(--card, #fff)", border: "1px solid var(--linha, #eef0f4)", borderRadius: 14, padding: 16, marginBottom: 12 };
-  const inputR$ = { width: 120, padding: "7px 9px", border: "1px solid var(--linha, #e2e6ee)", borderRadius: 8, fontSize: 13.5, fontFamily: "inherit" };
-
-  return (
-    <div className="of-metricas">
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 8, marginBottom: 14 }}>
-        <div>
-          <h2 style={{ margin: 0, fontSize: 20 }}>Métricas por número</h2>
-          <p style={{ margin: "4px 0 0", color: "var(--muted)", fontSize: 13 }}>Gasto, faturamento e ROI de cada número. O faturamento você lança na mão.</p>
-        </div>
-        <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-          <div style={{ display: "inline-flex", background: "var(--soft, #f1f3f8)", borderRadius: 10, padding: 3 }}>
-            {PERIODOS.map((p) => (
-              <button key={p.v} onClick={() => setDias(p.v)}
-                style={{ border: "none", cursor: "pointer", padding: "6px 12px", borderRadius: 8, fontSize: 13, fontFamily: "inherit",
-                  background: dias === p.v ? "var(--brand, #4f46e5)" : "transparent",
-                  color: dias === p.v ? "#fff" : "var(--muted)", fontWeight: dias === p.v ? 600 : 500 }}>
-                {p.l}
-              </button>
-            ))}
-          </div>
-          <button className="btn btn-sm" title="Tentar puxar o gasto da Meta de todos os números, no período escolhido" onClick={puxarTodos} disabled={!!puxando}>
-            ↻ Puxar gasto de todos
-          </button>
-          <button className="btn btn-sm" onClick={carregar}><I.refresh className="ico" /> Atualizar</button>
-        </div>
-      </div>
-
-      {/* totais (só quando tem mais de um número) */}
-      {mostrarTotais && (
-        <div style={{ ...cardStyle, display: "flex", gap: 22, flexWrap: "wrap", background: "linear-gradient(135deg, rgba(99,102,241,.08), rgba(99,102,241,.02))" }}>
-          <div><div style={{ fontSize: 12, color: "var(--muted)" }}>GASTO TOTAL</div><div style={{ fontSize: 20, fontWeight: 700, color: "#dc2626" }}>{brl(t.gasto)}</div></div>
-          <div><div style={{ fontSize: 12, color: "var(--muted)" }}>FATURAMENTO</div><div style={{ fontSize: 20, fontWeight: 700, color: "#16a34a" }}>{brl(t.faturamento)}</div></div>
-          <div><div style={{ fontSize: 12, color: "var(--muted)" }}>LUCRO</div><div style={{ fontSize: 20, fontWeight: 700, color: corValor(t.lucro) }}>{brl(t.lucro)}</div></div>
-          <div><div style={{ fontSize: 12, color: "var(--muted)" }}>ROI GERAL</div><div style={{ fontSize: 20, fontWeight: 700, color: t.roi === null ? "var(--muted)" : corValor(t.roi) }}>{roiTxt(t.roi)}</div></div>
-          <div style={{ marginLeft: "auto", alignSelf: "center", textAlign: "right" }}>
-            <div style={{ fontSize: 12, color: "var(--muted)" }}>ENVIADOS / ENTREGUES / RESPOSTAS</div>
-            <div style={{ fontSize: 15, fontWeight: 600 }}>{t.enviados} · {t.entregues} · {t.responderam}</div>
-          </div>
-        </div>
-      )}
-
-      {/* um card por número */}
-      {dados.numeros.map((m) => {
-        const v = vals[m.id] || { faturamento: m.faturamento, gasto: m.gasto };
-        return (
-          <div key={m.id} style={cardStyle}>
-            <div style={{ display: "flex", alignItems: "baseline", gap: 10, marginBottom: 12, flexWrap: "wrap" }}>
-              <b style={{ fontSize: 16 }}>{m.apelido}</b>
-              {m.vendedorNome
-                ? <span style={{ fontSize: 12.5, color: "var(--brand, #4f46e5)" }}>👤 {m.vendedorNome}</span>
-                : <span style={{ fontSize: 12.5, color: "var(--muted)" }}>🔀 sem dono</span>}
-              {m.numero && <span style={{ fontSize: 12.5, color: "var(--muted)" }}>{m.numero}</span>}
-            </div>
-
-            <div style={{ display: "flex", gap: 22, flexWrap: "wrap", alignItems: "flex-end" }}>
-              {/* GASTO — editável + puxar da meta */}
-              <div>
-                <div style={{ fontSize: 12, color: "var(--muted)", marginBottom: 4 }}>GASTO (Meta)</div>
-                <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
-                  <input style={inputR$} value={v.gasto}
-                    onChange={(e) => setVals({ ...vals, [m.id]: { ...v, gasto: e.target.value } })}
-                    onBlur={() => salvar(m.id, "gasto")} />
-                  <button className="btn btn-sm" title="Tentar puxar o gasto da Meta (últimos 30 dias)"
-                    disabled={puxando === m.id} onClick={() => puxarGasto(m.id)}>
-                    {puxando === m.id ? "…" : "↻ Meta"}
-                  </button>
-                </div>
-              </div>
-              {/* FATURAMENTO — na mão */}
-              <div>
-                <div style={{ fontSize: 12, color: "var(--muted)", marginBottom: 4 }}>FATURAMENTO</div>
-                <input style={inputR$} value={v.faturamento}
-                  onChange={(e) => setVals({ ...vals, [m.id]: { ...v, faturamento: e.target.value } })}
-                  onBlur={() => salvar(m.id, "faturamento")} />
-              </div>
-              {/* LUCRO */}
-              <div>
-                <div style={{ fontSize: 12, color: "var(--muted)", marginBottom: 4 }}>LUCRO</div>
-                <div style={{ fontSize: 19, fontWeight: 700, color: corValor(m.lucro) }}>{brl(m.lucro)}</div>
-              </div>
-              {/* ROI */}
-              <div>
-                <div style={{ fontSize: 12, color: "var(--muted)", marginBottom: 4 }}>ROI</div>
-                <div style={{ fontSize: 19, fontWeight: 700, color: m.roi === null ? "var(--muted)" : corValor(m.roi) }}>{roiTxt(m.roi)}</div>
-              </div>
-              {/* métricas de disparo/conversa */}
-              <div style={{ marginLeft: "auto", textAlign: "right", fontSize: 13, color: "var(--muted)", lineHeight: 1.7 }}>
-                <div><b style={{ color: "var(--txt, #111)" }}>{m.enviados}</b> enviados · <b style={{ color: "var(--txt, #111)" }}>{m.entregues}</b> entregues</div>
-                <div><b style={{ color: "var(--txt, #111)" }}>{m.conversas}</b> conversas · <b style={{ color: "var(--txt, #111)" }}>{m.responderam}</b> responderam{m.falhas ? <> · <span style={{ color: "#dc2626" }}>{m.falhas} falhas</span></> : null}</div>
-              </div>
-            </div>
-          </div>
-        );
-      })}
-
-      <p style={{ fontSize: 12, color: "var(--muted)", marginTop: 6, lineHeight: 1.6 }}>
-        O período (Hoje / 7 / 30 / 90 dias) filtra os <b>disparos e conversas</b> e a janela do <b>↻ Meta</b>. O <b>botão ↻ Meta</b> tenta puxar o gasto direto da conta — se a Meta devolver R$ 0 (custo por API costuma atrasar 1 a 3 dias, ou a conta não expõe), é só digitar o gasto na mão que o <b>ROI recalcula sozinho</b>. Gasto e faturamento são os valores lançados/puxados.
-      </p>
-    </div>
-  );
-}
-
-// badge da qualidade do número (vindo da Meta): Alta/Média/Baixa + limite + se subiu/caiu
 function badgeQualidade(q) {
   if (!q || !q.rating || q.rating === "UNKNOWN") {
     return <span style={{ fontSize: 11.5, color: "var(--faint)" }}>⚪ Qualidade: sem dado ainda</span>;
@@ -9647,6 +7339,7 @@ function InboxOficial({ isGer, ehLider, showToast, onIrParaEvolution, target, on
     versaoRef.current = ""; // ao trocar busca/campanha, força a próxima checagem a baixar
     // a cada 6s pergunta só o "carimbo" (barato). Se mudou, aí sim baixa a lista pesada.
     const t = setInterval(async () => {
+      if (document.hidden) return; // v2.0: aba escondida não fica consultando o servidor
       try {
         // durante uma busca, mantém o comportamento simples (recarrega direto)
         if (busca && busca.trim()) { carregarLista(); return; }
@@ -9733,7 +7426,7 @@ function InboxOficial({ isGer, ehLider, showToast, onIrParaEvolution, target, on
     if (!sel) { setConversa(null); return; }
     const carregar = () => api.ofChat(sel).then(setConversa).catch(() => {});
     carregar();
-    const t = setInterval(carregar, 6000); // aliviado: era 4000
+    const t = setInterval(() => { if (!document.hidden) carregar(); }, 6000); // v2.0: pausa com a aba escondida
     return () => clearInterval(t);
   }, [sel]);
 
@@ -10109,7 +7802,7 @@ function InboxOficial({ isGer, ehLider, showToast, onIrParaEvolution, target, on
                     value={conversa.etapaLead || ""}
                     onChange={(e) => mudarEtapa(e.target.value)}
                     title="Mover este lead no funil (Pipeline)"
-                    style={{ padding: "7px 10px", borderRadius: 8, border: "1px solid #e2e8f0", fontSize: 13, fontWeight: 600, color: "#0f172a", background: "#fff", cursor: "pointer", maxWidth: 175 }}
+                    style={{ height: 34, padding: "0 10px", borderRadius: 9, border: "1px solid var(--line)", fontSize: 13, fontWeight: 600, color: "var(--text)", background: "var(--card)", cursor: "pointer", maxWidth: 175 }}
                   >
                     <option value="">Etapa do funil…</option>
                     {etapas.map((e) => <option key={e.k} value={e.k}>{e.lb}</option>)}
@@ -10137,7 +7830,7 @@ function InboxOficial({ isGer, ehLider, showToast, onIrParaEvolution, target, on
                   </button>
                 )}
                 <button className="of-acao-btn" title="Ligar para este lead pelo Atende Simples" disabled={ligando} onClick={abrirConfirmacaoLigar}>
-                  {ligando ? <span className="spin" /> : "📞"} Ligar
+                  {ligando ? <span className="spin" /> : <I.fone className="ico" />} Ligar
                 </button>
                 {confirmarLig && (
                   <Portal>
@@ -10236,10 +7929,10 @@ function InboxOficial({ isGer, ehLider, showToast, onIrParaEvolution, target, on
                   <I.gauge className="ico" /> Registrar venda
                 </button>
                 <button className="of-acao-btn" title="Exportar esta conversa em PDF" disabled={baixandoConvPdf} onClick={exportarConversaPDF}>
-                  {baixandoConvPdf ? <span className="spin" /> : "⬇"} Exportar PDF
+                  {baixandoConvPdf ? <span className="spin" /> : <I.download className="ico" />} Exportar PDF
                 </button>
                 <button className="of-acao-btn" title="Adicionar observação (a IA lê e considera na análise)" onClick={abrirObs}>
-                  📝 Observação
+                  <I.nota className="ico" /> Observação
                 </button>
                 <button className="of-acao-btn fim" title="Encerrar atendimento" onClick={() => encerrar()}>
                   <I.check className="ico" /> Encerrar
@@ -10599,6 +8292,7 @@ function WhatsApp({ user, showToast, target, onTargetUsed, recarregarSol }) {
       await carregarChats(false);
     })();
     const t = setInterval(async () => {
+      if (document.hidden) return; // v2.0: aba escondida não fica consultando o servidor
       await carregarChats(true);
       if (selRef.current) {
         try { setChat(await api.waChat(selRef.current)); } catch (_) {}
@@ -10847,6 +8541,25 @@ function WhatsApp({ user, showToast, target, onTargetUsed, recarregarSol }) {
         <button className={canalAba === "oficial" ? "canal-aba on oficial" : "canal-aba oficial"} onClick={() => setCanalAba("oficial")}>
           <I.send className="ico" /> Oficial
         </button>
+        {canalAba !== "oficial" && !semEvolution && (
+          <div className="wa-toolbar">
+            <div className="wa-toolbar-left">
+              {isGer && (
+                <select className="select" style={{ minWidth: 200 }} value={filtro} onChange={(e) => setFiltro(e.target.value)}>
+                  <option value="todas">Todos os vendedores</option>
+                  {vendedoresWA.map((v) => <option key={v.id} value={v.id}>{v.nome}</option>)}
+                </select>
+              )}
+              {!isGer && minha && minha.estado !== "open" && (
+                <button className="btn btn-primary" onClick={() => setQrInst(minha.instance)}><I.link style={{ width: 15, height: 15 }} /> Conectar meu WhatsApp</button>
+              )}
+              {!isGer && minha && minha.estado === "open" && (
+                <span style={{ fontSize: 13, color: "var(--fechou)", fontWeight: 600, display: "flex", alignItems: "center", gap: 6 }}><span className="wa-dot on" /> WhatsApp conectado</span>
+              )}
+            </div>
+            {isGer && <button className="btn" onClick={() => setShowCfg(true)}><I.cog style={{ width: 15, height: 15 }} /> Configurar conexão</button>}
+          </div>
+        )}
       </div>
 
       {canalAba === "oficial" ? (
@@ -10858,37 +8571,19 @@ function WhatsApp({ user, showToast, target, onTargetUsed, recarregarSol }) {
         </div></div>
       ) : (
       <>
-      <div className="wa-toolbar">
-        <div className="wa-toolbar-left">
-          {isGer && (
-            <select className="select" style={{ minWidth: 200 }} value={filtro} onChange={(e) => setFiltro(e.target.value)}>
-              <option value="todas">Todos os vendedores</option>
-              {vendedoresWA.map((v) => <option key={v.id} value={v.id}>{v.nome}</option>)}
-            </select>
-          )}
-          {!isGer && minha && minha.estado !== "open" && (
-            <button className="btn btn-primary" onClick={() => setQrInst(minha.instance)}><I.link style={{ width: 15, height: 15 }} /> Conectar meu WhatsApp</button>
-          )}
-          {!isGer && minha && minha.estado === "open" && (
-            <span style={{ fontSize: 13, color: "var(--fechou)", fontWeight: 600, display: "flex", alignItems: "center", gap: 6 }}><span className="wa-dot on" /> WhatsApp conectado</span>
-          )}
-        </div>
-        {isGer && <button className="btn" onClick={() => setShowCfg(true)}><I.cog style={{ width: 15, height: 15 }} /> Configurar conexão</button>}
-      </div>
-      <div className="wa-filtros wa-filtros-row">
-        <button type="button" className={"wa-filtro" + (filtroAtivo === "ativas" ? " on" : "")} onClick={() => escolherFiltro("ativas")}>Ativas</button>
-        <button type="button" className={"wa-filtro" + (filtroAtivo === "aguardando" ? " on" : "")} onClick={() => escolherFiltro("aguardando")}>
-          Aguardando{aguardandoCount ? <span className="wa-filtro-cnt">{aguardandoCount}</span> : null}
-        </button>
-        <button type="button" className={"wa-filtro" + (filtroAtivo === "arquivadas" ? " on" : "")} onClick={() => escolherFiltro("arquivadas")}>
-          <I.arquivar style={{ width: 13, height: 13 }} /> Arquivadas
-        </button>
-      </div>
-
       <div className="wa-grid">
         <div className="wa-list">
           <div className="wa-list-h">
             <div className="wa-search"><input value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Buscar lead por nome ou número..." /></div>
+            <div className="wa-filtros wa-filtros-row">
+              <button type="button" className={"wa-filtro" + (filtroAtivo === "ativas" ? " on" : "")} onClick={() => escolherFiltro("ativas")}>Ativas</button>
+              <button type="button" className={"wa-filtro" + (filtroAtivo === "aguardando" ? " on" : "")} onClick={() => escolherFiltro("aguardando")}>
+                Aguardando{aguardandoCount ? <span className="wa-filtro-cnt">{aguardandoCount}</span> : null}
+              </button>
+              <button type="button" className={"wa-filtro" + (filtroAtivo === "arquivadas" ? " on" : "")} onClick={() => escolherFiltro("arquivadas")}>
+                <I.arquivar style={{ width: 13, height: 13 }} /> Arquivadas
+              </button>
+            </div>
           </div>
           <div className="wa-list-scroll">
             {filtrados.length === 0 && <div style={{ padding: 30, textAlign: "center", color: "var(--faint)", fontSize: 13 }}>Nenhuma conversa ainda.</div>}
@@ -10937,8 +8632,8 @@ function WhatsApp({ user, showToast, target, onTargetUsed, recarregarSol }) {
               {chat.nota != null && <span className="nota-badge" title="Nota da pesquisa de satisfação">⭐ {chat.nota}/5</span>}
               {isGer && <button type="button" className="btn-pipe" onClick={() => setCadPipeline(true)} title="Cadastrar este lead no Pipeline"><I.pipe style={{ width: 14, height: 14 }} /> Pipeline</button>}
               <button type="button" className="btn-venda" onClick={() => setRegVenda(true)} title="Registrar uma venda deste cliente"><I.gauge style={{ width: 14, height: 14 }} /> Registrar venda</button>
-              <button type="button" className="btn-pipe" onClick={abrirConfirmacaoLigar} disabled={ligando} title="Ligar para este lead pelo Atende Simples">📞 Ligar</button>
-              <button type="button" className="btn-pipe" onClick={abrirObs} title="Adicionar observação (a IA lê e considera na análise)">📝 Observação</button>
+              <button type="button" className="btn-pipe" onClick={abrirConfirmacaoLigar} disabled={ligando} title="Ligar para este lead pelo Atende Simples"><I.fone style={{ width: 14, height: 14 }} /> Ligar</button>
+              <button type="button" className="btn-pipe" onClick={abrirObs} title="Adicionar observação (a IA lê e considera na análise)"><I.nota style={{ width: 14, height: 14 }} /> Observação</button>
               {!isGer && <button type="button" className="btn-suporte" onClick={() => setPedindoSuporte(true)} title="Encaminhar este atendimento para a equipe de suporte"><I.suporte style={{ width: 14, height: 14 }} /> Encaminhar pro suporte</button>}
               {chat.encerrado ? (
                 <div className="enc-acao">
@@ -11361,1104 +9056,10 @@ function QrModal({ instance, onClose, onConnected }) {
 }
 
 /* ---------- NOVA CONVERSA ---------- */
-function NovaConversa({ isGer, instancias, minha, numeroInicial, onClose, onCriada }) {
-  const [instance, setInstance] = useState(isGer ? (instancias[0]?.instance || "") : (minha?.instance || ""));
-  const [numero, setNumero] = useState(numeroInicial || "");
-  const [texto, setTexto] = useState("");
-  const [saving, setSaving] = useState(false);
-
-  async function enviar() {
-    if (!numero.trim() || !texto.trim()) return;
-    setSaving(true);
-    try { const r = await api.waIniciar({ instance, numero, texto }); onCriada(r.id); }
-    catch (e) { alert(e.message); setSaving(false); }
-  }
-
-  return (
-    <div className="modal" onClick={(e) => e.target === e.currentTarget && onClose()}>
-      <div className="modal-box">
-        <div className="mh"><h3>Nova conversa</h3><p>Envie a primeira mensagem pra um número.</p></div>
-        <div className="mb">
-          {isGer && (
-            <div className="field">
-              <label>Enviar pelo WhatsApp de</label>
-              <select className="select" value={instance} onChange={(e) => setInstance(e.target.value)}>
-                {instancias.map((i) => <option key={i.instance} value={i.instance}>{i.instance}</option>)}
-              </select>
-            </div>
-          )}
-          <div className="field">
-            <label>Número (com DDD)</label>
-            <input className="input" value={numero} onChange={(e) => setNumero(e.target.value)} placeholder="Ex: 5544999990000" autoFocus />
-          </div>
-          <div className="field">
-            <label>Mensagem</label>
-            <textarea className="textarea" value={texto} onChange={(e) => setTexto(e.target.value)} placeholder="Olá! Tudo bem?" />
-          </div>
-        </div>
-        <div className="mf">
-          <button className="btn full" onClick={onClose}>Cancelar</button>
-          <button className="btn btn-primary full" onClick={enviar} disabled={saving || !numero.trim() || !texto.trim()}>{saving ? "Enviando..." : "Enviar"}</button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-/* ============================================================
-   DASHBOARD / PAINEL
-   ============================================================ */
-function intervaloPeriodo(preset, de, ate) {
-  const agora = Date.now();
-  const d = new Date();
-  if (preset === "hoje") { d.setHours(0, 0, 0, 0); return [d.getTime(), agora]; }
-  if (preset === "semana") { return [agora - 7 * 86400000, agora]; }
-  if (preset === "mes") { return [new Date(d.getFullYear(), d.getMonth(), 1).getTime(), agora]; }
-  if (preset === "custom") {
-    const ini = de ? new Date(de + "T00:00:00").getTime() : 0;
-    const fim = ate ? new Date(ate + "T23:59:59").getTime() : agora;
-    return [ini, fim];
-  }
-  return [0, agora];
-}
-function inicioDoMes() {
-  const d = new Date();
-  return new Date(d.getFullYear(), d.getMonth(), 1).getTime();
-}
-
-function Dashboard({ user, showToast, irParaPipeline }) {
-  const isGer = user.role === "gerente";
-  const [cards, setCards] = useState([]);
-  const [users, setUsers] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [preset, setPreset] = useState("mes");
-  const [de, setDe] = useState("");
-  const [ate, setAte] = useState("");
-
-  async function carregar() {
-    setLoading(true);
-    try {
-      const cs = await api.listCards();
-      setCards(cs);
-      if (isGer) setUsers(await api.listUsers());
-    } catch (e) { showToast("✗ " + e.message); }
-    finally { setLoading(false); }
-  }
-  useEffect(() => { carregar(); /* eslint-disable-next-line */ }, []);
-
-  if (loading) return <div className="spin" />;
-
-  const [ini, fim] = intervaloPeriodo(preset, de, ate);
-  const dataFech = (c) => c.fechadoEm || c.atualizadoEm || 0;
-  const noPeriodoVenda = (c) => c.etapa === "fechou" && dataFech(c) >= ini && dataFech(c) <= fim;
-  const noPeriodoLead = (c) => (c.criadoEm || 0) >= ini && (c.criadoEm || 0) <= fim;
-
-  const vendas = cards.filter(noPeriodoVenda);
-  const totalVendido = vendas.reduce((s, c) => s + (Number(c.valorFinal) || 0), 0);
-  const nVendas = vendas.length;
-  const ticket = nVendas ? totalVendido / nVendas : 0;
-  const leadsPeriodo = cards.filter(noPeriodoLead);
-  const ganhosDoCohort = leadsPeriodo.filter((c) => c.etapa === "fechou").length;
-  const conversao = leadsPeriodo.length ? (ganhosDoCohort / leadsPeriodo.length) * 100 : 0;
-
-  const nomePeriodo = { hoje: "hoje", semana: "nos últimos 7 dias", mes: "neste mês", tudo: "no total", custom: "no período" }[preset];
-
-  const segBtns = (
-    <div className="seg">
-      {[["hoje", "Hoje"], ["semana", "7 dias"], ["mes", "Este mês"], ["tudo", "Tudo"], ["custom", "Personalizado"]].map(([k, lbl]) => (
-        <button key={k} className={preset === k ? "on" : ""} onClick={() => setPreset(k)}>{lbl}</button>
-      ))}
-    </div>
-  );
-
-  const kpis = (
-    <div className="stats">
-      <div className="stat"><div className="lab"><span className="dot" style={{ background: "var(--fechou)" }} />Total vendido</div><div className="val money">{fmtMoney(totalVendido)}</div></div>
-      <div className="stat"><div className="lab"><span className="dot" style={{ background: "var(--indigo)" }} />Vendas fechadas</div><div className="val">{nVendas}</div></div>
-      <div className="stat"><div className="lab"><span className="dot" style={{ background: "var(--negociando)" }} />Ticket médio</div><div className="val money">{fmtMoney(ticket)}</div></div>
-      <div className="stat"><div className="lab"><span className="dot" style={{ background: "var(--violet)" }} />Conversão</div><div className="val">{conversao.toFixed(0)}%</div></div>
-    </div>
-  );
-
-  /* ---------- VISÃO DO VENDEDOR ---------- */
-  if (!isGer) {
-    const vendidoMes = cards.filter((c) => c.etapa === "fechou" && dataFech(c) >= inicioDoMes()).reduce((s, c) => s + (Number(c.valorFinal) || 0), 0);
-    const meta = Number(user.meta) || 0;
-    const pct = meta > 0 ? Math.min(100, (vendidoMes / meta) * 100) : 0;
-    const bateu = meta > 0 && vendidoMes >= meta;
-    const ultimas = [...vendas].sort((a, b) => dataFech(b) - dataFech(a)).slice(0, 8);
-
-    return (
-      <div>
-        <div className="dash-top">{segBtns}</div>
-        {preset === "custom" && (
-          <div className="custom-range">De <input type="date" value={de} onChange={(e) => setDe(e.target.value)} /> até <input type="date" value={ate} onChange={(e) => setAte(e.target.value)} /></div>
-        )}
-        {kpis}
-        <div className="dash-grid">
-          <div className="panel">
-            <div className="panel-h"><h3>Minha meta do mês</h3></div>
-            <div className="big-meta">
-              {meta > 0 ? (
-                <>
-                  <div className={"pct" + (bateu ? " done" : "")}>{pct.toFixed(0)}%</div>
-                  <div className="sub">{fmtMoney(vendidoMes)} de {fmtMoney(meta)}{bateu ? " — meta batida! 🎉" : ""}</div>
-                  <div className="pbar"><div className={"pfill" + (bateu ? " done" : "")} style={{ width: pct + "%" }} /></div>
-                </>
-              ) : (
-                <div className="sub">Você ainda não tem uma meta definida. Peça pra gerência cadastrar em Equipe & Acessos.</div>
-              )}
-            </div>
-          </div>
-          <div className="panel">
-            <div className="panel-h"><h3>Minhas últimas vendas</h3></div>
-            {ultimas.length === 0 ? (
-              <div className="dash-empty">Nenhuma venda fechada {nomePeriodo}.<br />Arraste um card pra "Fechou" no Pipeline. 🎯</div>
-            ) : ultimas.map((c) => (
-              <div className="deal-row" key={c.id}>
-                <div><div className="nm">{c.cliente}</div><div className="dt">{new Date(dataFech(c)).toLocaleDateString("pt-BR")}</div></div>
-                <div className="vl">{fmtMoney(c.valorFinal)}</div>
-              </div>
-            ))}
-          </div>
-        </div>
-        <AnaliseIA user={user} showToast={showToast} />
-      </div>
-    );
-  }
-
-  /* ---------- VISÃO DO GERENTE ---------- */
-  const vendedores = users.filter((u) => u.role === "vendedor");
-  const ranking = vendedores.map((v) => {
-    const vs = vendas.filter((c) => c.responsavelId === v.id);
-    return { ...v, total: vs.reduce((s, c) => s + (Number(c.valorFinal) || 0), 0), qtd: vs.length };
-  }).sort((a, b) => b.total - a.total);
-  const maxRank = Math.max(1, ...ranking.map((r) => r.total));
-
-  const mesIni = inicioDoMes();
-  const metas = vendedores.map((v) => {
-    const vendidoMes = cards.filter((c) => c.etapa === "fechou" && c.responsavelId === v.id && dataFech(c) >= mesIni).reduce((s, c) => s + (Number(c.valorFinal) || 0), 0);
-    const meta = Number(v.meta) || 0;
-    return { ...v, vendidoMes, meta, pct: meta > 0 ? Math.min(100, (vendidoMes / meta) * 100) : 0, bateu: meta > 0 && vendidoMes >= meta };
-  });
-  const comMeta = metas.filter((m) => m.meta > 0);
-  const bateram = comMeta.filter((m) => m.bateu).length;
-  const medalhas = ["🥇", "🥈", "🥉"];
-
-  return (
-    <div>
-      <div className="dash-top">{segBtns}</div>
-      {preset === "custom" && (
-        <div className="custom-range">De <input type="date" value={de} onChange={(e) => setDe(e.target.value)} /> até <input type="date" value={ate} onChange={(e) => setAte(e.target.value)} /></div>
-      )}
-      {kpis}
-
-      {cards.length === 0 ? (
-        <div className="panel"><div className="dash-empty">Ainda não há dados pra mostrar.<br /><button className="btn btn-primary" style={{ marginTop: 14 }} onClick={irParaPipeline}>Ir pro Pipeline criar leads</button></div></div>
-      ) : (
-        <div className="dash-grid">
-          <div className="panel">
-            <div className="panel-h"><h3>Ranking de vendedores</h3><span style={{ fontSize: 12, color: "var(--muted)" }}>{nomePeriodo}</span></div>
-            {ranking.length === 0 ? (
-              <div className="dash-empty">Nenhum vendedor cadastrado.</div>
-            ) : ranking.map((r, i) => (
-              <div className="rank-row" key={r.id}>
-                <div className="rank-fill" style={{ width: (r.total / maxRank) * 100 + "%" }} />
-                <div className={"rank-pos" + (i < 3 ? " medal" : "")}>{i < 3 && r.total > 0 ? medalhas[i] : i + 1}</div>
-                <div className="rank-av">{iniciais(r.nome)}</div>
-                <div className="rank-mid"><div className="nm">{r.nome}</div><div className="sub">{r.qtd} venda{r.qtd === 1 ? "" : "s"}</div></div>
-                <div className="rank-val">{fmtMoney(r.total)}</div>
-              </div>
-            ))}
-          </div>
-
-          <div className="panel">
-            <div className="panel-h"><h3>Metas do mês</h3></div>
-            {comMeta.length > 0 && (
-              <div className="metas-resumo"><b>{bateram}</b> de <b>{comMeta.length}</b> {comMeta.length === 1 ? "vendedor bateu" : "vendedores bateram"} a meta este mês 🎯</div>
-            )}
-            {metas.length === 0 ? (
-              <div className="dash-empty">Nenhum vendedor cadastrado.</div>
-            ) : metas.map((m) => (
-              <div className="meta-row" key={m.id}>
-                <div className="meta-head">
-                  <div className="nm">{iniciais(m.nome) && <span className="rank-av" style={{ width: 24, height: 24, fontSize: 10 }}>{iniciais(m.nome)}</span>}{m.nome}{m.bateu && <span className="bateu">✓ bateu</span>}</div>
-                  <div className="vals">{m.meta > 0 ? `${fmtMoney(m.vendidoMes)} / ${fmtMoney(m.meta)}` : "sem meta"}</div>
-                </div>
-                {m.meta > 0 && <div className="pbar"><div className={"pfill" + (m.bateu ? " done" : "")} style={{ width: m.pct + "%" }} /></div>}
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-      <AnaliseIA user={user} vendedores={vendedores} showToast={showToast} />
-    </div>
-  );
-}
-
-/* ============================================================
-   ANÁLISE POR IA
-   ============================================================ */
-function IAResultado({ res }) {
-  if (!res) return null;
-  return (
-    <div className="ia-res">
-      {res.resumo && <p className="ia-resumo">{res.resumo}</p>}
-      {res.pontosFortes && res.pontosFortes.length > 0 && (
-        <div className="ia-bloco">
-          <div className="ia-bloco-h pos">✓ Pontos fortes</div>
-          <ul>{res.pontosFortes.map((x, i) => <li key={i}>{x}</li>)}</ul>
-        </div>
-      )}
-      {res.pontosMelhorar && res.pontosMelhorar.length > 0 && (
-        <div className="ia-bloco">
-          <div className="ia-bloco-h warn">▲ Pontos a melhorar</div>
-          <ul>{res.pontosMelhorar.map((x, i) => <li key={i}>{x}</li>)}</ul>
-        </div>
-      )}
-      {res.sugestoes && res.sugestoes.length > 0 && (
-        <div className="ia-bloco">
-          <div className="ia-bloco-h sug">💡 Sugestões</div>
-          <ul>{res.sugestoes.map((x, i) => <li key={i}>{x}</li>)}</ul>
-        </div>
-      )}
-    </div>
-  );
-}
-
-function AnaliseIA({ user, vendedores, showToast }) {
-  const isGer = user.role === "gerente";
-  const [eqLoading, setEqLoading] = useState(false);
-  const [eq, setEq] = useState(null);
-  const [eqErro, setEqErro] = useState("");
-  const [vState, setVState] = useState({}); // { [id]: {loading, res, erro, aberto} }
-  const [meu, setMeu] = useState({ loading: false, res: null, erro: "" });
-
-  async function analisarEquipe() {
-    setEqLoading(true); setEqErro("");
-    try { setEq(await api.iaEquipe()); }
-    catch (e) { setEqErro(e.message); }
-    finally { setEqLoading(false); }
-  }
-  async function analisarVendedor(id) {
-    setVState((s) => ({ ...s, [id]: { ...(s[id] || {}), loading: true, erro: "", aberto: true } }));
-    try {
-      const r = await api.iaVendedor(id);
-      setVState((s) => ({ ...s, [id]: { loading: false, res: r, erro: "", aberto: true } }));
-    } catch (e) {
-      setVState((s) => ({ ...s, [id]: { loading: false, res: null, erro: e.message, aberto: true } }));
-    }
-  }
-  async function analisarMeu() {
-    setMeu({ loading: true, res: null, erro: "" });
-    try { setMeu({ loading: false, res: await api.iaVendedor(user.id), erro: "" }); }
-    catch (e) { setMeu({ loading: false, res: null, erro: e.message }); }
-  }
-  function toggle(id) {
-    const st = vState[id];
-    if (st && (st.res || st.erro)) setVState((s) => ({ ...s, [id]: { ...st, aberto: !st.aberto } }));
-    else analisarVendedor(id);
-  }
-
-  // VENDEDOR
-  if (!isGer) {
-    return (
-      <div className="panel ia-panel" style={{ marginTop: 18 }}>
-        <div className="panel-h"><h3>🤖 Minha análise</h3>
-          <button className="btn btn-sm btn-primary" onClick={analisarMeu} disabled={meu.loading}>{meu.loading ? "Analisando..." : "Analisar meu atendimento"}</button>
-        </div>
-        <div style={{ padding: "18px 22px" }}>
-          {meu.loading && <div className="ia-loading">A IA está lendo seus números e conversas... ✨</div>}
-          {meu.erro && <IAErro msg={meu.erro} />}
-          {!meu.loading && !meu.res && !meu.erro && <p className="ia-hint">Clique em "Analisar meu atendimento" pra receber uma avaliação dos seus resultados e do seu jeito de atender, com sugestões pra vender mais.</p>}
-          <IAResultado res={meu.res} />
-        </div>
-      </div>
-    );
-  }
-
-  // GERENTE
-  return (
-    <div className="panel ia-panel" style={{ marginTop: 18 }}>
-      <div className="panel-h"><h3>🤖 Análise inteligente</h3>
-        <button className="btn btn-sm btn-primary" onClick={analisarEquipe} disabled={eqLoading}>{eqLoading ? "Analisando..." : "Analisar equipe"}</button>
-      </div>
-      <div style={{ padding: "18px 22px" }}>
-        {eqLoading && <div className="ia-loading">A IA está analisando o desempenho do time... ✨</div>}
-        {eqErro && <IAErro msg={eqErro} />}
-        {!eqLoading && !eq && !eqErro && <p className="ia-hint">Clique em "Analisar equipe" pra uma visão geral do time com sugestões. Abaixo, você pode analisar cada vendedor individualmente.</p>}
-        {eq && (<><div className="ia-tag-time">Visão da equipe</div><IAResultado res={eq} /></>)}
-
-        {vendedores && vendedores.length > 0 && (
-          <div className="ia-individual">
-            <div className="ia-sub-titulo">Análise individual</div>
-            {vendedores.map((v) => {
-              const st = vState[v.id] || {};
-              return (
-                <div className="ia-vend" key={v.id}>
-                  <div className="ia-vend-h" onClick={() => toggle(v.id)}>
-                    <div className="ia-vend-nm"><span className="rank-av" style={{ width: 28, height: 28, fontSize: 11 }}>{iniciais(v.nome)}</span>{v.nome}</div>
-                    <button className="btn btn-sm" onClick={(e) => { e.stopPropagation(); analisarVendedor(v.id); }} disabled={st.loading}>
-                      {st.loading ? "Analisando..." : (st.res || st.erro) ? "Atualizar" : "Analisar"}
-                    </button>
-                  </div>
-                  {st.aberto && (
-                    <div className="ia-vend-body">
-                      {st.loading && <div className="ia-loading">Lendo números e conversas... ✨</div>}
-                      {st.erro && <IAErro msg={st.erro} />}
-                      <IAResultado res={st.res} />
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
-function IAErro({ msg }) {
-  const semChave = /ANTHROPIC_API_KEY/i.test(msg || "");
-  return (
-    <div className="ia-erro">
-      <b>Não foi possível gerar a análise.</b>
-      <div style={{ marginTop: 6 }}>{msg}</div>
-      {semChave && <div style={{ marginTop: 8, fontSize: 12.5 }}>👉 No Railway, em Variables, adicione <b>ANTHROPIC_API_KEY</b> com a mesma chave do Claude que você já usa no suporte.</div>}
-    </div>
-  );
-}
-
-/* ============================================================
-   GRÁFICOS (SVG, sem dependências)
-   ============================================================ */
-function GraficoBarras({ dados }) {
-  const max = Math.max(1, ...dados.map((d) => d.valor));
-  const W = 560, H = 240, padT = 16, padB = 34, axisW = 36, gap = 18;
-  const n = dados.length || 1;
-  const chartH = H - padT - padB;
-  const areaW = W - axisW - 10;
-  const bw = Math.min(70, (areaW - gap * (n - 1)) / n);
-  const ticks = 4;
-  const tem = dados.some((d) => d.valor > 0);
-  if (!tem) return <div className="chart-empty">Sem vendas no período pra mostrar.</div>;
-  return (
-    <svg viewBox={`0 0 ${W} ${H}`} className="chart-svg" preserveAspectRatio="xMidYMid meet">
-      <defs><linearGradient id="gradBar" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#c08bff" /><stop offset="100%" stopColor="#8b7bff" /></linearGradient></defs>
-      {Array.from({ length: ticks + 1 }).map((_, i) => {
-        const y = padT + (chartH / ticks) * i;
-        return <g key={i}><line x1={axisW} y1={y} x2={W - 6} y2={y} stroke="var(--line)" strokeDasharray="3 4" /><text x={axisW - 6} y={y + 3} className="chart-axis" textAnchor="end">{Math.round(max - (max / ticks) * i)}</text></g>;
-      })}
-      {dados.map((d, i) => {
-        const h = (d.valor / max) * chartH;
-        const x = axisW + 6 + i * (bw + gap);
-        const y = padT + chartH - h;
-        return <g key={i}>
-          <rect x={x} y={y} width={bw} height={Math.max(2, h)} rx="6" fill={d.cor || "url(#gradBar)"} />
-          {d.valor > 0 && <text x={x + bw / 2} y={y - 6} className="chart-val" textAnchor="middle">{d.rotulo || d.valor}</text>}
-          <text x={x + bw / 2} y={H - 12} className="chart-label" textAnchor="middle">{(d.label || "").slice(0, 9)}</text>
-        </g>;
-      })}
-    </svg>
-  );
-}
-
-function GraficoRosca({ dados }) {
-  const total = dados.reduce((s, d) => s + d.valor, 0);
-  const r = 66, sw = 26, cx = 90, cy = 90, c = 2 * Math.PI * r;
-  let acc = 0;
-  return (
-    <div className="donut-wrap">
-      <svg viewBox="0 0 180 180" className="donut-svg">
-        <circle cx={cx} cy={cy} r={r} fill="none" stroke="var(--line-2)" strokeWidth={sw} />
-        {total > 0 && dados.map((d, i) => {
-          if (d.valor <= 0) return null;
-          const len = (d.valor / total) * c;
-          const el = <circle key={i} cx={cx} cy={cy} r={r} fill="none" stroke={d.cor} strokeWidth={sw} strokeDasharray={`${len} ${c - len}`} strokeDashoffset={-acc} transform={`rotate(-90 ${cx} ${cy})`} />;
-          acc += len;
-          return el;
-        })}
-        <text x={cx} y={cy - 2} textAnchor="middle" className="donut-center-n">{total}</text>
-        <text x={cx} y={cy + 15} textAnchor="middle" className="donut-center-l">leads</text>
-      </svg>
-      <div className="donut-leg">
-        {dados.map((d, i) => <div className="leg-item" key={i}><span className="leg-dot" style={{ background: d.cor }} />{d.label} <b>{d.valor}</b></div>)}
-      </div>
-    </div>
-  );
-}
-
-function GraficoLinha({ dados }) {
-  const W = 600, H = 200, padL = 38, padR = 10, padT = 14, padB = 26;
-  const max = Math.max(1, ...dados.map((d) => d.valor));
-  const n = dados.length;
-  const innerW = W - padL - padR, innerH = H - padT - padB, ticks = 4;
-  const x = (i) => padL + (n <= 1 ? innerW / 2 : (innerW / (n - 1)) * i);
-  const y = (v) => padT + innerH - (v / max) * innerH;
-  const pts = dados.map((d, i) => `${x(i)},${y(d.valor)}`).join(" ");
-  const passo = Math.max(1, Math.ceil(n / 7));
-  return (
-    <svg viewBox={`0 0 ${W} ${H}`} className="chart-svg" preserveAspectRatio="xMidYMid meet">
-      <defs><linearGradient id="gradArea" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#8b7bff" stopOpacity="0.32" /><stop offset="100%" stopColor="#8b7bff" stopOpacity="0" /></linearGradient></defs>
-      {Array.from({ length: ticks + 1 }).map((_, i) => {
-        const yy = padT + (innerH / ticks) * i;
-        return <g key={i}><line x1={padL} y1={yy} x2={W - padR} y2={yy} stroke="var(--line)" strokeDasharray="3 4" /><text x={padL - 6} y={yy + 3} className="chart-axis" textAnchor="end">{Math.round(max - (max / ticks) * i)}</text></g>;
-      })}
-      {n > 1 && <polygon points={`${padL},${padT + innerH} ${pts} ${x(n - 1)},${padT + innerH}`} fill="url(#gradArea)" />}
-      {n > 1 && <polyline points={pts} fill="none" stroke="#8b7bff" strokeWidth="2.5" strokeLinejoin="round" strokeLinecap="round" />}
-      {dados.map((d, i) => <circle key={i} cx={x(i)} cy={y(d.valor)} r="3.4" fill="#fff" stroke="#8b7bff" strokeWidth="2" />)}
-      {dados.map((d, i) => (i % passo === 0 || i === n - 1) ? <text key={i} x={x(i)} y={H - 8} className="chart-label" textAnchor="middle">{d.label}</text> : null)}
-    </svg>
-  );
-}
-
-function nice1(v) {
-  const p = Math.pow(10, Math.floor(Math.log10(v || 1)));
-  const f = (v || 1) / p;
-  const n = f <= 1 ? 1 : f <= 1.5 ? 1.5 : f <= 2 ? 2 : f <= 3 ? 3 : f <= 4 ? 4 : f <= 5 ? 5 : f <= 6 ? 6 : f <= 8 ? 8 : 10;
-  return n * p;
-}
-function escalaEvo(dados, fmtY) {
-  const max = Math.max(1, ...dados.map((d) => d.valor));
-  if (!fmtY && dados.every((d) => Number.isInteger(d.valor))) {
-    const step = Math.max(1, Math.ceil(max / 4));
-    return { niceMax: step * 4, step, ticks: 4 };
-  }
-  const nm = nice1(max);
-  return { niceMax: nm, step: nm / 4, ticks: 4 };
-}
-function pathMonotone(pts) {
-  const n = pts.length;
-  if (n < 2) return n ? `M ${pts[0][0]},${pts[0][1]}` : "";
-  const xs = pts.map((p) => p[0]), ys = pts.map((p) => p[1]);
-  const dx = [], dy = [], m = [];
-  for (let i = 0; i < n - 1; i++) { dx[i] = xs[i + 1] - xs[i]; dy[i] = ys[i + 1] - ys[i]; m[i] = dy[i] / (dx[i] || 1); }
-  const s = []; s[0] = m[0]; s[n - 1] = m[n - 2];
-  for (let i = 1; i < n - 1; i++) {
-    if (m[i - 1] * m[i] <= 0) s[i] = 0;
-    else { const c = Math.min(Math.abs(m[i - 1]), Math.abs(m[i])); s[i] = Math.sign(m[i - 1]) * Math.min(Math.abs((m[i - 1] + m[i]) / 2), 3 * c); }
-  }
-  let d = `M ${xs[0]},${ys[0]}`;
-  for (let i = 0; i < n - 1; i++)
-    d += ` C ${xs[i] + dx[i] / 3},${ys[i] + s[i] * dx[i] / 3} ${xs[i + 1] - dx[i] / 3},${ys[i + 1] - s[i + 1] * dx[i] / 3} ${xs[i + 1]},${ys[i + 1]}`;
-  return d;
-}
-
-function GraficoEvolucao({ dados, fmtY }) {
-  const fmt = fmtY || ((v) => String(Math.round(v)));
-  const W = 920, H = 300, padL = 58, padR = 30, padT = 24, padB = 42;
-  const n = dados.length;
-  const { niceMax, step, ticks } = escalaEvo(dados, fmtY);
-  const innerW = W - padL - padR, innerH = H - padT - padB;
-  const X = (i) => padL + (n <= 1 ? innerW / 2 : (innerW / (n - 1)) * i);
-  const Y = (v) => padT + innerH - (v / niceMax) * innerH;
-  const pts = dados.map((d, i) => [X(i), Y(d.valor)]);
-  const line = pathMonotone(pts);
-  const area = n >= 2 ? `${line} L ${X(n - 1)},${padT + innerH} L ${X(0)},${padT + innerH} Z` : "";
-  const passo = Math.max(1, Math.ceil(n / 8));
-  const last = n - 1;
-  return (
-    <svg viewBox={`0 0 ${W} ${H}`} className="evo-svg" preserveAspectRatio="xMidYMid meet">
-      <defs>
-        <linearGradient id="evoFill" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#8b7bff" stopOpacity="0.26" /><stop offset="100%" stopColor="#8b7bff" stopOpacity="0" /></linearGradient>
-        <linearGradient id="evoLine" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stopColor="#8b7bff" /><stop offset="100%" stopColor="#c08bff" /></linearGradient>
-      </defs>
-      {Array.from({ length: ticks + 1 }).map((_, i) => {
-        const yy = padT + (innerH / ticks) * i;
-        const v = niceMax - step * i;
-        return <g key={i}><line x1={padL} y1={yy} x2={W - padR} y2={yy} stroke="var(--line)" strokeWidth="1" strokeDasharray={i === ticks ? "0" : "2 7"} opacity={i === ticks ? 1 : 0.7} /><text x={padL - 12} y={yy + 4} className="evo-ylabel" textAnchor="end">{Math.abs(v) < 1e-9 ? "0" : fmt(v)}</text></g>;
-      })}
-      {area && <path d={area} fill="url(#evoFill)" />}
-      {n >= 2 && <path d={line} fill="none" stroke="url(#evoLine)" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />}
-      {pts.map(([px, py], i) => (
-        <g key={i}>
-          <title>{dados[i].label}: {fmt(dados[i].valor)}</title>
-          {i === last && <circle cx={px} cy={py} r="11" fill="#8b7bff" opacity="0.16" />}
-          <circle cx={px} cy={py} r={i === last ? 6 : 4} fill="#fff" stroke="#8b7bff" strokeWidth={i === last ? 3 : 2.4} />
-        </g>
-      ))}
-      {n >= 1 && (() => {
-        const [px, py] = pts[last]; const txt = fmt(dados[last].valor);
-        const w = Math.max(34, txt.length * 8.5 + 16);
-        const bx = Math.min(W - padR - w, Math.max(padL, px - w / 2)); const by = Math.max(4, py - 34);
-        return <g><rect x={bx} y={by} width={w} height={22} rx={7} fill="#8b7bff" /><text x={bx + w / 2} y={by + 15} className="evo-badge" textAnchor="middle">{txt}</text></g>;
-      })()}
-      {dados.map((d, i) => (i % passo === 0 || i === last) ? <text key={i} x={X(i)} y={H - 12} className="evo-xlabel" textAnchor={i === last ? "end" : i === 0 ? "start" : "middle"}>{d.label}</text> : null)}
-    </svg>
-  );
-}
-
-/* ============================================================
-   PAINEL v2
-   ============================================================ */
-const ETAPA_INFO = [
-  { k: "lead", label: "Lead", cor: "#64748b" },
-  { k: "contato", label: "Em contato", cor: "#8b7bff" },
-  { k: "sem_resposta", label: "Sem resposta", cor: "#aab2c7" },
-  { k: "negociando", label: "Negociando", cor: "#ffb547" },
-  { k: "fechou", label: "Fechou", cor: "#34e3b0" },
-  { k: "perdeu", label: "Perdeu", cor: "#ff5d73" },
-];
-
-function Painel({ user, showToast, irParaPipeline }) {
-  const isGer = user.role === "gerente";
-  const [cards, setCards] = useState([]);
-  const [users, setUsers] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [preset, setPreset] = useState("mes");
-  const [de, setDe] = useState("");
-  const [ate, setAte] = useState("");
-
-  async function carregar() {
-    setLoading(true);
-    try {
-      setCards(await api.listCards());
-      if (isGer) setUsers(await api.listUsers());
-    } catch (e) { showToast("✗ " + e.message); }
-    finally { setLoading(false); }
-  }
-  useEffect(() => { carregar(); /* eslint-disable-next-line */ }, []);
-
-  // sincroniza as datas com o preset escolhido
-  useEffect(() => {
-    if (preset === "custom") return;
-    const [i, f] = intervaloPeriodo(preset, "", "");
-    const iso = (t) => new Date(t).toISOString().slice(0, 10);
-    setDe(iso(preset === "tudo" ? Date.now() : i));
-    setAte(iso(f));
-    // eslint-disable-next-line
-  }, [preset]);
-
-  if (loading) return <div className="spin" />;
-
-  const [ini, fim] = intervaloPeriodo(preset, de, ate);
-  const dataFech = (c) => c.fechadoEm || c.atualizadoEm || 0;
-  const ativos = cards.filter((c) => !c.arquivado);
-  const noPeriodoVenda = (c) => c.etapa === "fechou" && dataFech(c) >= ini && dataFech(c) <= fim;
-  const noPeriodoLead = (c) => (c.criadoEm || 0) >= ini && (c.criadoEm || 0) <= fim;
-
-  const vendas = ativos.filter(noPeriodoVenda);
-  const totalVendido = vendas.reduce((s, c) => s + (Number(c.valorFinal) || 0), 0);
-  const nVendas = vendas.length;
-  const ticket = nVendas ? totalVendido / nVendas : 0;
-  const leadsPeriodo = ativos.filter(noPeriodoLead);
-  const conversao = leadsPeriodo.length ? Math.round((leadsPeriodo.filter((c) => c.etapa === "fechou").length / leadsPeriodo.length) * 100) : 0;
-
-  // gráfico de linha: vendas por dia (período, máx ~14 pontos)
-  const dias = Math.min(14, Math.max(1, Math.ceil((fim - ini) / 86400000)));
-  const serie = [];
-  for (let d = dias - 1; d >= 0; d--) {
-    const dia = new Date(fim - d * 86400000); dia.setHours(0, 0, 0, 0);
-    const ini2 = dia.getTime(), fim2 = ini2 + 86400000;
-    const v = vendas.filter((c) => dataFech(c) >= ini2 && dataFech(c) < fim2).reduce((s, c) => s + (Number(c.valorFinal) || 0), 0);
-    serie.push({ label: dia.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" }), valor: Math.round(v) });
-  }
-
-  // rosca: distribuição do funil (snapshot atual)
-  const rosca = ETAPA_INFO.map((e) => ({ label: e.label, cor: e.cor, valor: ativos.filter((c) => c.etapa === e.k).length }));
-
-  const filtroBar = (
-    <div className="filtro-bar">
-      <div className="seg">
-        {[["hoje", "Hoje"], ["semana", "Semana"], ["mes", "Mês"], ["tudo", "Tudo"]].map(([k, lbl]) => (
-          <button key={k} className={preset === k ? "on" : ""} onClick={() => setPreset(k)}>{lbl}</button>
-        ))}
-      </div>
-      <div className="filtro-datas">
-        <input type="date" value={de} onChange={(e) => { setDe(e.target.value); setPreset("custom"); }} />
-        até
-        <input type="date" value={ate} onChange={(e) => { setAte(e.target.value); setPreset("custom"); }} />
-      </div>
-      <button className="filtro-hoje" onClick={() => setPreset("hoje")}>Hoje</button>
-    </div>
-  );
-
-  /* ---------- VENDEDOR ---------- */
-  if (!isGer) {
-    const vendidoMes = ativos.filter((c) => c.etapa === "fechou" && dataFech(c) >= inicioDoMes()).reduce((s, c) => s + (Number(c.valorFinal) || 0), 0);
-    const meta = Number(user.meta) || 0;
-    const pct = meta > 0 ? Math.min(100, Math.round((vendidoMes / meta) * 100)) : 0;
-    const bateu = meta > 0 && vendidoMes >= meta;
-    const ultimas = [...vendas].sort((a, b) => dataFech(b) - dataFech(a)).slice(0, 8);
-    const roscaV = ETAPA_INFO.map((e) => ({ label: e.label, cor: e.cor, valor: ativos.filter((c) => c.etapa === e.k).length }));
-    return (
-      <div>
-        {filtroBar}
-        <div className="stats">
-          <StatIco ico={I.cash} cor="#34e3b0" val={fmtMoney(totalVendido)} money lab="Vendido no período" />
-          <StatIco ico={I.check} cor="#8b7bff" val={nVendas} lab="Vendas fechadas" />
-          <StatIco ico={I.cash} cor="#ffb547" val={fmtMoney(ticket)} money lab="Ticket médio" />
-          <StatIco ico={I.target} cor="#c08bff" val={conversao + "%"} lab="Conversão" />
-        </div>
-        <div className="comp-card">
-          <div className="comp-info"><div className="lab">Minha meta do mês</div><div className="num">{fmtMoney(vendidoMes)} / {meta > 0 ? fmtMoney(meta) : "—"}</div></div>
-          <div className="comp-bar-wrap"><div className="comp-bar"><div className={"fill" + (bateu ? " done" : "")} style={{ width: pct + "%" }} /></div><div className="comp-pct">{pct}%</div></div>
-        </div>
-        <div className="charts-2">
-          <div className="panel"><div className="panel-h"><h3>Minha evolução<span className="panel-sub">vendas por dia</span></h3></div><div className="chart-body"><GraficoLinha dados={serie} /></div></div>
-          <div className="panel"><div className="panel-h"><h3>Meu funil<span className="panel-sub">situação atual</span></h3></div><div className="chart-body"><GraficoRosca dados={roscaV} /></div></div>
-        </div>
-        <div className="panel">
-          <div className="panel-h"><h3>Minhas últimas vendas</h3></div>
-          {ultimas.length === 0 ? <div className="dash-empty">Nenhuma venda fechada no período. 🎯</div> : ultimas.map((c) => (
-            <div className="deal-row" key={c.id}><div><div className="nm">{c.cliente}</div><div className="dt">{new Date(dataFech(c)).toLocaleDateString("pt-BR")}</div></div><div className="vl">{fmtMoney(c.valorFinal)}</div></div>
-          ))}
-        </div>
-      </div>
-    );
-  }
-
-  /* ---------- GERENTE ---------- */
-  const vendedores = users.filter((u) => u.role === "vendedor");
-  const ranking = vendedores.map((v) => {
-    const vs = vendas.filter((c) => c.responsavelId === v.id);
-    return { ...v, total: vs.reduce((s, c) => s + (Number(c.valorFinal) || 0), 0), qtd: vs.length };
-  }).sort((a, b) => b.total - a.total);
-  const maxRank = Math.max(1, ...ranking.map((r) => r.total));
-  const barras = ranking.slice(0, 7).map((r) => ({ label: r.nome.split(" ")[0], valor: Math.round(r.total), rotulo: r.total >= 1000 ? "R$" + (r.total / 1000).toFixed(1) + "k" : "R$" + r.total }));
-
-  const mesIni = inicioDoMes();
-  const metas = vendedores.map((v) => {
-    const vendidoMes = ativos.filter((c) => c.etapa === "fechou" && c.responsavelId === v.id && dataFech(c) >= mesIni).reduce((s, c) => s + (Number(c.valorFinal) || 0), 0);
-    const meta = Number(v.meta) || 0;
-    return { ...v, vendidoMes, meta, pct: meta > 0 ? Math.min(100, Math.round((vendidoMes / meta) * 100)) : 0, bateu: meta > 0 && vendidoMes >= meta };
-  });
-  const comMeta = metas.filter((m) => m.meta > 0);
-  const bateram = comMeta.filter((m) => m.bateu).length;
-  const somaMetas = comMeta.reduce((s, m) => s + m.meta, 0);
-  const somaVendidoMes = metas.reduce((s, m) => s + m.vendidoMes, 0);
-  const pctMeta = somaMetas > 0 ? Math.min(100, Math.round((somaVendidoMes / somaMetas) * 100)) : 0;
-  const medalhas = ["🥇", "🥈", "🥉"];
-
-  return (
-    <div>
-      {filtroBar}
-      <div className="stats">
-        <StatIco ico={I.cash} cor="#34e3b0" val={fmtMoney(totalVendido)} money lab="Total vendido" />
-        <StatIco ico={I.check} cor="#8b7bff" val={nVendas} lab="Vendas fechadas" />
-        <StatIco ico={I.cash} cor="#ffb547" val={fmtMoney(ticket)} money lab="Ticket médio" />
-        <StatIco ico={I.target} cor="#c08bff" val={conversao + "%"} lab="Conversão" />
-      </div>
-
-      {somaMetas > 0 && (
-        <div className="comp-card">
-          <div className="comp-info"><div className="lab">Meta do time este mês — {bateram}/{comMeta.length} bateram</div><div className="num">{fmtMoney(somaVendidoMes)} / {fmtMoney(somaMetas)}</div></div>
-          <div className="comp-bar-wrap"><div className="comp-bar"><div className={"fill" + (pctMeta >= 100 ? " done" : "")} style={{ width: pctMeta + "%" }} /></div><div className="comp-pct">{pctMeta}%</div></div>
-        </div>
-      )}
-
-      <div className="charts-2">
-        <div className="panel"><div className="panel-h"><h3>Vendas por vendedor<span className="panel-sub">no período</span></h3></div><div className="chart-body"><GraficoBarras dados={barras} /></div></div>
-        <div className="panel"><div className="panel-h"><h3>Distribuição do funil<span className="panel-sub">situação atual</span></h3></div><div className="chart-body"><GraficoRosca dados={rosca} /></div></div>
-      </div>
-
-      <div className="panel" style={{ marginBottom: 18 }}><div className="panel-h"><h3>Evolução de vendas<span className="panel-sub">últimos dias</span></h3></div><div className="chart-body"><GraficoLinha dados={serie} /></div></div>
-
-      <div className="charts-2">
-        <div className="panel">
-          <div className="panel-h"><h3>Ranking de vendedores</h3></div>
-          {ranking.length === 0 ? <div className="dash-empty">Nenhum vendedor cadastrado.</div> : ranking.map((r, i) => (
-            <div className="rank-row" key={r.id}>
-              <div className="rank-fill" style={{ width: (r.total / maxRank) * 100 + "%" }} />
-              <div className={"rank-pos" + (i < 3 ? " medal" : "")}>{i < 3 && r.total > 0 ? medalhas[i] : i + 1}</div>
-              <div className="rank-av">{iniciais(r.nome)}</div>
-              <div className="rank-mid"><div className="nm">{r.nome}</div><div className="sub">{r.qtd} venda{r.qtd === 1 ? "" : "s"}</div></div>
-              <div className="rank-val">{fmtMoney(r.total)}</div>
-            </div>
-          ))}
-        </div>
-        <div className="panel">
-          <div className="panel-h"><h3>Metas do mês</h3></div>
-          {metas.length === 0 ? <div className="dash-empty">Nenhum vendedor cadastrado.</div> : metas.map((m) => (
-            <div className="meta-row" key={m.id}>
-              <div className="meta-head"><div className="nm"><span className="rank-av" style={{ width: 24, height: 24, fontSize: 10 }}>{iniciais(m.nome)}</span>{m.nome}{m.bateu && <span className="bateu">✓ bateu</span>}</div><div className="vals">{m.meta > 0 ? `${fmtMoney(m.vendidoMes)} / ${fmtMoney(m.meta)}` : "sem meta"}</div></div>
-              {m.meta > 0 && <div className="pbar"><div className={"pfill" + (m.bateu ? " done" : "")} style={{ width: m.pct + "%" }} /></div>}
-            </div>
-          ))}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function StatIco({ ico: Ico, cor, val, money, lab }) {
-  return (
-    <div className="stat stat-ico">
-      <div className="badge" style={{ background: cor + "1f", color: cor }}><Ico /></div>
-      <div className="info"><div className={"val" + (money ? " money" : "")}>{val}</div><div className="lab">{lab}</div></div>
-    </div>
-  );
-}
-
-/* ============================================================
-   PÁGINA ANÁLISE IA
-   ============================================================ */
-/* ============================================================
-   NPS / SATISFAÇÃO
-   ============================================================ */
-function Estrelas({ n }) {
-  const cheias = Math.round(n || 0);
-  return <span className="estrelas">{[1, 2, 3, 4, 5].map((i) => <span key={i} className={i <= cheias ? "on" : ""}>★</span>)}</span>;
-}
-function DistBar({ dist }) {
-  const max = Math.max(1, ...[1, 2, 3, 4, 5].map((k) => dist[k] || 0));
-  return (
-    <div className="dist">
-      {[5, 4, 3, 2, 1].map((k) => {
-        const v = dist[k] || 0;
-        return (
-          <div key={k} className="dist-row">
-            <span className="dist-lbl">{k}★</span>
-            <div className="dist-track"><div className={"dist-fill n" + k} style={{ width: (v / max * 100) + "%" }} /></div>
-            <span className="dist-n">{v}</span>
-          </div>
-        );
-      })}
-    </div>
-  );
-}
 function fmtDataHora(ts) {
   const d = new Date(ts);
   return d.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" }) + " " + d.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
 }
-function PaginaNPS({ showToast }) {
-  const agoraInit = Date.now();
-  const ini30 = inicioDoDia(new Date(agoraInit)); ini30.setDate(ini30.getDate() - 29);
-  const [periodo, setPeriodo] = useState({ desde: ini30.getTime(), ate: agoraInit, key: "30d", label: "últimos 30 dias" });
-  const [dataEsp, setDataEsp] = useState("");
-  const [vendId, setVendId] = useState("");
-  const [data, setData] = useState(null);
-  const [loading, setLoading] = useState(true);
-
-  function aplicarPreset(key) {
-    const now = Date.now(); setDataEsp("");
-    if (key === "hoje") setPeriodo({ desde: inicioDoDia(now).getTime(), ate: now, key, label: "hoje" });
-    else if (key === "7d") { const ini = inicioDoDia(now); ini.setDate(ini.getDate() - 6); setPeriodo({ desde: ini.getTime(), ate: now, key, label: "últimos 7 dias" }); }
-    else if (key === "30d") { const ini = inicioDoDia(now); ini.setDate(ini.getDate() - 29); setPeriodo({ desde: ini.getTime(), ate: now, key, label: "últimos 30 dias" }); }
-    else setPeriodo({ desde: 0, ate: now, key: "tudo", label: "todo o histórico" });
-  }
-  function aplicarData(str) {
-    setDataEsp(str); if (!str) return;
-    const [y, mo, da] = str.split("-").map(Number);
-    setPeriodo({ desde: new Date(y, mo - 1, da, 0, 0, 0, 0).getTime(), ate: new Date(y, mo - 1, da, 23, 59, 59, 999).getTime(), key: "data", label: str.split("-").reverse().join("/") });
-  }
-  useEffect(() => {
-    let vivo = true; setLoading(true);
-    api.nps(periodo.desde, periodo.ate, vendId)
-      .then((d) => { if (vivo) { setData(d); setLoading(false); } })
-      .catch((e) => { if (vivo) { setLoading(false); showToast("✗ " + e.message); } });
-    return () => { vivo = false; };
-    // eslint-disable-next-line
-  }, [periodo.desde, periodo.ate, vendId]);
-
-  const periodoBar = (
-    <div className="ia-periodo">
-      <span className="lbl">Período:</span>
-      {[["hoje", "Hoje"], ["7d", "7 dias"], ["30d", "30 dias"], ["tudo", "Tudo"]].map(([k, l]) => (
-        <button key={k} className={"chip" + (periodo.key === k ? " on" : "")} onClick={() => aplicarPreset(k)}>{l}</button>
-      ))}
-      <input type="date" className="input-date" value={dataEsp} max={dataInputHoje()} onChange={(e) => aplicarData(e.target.value)} />
-      <select className="nps-vsel" value={vendId} onChange={(e) => setVendId(e.target.value)}>
-        <option value="">Todos os vendedores</option>
-        {(data && data.vendedoresLista ? data.vendedoresLista : []).map((v) => (
-          <option key={v.id} value={v.id}>{v.nome}</option>
-        ))}
-      </select>
-    </div>
-  );
-  const vendNome = vendId && data && data.vendedoresLista ? (data.vendedoresLista.find((v) => v.id === vendId) || {}).nome : "";
-
-  const g = data && data.geral;
-  const positivas = g && g.respostas ? Math.round(((g.dist[4] + g.dist[5]) / g.respostas) * 100) : 0;
-
-  return (
-    <div className="nps-page">
-      {periodoBar}
-      {loading && <div className="nps-card"><div className="ia-loading">Carregando avaliações... ⭐</div></div>}
-      {!loading && data && g.respostas === 0 && (
-        <div className="nps-card nps-vazio">
-          <div className="big">⭐</div>
-          <h3>Nenhuma avaliação{vendNome ? " de " + vendNome : ""} em {periodo.label}</h3>
-          <p>As notas aparecem aqui quando os leads respondem à pesquisa de satisfação que o vendedor envia no fim do atendimento.</p>
-        </div>
-      )}
-      {!loading && data && g.respostas > 0 && (
-        <>
-          <div className="nps-top">
-            <div className="nps-card nps-geral">
-              <span className="nps-cap">Nota média — {vendNome ? vendNome + " · " : ""}{periodo.label}</span>
-              <div className="nps-media">{g.media.toFixed(1)}<small>/5</small></div>
-              <Estrelas n={g.media} />
-              <div className="nps-sub">{g.respostas} {g.respostas === 1 ? "avaliação" : "avaliações"} · {positivas}% positivas (4-5)</div>
-            </div>
-            <div className="nps-card nps-dist">
-              <span className="nps-cap">Distribuição das notas</span>
-              <DistBar dist={g.dist} />
-            </div>
-          </div>
-
-          {!vendId && (
-          <div className="nps-card">
-            <div className="panel-h"><h3>Por vendedor</h3></div>
-            <div className="nps-vends">
-              {data.vendedores.map((v, i) => {
-                const pos = v.respostas ? Math.round(((v.dist[4] + v.dist[5]) / v.respostas) * 100) : 0;
-                return (
-                  <div key={v.id} className="nps-vend">
-                    <div className="nps-vend-rank">{i + 1}</div>
-                    <div className="nps-vend-info">
-                      <div className="nps-vend-nome">{v.nome}</div>
-                      <div className="nps-vend-meta"><Estrelas n={v.media} /> <b>{v.media.toFixed(1)}</b> · {v.respostas} {v.respostas === 1 ? "nota" : "notas"} · {pos}% positivas</div>
-                    </div>
-                    <div className="nps-vend-mini"><DistBar dist={v.dist} /></div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-          )}
-
-          <div className="nps-card">
-            <div className="panel-h"><h3>Últimas avaliações</h3></div>
-            <div className="nps-aval">
-              {data.avaliacoes.map((a) => (
-                <div key={a.id + a.notaEm} className="nps-aval-row">
-                  <span className={"nps-nota n" + Math.round(a.nota)}>⭐ {a.nota}</span>
-                  <div className="nps-aval-info">
-                    <div className="nps-aval-top"><b>{a.nome}</b> <span className="nps-aval-vend">· {a.vendedorNome}</span></div>
-                    {a.notaTexto && <div className="nps-aval-txt">"{a.notaTexto}"</div>}
-                  </div>
-                  <span className="nps-aval-data">{fmtDataHora(a.notaEm)}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        </>
-      )}
-    </div>
-  );
-}
-
-function PaginaIA({ user, showToast }) {
-  const isGer = user.role === "gerente";
-  const [aba, setAba] = useState("equipe");
-  const [users, setUsers] = useState([]);
-  const [mon, setMon] = useState(null);
-  const [selVend, setSelVend] = useState("");
-  const [eq, setEq] = useState({ loading: false, res: null, erro: "" });
-  const [ind, setInd] = useState({ loading: false, res: null, erro: "" });
-  const [periodo, setPeriodo] = useState({ desde: 0, ate: Date.now(), key: "tudo", label: "todo o histórico" });
-  const [dataEsp, setDataEsp] = useState(dataInputHoje());
-
-  async function carregarUsers() {
-    if (!isGer) return;
-    try { const us = await api.listVendedores(); setUsers(us); if (us[0]) setSelVend(us[0].id); } catch (_) {}
-  }
-  useEffect(() => { carregarUsers(); /* eslint-disable-next-line */ }, []);
-  // recarrega as métricas e limpa análises antigas quando muda o período
-  useEffect(() => {
-    (async () => { try { setMon(await api.monitoria(periodo.desde, periodo.ate)); } catch (_) {} })();
-    setEq({ loading: false, res: null, erro: "" });
-    setInd({ loading: false, res: null, erro: "" });
-    // eslint-disable-next-line
-  }, [periodo.desde, periodo.ate]);
-
-  function aplicarPreset(key) {
-    const now = Date.now();
-    if (key === "hoje") setPeriodo({ desde: inicioDoDia(now).getTime(), ate: now, key, label: "hoje" });
-    else if (key === "ontem") { const ini = inicioDoDia(now); ini.setDate(ini.getDate() - 1); setPeriodo({ desde: ini.getTime(), ate: inicioDoDia(now).getTime() - 1, key, label: "ontem" }); }
-    else if (key === "7d") { const ini = inicioDoDia(now); ini.setDate(ini.getDate() - 6); setPeriodo({ desde: ini.getTime(), ate: now, key, label: "últimos 7 dias" }); }
-    else if (key === "30d") { const ini = inicioDoDia(now); ini.setDate(ini.getDate() - 29); setPeriodo({ desde: ini.getTime(), ate: now, key, label: "últimos 30 dias" }); }
-    else setPeriodo({ desde: 0, ate: now, key: "tudo", label: "todo o histórico" });
-  }
-  function aplicarData(str) {
-    setDataEsp(str);
-    if (!str) return;
-    const [y, mo, da] = str.split("-").map(Number);
-    const ini = new Date(y, mo - 1, da, 0, 0, 0, 0);
-    const fim = new Date(y, mo - 1, da, 23, 59, 59, 999);
-    setPeriodo({ desde: ini.getTime(), ate: fim.getTime(), key: "data", label: str.split("-").reverse().join("/") });
-  }
-  const periodoBar = (
-    <div className="ia-periodo">
-      <span className="lbl">Período:</span>
-      {[["hoje", "Hoje"], ["ontem", "Ontem"], ["7d", "7 dias"], ["30d", "30 dias"], ["tudo", "Tudo"]].map(([k, l]) => (
-        <button key={k} className={"chip" + (periodo.key === k ? " on" : "")} onClick={() => aplicarPreset(k)}>{l}</button>
-      ))}
-      <input type="date" className="input-date" value={dataEsp} max={dataInputHoje()} onChange={(e) => aplicarData(e.target.value)} />
-    </div>
-  );
-
-  const m = (mon && mon.time) || {};
-
-  async function gerarEquipe() {
-    setEq({ loading: true, res: null, erro: "" });
-    try { setEq({ loading: false, res: await api.iaEquipe(periodo.desde, periodo.ate), erro: "" }); }
-    catch (e) { setEq({ loading: false, res: null, erro: e.message }); }
-  }
-  async function gerarIndividual(id) {
-    setInd({ loading: true, res: null, erro: "" });
-    try { setInd({ loading: false, res: await api.iaVendedor(id, periodo.desde, periodo.ate), erro: "" }); }
-    catch (e) { setInd({ loading: false, res: null, erro: e.message }); }
-  }
-
-  // VENDEDOR: só a própria análise
-  if (!isGer) {
-    return (
-      <div className="ia-page">
-        {periodoBar}
-        <div className="ia-hero">
-          <span className="ia-hero-badge"><I.spark style={{ width: 14, height: 14 }} /> Inteligência Artificial</span>
-          <h2>Análise do meu atendimento</h2>
-          <p>A IA olha o seu atendimento no WhatsApp — rapidez nas respostas, clientes sem retorno, tom e educação — e te dá uma leitura honesta com sugestões pra melhorar. <b>Período: {periodo.label}.</b></p>
-          <div className="ia-hero-stats"><span><b>{m.conversas || 0}</b> atendimentos</span><span className="sep">•</span><span><b>{m.semResposta || 0}</b> sem resposta</span><span className="sep">•</span><span><b>{m.taxaResposta || 0}%</b> taxa de resposta</span></div>
-          <button className="btn-hero" onClick={() => gerarIndividual(user.id)} disabled={ind.loading}><I.spark style={{ width: 17, height: 17 }} /> {ind.loading ? "Analisando..." : "Gerar minha análise"}</button>
-        </div>
-        {ind.loading && <div className="ia-resultado-card"><div className="ia-loading">A IA está lendo seus números e conversas... ✨</div></div>}
-        {ind.erro && <div className="ia-resultado-card"><IAErro msg={ind.erro} /></div>}
-        {ind.res && <div className="ia-resultado-card"><div className="rc-h"><span className="rank-av">{iniciais(user.nome)}</span>{user.nome}</div><IAResultado res={ind.res} /></div>}
-      </div>
-    );
-  }
-
-  // GERENTE
-  return (
-    <div className="ia-page">
-      <div className="ia-tabs">
-        <button className={aba === "equipe" ? "on" : ""} onClick={() => setAba("equipe")}><I.users /> Equipe inteira</button>
-        <button className={aba === "individual" ? "on" : ""} onClick={() => setAba("individual")}><I.team /> Vendedor específico</button>
-      </div>
-
-      {periodoBar}
-
-      {aba === "equipe" && (
-        <>
-          <div className="ia-hero">
-            <span className="ia-hero-badge"><I.spark style={{ width: 14, height: 14 }} /> Inteligência Artificial</span>
-            <h2>Relatório de atendimento da equipe</h2>
-            <p>A IA analisa a velocidade das respostas, os clientes deixados sem retorno, o volume e o tom de cada atendente, gerando uma leitura geral e recomendações pra apresentar à diretoria. <b>Período: {periodo.label}.</b></p>
-            <div className="ia-hero-stats"><span><b>{m.conversas || 0}</b> atendimentos</span><span className="sep">•</span><span><b>{users.length}</b> vendedores</span><span className="sep">•</span><span><b>{m.taxaResposta || 0}%</b> taxa de resposta</span></div>
-            <button className="btn-hero" onClick={gerarEquipe} disabled={eq.loading}><I.spark style={{ width: 17, height: 17 }} /> {eq.loading ? "Analisando..." : "Gerar análise da equipe"}</button>
-          </div>
-          {eq.loading && <div className="ia-resultado-card"><div className="ia-loading">A IA está analisando o time... ✨</div></div>}
-          {eq.erro && <div className="ia-resultado-card"><IAErro msg={eq.erro} /></div>}
-          {eq.res && <div className="ia-resultado-card"><div className="rc-h">📊 Visão geral da equipe</div><IAResultado res={eq.res} /></div>}
-        </>
-      )}
-
-      {aba === "individual" && (
-        <>
-          <div className="ia-pick">
-            <label>Escolha o vendedor</label>
-            <select className="select" style={{ maxWidth: 320 }} value={selVend} onChange={(e) => { setSelVend(e.target.value); setInd({ loading: false, res: null, erro: "" }); }}>
-              {users.length === 0 && <option value="">Nenhum vendedor cadastrado</option>}
-              {users.map((u) => <option key={u.id} value={u.id}>{u.nome}</option>)}
-            </select>
-          </div>
-          {selVend && (
-            <div className="ia-hero">
-              <span className="ia-hero-badge"><I.spark style={{ width: 14, height: 14 }} /> Inteligência Artificial</span>
-              <h2>Avaliação individual</h2>
-              <p>Análise dos resultados e da qualidade do atendimento de <b>{(users.find((u) => u.id === selVend) || {}).nome}</b>, com pontos fortes, pontos a melhorar e sugestões específicas. <b>Período: {periodo.label}.</b></p>
-              <button className="btn-hero" onClick={() => gerarIndividual(selVend)} disabled={ind.loading}><I.spark style={{ width: 17, height: 17 }} /> {ind.loading ? "Analisando..." : "Gerar análise do vendedor"}</button>
-            </div>
-          )}
-          {ind.loading && <div className="ia-resultado-card"><div className="ia-loading">Lendo números e conversas... ✨</div></div>}
-          {ind.erro && <div className="ia-resultado-card"><IAErro msg={ind.erro} /></div>}
-          {ind.res && <div className="ia-resultado-card"><div className="rc-h"><span className="rank-av">{iniciais(ind.res.vendedor || "")}</span>{ind.res.vendedor}</div><IAResultado res={ind.res} /></div>}
-        </>
-      )}
-    </div>
-  );
-}
-
-/* ============================================================
-   IMPORTAR LISTA DE LEADS
-   ============================================================ */
-function parseLeads(texto) {
-  const linhas = (texto || "").split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
-  const out = [];
-  linhas.forEach((l, idx) => {
-    const temNumero = /\d{8,}/.test(l.replace(/\D/g, ""));
-    if (idx === 0 && !temNumero && /(nome|telefone|phone|whats|numero|n[uú]mero|celular|contato)/i.test(l)) return;
-    const partes = l.split(/[,;\t]+/).map((p) => p.trim()).filter(Boolean);
-    let tel = "", nome = "";
-    partes.forEach((p) => {
-      const dig = p.replace(/\D/g, "");
-      if (dig.length >= 8 && !tel) tel = dig;
-      else if (!nome && dig.length < 8) nome = p;
-    });
-    if (tel || nome) out.push({ cliente: nome, telefone: tel });
-  });
-  return out;
-}
-
-function ImportarLeads({ isGer, users, meId, onClose, onImported }) {
-  const [origem, setOrigem] = useState("");
-  const [curso, setCurso] = useState("");
-  const [responsavelId, setResponsavelId] = useState(meId);
-  const [texto, setTexto] = useState("");
-  const [saving, setSaving] = useState(false);
-
-  function lerArquivo(e) {
-    const file = e.target.files[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = () => setTexto((t) => (t ? t + "\n" : "") + String(reader.result));
-    reader.readAsText(file);
-    e.target.value = "";
-  }
-
-  const leads = parseLeads(texto);
-
-  async function importar() {
-    if (leads.length === 0 || !origem.trim()) return;
-    setSaving(true);
-    try {
-      const r = await api.importCards({ leads, origem, curso, responsavelId });
-      onImported(r.criados);
-    } catch (e) { alert(e.message); setSaving(false); }
-  }
-
-  return (
-    <div className="modal" onClick={(e) => e.target === e.currentTarget && onClose()}>
-      <div className="modal-box" style={{ maxWidth: 540 }}>
-        <div className="mh"><h3>Importar lista de leads</h3><p>Cole os números (um por linha) ou suba um CSV. Cada linha vira um lead novo no funil.</p></div>
-        <div className="mb">
-          <div className="row2">
-            <div className="field"><label>Origem / Tag *</label><input className="input" value={origem} onChange={(e) => setOrigem(e.target.value)} placeholder="Ex: Lista Instagram Junho" autoFocus /></div>
-            <div className="field"><label>Curso (opcional)</label><input className="input" value={curso} onChange={(e) => setCurso(e.target.value)} placeholder="Ex: Eletrônica" /></div>
-          </div>
-          {isGer && (
-            <div className="field"><label>Atribuir a</label>
-              <select className="select" value={responsavelId} onChange={(e) => setResponsavelId(e.target.value)}>
-                {users.map((u) => <option key={u.id} value={u.id}>{u.nome}</option>)}
-              </select>
-            </div>
-          )}
-          <div className="field">
-            <label>Números (um por linha — pode ser "Nome, telefone")</label>
-            <textarea className="textarea" style={{ minHeight: 130, fontFamily: "'JetBrains Mono', monospace", fontSize: 13 }} value={texto} onChange={(e) => setTexto(e.target.value)} placeholder={"João, 5544999998888\n5544988887777\nMaria; 44 90000-0000"} />
-          </div>
-          <label className="import-file">
-            <I.out style={{ width: 15, height: 15, transform: "rotate(180deg)" }} /> Subir arquivo CSV
-            <input type="file" accept=".csv,text/csv,text/plain" onChange={lerArquivo} hidden />
-          </label>
-          {leads.length > 0 && <div className="import-count">✓ {leads.length} número{leads.length === 1 ? "" : "s"} detectado{leads.length === 1 ? "" : "s"}</div>}
-        </div>
-        <div className="mf">
-          <button className="btn full" onClick={onClose}>Cancelar</button>
-          <button className="btn btn-primary full" onClick={importar} disabled={saving || leads.length === 0 || !origem.trim()}>{saving ? "Importando..." : `Importar ${leads.length || ""} leads`}</button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-/* ============================================================
-   MONITORIA DE ATENDIMENTO
-   ============================================================ */
 function fmtTempo(seg) {
   if (!seg || seg <= 0) return "—";
   if (seg < 60) return seg + "s";
@@ -12466,290 +9067,6 @@ function fmtTempo(seg) {
   return Math.floor(seg / 3600) + "h " + Math.floor((seg % 3600) / 60) + "min";
 }
 
-function Monitoria({ user, showToast }) {
-  const isGer = user.role === "gerente";
-  const [dados, setDados] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [preset, setPreset] = useState("mes");
-  const [de, setDe] = useState("");
-  const [ate, setAte] = useState("");
-  const [vendFiltro, setVendFiltro] = useState(isGer ? "" : user.id);
-  const [det, setDet] = useState(null);
-  const [ofStats, setOfStats] = useState(null);
-
-  const alvo = isGer ? vendFiltro : user.id;
-
-  async function carregar(silencioso) {
-    if (!silencioso) setLoading(true);
-    const [ini, fim] = intervaloPeriodo(preset, de, ate);
-    try { setDados(await api.monitoria(ini, fim)); }
-    catch (e) { if (!silencioso) showToast("✗ " + e.message); }
-    finally { if (!silencioso) setLoading(false); }
-    if (isGer) { api.ofStats(ini, fim).then(setOfStats).catch(() => setOfStats(null)); }
-  }
-  useEffect(() => { carregar(false); /* eslint-disable-next-line */ }, [preset, de, ate]);
-  useEffect(() => {
-    if (preset === "custom") return;
-    const [i, f] = intervaloPeriodo(preset, "", "");
-    const iso = (t) => new Date(t).toISOString().slice(0, 10);
-    setDe(iso(preset === "tudo" ? Date.now() : i)); setAte(iso(f));
-    // eslint-disable-next-line
-  }, [preset]);
-  useEffect(() => {
-    if (!alvo) { setDet(null); return; }
-    let cancel = false;
-    (async () => {
-      const [ini, fim] = intervaloPeriodo(preset, de, ate);
-      try {
-        const [info, ev, nps] = await Promise.all([
-          api.monitoriaVendedor(alvo, ini, fim),
-          api.monitoriaEvolucao(ini, fim, alvo),
-          api.nps(ini, fim, alvo).catch(() => null),
-        ]);
-        if (!cancel) setDet({ info, evo: ev.dias || [], nps });
-      } catch (e) { if (!cancel) showToast("✗ " + e.message); }
-    })();
-    return () => { cancel = true; };
-    // eslint-disable-next-line
-  }, [alvo, preset, de, ate]);
-
-  if (loading) return <div className="spin" />;
-  const time = (dados && dados.time) || {};
-  const vendedores = (dados && dados.vendedores) || [];
-  const ranked = [...vendedores].sort((a, b) => b.mensagensEnviadas - a.mensagensEnviadas);
-  const barrasMsg = ranked.slice(0, 8).map((v) => ({ label: (v.nome || "").split(" ")[0], valor: v.mensagensEnviadas }));
-  const barrasTmr = [...vendedores].filter((v) => v.tmrSeg > 0).sort((a, b) => a.tmrSeg - b.tmrSeg).slice(0, 8)
-    .map((v) => ({ label: (v.nome || "").split(" ")[0], valor: Math.round(v.tmrSeg / 60) || 1, rotulo: fmtTempo(v.tmrSeg), cor: "#ffb547" }));
-
-  const topo = (
-    <div className="mon-topo">
-      <div className="filtro-bar">
-        <div className="seg">
-          {[["hoje", "Hoje"], ["semana", "Semana"], ["mes", "Mês"], ["tudo", "Tudo"]].map(([k, lbl]) => (
-            <button key={k} className={preset === k ? "on" : ""} onClick={() => setPreset(k)}>{lbl}</button>
-          ))}
-        </div>
-        <div className="filtro-datas">
-          <input type="date" value={de} onChange={(e) => { setDe(e.target.value); setPreset("custom"); }} />
-          até
-          <input type="date" value={ate} onChange={(e) => { setAte(e.target.value); setPreset("custom"); }} />
-        </div>
-      </div>
-      {isGer && (
-        <select className="select mon-vend-sel" value={vendFiltro} onChange={(e) => setVendFiltro(e.target.value)}>
-          <option value="">Todos os vendedores</option>
-          {[...vendedores].sort((a, b) => a.nome.localeCompare(b.nome)).map((v) => <option key={v.id} value={v.id}>{v.nome}</option>)}
-        </select>
-      )}
-    </div>
-  );
-
-  // ===== VISÃO INDIVIDUAL (um vendedor) =====
-  if (alvo) {
-    return (
-      <div>
-        {topo}
-        {det ? <PainelIndividual info={det.info} evo={det.evo} nps={det.nps} isGer={isGer} onVoltar={() => setVendFiltro("")} /> : <div className="spin" />}
-      </div>
-    );
-  }
-
-  // ===== VISÃO DO TIME (todos) =====
-  const vazio = time.conversas === 0;
-  return (
-    <div>
-      {topo}
-      <div className="stats">
-        <StatIco ico={I.refresh} cor="#8b7bff" val={fmtTempo(time.tmrSeg)} lab="Tempo médio de resposta (TMA)" />
-        <StatIco ico={I.wa} cor="#ff5d73" val={time.semResposta || 0} lab="Conversas sem resposta" />
-        <StatIco ico={I.chat} cor="#34e3b0" val={time.conversas || 0} lab="Atendimentos no período" />
-        <StatIco ico={I.send} cor="#c08bff" val={time.mensagensEnviadas || 0} lab="Mensagens enviadas" />
-      </div>
-      <div className="mon-strip">
-        <div className="mon-mini"><div className="lab">1ª resposta (média)</div><div className="num">{fmtTempo(time.primeiraSeg)}</div></div>
-        <div className="mon-mini"><div className="lab">Taxa de resposta</div><div className="num">{time.taxaResposta || 0}%</div></div>
-        <div className="mon-mini"><div className="lab">Conversas atendidas</div><div className="num">{time.atendidas || 0} de {time.conversas || 0}</div></div>
-      </div>
-
-      {isGer && ofStats && (
-        <div className="panel" style={{ marginBottom: 16 }}>
-          <div className="panel-h">
-            <h3>Disparo Oficial &amp; IA<span className="panel-sub">desempenho do canal oficial no período</span></h3>
-          </div>
-          <div style={{ padding: "0 18px 18px" }}>
-            <div className="mon-of-grid">
-              <div className="mon-of-card"><div className="n">{ofStats.disparos.enviados.toLocaleString("pt-BR")}</div><div className="l">Disparos enviados</div></div>
-              <div className="mon-of-card"><div className="n">{ofStats.disparos.entregues.toLocaleString("pt-BR")}</div><div className="l">Entregues</div></div>
-              <div className="mon-of-card"><div className="n">{ofStats.disparos.lidos.toLocaleString("pt-BR")}</div><div className="l">Lidos</div></div>
-              <div className="mon-of-card destaque"><div className="n">{ofStats.disparos.responderam.toLocaleString("pt-BR")}</div><div className="l">Responderam</div></div>
-              <div className="mon-of-card"><div className="n">{ofStats.disparos.taxaResp}%</div><div className="l">Taxa de resposta</div></div>
-            </div>
-            <div className="mon-of-grid" style={{ marginTop: 12 }}>
-              <div className="mon-of-card ia"><div className="n">{ofStats.atendimento.iaAtendendo}</div><div className="l">🤖 IA atendendo agora</div></div>
-              <div className="mon-of-card ia"><div className="n">{ofStats.atendimento.iaPassou}</div><div className="l">IA passou pro vendedor</div></div>
-              <div className="mon-of-card ia"><div className="n">{ofStats.atendimento.msgsIA.toLocaleString("pt-BR")}</div><div className="l">Mensagens da IA</div></div>
-              <div className="mon-of-card"><div className="n">{ofStats.atendimento.comVendedor}</div><div className="l">Com vendedor</div></div>
-              <div className="mon-of-card"><div className="n">{ofStats.atendimento.semDono}</div><div className="l">Aguardando</div></div>
-            </div>
-            {ofStats.ias.filter((ia) => ia.atendendo > 0 || ia.passou > 0 || ia.msgs > 0).length > 0 && (
-              <div style={{ marginTop: 16 }}>
-                <div className="panel-sub" style={{ marginBottom: 8, fontWeight: 600 }}>Por agente de IA</div>
-                {ofStats.ias.filter((ia) => ia.atendendo > 0 || ia.passou > 0 || ia.msgs > 0).map((ia) => (
-                  <div key={ia.id} className="mon-of-ia-row">
-                    <span className="nm"><I.spark className="ico" /> {ia.nome}<span className="modo">{ia.modo === "qualifica" ? "qualifica" : "fecha"}</span></span>
-                    <span className="vals">
-                      <span><b>{ia.atendendo}</b> atendendo</span>
-                      <span><b>{ia.passou}</b> passou</span>
-                      <span><b>{ia.msgs.toLocaleString("pt-BR")}</b> msgs</span>
-                    </span>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-
-      {vazio ? (
-        <div className="panel"><div className="dash-empty">
-          Ainda não há conversas registradas neste período.<br />
-          Os números vão aparecer conforme os vendedores forem conectados em <b>WhatsApp → Configurar conexão</b> e começarem a atender.
-        </div></div>
-      ) : (
-        <>
-          {isGer && (
-            <div className="charts-2">
-              <div className="panel"><div className="panel-h"><h3>Produtividade<span className="panel-sub">mensagens enviadas por vendedor</span></h3></div><div className="chart-body"><GraficoBarras dados={barrasMsg} /></div></div>
-              <div className="panel"><div className="panel-h"><h3>Tempo de resposta<span className="panel-sub">média por vendedor (min) — menor é melhor</span></h3></div><div className="chart-body"><GraficoBarras dados={barrasTmr} /></div></div>
-            </div>
-          )}
-
-          <div className="panel">
-            <div className="panel-h"><h3>Desempenho por vendedor<span className="panel-sub">clique num vendedor pra ver só ele</span></h3></div>
-            <div className="mon-tabela-wrap">
-              <table className="mon-tabela">
-                <thead>
-                  <tr>
-                    <th>Vendedor</th><th>Atend.</th><th>Atendidas</th><th>S/ resposta</th>
-                    <th>Msgs</th><th>TMA resposta</th><th>1ª resp.</th><th>Taxa</th><th></th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {ranked.map((v) => (
-                    <tr key={v.id} className="clicavel" onClick={() => isGer && setVendFiltro(v.id)}>
-                      <td className="vend"><span className="rank-av" style={{ width: 26, height: 26, fontSize: 11 }}>{iniciais(v.nome)}</span>{v.nome}</td>
-                      <td>{v.conversas}</td>
-                      <td>{v.atendidas}</td>
-                      <td>{v.semResposta > 0 ? <span className="alerta">{v.semResposta}</span> : "0"}</td>
-                      <td>{v.mensagensEnviadas}</td>
-                      <td>{fmtTempo(v.tmrSeg)}</td>
-                      <td>{fmtTempo(v.primeiraSeg)}</td>
-                      <td>{v.taxaResposta}%</td>
-                      <td className="chev">›</td>
-                    </tr>
-                  ))}
-                  {ranked.length === 0 && <tr><td colSpan={9} style={{ textAlign: "center", color: "var(--faint)", padding: 24 }}>Nenhum vendedor com atendimentos.</td></tr>}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </>
-      )}
-    </div>
-  );
-}
-
-function PainelIndividual({ info: d, evo, nps, isGer, onVoltar }) {
-  const ativos = (evo || []).filter((x) => x.atendimentos > 0 || x.mensagens > 0);
-  return (
-    <div>
-      <div className="ind-head">
-        {isGer && <button className="btn btn-sm" onClick={onVoltar}>← Todos os vendedores</button>}
-        <div className="ind-nome"><span className="rank-av" style={{ width: 30, height: 30, fontSize: 12 }}>{iniciais(d.nome)}</span>{d.nome}</div>
-      </div>
-
-      <div className="stats">
-        <StatIco ico={I.refresh} cor="#8b7bff" val={fmtTempo(d.tmrSeg)} lab="Tempo médio de resposta (TMA)" />
-        <StatIco ico={I.wa} cor="#ff5d73" val={d.semResposta || 0} lab="Conversas sem resposta" />
-        <StatIco ico={I.chat} cor="#34e3b0" val={d.conversas || 0} lab="Atendimentos no período" />
-        <StatIco ico={I.send} cor="#c08bff" val={d.mensagensEnviadas || 0} lab="Mensagens enviadas" />
-      </div>
-      <div className="mon-strip">
-        <div className="mon-mini"><div className="lab">1ª resposta (média)</div><div className="num">{fmtTempo(d.primeiraSeg)}</div></div>
-        <div className="mon-mini"><div className="lab">Taxa de resposta</div><div className="num">{d.taxaResposta || 0}%</div></div>
-        <div className="mon-mini"><div className="lab">Conversas atendidas</div><div className="num">{d.atendidas || 0} de {d.conversas || 0}</div></div>
-      </div>
-
-      {nps && nps.geral && nps.geral.respostas > 0 && (
-        <div className="panel">
-          <div className="panel-h"><h3>Satisfação (NPS)<span className="panel-sub">notas da pesquisa no período</span></h3></div>
-          <div className="ind-nps">
-            <div className="ind-nps-media">
-              <div className="nps-media">{nps.geral.media.toFixed(1)}<small>/5</small></div>
-              <Estrelas n={nps.geral.media} />
-              <div className="nps-sub">{nps.geral.respostas} {nps.geral.respostas === 1 ? "avaliação" : "avaliações"}</div>
-            </div>
-            <div className="ind-nps-dist"><DistBar dist={nps.geral.dist} /></div>
-          </div>
-          {nps.avaliacoes && nps.avaliacoes.length > 0 && (
-            <div className="ind-nps-aval">
-              {nps.avaliacoes.slice(0, 6).map((a) => (
-                <div key={a.id + a.notaEm} className="nps-aval-row">
-                  <span className={"nps-nota n" + Math.round(a.nota)}>⭐ {a.nota}</span>
-                  <div className="nps-aval-info">
-                    <div className="nps-aval-top"><b>{a.nome}</b></div>
-                    {a.notaTexto && <div className="nps-aval-txt">"{a.notaTexto}"</div>}
-                  </div>
-                  <span className="nps-aval-data">{fmtDataHora(a.notaEm)}</span>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
-
-      {ativos.length > 0 && (
-        <div className="panel">
-          <div className="panel-h"><h3>Números por dia</h3></div>
-          <div className="mon-tabela-wrap">
-            <table className="mon-tabela">
-              <thead><tr><th>Dia</th><th>Atend.</th><th>Atendidas</th><th>Msgs</th><th>TMA resposta</th><th>1ª resp.</th></tr></thead>
-              <tbody>
-                {[...ativos].reverse().map((x) => (
-                  <tr key={x.label}>
-                    <td>{x.label}</td><td>{x.atendimentos}</td><td>{x.atendidas}</td><td>{x.mensagens}</td><td>{fmtTempo(x.tmrSeg)}</td><td>{fmtTempo(x.primeiraSeg)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
-
-      <div className="panel">
-        <div className="panel-h"><h3>Conversas<span className="panel-sub">{d.conversas} no período</span></h3></div>
-        <div className="det-conv" style={{ padding: 18, maxHeight: "none" }}>
-          {(!d.lista || d.lista.length === 0) && <div className="dash-empty" style={{ padding: 18 }}>Nenhuma conversa no período.</div>}
-          {(d.lista || []).map((c) => (
-            <div className="det-conv-row" key={c.id}>
-              <span className="rank-av" style={{ width: 30, height: 30, fontSize: 11, flexShrink: 0 }}>{iniciais(c.nome)}</span>
-              <div className="cc">
-                <div className="nm">{c.nome} <span className="num">{c.numero}</span></div>
-                <div className="last">{c.ultimaDe === "me" ? "Você: " : ""}{c.ultimaMsg || "—"}</div>
-              </div>
-              <div className="cc-meta">
-                {c.semResposta ? <span className="badge red">sem resposta</span> : c.atendida ? <span className="badge green">respondida</span> : <span className="badge">só recebida</span>}
-                {c.tmrSeg > 0 && <span className="t">resp. {fmtTempo(c.tmrSeg)}</span>}
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-/* ============================ SOLICITAÇÕES DE SUPORTE ============================ */
 function rotuloStatus(s) {
   return s === "aberta" ? "Aberta" : s === "andamento" ? "Em andamento" : "Resolvida";
 }
@@ -13108,7 +9425,7 @@ function PaginaMinhasSolicitacoes({ itens, recarregar, showToast }) {
     let vivo = true;
     const tick = () => api.sincronizarSolic(aberta.id).then((r) => { if (!vivo) return; if (r && r.removida) { setAberta(null); alert("Esse chamado foi resolvido e removido pelo suporte."); } recarregar(); }).catch(() => {});
     tick();
-    const t = setInterval(tick, 6000);
+    const t = setInterval(() => { if (!document.hidden) tick(); }, 6000);
     return () => { vivo = false; clearInterval(t); };
     // eslint-disable-next-line
   }, [aberta && aberta.id]);
