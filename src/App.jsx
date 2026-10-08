@@ -60,6 +60,11 @@ const I = {
   alert: (p) => (<svg {...p} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3l9 16H3z"/><path d="M12 9v5M12 17.5v.5"/></svg>),
   gauge: (p) => (<svg {...p} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M4 20a8 8 0 1 1 16 0"/><path d="M12 20l4-6"/></svg>),
   user: (p) => (<svg {...p} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="8" r="3.5"/><path d="M5 20a7 7 0 0 1 14 0"/></svg>),
+  list: (p) => (<svg {...p} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M8 6h13M8 12h13M8 18h13M3.5 6h.01M3.5 12h.01M3.5 18h.01"/></svg>),
+  seta: (p) => (<svg {...p} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>),
+  painelLado: (p) => (<svg {...p} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="16" rx="3"/><path d="M9 4v16"/></svg>),
+  olho: (p) => (<svg {...p} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>),
+  olhoFechado: (p) => (<svg {...p} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M10.6 5.1A10.5 10.5 0 0 1 12 5c6.4 0 10 7 10 7a17.6 17.6 0 0 1-2.4 3.3M6.2 6.2C3.6 7.9 2 12 2 12s3.6 7 10 7a9.6 9.6 0 0 0 5.8-1.9"/><path d="M9.9 9.9a3 3 0 0 0 4.2 4.2"/><path d="M3 3l18 18"/></svg>),
   brilho: (p) => (<svg {...p} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3c.5 4 2 5.5 6 6-4 .5-5.5 2-6 6-.5-4-2-5.5-6-6 4-.5 5.5-2 6-6z"/><path d="M19 15c.2 1.6.9 2.3 2.5 2.5-1.6.2-2.3.9-2.5 2.5-.2-1.6-.9-2.3-2.5-2.5 1.6-.2 2.3-.9 2.5-2.5z"/></svg>),
   celular: (p) => (<svg {...p} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="5" y="2" width="14" height="20" rx="2.5"/><path d="M11 18h2"/></svg>),
   repetir: (p) => (<svg {...p} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M17 2l4 4-4 4"/><path d="M3 11V9a3 3 0 0 1 3-3h15"/><path d="M7 22l-4-4 4-4"/><path d="M21 13v2a3 3 0 0 1-3 3H3"/></svg>),
@@ -236,6 +241,10 @@ export default function App() {
     });
   }
 
+  // v2.2: menu lateral recolhível (só ícones) — lembra a escolha neste navegador
+  const [menuRecolhido, setMenuRecolhido] = useState(() => { try { return localStorage.getItem("instructiva_menu") === "recolhido"; } catch (e) { return false; } });
+  useEffect(() => { try { localStorage.setItem("instructiva_menu", menuRecolhido ? "recolhido" : "aberto"); } catch (e) {} }, [menuRecolhido]);
+
   // v2.1: busca rápida — Ctrl+K (⌘K no Mac) abre de qualquer tela
   const [buscaAberta, setBuscaAberta] = useState(false);
   useEffect(() => {
@@ -302,8 +311,8 @@ export default function App() {
   }
 
   if (booting) return <div className="login-wrap"><div className="spin" /></div>;
-  if (!user) return <Login onDone={(u) => setUser(u)} />;
-  if (user.precisaOnboarding) return <Onboarding user={user} onDone={setUser} />;
+  if (!user) return <Login onDone={(u) => setUser(u)} unidade={unidade} />;
+  if (user.precisaOnboarding) return <Onboarding user={user} onDone={setUser} unidade={unidade} />;
 
   const isGer = user.role === "gerente";
   const isSuporte = user.role === "suporte";
@@ -354,11 +363,16 @@ export default function App() {
     : "";
 
   return (
-    <div className="shell">
+    <div className={"shell" + (menuRecolhido ? " menu-recolhido" : "")}>
       <RecadoDoDia />
       <aside className="sidebar">
-        <div className="brand">
-          <img src={LOGO_LIGHT} alt="Instructiva" />
+        <div className="side-topo">
+          <div className="brand"><img src={theme === "dark" ? LOGO_LIGHT : LOGO_FULL} alt="Instructiva" /></div>
+          <button type="button" className="side-recolher" onClick={() => setMenuRecolhido((v) => !v)} title={menuRecolhido ? "Abrir menu" : "Recolher menu"} aria-label={menuRecolhido ? "Abrir menu" : "Recolher menu"}>
+            <I.painelLado className="ico" />
+          </button>
+        </div>
+        <div className="brand-unidade">
           {nomeUnidade && (
             <div className="unidade-chip">
               <span className="unidade-dot" />
@@ -382,8 +396,8 @@ export default function App() {
         </nav>
         <div className="side-foot">
           <div className="tema-seg" role="group" aria-label="Tema">
-            <button type="button" className={theme !== "dark" ? "on" : ""} onClick={() => theme === "dark" && toggleTheme()}><I.sun className="ico" />Claro</button>
-            <button type="button" className={theme === "dark" ? "on" : ""} onClick={() => theme !== "dark" && toggleTheme()}><I.moon className="ico" />Escuro</button>
+            <button type="button" className={theme !== "dark" ? "on" : ""} onClick={() => theme === "dark" && toggleTheme()} title="Tema claro"><I.sun className="ico" /><span>Claro</span></button>
+            <button type="button" className={theme === "dark" ? "on" : ""} onClick={() => theme !== "dark" && toggleTheme()} title="Tema escuro"><I.moon className="ico" /><span>Escuro</span></button>
           </div>
           <div className="side-user">
             <Avatar nome={user.nome} foto={user.foto} size={36} />
@@ -393,7 +407,7 @@ export default function App() {
             </div>
             <button className="side-sair" onClick={logout} title="Sair" aria-label="Sair"><I.out className="ico" /></button>
           </div>
-          <div className="side-versao">v2.1</div>
+          <div className="side-versao">v2.2</div>
         </div>
       </aside>
 
@@ -576,7 +590,7 @@ function BuscaRapida({ telas, podeCRM, podeCaixa, onClose, onIrTela, onAbrirLead
 
 function NavBtn({ ic: Ico, label, active, onClick, badge }) {
   return (
-    <button className={active ? "active" : ""} onClick={onClick}>
+    <button className={active ? "active" : ""} onClick={onClick} title={label}>
       <Ico className="ico" />
       <span>{label}</span>
       {badge > 0 && <span className="nav-badge">{badge}</span>}
@@ -584,8 +598,52 @@ function NavBtn({ ic: Ico, label, active, onClick, badge }) {
   );
 }
 
-/* ============================ LOGIN ============================ */
-function Login({ onDone }) {
+/* ============================ LOGIN (v2.2) ============================ */
+// Tela inteira: a marca de um lado (sem caixa atrás da logo) e o formulário do outro.
+function TelaAcesso({ unidade, children }) {
+  const nome = unidade && unidade !== "nao-configurada" ? ({ toledo: "Toledo", jesuitas: "Jesuítas" }[unidade] || unidade.charAt(0).toUpperCase() + unidade.slice(1)) : "";
+  return (
+    <div className="acesso">
+      <section className="acesso-marca">
+        <img className="acesso-logo" src={LOGO_LIGHT} alt="Instructiva" />
+        <div className="acesso-meio">
+          <h1>Todo o comercial da Instructiva num só lugar.</h1>
+          <p>Conversas do WhatsApp, funil de leads, metas e análise do atendimento. Tudo para você vender mais com menos esforço.</p>
+          <ul className="acesso-lista">
+            <li><span><I.wa className="ico" /></span>Conversas oficiais e dos vendedores</li>
+            <li><span><I.pipe className="ico" /></span>Pipeline com tarefas e lembretes</li>
+            <li><span><I.trend className="ico" /></span>Metas, ranking e comissões ao vivo</li>
+          </ul>
+        </div>
+        <div className="acesso-bolhas" aria-hidden="true">
+          <div className="ab ab-them">Oi! Quero saber mais sobre o curso.</div>
+          <div className="ab ab-me">Claro! Já te mando as condições.<i>✓✓</i></div>
+          <div className="ab-card"><span className="ab-card-ic"><I.check className="ico" /></span><div><b>Lead movido para Matriculado</b><small>agora mesmo</small></div></div>
+        </div>
+        <div className="acesso-rodape">
+          {nome ? <span className="acesso-unidade"><i />Unidade {nome}</span> : <span />}
+          <span>Escola Instructiva · Sistema comercial</span>
+        </div>
+      </section>
+      <section className="acesso-form">
+        <div className="acesso-form-in">{children}</div>
+      </section>
+    </div>
+  );
+}
+function CampoSenha({ value, onChange, placeholder, autoComplete }) {
+  const [ver, setVer] = useState(false);
+  return (
+    <div className="acesso-input">
+      <I.lock className="ico" />
+      <input type={ver ? "text" : "password"} value={value} onChange={onChange} placeholder={placeholder} autoComplete={autoComplete} />
+      <button type="button" className="acesso-olho" onClick={() => setVer((v) => !v)} aria-label={ver ? "Esconder senha" : "Mostrar senha"} title={ver ? "Esconder senha" : "Mostrar senha"}>
+        {ver ? <I.olhoFechado className="ico" /> : <I.olho className="ico" />}
+      </button>
+    </div>
+  );
+}
+function Login({ onDone, unidade }) {
   const dark = typeof document !== "undefined" && document.documentElement.getAttribute("data-theme") === "dark";
   const [login, setLogin] = useState("");
   const [senha, setSenha] = useState("");
@@ -605,31 +663,29 @@ function Login({ onDone }) {
   }
 
   return (
-    <div className="login-wrap">
-      <form className="login-card" onSubmit={entrar}>
-        <img className="logo" src={dark ? LOGO_LIGHT : LOGO_FULL} alt="Instructiva" />
-        <div className="ttl">Sistema Comercial</div>
-        <h2>Entrar</h2>
-        <p className="hi">Acesse com seu usuário e senha.</p>
-        {err && <div className="err">{err}</div>}
-        <div className="field">
-          <label>Usuário</label>
-          <input className="input" value={login} onChange={(e) => setLogin(e.target.value)} placeholder="seu usuário" autoFocus />
-        </div>
-        <div className="field">
-          <label>Senha</label>
-          <input className="input" type="password" value={senha} onChange={(e) => setSenha(e.target.value)} placeholder="••••••••" />
-        </div>
-        <button className="btn btn-primary full" disabled={loading} style={{ marginTop: 6 }}>
-          {loading ? "Entrando..." : "Entrar"}
-        </button>
+    <TelaAcesso unidade={unidade}>
+      <form className="acesso-caixa" onSubmit={entrar}>
+        <img className="acesso-logo-mob" src={dark ? LOGO_LIGHT : LOGO_FULL} alt="Instructiva" />
+        <h2>Bem-vindo de volta</h2>
+        <p className="acesso-sub">Entre com seu usuário e senha para continuar.</p>
+        {err && <div className="acesso-erro"><I.alert className="ico" />{err}</div>}
+        <label className="acesso-campo">
+          <span>Usuário</span>
+          <div className="acesso-input"><I.user className="ico" /><input value={login} onChange={(e) => setLogin(e.target.value)} placeholder="seu usuário" autoComplete="username" autoFocus /></div>
+        </label>
+        <label className="acesso-campo">
+          <span>Senha</span>
+          <CampoSenha value={senha} onChange={(e) => setSenha(e.target.value)} placeholder="sua senha" autoComplete="current-password" />
+        </label>
+        <button className="acesso-entrar" disabled={loading}>{loading ? "Entrando…" : <>Entrar <I.seta className="ico" /></>}</button>
+        <p className="acesso-ajuda">Esqueceu a senha? Fale com o gerente comercial.</p>
       </form>
-    </div>
+    </TelaAcesso>
   );
 }
 
 /* ============================ ONBOARDING ============================ */
-function Onboarding({ user, onDone }) {
+function Onboarding({ user, onDone, unidade }) {
   const dark = typeof document !== "undefined" && document.documentElement.getAttribute("data-theme") === "dark";
   const [nome, setNome] = useState(user.nome === "Gerente Comercial" ? "" : user.nome);
   const [senha, setSenha] = useState("");
@@ -647,29 +703,26 @@ function Onboarding({ user, onDone }) {
   }
 
   return (
-    <div className="login-wrap">
-      <form className="login-card" onSubmit={salvar}>
-        <img className="logo" src={dark ? LOGO_LIGHT : LOGO_FULL} alt="Instructiva" />
-        <div className="ttl">Primeiro acesso</div>
-        <h2>Seja bem-vindo(a)! 🎉</h2>
-        <p className="hi">Confirme seu nome e defina uma senha sua.</p>
-        <div className="field">
-          <label>Seu nome</label>
-          <input className="input" value={nome} onChange={(e) => setNome(e.target.value)} placeholder="Ex: Maria Souza" required autoFocus />
-        </div>
-        <div className="field">
-          <label>Nova senha</label>
-          <input className="input" type="password" value={senha} onChange={(e) => setSenha(e.target.value)} placeholder="mínimo 3 caracteres" />
-        </div>
-        <button className="btn btn-primary full" disabled={loading || !nome.trim()}>
-          {loading ? "Salvando..." : "Começar"}
-        </button>
+    <TelaAcesso unidade={unidade}>
+      <form className="acesso-caixa" onSubmit={salvar}>
+        <img className="acesso-logo-mob" src={dark ? LOGO_LIGHT : LOGO_FULL} alt="Instructiva" />
+        <div className="acesso-eyebrow">Primeiro acesso</div>
+        <h2>Seja bem-vindo(a)!</h2>
+        <p className="acesso-sub">Confirme seu nome e crie uma senha só sua.</p>
+        <label className="acesso-campo">
+          <span>Seu nome</span>
+          <div className="acesso-input"><I.user className="ico" /><input value={nome} onChange={(e) => setNome(e.target.value)} placeholder="Ex.: Maria Souza" required autoFocus /></div>
+        </label>
+        <label className="acesso-campo">
+          <span>Nova senha</span>
+          <CampoSenha value={senha} onChange={(e) => setSenha(e.target.value)} placeholder="mínimo 3 caracteres" autoComplete="new-password" />
+        </label>
+        <button className="acesso-entrar" disabled={loading || !nome.trim()}>{loading ? "Salvando…" : <>Começar <I.seta className="ico" /></>}</button>
       </form>
-    </div>
+    </TelaAcesso>
   );
 }
 
-/* ============================ PIPELINE (KANBAN) ============================ */
 function Equipe({ showToast, meId }) {
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -1492,6 +1545,23 @@ function OficialDisparo({ isGer = true, showToast, preset = null, onPresetUsado 
         <button className={"disp-fchip" + (dataFiltro === "" ? " on" : "")} onClick={() => setDataFiltro("")}>Tudo</button>
       </div>
 
+      {/* v2.2: números do período (somados das campanhas da lista) */}
+      {campanhas.length > 0 && (() => {
+        const soma = (k) => campanhas.reduce((t, c) => t + (Number(c[k]) || 0), 0);
+        const env = soma("enviados"), ent = soma("entregues"), lid = soma("lidos"), resp = soma("responderam"), fal = soma("falhas");
+        const pct = (a) => (env ? Math.round((a / env) * 100) : 0);
+        const ativas = campanhas.filter((c) => c.pendentes > 0 || c.status === "agendada").length;
+        return (
+          <div className="dsx-kpis">
+            <div className="dsx-kpi"><span><I.send className="ico" /> Enviados</span><b>{env.toLocaleString("pt-BR")}</b><small>{campanhas.length} campanha{campanhas.length > 1 ? "s" : ""}{ativas ? " · " + ativas + " em andamento" : ""}</small></div>
+            <div className="dsx-kpi"><span><I.check className="ico" /> Entregues</span><b>{pct(ent)}%</b><small>{ent.toLocaleString("pt-BR")} mensagens</small></div>
+            <div className="dsx-kpi"><span><I.olho className="ico" /> Lidas</span><b>{pct(lid)}%</b><small>{lid.toLocaleString("pt-BR")} mensagens</small></div>
+            <div className="dsx-kpi destaque"><span><I.chat className="ico" /> Responderam</span><b>{pct(resp)}%</b><small>{resp.toLocaleString("pt-BR")} pessoas responderam</small></div>
+            <div className={"dsx-kpi" + (fal ? " ruim" : "")}><span><I.alert className="ico" /> Falhas</span><b>{fal.toLocaleString("pt-BR")}</b><small>{fal ? pct(fal) + "% do envio" : "nenhuma falha"}</small></div>
+          </div>
+        );
+      })()}
+
       {/* resumo por pessoa (gerente) — agrupado e colapsável */}
       {isGer && campanhas.length > 0 && (
         <div className="disp-box">
@@ -1524,7 +1594,6 @@ function OficialDisparo({ isGer = true, showToast, preset = null, onPresetUsado 
             {isGer && <button className="btn btn-sm" title="Baixa um arquivo só com os números que já receberam disparo" onClick={() => { window.open("/api/oficial/export-recebidos?token=" + encodeURIComponent(getToken()), "_blank"); }}>Números que receberam</button>}
             {isGer && <button className="btn btn-sm" title="Passa as conversas dos disparos para o vendedor dono de cada número" onClick={() => setRepasse(true)}><I.users className="ico-inline" /> Passar leads pros vendedores</button>}
             {repasse && <ModalRepasse onClose={() => setRepasse(false)} showToast={showToast} onFeito={carregarCampanhas} />}
-            {repasse && <ModalRepasse onClose={() => setRepasse(false)} showToast={showToast} />}
           </div>
         </div>
         {campanhas.length === 0 ? (
@@ -1546,6 +1615,18 @@ function OficialDisparo({ isGer = true, showToast, preset = null, onPresetUsado 
                     <span className="disp-row-nome">{c.nome}</span>
                     <span className="disp-row-meta">{c.template}{c.criadoPorNome ? " · " + c.criadoPorNome : ""}</span>
                   </span>
+                  {!agendada && (
+                    <span className="dsx-envio" title={(c.enviados || 0) + " de " + (c.total || c.enviados || 0) + " enviados"}>
+                      <span className="dsx-envio-trilho"><i style={{ width: Math.min(100, c.total ? ((c.enviados || 0) / c.total) * 100 : 100) + "%" }} /></span>
+                      <small>{(c.enviados || 0).toLocaleString("pt-BR")} de {(c.total || c.enviados || 0).toLocaleString("pt-BR")}</small>
+                    </span>
+                  )}
+                  {!agendada && (
+                    <span className="dsx-taxas">
+                      <span title="Entregues"><em>{c.enviados ? Math.round(((c.entregues || 0) / c.enviados) * 100) : 0}%</em>entregues</span>
+                      <span title="Lidas"><em>{c.enviados ? Math.round(((c.lidos || 0) / c.enviados) * 100) : 0}%</em>lidas</span>
+                    </span>
+                  )}
                   <span className="disp-row-info">
                     {agendada
                       ? <span className="disp-row-sched">⏰ {new Date(c.agendadoPara).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}</span>
@@ -3681,22 +3762,6 @@ function ModalPessoaRapida({ pessoa, pessoas, mes, isGer = true, onVerPainel, on
 }
 
 // Anel de progresso da meta
-function GraficoDias({ porDia, diaHoje, diaSel, onDia }) {
-  const max = porDia.reduce((m, d) => Math.max(m, d.venda), 0) || 1;
-  return (
-    <div className="vd-graf">
-      {porDia.map((d) => (
-        <div key={d.dia} className={"vd-graf-col" + (d.dia === diaHoje ? " hoje" : "") + (d.dia === diaSel ? " sel" : "") + (onDia ? " clicavel" : "")}
-          onClick={() => onDia && onDia(d.dia)}
-          title={`Dia ${d.dia}: ${d.qtd} venda(s) · R$ ${d.venda.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`}>
-          <div className="vd-graf-barra" style={{ height: Math.max(d.venda > 0 ? 4 : 1, (d.venda / max) * 100) + "%" }} />
-          {(d.dia === 1 || d.dia % 5 === 0) && <span className="vd-graf-dia">{d.dia}</span>}
-        </div>
-      ))}
-    </div>
-  );
-}
-
 // Conferir vendas repetidas (a mesma venda veio da planilha e do outro sistema)
 function ModalDuplicadas({ mes, onClose, onMudou, showToast }) {
   const [dados, setDados] = useState(null);
@@ -4054,6 +4119,343 @@ function ModalVendasPeriodo({ isGer = true, onClose, showToast }) {
   );
 }
 
+/* ============================ PAINEL DE VENDAS (v2.2) ============================ */
+// Gráfico do mês: vendido acumulado x ritmo da meta (um eixo só, em reais).
+// Passe o mouse num dia pra ver os números; clique pra abrir as vendas do dia.
+function GraficoMes({ porDia, diasNoMes, diaHoje, meta, diaSel, onDia, ehMesCorrente }) {
+  const [hov, setHov] = useState(null);
+  const N = Math.max(1, diasNoMes || 30);
+  const W = 760, H = 250, pl = 58, pr = 16, pt = 16, pb = 30;
+  const porNum = {}; (porDia || []).forEach((d) => { porNum[d.dia] = d.venda || 0; });
+  const ate = ehMesCorrente ? Math.max(1, diaHoje || 1) : N;
+  let acc = 0; const acum = [];
+  for (let d = 1; d <= N; d++) { acc += porNum[d] || 0; acum.push(acc); }
+  const maxY = Math.max(meta || 0, acum[ate - 1] || 0, 1) * 1.08;
+  const x = (d) => pl + ((d - 1) / Math.max(1, N - 1)) * (W - pl - pr);
+  const y = (v) => pt + (1 - v / maxY) * (H - pt - pb);
+  const pontos = acum.slice(0, ate).map((v, i) => [x(i + 1), y(v)]);
+  const linha = pontos.map((p, i) => (i ? "L" : "M") + p[0].toFixed(1) + " " + p[1].toFixed(1)).join(" ");
+  const area = pontos.length ? linha + " L" + pontos[pontos.length - 1][0].toFixed(1) + " " + y(0) + " L" + pontos[0][0].toFixed(1) + " " + y(0) + " Z" : "";
+  const ticksY = [0, 0.25, 0.5, 0.75, 1].map((f) => maxY / 1.08 * f);
+  const ticksX = [1, 5, 10, 15, 20, 25, N].filter((d, i, a) => d <= N && a.indexOf(d) === i);
+  const h = hov ? { d: hov, dia: porNum[hov] || 0, acum: acum[hov - 1] || 0, meta: meta ? (meta * hov) / N : 0 } : null;
+  return (
+    <div className="vdx-graf">
+      <div className="vdx-legenda">
+        <span><i className="l-vendido" />Vendido (acumulado)</span>
+        {meta > 0 && <span><i className="l-meta" />Ritmo da meta</span>}
+      </div>
+      <div className="vdx-graf-area">
+        <svg viewBox={"0 0 " + W + " " + H} role="img" aria-label="Vendido acumulado no mês comparado com o ritmo da meta">
+          <defs>
+            <linearGradient id="vdxArea" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor="var(--brand-2)" stopOpacity="0.22" />
+              <stop offset="100%" stopColor="var(--brand-2)" stopOpacity="0" />
+            </linearGradient>
+          </defs>
+          {ticksY.map((v, i) => (
+            <g key={i}>
+              <line x1={pl} x2={W - pr} y1={y(v)} y2={y(v)} className="vdx-grade" />
+              <text x={pl - 10} y={y(v) + 4} className="vdx-eixo" textAnchor="end">{dinheiroCurto(v)}</text>
+            </g>
+          ))}
+          {ticksX.map((d) => <text key={d} x={x(d)} y={H - 8} className="vdx-eixo" textAnchor="middle">{d}</text>)}
+          {meta > 0 && <line x1={x(1)} y1={y(meta / N)} x2={x(N)} y2={y(meta)} className="vdx-meta" />}
+          {area && <path d={area} fill="url(#vdxArea)" />}
+          {linha && <path d={linha} className="vdx-linha" />}
+          {pontos.length > 0 && <circle cx={pontos[pontos.length - 1][0]} cy={pontos[pontos.length - 1][1]} r="5" className="vdx-ponto-fim" />}
+          {diaSel && diaSel <= ate && <line x1={x(diaSel)} x2={x(diaSel)} y1={pt} y2={H - pb} className="vdx-sel" />}
+          {h && (
+            <g>
+              <line x1={x(h.d)} x2={x(h.d)} y1={pt} y2={H - pb} className="vdx-guia" />
+              {h.d <= ate && <circle cx={x(h.d)} cy={y(h.acum)} r="5" className="vdx-ponto" />}
+              {meta > 0 && <circle cx={x(h.d)} cy={y(h.meta)} r="4" className="vdx-ponto-meta" />}
+            </g>
+          )}
+          {Array.from({ length: N }, (_, i) => i + 1).map((d) => (
+            <rect key={d} x={x(d) - (W - pl - pr) / N / 2} y={pt} width={(W - pl - pr) / N} height={H - pt - pb} fill="transparent"
+              style={{ cursor: d <= ate ? "pointer" : "default" }}
+              onMouseEnter={() => setHov(d)} onMouseLeave={() => setHov(null)} onClick={() => d <= ate && onDia && onDia(d)} />
+          ))}
+        </svg>
+        {h && (
+          <div className="vdx-tip" style={{ left: (x(h.d) / W) * 100 + "%" }}>
+            <b>Dia {h.d}</b>
+            {h.d <= ate ? <>
+              <span>No dia <em>{dinheiro(h.dia)}</em></span>
+              <span>Acumulado <em>{dinheiro(h.acum)}</em></span>
+            </> : <span>ainda não chegou</span>}
+            {meta > 0 && <span className="m">Meta até aqui <em>{dinheiroCurto(h.meta)}</em></span>}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+// Ritmo da meta: compara o vendido com o que a meta pedia até hoje (como se o mês fosse parelho).
+// Um pouquinho abaixo ainda conta como "no ritmo"; qualquer valor acima já aparece como "acima do ritmo".
+function ritmoDoMes(venda, meta, diaHoje, diasNoMes, ehMesCorrente) {
+  if (!(meta > 0)) return null;
+  if (!ehMesCorrente) return venda >= meta ? { cls: "acima", txt: "Meta batida", dif: venda - meta } : { cls: "atras", txt: "Meta não batida", dif: venda - meta };
+  const esperado = (meta * Math.max(1, diaHoje || 1)) / Math.max(1, diasNoMes || 30);
+  const dif = venda - esperado;
+  if (dif > 0) return { cls: "acima", txt: "Acima do ritmo", dif, esperado };
+  if (dif >= -meta * 0.005) return { cls: "ok", txt: "No ritmo", dif, esperado };
+  return { cls: "atras", txt: "Atrás do ritmo", dif, esperado };
+}
+function ChipRitmo({ r, peq }) {
+  if (!r) return null;
+  return (
+    <span className={"vdx-ritmo " + r.cls + (peq ? " peq" : "")}>
+      <I.seta className="ico" />{r.txt}
+    </span>
+  );
+}
+function AnelMeta({ pct, ritmo }) {
+  const r = 50, c = 2 * Math.PI * r;
+  const p = Math.max(0, Math.min(100, pct || 0));
+  const pr = ritmo != null ? Math.max(0, Math.min(100, ritmo)) : 0;   // onde a meta pedia estar hoje (arco clarinho)
+  return (
+    <svg viewBox="0 0 128 128" className="vdx-anel" role="img" aria-label={pct + "% da meta"}>
+      <circle cx="64" cy="64" r={r} className="vdx-anel-trilho" />
+      {pr > p && <circle cx="64" cy="64" r={r} className="vdx-anel-esperado" strokeDasharray={c} strokeDashoffset={c * (1 - pr / 100)} transform="rotate(-90 64 64)"><title>{"Até hoje a meta pedia " + pr + "%"}</title></circle>}
+      {p > 0 && <circle cx="64" cy="64" r={r} className="vdx-anel-arco" strokeDasharray={c} strokeDashoffset={c * (1 - p / 100)} transform="rotate(-90 64 64)" />}
+      <text x="64" y="66" textAnchor="middle" className="vdx-anel-pct">{pct || 0}%</text>
+      <text x="64" y="84" textAnchor="middle" className="vdx-anel-rot">da meta</text>
+    </svg>
+  );
+}
+// Vendas de cada dia, com a linha da meta por dia: barra escura = bateu a meta do dia.
+function BarrasDias({ porDia, diasNoMes, diaHoje, metaDia, ehMesCorrente, diaSel, onDia }) {
+  const [hov, setHov] = useState(null);
+  const N = Math.max(1, diasNoMes || (porDia || []).length || 30);
+  const W = 460, H = 250, pl = 50, pr = 6, pt = 16, pb = 30;
+  const val = {}, qtd = {};
+  (porDia || []).forEach((d) => { val[d.dia] = d.venda || 0; qtd[d.dia] = d.qtd || 0; });
+  const maxV = Math.max(metaDia || 0, ...Object.values(val), 1) * 1.12;
+  const bw = (W - pl - pr) / N, gap = Math.min(2, bw * 0.18);
+  const x = (d) => pl + (d - 1) * bw;
+  const y = (v) => pt + (1 - v / maxV) * (H - pt - pb);
+  const base = y(0);
+  const ticks = [0, 0.5, 1].map((f) => (maxV / 1.12) * f);
+  const ultimo = ehMesCorrente ? diaHoje : N;
+  const barra = (d) => {
+    const v = val[d] || 0; if (!v) return null;
+    const bx = x(d) + gap, w = Math.max(1, bw - gap * 2), top = y(v), h = base - top, rr = Math.min(3, w / 2, h);
+    const cls = "vdx-bd" + (!(metaDia > 0) || v >= metaDia ? " bom" : "") + (d === diaSel ? " sel" : "") + (hov === d ? " hov" : "");
+    return <path key={d} className={cls} d={`M${bx} ${base}V${top + rr}Q${bx} ${top} ${bx + rr} ${top}H${bx + w - rr}Q${bx + w} ${top} ${bx + w} ${top + rr}V${base}Z`} />;
+  };
+  const h = hov ? { d: hov, v: val[hov] || 0, q: qtd[hov] || 0 } : null;
+  return (
+    <div className="vdx-graf">
+      <div className="vdx-legenda">
+        {metaDia > 0 ? <>
+          <span><i className="q bom" />Bateu a meta</span>
+          <span><i className="q" />Abaixo</span>
+          <span><i className="l-meta" />Meta/dia</span>
+        </> : <span><i className="q bom" />Vendido no dia</span>}
+      </div>
+      <div className="vdx-graf-area">
+        <svg viewBox={"0 0 " + W + " " + H} role="img" aria-label="Vendas de cada dia do mês">
+          {ticks.map((v, i) => (
+            <g key={i}>
+              <line x1={pl} x2={W - pr} y1={y(v)} y2={y(v)} className="vdx-grade" />
+              <text x={pl - 8} y={y(v) + 4} className="vdx-eixo" textAnchor="end">{dinheiroCurto(v)}</text>
+            </g>
+          ))}
+          {Array.from({ length: N }, (_, i) => i + 1).map((d) => (d === 1 || d % 5 === 0) && (
+            <text key={"t" + d} x={x(d) + bw / 2} y={H - 8} className={"vdx-eixo" + (ehMesCorrente && d === diaHoje ? " hoje" : "")} textAnchor="middle">{d}</text>
+          ))}
+          {Array.from({ length: N }, (_, i) => barra(i + 1))}
+          {ehMesCorrente && diaHoje <= N && <circle cx={x(diaHoje) + bw / 2} cy={base + 5} r="2.5" className="vdx-bd-hoje" />}
+          {metaDia > 0 && <line x1={pl} x2={W - pr} y1={y(metaDia)} y2={y(metaDia)} className="vdx-meta" />}
+          {Array.from({ length: N }, (_, i) => i + 1).map((d) => (
+            <rect key={"h" + d} x={x(d)} y={pt} width={bw} height={H - pt - pb} fill="transparent"
+              style={{ cursor: d <= ultimo ? "pointer" : "default" }}
+              onMouseEnter={() => setHov(d)} onMouseLeave={() => setHov(null)} onClick={() => d <= ultimo && onDia && onDia(d)} />
+          ))}
+        </svg>
+        {h && (
+          <div className="vdx-tip" style={{ left: Math.min(84, Math.max(16, ((x(h.d) + bw / 2) / W) * 100)) + "%" }}>
+            <b>Dia {h.d}{ehMesCorrente && h.d === diaHoje ? " · hoje" : ""}</b>
+            {h.d <= ultimo ? <>
+              <span>Vendido <em>{dinheiro(h.v)}</em></span>
+              <span>Vendas <em>{h.q}</em></span>
+              {metaDia > 0 && <span className="m">{h.v >= metaDia ? "Bateu a meta do dia" : "Meta do dia " + dinheiroCurto(metaDia)}</span>}
+            </> : <span>ainda não chegou</span>}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+function BarrasVendas({ titulo, itens, total, vazio }) {
+  const max = Math.max(1, ...itens.map((i) => i.valor));
+  return (
+    <div className="vdx-card">
+      <div className="vdx-card-h"><b>{titulo}</b></div>
+      {itens.length === 0 ? <div className="vdx-vazio">{vazio}</div> : (
+        <div className="vdx-barras">
+          {itens.map((it, i) => (
+            <div key={it.nome} className={"vdx-barra" + (i === 0 ? " top" : "")}>
+              <div className="vdx-barra-t"><span>{it.nome}</span><b>{dinheiroCurto(it.valor)}</b></div>
+              <div className="vdx-barra-trilho"><i style={{ width: Math.max(2, (it.valor / max) * 100) + "%" }} /></div>
+              <div className="vdx-barra-s">{it.qtd} venda{it.qtd === 1 ? "" : "s"} · {total ? Math.round((it.valor / total) * 100) : 0}% do total</div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+const DIAS_SEMANA = [["Seg", 1], ["Ter", 2], ["Qua", 3], ["Qui", 4], ["Sex", 5], ["Sáb", 6], ["Dom", 0]];
+const NOME_DIA = { 0: "domingo", 1: "segunda", 2: "terça", 3: "quarta", 4: "quinta", 5: "sexta", 6: "sábado" };
+function SemanaVendas({ vendas }) {
+  const soma = {}, qtd = {};
+  (vendas || []).forEach((v) => { const w = new Date(v.data).getDay(); soma[w] = (soma[w] || 0) + (Number(v.valor) || 0); qtd[w] = (qtd[w] || 0) + 1; });
+  const max = Math.max(1, ...Object.values(soma));
+  const melhor = Object.keys(soma).sort((a, b) => soma[b] - soma[a])[0];
+  return (
+    <div className="vdx-card">
+      <div className="vdx-card-h"><b>Dias da semana que mais vendem</b></div>
+      {!vendas || !vendas.length ? <div className="vdx-vazio">Nenhuma venda no período.</div> : (
+        <>
+          <div className="vdx-semana">
+            {DIAS_SEMANA.map(([rot, w]) => {
+              const v = soma[w] || 0;
+              return (
+                <div key={w} className={"vdx-sem-col" + (String(w) === melhor ? " top" : "")} title={`${rot}: ${qtd[w] || 0} venda(s) · ${dinheiro(v)}`}>
+                  <span className="vdx-sem-v">{v ? dinheiroCurto(v).replace("R$ ", "") : ""}</span>
+                  <div className="vdx-sem-trilho"><i style={{ height: Math.max(v ? 4 : 0, (v / max) * 100) + "%" }} /></div>
+                  <span className="vdx-sem-d">{rot}</span>
+                </div>
+              );
+            })}
+          </div>
+          {melhor != null && <div className="vdx-sem-dica"><I.brilho className="ico" /><span>O melhor dia é <b>{NOME_DIA[melhor]}</b>: {qtd[melhor]} venda{qtd[melhor] === 1 ? "" : "s"}, {dinheiroCurto(soma[melhor])}.</span></div>}
+        </>
+      )}
+    </div>
+  );
+}
+function DashVendas({ dados, vendas, mes, ehMesCorrente, diaSel, setDiaSel, vendidoHoje, escopo }) {
+  const g = dados.geral;
+  const qtdHoje = (vendas || []).filter((v) => new Date(v.data).getDate() === dados.diaHoje).length;
+  const pctMeta = g.meta > 0 ? Math.round((g.venda / g.meta) * 100) : 0;
+  const pctRitmo = dados.diasNoMes ? Math.round((dados.diaHoje / dados.diasNoMes) * 100) : 0;
+  const pctRecebido = g.venda > 0 ? Math.round((g.recebido / g.venda) * 100) : 0;
+  const ritmo = ritmoDoMes(g.venda, g.meta, dados.diaHoje, dados.diasNoMes, ehMesCorrente);
+  const metaDia = g.meta > 0 && dados.diasNoMes ? g.meta / dados.diasNoMes : 0;
+  const vsMedia = dados.mediaDia > 0 && vendidoHoje > 0 ? Math.round((vendidoHoje / dados.mediaDia) * 100 - 100) : null;
+  const difProj = g.meta > 0 ? dados.projecao - g.meta : 0;
+  const quem = escopo === "time" ? "Vendido pelo time" : escopo === "minhas" ? "Você vendeu" : "Vendido por " + primeiroNome(dados.nomeEscopo || "");
+  const agrupar = (chave) => {
+    const m = {};
+    (vendas || []).forEach((v) => {
+      const k = String(chave(v) || "").trim() || "Sem informação";
+      if (!m[k]) m[k] = { nome: k, valor: 0, qtd: 0 };
+      m[k].valor += Number(v.valor) || 0; m[k].qtd += 1;
+    });
+    return Object.values(m).sort((a, b) => b.valor - a.valor);
+  };
+  const porForma = agrupar((v) => v.formaLabel || v.forma).slice(0, 5);
+  const porCurso = agrupar((v) => v.curso).slice(0, 5);
+  const totalLista = (vendas || []).reduce((s, v) => s + (Number(v.valor) || 0), 0);
+  let fraseRitmo = null;
+  if (ritmo && ehMesCorrente) {
+    fraseRitmo = ritmo.cls === "acima" ? <><b>{dinheiroCurto(ritmo.dif)}</b> acima do esperado pra hoje. Bora manter!</>
+      : ritmo.cls === "ok" ? <>Bem no ritmo da meta. Mais uma venda e já passa!</>
+      : <>Faltam <b>{dinheiroCurto(-ritmo.dif)}</b> pra alcançar o ritmo de hoje.</>;
+  } else if (ritmo) {
+    fraseRitmo = ritmo.cls === "acima" ? <>Fechou o mês com <b>{pctMeta}%</b> da meta. Parabéns!</> : <>Fechou o mês com <b>{pctMeta}%</b> da meta.</>;
+  }
+  return (
+    <div className="vdx">
+      <div className="vdx-topo">
+        <div className="vdx-hero">
+          <div className="vdx-hero-h">
+            <span className="vdx-kpi-ic"><I.cash className="ico" /></span>
+            <span>{quem} em {mesLegivel(mes)}</span>
+            <ChipRitmo r={ritmo} />
+          </div>
+          <div className="vdx-hero-corpo">
+            <div className="vdx-hero-num">
+              <div className="vdx-hero-v">{dinheiro(g.venda)}</div>
+              {g.meta > 0 ? (
+                <>
+                  <div className="vdx-hero-s">{pctMeta}% da meta de <b>{dinheiro(g.meta)}</b></div>
+                  {fraseRitmo && <div className={"vdx-hero-frase " + ritmo.cls}>{fraseRitmo}</div>}
+                </>
+              ) : <div className="vdx-hero-s">Defina as metas em <b>Gerenciar › Equipe e metas</b> pra ver o ritmo.</div>}
+            </div>
+            {g.meta > 0 && <AnelMeta pct={pctMeta} ritmo={ehMesCorrente ? pctRitmo : null} />}
+          </div>
+          {g.meta > 0 && (
+            <div className="vdx-hero-pe">
+              {ehMesCorrente && <div><span>Esperado hoje</span><b>{dinheiroCurto(ritmo.esperado)}</b></div>}
+              <div><span>Falta pra meta</span><b>{g.falta > 0 ? dinheiroCurto(g.falta) : "Meta batida"}</b></div>
+              {dados.diasRestantes > 0 && <div><span>Precisa/dia</span><b>{g.falta > 0 ? dinheiroCurto(dados.precisaPorDia) : "—"}</b></div>}
+              <div><span>{dados.diasRestantes > 0 ? "Dias restantes" : "Dias no mês"}</span><b>{dados.diasRestantes > 0 ? dados.diasRestantes : dados.diasNoMes}</b></div>
+            </div>
+          )}
+        </div>
+
+        <div className="vdx-tiles">
+          <div className="vdx-kpi">
+            <div className="vdx-kpi-h"><span className="vdx-kpi-ic azul"><I.clock className="ico" /></span><span>{ehMesCorrente ? "Hoje" : "Último dia"}</span>
+              {vsMedia !== null && <span className={"vdx-delta " + (vsMedia >= 0 ? "sobe" : "desce")}>{vsMedia >= 0 ? "▲" : "▼"} {Math.abs(vsMedia)}%</span>}
+            </div>
+            <div className="vdx-kpi-v" title={dinheiro(vendidoHoje)}>{dinheiroCurto(vendidoHoje)}</div>
+            <div className="vdx-kpi-s">{qtdHoje ? <>{qtdHoje} venda{qtdHoje === 1 ? "" : "s"} · média {dinheiroCurto(dados.mediaDia)}/dia</> : ehMesCorrente ? <>Nenhuma venda ainda · média {dinheiroCurto(dados.mediaDia)}/dia</> : "Nenhuma venda nesse dia"}</div>
+          </div>
+          <div className="vdx-kpi">
+            <div className="vdx-kpi-h"><span className="vdx-kpi-ic verde"><I.check className="ico" /></span><span>Recebido</span><span className="vdx-delta neutro">{pctRecebido}%</span></div>
+            <div className="vdx-kpi-v" title={dinheiro(g.recebido)}>{dinheiroCurto(g.recebido)}</div>
+            <div className="vdx-mini-trilho"><i style={{ width: Math.min(100, pctRecebido) + "%" }} /></div>
+            <div className="vdx-kpi-s">a receber {dinheiroCurto(Math.max(0, g.venda - g.recebido))}</div>
+          </div>
+          <div className="vdx-kpi">
+            <div className="vdx-kpi-h"><span className="vdx-kpi-ic roxo"><I.list className="ico" /></span><span>Vendas no mês</span></div>
+            <div className="vdx-kpi-v">{g.qtd}</div>
+            <div className="vdx-kpi-s">ticket médio <b>{g.qtd ? dinheiroCurto(g.venda / g.qtd) : "—"}</b></div>
+          </div>
+          <div className="vdx-kpi">
+            <div className="vdx-kpi-h"><span className="vdx-kpi-ic ambar"><I.trend className="ico" /></span><span>{dados.diasRestantes > 0 ? "Projeção" : "Média por dia"}</span>
+              {dados.diasRestantes > 0 && g.meta > 0 && difProj >= 0 && <span className="vdx-delta sobe">bate a meta</span>}
+            </div>
+            <div className="vdx-kpi-v" title={dinheiro(dados.diasRestantes > 0 ? dados.projecao : dados.mediaDia)}>{dinheiroCurto(dados.diasRestantes > 0 ? dados.projecao : dados.mediaDia)}</div>
+            <div className="vdx-kpi-s">{dados.diasRestantes > 0 ? (g.meta > 0 ? (difProj >= 0 ? <>no ritmo atual, passa a meta em <b>{dinheiroCurto(difProj)}</b></> : <>no ritmo atual, ficam faltando <b>{dinheiroCurto(-difProj)}</b></>) : "se continuar no ritmo atual") : "no mês fechado"}</div>
+          </div>
+        </div>
+      </div>
+
+      <div className="vdx-grade-2">
+        <div className="vdx-card">
+          <div className="vdx-card-h">
+            <b>Evolução do mês</b>
+            <input type="date" className="vdx-data" aria-label="Ver as vendas de um dia" value={diaSel ? mes + "-" + String(diaSel).padStart(2, "0") : ""}
+              min={mes + "-01"} max={mes + "-" + String(dados.diasNoMes).padStart(2, "0")}
+              onChange={(e) => setDiaSel(e.target.value ? Number(e.target.value.slice(8, 10)) : null)} />
+          </div>
+          <GraficoMes porDia={dados.porDia || []} diasNoMes={dados.diasNoMes} diaHoje={dados.diaHoje} meta={g.meta} ehMesCorrente={ehMesCorrente}
+            diaSel={diaSel} onDia={(d) => setDiaSel(diaSel === d ? null : d)} />
+        </div>
+        <div className="vdx-card">
+          <div className="vdx-card-h"><b>Vendas por dia</b>{dados.melhorDia ? <span>melhor dia: <b>{dados.melhorDia.dia}</b> · {dinheiroCurto(dados.melhorDia.venda)}</span> : <span>clique num dia</span>}</div>
+          <BarrasDias porDia={dados.porDia || []} diasNoMes={dados.diasNoMes} diaHoje={dados.diaHoje} metaDia={metaDia} ehMesCorrente={ehMesCorrente}
+            diaSel={diaSel} onDia={(d) => setDiaSel(diaSel === d ? null : d)} />
+        </div>
+      </div>
+
+      <div className="vdx-grade-3">
+        <BarrasVendas titulo="Formas de pagamento" itens={porForma} total={totalLista} vazio="Nenhuma venda no período." />
+        <BarrasVendas titulo="Cursos que mais vendem" itens={porCurso} total={totalLista} vazio="Nenhuma venda no período." />
+        <SemanaVendas vendas={vendas} />
+      </div>
+    </div>
+  );
+}
+
 function PainelVendas({ showToast, isGer = true, ehLider = false }) {
   const [mes, setMes] = useState("");
   const [dados, setDados] = useState(null);
@@ -4204,7 +4606,6 @@ function PainelVendas({ showToast, isGer = true, ehLider = false }) {
   const comVenda = concorrem;
   const podio = concorrem.slice(0, 3);
   const semVenda = linhas.filter((l) => l.venda <= 0);
-  const pctGeral = Math.min(100, g.pct || 0);
   const hojeReal = new Date();
   const ehMesCorrente = mes === hojeReal.getFullYear() + "-" + String(hojeReal.getMonth() + 1).padStart(2, "0");
   const vendidoHoje = ((dados.porDia || []).find((d) => d.dia === dados.diaHoje) || {}).venda || 0;
@@ -4230,8 +4631,8 @@ function PainelVendas({ showToast, isGer = true, ehLider = false }) {
   const hoje = dados.hoje || {};
   const destHoje = hoje.destaque || null;
   // ritmo: onde a meta deveria estar hoje se o mês fosse parelho
-  const pctRitmo = dados.diasNoMes ? Math.min(100, Math.round((dados.diaHoje / dados.diasNoMes) * 100)) : 0;
-  const noRitmo = pctGeral >= pctRitmo;
+  // ritmo de cada vendedor no ranking (só no mês corrente e pra quem tem meta)
+  const ritmoDe = (l) => (ehMesCorrente ? ritmoDoMes(l.venda, l.meta, dados.diaHoje, dados.diasNoMes, true) : null);
 
   if (showAnalise) {
     return (
@@ -4246,7 +4647,7 @@ function PainelVendas({ showToast, isGer = true, ehLider = false }) {
       {/* topo */}
       <div className="vd-top">
         <select className="vd-mes" value={mes} onChange={(e) => trocarMes(e.target.value)}>
-          {(dados.meses || []).map((m) => <option key={m} value={m}>{mesLegivel(m)}</option>)}
+          {(dados.meses || []).map((m) => <option key={m} value={m}>{mesLegivel(m).charAt(0).toUpperCase() + mesLegivel(m).slice(1)}</option>)}
         </select>
         <div className="vd-switch">
           <button className={escopo === "time" ? "on" : ""} onClick={() => trocarEscopo("time")}>Time</button>
@@ -4292,62 +4693,9 @@ function PainelVendas({ showToast, isGer = true, ehLider = false }) {
         </div>
       </div>
 
-      {/* PLACAR DO MÊS */}
-      <div className="vd-placar">
-        <div className="vd-placar-esq">
-          <div className="vd-placar-cab">
-            <span className="vd-eyebrow">Vendido em {mesLegivel(mes)}</span>
-            {g.meta > 0 && ehMesCorrente && (
-              <span className={"vd-selo " + (noRitmo ? "ok" : "atras")}>
-                {noRitmo ? "no ritmo" : "atrás do ritmo"}
-              </span>
-            )}
-          </div>
-          <div className="vd-placar-vl">{dinheiro(g.venda)}</div>
-          <div className="vd-placar-sub">
-            {g.meta > 0
-              ? <><b>{pctGeral}%</b> da meta de {dinheiroCurto(g.meta)} · faltam <b>{dinheiroCurto(g.falta)}</b></>
-              : <>defina as metas em <b>Equipe &amp; metas</b></>}
-          </div>
-          {g.meta > 0 && (
-            <div className="vd-leds" title={pctGeral + "% da meta"}>
-              <div className="vd-leds-trilho">
-                <div className="vd-leds-fill" style={{ width: pctGeral + "%" }} />
-              </div>
-              {ehMesCorrente && (
-                <span className="vd-leds-marca" style={{ left: Math.min(97, pctRitmo) + "%" }}>
-                  <b>onde devia estar hoje</b>
-                </span>
-              )}
-            </div>
-          )}
-          <div className="vd-kpis">
-            <div><span>{dados.diaHoje === dados.diasNoMes && !ehMesCorrente ? "Último dia" : "Hoje"}</span><b>{dinheiro(vendidoHoje)}</b></div>
-            <div><span>Recebido</span><b className="verde">{dinheiro(g.recebido)}</b></div>
-            <div><span>Vendas</span><b>{g.qtd}</b></div>
-            <div><span>Ticket médio</span><b>{g.qtd ? dinheiroCurto(g.venda / g.qtd) : "—"}</b></div>
-          </div>
-        </div>
-        <div className="vd-placar-dir">
-          <div className="vd-graf-cab">
-            <span>Evolução do mês <small className="vd-graf-dica">— clique num dia</small></span>
-            <input type="date" className="vd-data" value={diaSel ? mes + "-" + String(diaSel).padStart(2, "0") : ""}
-              min={mes + "-01"} max={mes + "-" + String(dados.diasNoMes).padStart(2, "0")}
-              onChange={(e) => setDiaSel(e.target.value ? Number(e.target.value.slice(8, 10)) : null)} />
-          </div>
-          <GraficoDias porDia={dados.porDia || []} diaHoje={dados.diaHoje} diaSel={diaSel} onDia={(d) => setDiaSel(diaSel === d ? null : d)} />
-          <div className="vd-proj">
-            {dados.diasRestantes > 0 ? (
-              <>
-                <div><span>No ritmo de hoje, fecha em</span><b>{dinheiroCurto(dados.projecao)}</b></div>
-                <div><span>Faltam {dados.diasRestantes} dia(s) · precisa por dia</span><b>{dinheiroCurto(dados.precisaPorDia)}</b></div>
-              </>
-            ) : (
-              <div><span>Média por dia no mês</span><b>{dinheiroCurto(dados.mediaDia)}</b></div>
-            )}
-          </div>
-        </div>
-      </div>
+      {/* PAINEL DO MÊS (v2.2) */}
+      <DashVendas dados={dados} vendas={vendas} mes={mes} ehMesCorrente={ehMesCorrente} diaSel={diaSel} setDiaSel={setDiaSel}
+        vendidoHoje={vendidoHoje} escopo={escopo} />
 
       {diaSel && (
         <div className="vd-dodia">
@@ -4455,6 +4803,7 @@ function PainelVendas({ showToast, isGer = true, ehLider = false }) {
                     <Avatar nome={p.nome} foto={p.foto} size={lugar === 1 ? 74 : 58} />
                     <div className="vd-lug-nome">{p.nome}</div>
                     <div className="vd-lug-vl">{dinheiro(p.venda)}</div>
+                    <ChipRitmo r={ritmoDe(p)} peq />
                     <div className="vd-lug-meta">
                       <div className="vd-barra fina"><div className="vd-barra-in" style={{ width: Math.min(100, p.pct) + "%" }} /></div>
                       <span>{p.pct}% da meta</span>
@@ -4497,7 +4846,7 @@ function PainelVendas({ showToast, isGer = true, ehLider = false }) {
                           <span className="vd-pos">{i + 1}º</span>
                           <Avatar nome={l.nome} foto={l.foto} size={34} />
                           <div className="vd-linha-info">
-                            <div className="vd-linha-nome">{l.nome}</div>
+                            <div className="vd-linha-nome">{l.nome}<ChipRitmo r={ritmoDe(l)} peq /></div>
                             <div className="vd-barra fina"><div className="vd-barra-in" style={{ width: Math.min(100, l.pct) + "%" }} /></div>
                           </div>
                           <div className="vd-linha-nums">
@@ -4516,7 +4865,7 @@ function PainelVendas({ showToast, isGer = true, ehLider = false }) {
                       <span className="vd-pos">{i + 1}º</span>
                       <Avatar nome={l.nome} foto={l.foto} size={34} />
                       <div className="vd-linha-info">
-                        <div className="vd-linha-nome">{l.nome}{l.grupo && <span className="vd-grupo">{l.grupo}</span>}</div>
+                        <div className="vd-linha-nome">{l.nome}{l.grupo && <span className="vd-grupo">{l.grupo}</span>}<ChipRitmo r={ritmoDe(l)} peq /></div>
                         <div className="vd-barra fina"><div className="vd-barra-in" style={{ width: Math.min(100, l.pct) + "%" }} /></div>
                       </div>
                       <div className="vd-linha-nums">
@@ -7068,28 +7417,46 @@ function OficialNumeros({ showToast }) {
     navigator.clipboard?.writeText(txt).then(() => showToast(`${label} copiado!`)).catch(() => {});
   }
 
+  const ativos = numeros.filter((n) => n.ativo).length;
+  const qAlta = numeros.filter((n) => n.quality && n.quality.rating === "GREEN").length;
+  const qAtencao = numeros.filter((n) => n.quality && (n.quality.rating === "YELLOW" || n.quality.rating === "RED")).length;
+  const comIA = numeros.filter((n) => n.iaId && iasNum.some((x) => x.id === n.iaId)).length;
+  const semDono = numeros.filter((n) => !n.vendedorId).length;
+  const novoNumero = () => setForm({ apelido: "", numero: "", phoneNumberId: "", wabaId: "", token: "", vendedorId: "" });
+  const igAtivo = !!(igCfg && igCfg.ativo && igCfg.temToken);
+
   return (
-    <div className="onum">
+    <div className="onum onx">
       {/* cabeçalho */}
-      <div className="onum-head">
+      <div className="onx-topo">
         <div>
           <h3 className="onum-titulo">Números oficiais</h3>
           <p className="onum-sub">WhatsApp Cloud API conectados à sua conta Meta</p>
         </div>
-        <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-          <button className={tokenDef ? "onum-btn-ghost" : "onum-add"} onClick={() => setTokenForm({ token: "" })} title="Token permanente da Meta (mesma conta da empresa). Vale pra todos os números.">
-            <I.key className="ico" /> Token da Meta {tokenDef ? "✓" : "(configurar)"}
+        <div className="onx-topo-acoes">
+          <button className={"onx-token" + (tokenDef ? " ok" : "")} onClick={() => setTokenForm({ token: "" })} title="Token permanente da Meta (mesma conta da empresa). Vale pra todos os números.">
+            <I.key className="ico" /> {tokenDef ? "Token da Meta ativo" : "Configurar token da Meta"}
           </button>
-          <button className="onum-btn-ghost" onClick={diagnostico} title="Verificar se as respostas estão chegando"><I.search className="ico" /> Diagnóstico</button>
-          <button className="onum-btn-ghost" onClick={assinarTodos} title="Ativa o recebimento de respostas (webhook) em TODOS os números de uma vez"><I.link className="ico" /> Assinar webhook (todos)</button>
-          <button className="onum-btn-ghost" onClick={puxarQualidadeTodos} disabled={puxandoQ === "todos"} title="Puxar da Meta a qualidade, o limite e a foto de perfil de todos os números">
-            {puxandoQ === "todos" ? "Atualizando…" : <><I.gauge className="ico" /> Atualizar qualidade e fotos</>}
-          </button>
-          <button className="onum-add" onClick={() => setForm({ apelido: "", numero: "", phoneNumberId: "", wabaId: "", token: "", vendedorId: "" })}>
-            <I.plus className="ico" /> Adicionar número
-          </button>
+          <button className="onum-add" onClick={novoNumero}><I.plus className="ico" /> Adicionar número</button>
         </div>
       </div>
+
+      <div className="onx-barra">
+        <button className="onx-btn" onClick={diagnostico} title="Verificar se as respostas estão chegando"><I.search className="ico" /> Diagnóstico</button>
+        <button className="onx-btn" onClick={assinarTodos} title="Ativa o recebimento de respostas (webhook) em TODOS os números de uma vez"><I.link className="ico" /> Assinar webhook (todos)</button>
+        <button className="onx-btn" onClick={puxarQualidadeTodos} disabled={puxandoQ === "todos"} title="Puxar da Meta a qualidade, o limite e a foto de perfil de todos os números">
+          {puxandoQ === "todos" ? <><span className="spin" /> Atualizando…</> : <><I.gauge className="ico" /> Atualizar qualidade e fotos</>}
+        </button>
+      </div>
+
+      {numeros.length > 0 && (
+        <div className="onx-kpis">
+          <div className="onx-kpi"><span><I.wa className="ico" /> Conectados</span><b>{ativos}<small> de {numeros.length}</small></b><em>{ativos === numeros.length ? "todos ativos" : (numeros.length - ativos) + " inativo(s)"}</em></div>
+          <div className="onx-kpi bom"><span><I.check className="ico" /> Qualidade alta</span><b>{qAlta}</b><em>prontos pra disparar</em></div>
+          <div className={"onx-kpi" + (qAtencao ? " alerta" : "")}><span><I.alert className="ico" /> Pedem atenção</span><b>{qAtencao}</b><em>{qAtencao ? "qualidade média ou baixa" : "nenhum com problema"}</em></div>
+          <div className="onx-kpi"><span><I.spark className="ico" /> Atendidos por IA</span><b>{comIA}</b><em>{semDono} sem dono (distribuição)</em></div>
+        </div>
+      )}
 
       {/* alerta de queda de qualidade */}
       {(() => {
@@ -7102,7 +7469,7 @@ function OficialNumeros({ showToast }) {
             <div className="onum-alerta-tit"><I.alert className="ico-inline" /> Atenção: {caidos.length} número{caidos.length > 1 ? "s caíram" : " caiu"} de qualidade</div>
             <div className="onum-alerta-lista">
               {caidos.map((n) => (
-                <span key={n.id} className="onum-alerta-item"><b>{n.apelido}</b>: {lab(n.quality.anterior)} → <b style={{ color: n.quality.rating === "RED" ? "#dc2626" : "#b45309" }}>{lab(n.quality.rating)}</b></span>
+                <span key={n.id} className="onum-alerta-item"><b>{n.apelido}</b>: {lab(n.quality.anterior)} → <b className={n.quality.rating === "RED" ? "onx-q-baixa" : "onx-q-media"}>{lab(n.quality.rating)}</b></span>
               ))}
             </div>
             <div className="onum-alerta-dica">Segure o ritmo de disparo desse(s) número(s) e use templates UTILITY até a qualidade voltar, pra não ser restringido pela Meta.</div>
@@ -7112,7 +7479,7 @@ function OficialNumeros({ showToast }) {
 
       {/* lista de números */}
       {carregando && !numeros.length ? (
-        <div className="onum-cards">
+        <div className="onx-cards">
           {[0, 1, 2].map((i) => <div key={i} className="skel skel-card" />)}
         </div>
       ) : numeros.length === 0 ? (
@@ -7120,119 +7487,124 @@ function OficialNumeros({ showToast }) {
           <div className="onum-vazio-ico"><I.wa className="ico" /></div>
           <b>Nenhum número conectado ainda</b>
           <p>Conecte um número da sua conta Meta para começar a disparar.</p>
-          <button className="onum-add" onClick={() => setForm({ apelido: "", numero: "", phoneNumberId: "", wabaId: "", token: "", vendedorId: "" })}>
-            <I.plus className="ico" /> Adicionar número
-          </button>
+          <button className="onum-add" onClick={novoNumero}><I.plus className="ico" /> Adicionar número</button>
         </div>
       ) : (
-        <div className="onum-cards">
-          {numeros.map((n) => (
-            <div key={n.id} className="onum-card">
-              <div className="onum-card-ico">
-                {n.temFoto
-                  ? <img src={"/api/oficial/numeros/" + n.id + "/foto?v=" + (n.fotoAtualizadaEm || 0)} className="onum-ico-foto" alt="" onError={(e) => { e.target.style.display = "none"; }} />
-                  : <I.wa className="ico" />}
-              </div>
-              <div className="onum-card-info">
-                <div className="onum-card-top">
-                  <b>{n.apelido}</b>
-                  <span className={n.ativo ? "onum-status on" : "onum-status off"}>
-                    <i /> {n.ativo ? "Ativo" : "Inativo"}
-                  </span>
+        <div className="onx-cards">
+          {numeros.map((n) => {
+            const ia = n.iaId ? iasNum.find((x) => x.id === n.iaId) : null;
+            return (
+              <div key={n.id} className={"onx-card" + (n.ativo ? "" : " off")}>
+                <div className="onx-card-topo">
+                  <div className="onx-foto">
+                    {n.temFoto
+                      ? <img src={"/api/oficial/numeros/" + n.id + "/foto?v=" + (n.fotoAtualizadaEm || 0)} alt="" onError={(e) => { e.target.style.display = "none"; }} />
+                      : <I.wa className="ico" />}
+                    <i className={n.ativo ? "on" : ""} title={n.ativo ? "Ativo" : "Inativo"} />
+                  </div>
+                  <div className="onx-card-nome">
+                    <b>{n.apelido}</b>
+                    <span>{n.numero || "número não informado"}</span>
+                  </div>
+                  <span className={n.ativo ? "onum-status on" : "onum-status off"}><i /> {n.ativo ? "Ativo" : "Inativo"}</span>
                 </div>
-                <span className="onum-card-num">{n.numero || "número não informado"}</span>
-                <span className="onum-card-id">ID {n.phoneNumberId}</span>
-                <span className="onum-card-id" style={{ marginTop: 2 }}>
-                  {n.vendedorId ? <><I.user className="ico-inline" /> Vendedor: <b style={{ color: "var(--brand)" }}>{n.vendedorNome || "—"}</b></> : <span style={{ opacity: .7 }}><I.funnel className="ico-inline" /> Sem dono (distribuição por %)</span>}
-                </span>
-                {n.iaId && (() => { const ia = iasNum.find((x) => x.id === n.iaId); return (
-                  <span className="onum-card-id" style={{ marginTop: 3, display: "inline-flex", alignItems: "center", gap: 5, color: "var(--brand)", fontWeight: 700 }}>
-                    <I.spark className="ico-inline" /> IA: {ia ? ia.nome : "atende este número"}
-                  </span>
-                ); })()}
-                <span style={{ marginTop: 6, display: "block" }}>{badgeQualidade(n.quality)}</span>
+                <div className="onx-q">{badgeQualidade(n.quality)}</div>
+                <div className="onx-chips">
+                  {n.vendedorId
+                    ? <span className="onx-chip dono"><I.user className="ico" /> {n.vendedorNome || "—"}</span>
+                    : <span className="onx-chip"><I.funnel className="ico" /> Sem dono · distribuição por %</span>}
+                  {n.iaId && <span className="onx-chip ia"><I.spark className="ico" /> IA: {ia ? ia.nome : "atende este número"}</span>}
+                </div>
+                <div className="onx-pid">Phone ID <span className="mono">{n.phoneNumberId}</span></div>
+                <div className="onx-card-acoes">
+                  <button className="onum-acao" onClick={() => puxarQualidade(n)} title="Puxar da Meta a qualidade e a foto de perfil do número" disabled={puxandoQ === n.id}>
+                    {puxandoQ === n.id ? <span className="spin" /> : <I.gauge className="ico" />}
+                  </button>
+                  <button className="onum-acao" onClick={() => assinarWebhook(n)} title="Ativar recebimento de respostas (webhook)"><I.link className="ico" /></button>
+                  <button className="onum-acao" onClick={() => registrar(n)} title="Registrar número na Cloud API (use se aparecer erro de envio)"><I.key className="ico" /></button>
+                  <button className="onum-acao" onClick={() => testar(n)} title="Testar conexão" disabled={testando === n.id}>
+                    {testando === n.id ? <span className="spin" /> : <I.check className="ico" />}
+                  </button>
+                  <button className="onum-acao danger" onClick={() => excluir(n)} title="Excluir"><I.trash className="ico" /></button>
+                  <button className="onx-editar" onClick={() => setForm({ ...n, token: "", iaId: (n.iaId && iasNum.some((x) => x.id === n.iaId)) ? n.iaId : "" })}><I.cog className="ico" /> Editar</button>
+                </div>
               </div>
-              <div className="onum-card-acoes">
-                <button className="onum-acao" onClick={() => puxarQualidade(n)} title="Puxar da Meta a qualidade e a foto de perfil do número" disabled={puxandoQ === n.id}>
-                  {puxandoQ === n.id ? <span className="spin" /> : <I.gauge className="ico" />}
-                </button>
-                <button className="onum-acao" onClick={() => assinarWebhook(n)} title="Ativar recebimento de respostas (webhook)"><I.link className="ico" /></button>
-                <button className="onum-acao" onClick={() => registrar(n)} title="Registrar número na Cloud API (use se aparecer erro de envio)"><I.key className="ico" /></button>
-                <button className="onum-acao" onClick={() => testar(n)} title="Testar conexão" disabled={testando === n.id}>
-                  {testando === n.id ? <span className="spin" /> : <I.check className="ico" />}
-                </button>
-                <button className="onum-acao" onClick={() => setForm({ ...n, token: "", iaId: (n.iaId && iasNum.some((x) => x.id === n.iaId)) ? n.iaId : "" })} title="Editar"><I.cog className="ico" /></button>
-                <button className="onum-acao danger" onClick={() => excluir(n)} title="Excluir"><I.trash className="ico" /></button>
-              </div>
-            </div>
-          ))}
+            );
+          })}
+          <button className="onx-card onx-novo" onClick={novoNumero}>
+            <span><I.plus className="ico" /></span>
+            <b>Adicionar número</b>
+            <small>Conecte outro número da sua conta Meta</small>
+          </button>
         </div>
       )}
 
-      {/* webhook colapsável */}
-      {webhook && (
+      <div className="onx-sec">Integrações</div>
+      <div className="onx-integ">
+        {/* webhook colapsável */}
+        {webhook && (
+          <div className="onum-webhook">
+            <button className="onum-webhook-h" onClick={() => setVerWebhook((v) => !v)}>
+              <span className="onx-integ-ic"><I.link className="ico" /></span>
+              <span className="onx-integ-t"><b>Webhook na Meta</b><small>URL e token pra receber as respostas</small></span>
+              <I.chevron className={"ico chev" + (verWebhook ? " open" : "")} />
+            </button>
+            {verWebhook && (
+              <div className="onum-webhook-body">
+                <p className="onum-webhook-intro">No painel da Meta, vá em <b>WhatsApp → Configuração → Webhook</b> e cole estes dois valores:</p>
+                <div className="onum-copy">
+                  <label>URL de callback</label>
+                  <div className="onum-copy-row">
+                    <input className="mono" readOnly value={webhook.url} onFocus={(e) => e.target.select()} />
+                    <button onClick={() => copiar(webhook.url, "URL")} title="Copiar"><I.copy className="ico" /></button>
+                  </div>
+                </div>
+                <div className="onum-copy">
+                  <label>Token de verificação</label>
+                  <div className="onum-copy-row">
+                    <input className="mono" readOnly value={webhook.verifyToken} onFocus={(e) => e.target.select()} />
+                    <button onClick={() => copiar(webhook.verifyToken, "Token")} title="Copiar"><I.copy className="ico" /></button>
+                  </div>
+                </div>
+                <p className="onum-webhook-fim">Depois de verificar, ative o campo <b>messages</b> nos webhooks.</p>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Reenvio pra outro sistema (mesmo app da Meta) */}
         <div className="onum-webhook">
-          <button className="onum-webhook-h" onClick={() => setVerWebhook((v) => !v)}>
-            <I.link className="ico" />
-            <span>Configuração do Webhook na Meta</span>
-            <I.chevron className={"ico chev" + (verWebhook ? " open" : "")} />
+          <button className="onum-webhook-h" onClick={() => setVerReenvio((v) => !v)}>
+            <span className="onx-integ-ic"><I.repetir className="ico" /></span>
+            <span className="onx-integ-t"><b>2 sistemas no mesmo app da Meta</b><small>{reenvio.trim() ? "reenvio ligado" : "reenvio desligado"}</small></span>
+            <I.chevron className={"ico chev" + (verReenvio ? " open" : "")} />
           </button>
-          {verWebhook && (
+          {verReenvio && (
             <div className="onum-webhook-body">
-              <p className="onum-webhook-intro">No painel da Meta, vá em <b>WhatsApp → Configuração → Webhook</b> e cole estes dois valores:</p>
-              <div className="onum-copy">
-                <label>URL de callback</label>
-                <div className="onum-copy-row">
-                  <input className="mono" readOnly value={webhook.url} onFocus={(e) => e.target.select()} />
-                  <button onClick={() => copiar(webhook.url, "URL")} title="Copiar"><I.copy className="ico" /></button>
-                </div>
-              </div>
-              <div className="onum-copy">
-                <label>Token de verificação</label>
-                <div className="onum-copy-row">
-                  <input className="mono" readOnly value={webhook.verifyToken} onFocus={(e) => e.target.select()} />
-                  <button onClick={() => copiar(webhook.verifyToken, "Token")} title="Copiar"><I.copy className="ico" /></button>
-                </div>
-              </div>
-              <p className="onum-webhook-fim">Depois de verificar, ative o campo <b>messages</b> nos webhooks.</p>
+              <p className="onum-webhook-intro">A Meta só manda pra <b>uma</b> URL. Se você tem <b>outro CRM no MESMO app da Meta</b>, configure isto <b>no sistema pra onde a Meta aponta hoje</b> (o que já funciona): cole a URL <b>base</b> do sistema irmão (ex.: <span className="mono">https://xxx.up.railway.app</span>) que este aqui <b>repassa</b> os eventos pra ele. Cada sistema processa só os números dele. Deixe vazio pra desligar.</p>
+              <textarea className="mono onx-textarea" rows={2} placeholder="https://outro-sistema.up.railway.app" value={reenvio} onChange={(e) => setReenvio(e.target.value)} />
+              <button className="onum-btn-save" onClick={salvarReenvio}>Salvar reenvio</button>
+              <p className="onum-webhook-fim">Uma URL por linha se tiver mais de um sistema. Pode colar a URL completa do webhook que ele guarda só a base.</p>
             </div>
           )}
         </div>
-      )}
 
-      {/* Reenvio pra outro sistema (mesmo app da Meta) */}
-      <div className="onum-webhook" style={{ marginTop: 12 }}>
-        <button className="onum-webhook-h" onClick={() => setVerReenvio((v) => !v)}>
-          <I.link className="ico" />
-          <span>Usar 2 sistemas no mesmo app da Meta (reenvio)</span>
-          <I.chevron className={"ico chev" + (verReenvio ? " open" : "")} />
-        </button>
-        {verReenvio && (
+        {/* Instagram (Direct) — cai na mesma Caixa de entrada */}
+        <div className="onum-webhook onx-ig">
+          <div className="onx-ig-h">
+            <span className="onx-integ-ic ig"><I.image className="ico" /></span>
+            <span className="onx-integ-t"><b>Instagram (Direct)</b><small>{igCfg && igCfg.igId ? (igCfg.usuario ? "@" + igCfg.usuario : igCfg.igId) : "nenhuma conta ligada"}</small></span>
+            <span className={"onx-pill" + (igAtivo ? " on" : "")}>{igAtivo ? "Ativo" : "Desligado"}</span>
+          </div>
           <div className="onum-webhook-body">
-            <p className="onum-webhook-intro">A Meta só manda pra <b>uma</b> URL. Se você tem <b>outro CRM no MESMO app da Meta</b>, configure isto <b>no sistema pra onde a Meta aponta hoje</b> (o que já funciona): cole a URL <b>base</b> do sistema irmão (ex.: <span className="mono">https://xxx.up.railway.app</span>) que este aqui <b>repassa</b> os eventos pra ele. Cada sistema processa só os números dele. Deixe vazio pra desligar.</p>
-            <textarea className="mono" rows={2} style={{ width: "100%", boxSizing: "border-box" }} placeholder="https://outro-sistema.up.railway.app" value={reenvio} onChange={(e) => setReenvio(e.target.value)} />
-            <button className="onum-btn-save" onClick={salvarReenvio}>Salvar reenvio</button>
-            <p className="onum-webhook-fim">Uma URL por linha se tiver mais de um sistema. Pode colar a URL completa do webhook que ele guarda só a base.</p>
+            {igCfg && igCfg.igId
+              ? <p className="onum-webhook-intro">Token {igCfg.temToken ? "salvo ✅" : "faltando ⚠️"}{igCfg.vendedorId && vendedores.find((v) => v.id === igCfg.vendedorId) ? <> · Atende: <b>{vendedores.find((v) => v.id === igCfg.vendedorId).nome}</b></> : null} — os DMs caem aqui na <b>Caixa de entrada</b>.</p>
+              : <p className="onum-webhook-intro">Ligue uma conta Instagram profissional pra <b>receber e responder DMs</b> aqui na Caixa de entrada.</p>}
+            <p className="onum-webhook-fim">Usa o <b>mesmo webhook do WhatsApp</b>. No app da Meta, adicione o produto <b>Instagram</b>, assine o webhook e ative o campo <b>messages</b>.</p>
+            <button className="onum-btn-save" onClick={() => setIgForm({ igId: (igCfg && igCfg.igId) || "", usuario: (igCfg && igCfg.usuario) || "", token: "", ativo: igCfg ? !!igCfg.ativo : true, vendedorId: (igCfg && igCfg.vendedorId) || null })}>
+              {igCfg && igCfg.igId ? "Editar Instagram" : "Configurar Instagram"}
+            </button>
           </div>
-        )}
-      </div>
-
-      {/* Instagram (Direct) — cai na mesma Caixa de entrada */}
-      <div className="onum-webhook" style={{ marginTop: 12 }}>
-        <div className="onum-webhook-body">
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginBottom: 6 }}>
-            <b>📸 Instagram (Direct)</b>
-            <span style={{ background: igCfg && igCfg.ativo && igCfg.temToken ? "#25A06B" : "#e5e7eb", color: igCfg && igCfg.ativo && igCfg.temToken ? "#fff" : "#6b7280", borderRadius: 20, padding: "2px 12px", fontSize: 12, fontWeight: 700 }}>
-              {igCfg && igCfg.ativo && igCfg.temToken ? "Ativo" : "Desligado"}
-            </span>
-          </div>
-          {igCfg && igCfg.igId
-            ? <p className="onum-webhook-intro">Conta: <b>{igCfg.usuario ? "@" + igCfg.usuario : igCfg.igId}</b> · Token {igCfg.temToken ? "salvo ✅" : "faltando ⚠️"}{igCfg.vendedorId && vendedores.find((v) => v.id === igCfg.vendedorId) ? <> · Atende: <b>{vendedores.find((v) => v.id === igCfg.vendedorId).nome}</b></> : null} — os DMs caem aqui na <b>Caixa de entrada</b>.</p>
-            : <p className="onum-webhook-intro">Ligue uma conta Instagram profissional pra <b>receber e responder DMs</b> aqui na Caixa de entrada.</p>}
-          <p className="onum-webhook-fim">Usa o <b>mesmo webhook do WhatsApp</b> (acima). No app da Meta, adicione o produto <b>Instagram</b>, assine o webhook e ative o campo <b>messages</b>.</p>
-          <button className="onum-btn-save" onClick={() => setIgForm({ igId: (igCfg && igCfg.igId) || "", usuario: (igCfg && igCfg.usuario) || "", token: "", ativo: igCfg ? !!igCfg.ativo : true, vendedorId: (igCfg && igCfg.vendedorId) || null })}>
-            {igCfg && igCfg.igId ? "Editar Instagram" : "Configurar Instagram"}
-          </button>
         </div>
       </div>
 
@@ -9944,75 +10316,73 @@ function PaginaSolicitacoes({ showToast, readonly }) {
   }
 
   const sit = rel && rel.situacao;
-  const perBtn = (v, txt) => (
-    <button className={"chip" + (periodo === v ? " on" : "")} onClick={() => setPeriodo(v)}>{txt}</button>
-  );
-  const filBtn = (v, txt) => (
-    <button className={"chip" + (filtro === v ? " on" : "")} onClick={() => setFiltro(v)}>{txt}</button>
-  );
+  const quemAbriu = (rel && rel.porVendedor) || [];
+  const PERIODOS = [["hoje", "Hoje"], ["7", "7 dias"], ["30", "30 dias"], ["tudo", "Tudo"]];
+  const FILTROS = [["todas", "Todas"], ["aberta", "Abertas"], ["andamento", "Em andamento"], ["resolvida", "Resolvidas"]];
 
   return (
-    <div>
-      <div className="panel">
-        <div className="panel-h"><h3>Visão geral<span className="panel-sub">situação das solicitações no período</span></h3></div>
-        <div className="ia-periodo" style={{ padding: "0 18px 14px" }}>
-          <span className="lbl">Período:</span>
-          {perBtn("hoje", "Hoje")}{perBtn("7", "7 dias")}{perBtn("30", "30 dias")}{perBtn("tudo", "Tudo")}
+    <div className="solx">
+      <div className="solx-topo">
+        <div className="solx-seg" role="group" aria-label="Período">
+          {PERIODOS.map(([v, t]) => <button key={v} className={periodo === v ? "on" : ""} onClick={() => setPeriodo(v)}>{t}</button>)}
         </div>
-        {!sit && <div className="spin" />}
-        {sit && (
-          <>
-            <div className="mon-strip" style={{ margin: "0 18px 16px" }}>
-              <div className="mon-mini"><div className="lab">Total</div><div className="num">{sit.total}</div></div>
-              <div className="mon-mini"><div className="lab">Abertas</div><div className="num">{sit.aberta}</div></div>
-              <div className="mon-mini"><div className="lab">Em andamento</div><div className="num">{sit.andamento}</div></div>
-              <div className="mon-mini"><div className="lab">Resolvidas</div><div className="num">{sit.resolvida}</div></div>
-              <div className="mon-mini"><div className="lab">Taxa de resolução</div><div className="num">{sit.taxaResolucao}%</div></div>
-              <div className="mon-mini"><div className="lab">Tempo médio p/ resolver</div><div className="num">{sit.tempoMedioResolverSeg ? fmtTempo(sit.tempoMedioResolverSeg) : "—"}</div></div>
+        {readonly && <button className="onum-add" onClick={() => setNovoChamado(true)}><I.suporte className="ico" /> Abrir chamado</button>}
+      </div>
+
+      {!sit ? (
+        <div className="solx-kpis">{[0, 1, 2, 3, 4].map((i) => <div key={i} className="skel skel-card" />)}</div>
+      ) : (
+        <div className="solx-kpis">
+          <div className="solx-kpi"><span><I.list className="ico" /> Total</span><b>{sit.total}</b><em>pedidos no período</em></div>
+          <div className="solx-kpi aberta"><span><I.alert className="ico" /> Abertas</span><b>{sit.aberta}</b><em>{sit.aberta ? "esperando alguém pegar" : "nenhuma esperando"}</em></div>
+          <div className="solx-kpi andamento"><span><I.clock className="ico" /> Em andamento</span><b>{sit.andamento}</b><em>sendo resolvidas</em></div>
+          <div className="solx-kpi resolvida"><span><I.check className="ico" /> Resolvidas</span><b>{sit.resolvida}</b><em>{sit.taxaResolucao}% de resolução</em>
+            <div className="vdx-mini-trilho"><i style={{ width: Math.min(100, sit.taxaResolucao || 0) + "%" }} /></div>
+          </div>
+          <div className="solx-kpi"><span><I.gauge className="ico" /> Tempo médio</span><b>{sit.tempoMedioResolverSeg ? fmtTempo(sit.tempoMedioResolverSeg) : "—"}</b><em>pra resolver um pedido</em></div>
+        </div>
+      )}
+
+      <div className="solx-grade">
+        <div className="solx-fila">
+          <div className="solx-fila-h">
+            <div><b>Fila de solicitações</b><span>{readonly ? "acompanhe os pedidos do time" : "trabalhe os pedidos e atualize o status"}</span></div>
+            <div className="solx-tabs" role="group" aria-label="Status">
+              {FILTROS.map(([v, t]) => <button key={v} className={filtro === v ? "on" : ""} onClick={() => setFiltro(v)}>{t}</button>)}
             </div>
-            {rel.porVendedor.length > 0 && (
-              <div style={{ padding: "0 18px 18px" }}>
-                <div className="sol-rank-t">Quem mais abriu chamado</div>
-                {rel.porVendedor.map((v, i) => (
-                  <div className="sol-rank-row" key={v.vendedorId}>
-                    <span className="sol-rank-pos">{i + 1}</span>
-                    <span className="sol-rank-nome">{v.nome}</span>
-                    <span className="sol-rank-val">{v.total} {v.total === 1 ? "pedido" : "pedidos"} · {v.resolvidas} resolvido{v.resolvidas === 1 ? "" : "s"}</span>
-                  </div>
-                ))}
-              </div>
+          </div>
+          <div className="solx-lista">
+            {!lista && [0, 1, 2].map((i) => <div key={i} className="skel solx-skel" />)}
+            {lista && lista.length === 0 && (
+              <div className="solx-vazio"><span><I.check className="ico" /></span><b>Tudo em dia por aqui</b><small>{filtro === "todas" ? "Nenhuma solicitação ainda." : "Nenhuma solicitação com esse status."}</small></div>
             )}
-          </>
-        )}
-      </div>
+            {(lista || []).map((s) => <SolicitacaoRow key={s.id} s={s} onMudar={mudar} readonly={readonly} />)}
+          </div>
+        </div>
 
-      <div className="panel">
-        <div className="panel-h">
-          <h3>Análise da IA<span className="panel-sub">temas recorrentes e sugestões</span></h3>
-          <button className="btn btn-primary btn-sm" onClick={gerarIA} disabled={iaLoad}>{iaLoad ? "Analisando..." : "Gerar análise"}</button>
-        </div>
-        <div style={{ padding: 18 }}>
-          {!ia && !iaErr && !iaLoad && <div className="dash-empty">Clique em "Gerar análise" para a IA avaliar as solicitações do período.</div>}
-          {iaLoad && <div className="spin" />}
-          {iaErr && <div className="ia-erro">{iaErr}</div>}
-          {ia && <div className="ia-resumo" style={{ whiteSpace: "pre-wrap" }}>{ia}</div>}
-        </div>
-      </div>
-
-      <div className="panel">
-        <div className="panel-h">
-          <h3>Fila de solicitações<span className="panel-sub">trabalhe os pedidos e atualize o status</span></h3>
-          {readonly && <button className="btn btn-primary btn-sm" onClick={() => setNovoChamado(true)}><I.suporte className="ico" /> Abrir chamado</button>}
-        </div>
-        <div className="ia-periodo" style={{ padding: "0 18px 14px" }}>
-          <span className="lbl">Status:</span>
-          {filBtn("todas", "Todas")}{filBtn("aberta", "Abertas")}{filBtn("andamento", "Em andamento")}{filBtn("resolvida", "Resolvidas")}
-        </div>
-        <div className="sol-list" style={{ padding: "0 6px 8px" }}>
-          {!lista && <div className="spin" />}
-          {lista && lista.length === 0 && <div className="dash-empty" style={{ padding: 18 }}>Nenhuma solicitação por aqui.</div>}
-          {(lista || []).map((s) => <SolicitacaoRow key={s.id} s={s} onMudar={mudar} readonly={readonly} />)}
-        </div>
+        <aside className="solx-lado">
+          <div className="solx-card">
+            <div className="solx-card-h"><b>Quem mais abriu chamado</b></div>
+            {quemAbriu.length === 0 ? <div className="solx-mini-vazio">Ninguém abriu chamado no período.</div> : quemAbriu.slice(0, 8).map((v, i) => (
+              <div className="solx-rank" key={v.vendedorId}>
+                <span className="solx-rank-pos">{i + 1}</span>
+                <Avatar nome={v.nome} size={30} />
+                <div className="solx-rank-nome"><b>{v.nome}</b><small>{v.resolvidas} de {v.total} resolvido{v.total === 1 ? "" : "s"}</small></div>
+                <span className="solx-rank-n">{v.total}</span>
+              </div>
+            ))}
+          </div>
+          <div className="solx-card">
+            <div className="solx-card-h">
+              <b><I.brilho className="ico" /> Análise da IA</b>
+              <button className="btn btn-primary btn-sm" onClick={gerarIA} disabled={iaLoad}>{iaLoad ? "Analisando…" : ia ? "Gerar de novo" : "Gerar análise"}</button>
+            </div>
+            {!ia && !iaErr && !iaLoad && <p className="solx-ia-dica">A IA lê os pedidos do período e mostra os assuntos que mais se repetem, com sugestões pra diminuir os chamados.</p>}
+            {iaLoad && <div className="ficha-carregando"><span className="skel" /><span className="skel" /><span className="skel" /></div>}
+            {iaErr && <div className="ia-erro">{iaErr}</div>}
+            {ia && <div className="solx-ia-txt">{ia}</div>}
+          </div>
+        </aside>
       </div>
 
       {novoChamado && (
@@ -10029,18 +10399,20 @@ function SolicitacaoRow({ s, onMudar, readonly }) {
   const [resp, setResp] = useState(s.resposta || "");
   const resolvida = s.status === "resolvida";
   return (
-    <div className="sol-row big">
-      <div className="sol-info">
-        <div className="sol-top">
+    <div className={"solx-item u-" + (s.urgencia || "normal") + (resolvida ? " feita" : "")}>
+      <Avatar nome={s.vendedorNome} size={38} />
+      <div className="solx-item-corpo">
+        <div className="solx-item-topo">
+          <b>{s.vendedorNome}</b>
           <span className={"sol-st " + s.status}>{rotuloStatus(s.status)}</span>
-          <span className={"sol-urg " + s.urgencia}>{s.urgencia}</span>
-          <b className="sol-quem">{s.vendedorNome}</b>
+          {s.urgencia && <span className={"sol-urg " + s.urgencia}>{({ baixa: "Baixa", media: "Média", normal: "Normal", alta: "Urgente" })[s.urgencia] || s.urgencia}</span>}
+          <span className="solx-quando"><I.clock className="ico" /> {fmtDataHora(s.criadoEm)}</span>
         </div>
+        {s.tipoLabel && <div className="solx-tipo">{s.tipoLabel}</div>}
         <div className="sol-desc">{s.descricao}</div>
-        <div className="sol-meta">
-          {s.cliente ? "Cliente: " + s.cliente + (s.numero ? " (" + s.numero + ")" : "") + " · " : (s.numero ? s.numero + " · " : "")}
-          {fmtDataHora(s.criadoEm)}
-        </div>
+        {(s.cliente || s.numero) && (
+          <div className="solx-cliente"><I.user className="ico" /> {s.cliente || "Cliente"}{s.numero ? <span className="mono">{s.numero}</span> : null}</div>
+        )}
         {resolvida && s.resposta && <div className="sol-resp"><b>Resposta:</b> {s.resposta}</div>}
         {!readonly && !resolvida && (
           <input className="input sol-resp-input" value={resp} onChange={(e) => setResp(e.target.value)} placeholder="Resposta pro vendedor (opcional)" />
