@@ -16,7 +16,7 @@
    ===================================================================== */
 :root{
   --bg:#05070a;
-  --text:#f3f5f8; --muted:#98a2b2; --faint:#5e6776;
+  --text:#f5f7fa; --muted:#aab3c0; --faint:#7a8494;
   --line:rgba(255,255,255,.075); --line2:rgba(255,255,255,.045);
   --em:#34d399; --em2:#10b981; --em-ink:#6ee7b7;
   --ouro:#f6c453; --ambar:#fbbf24;
@@ -80,6 +80,8 @@ svg{display:block}
 
 .pn{position:relative;border-radius:26px;background:linear-gradient(180deg,rgba(255,255,255,.042),rgba(255,255,255,.016));border:1px solid var(--line);box-shadow:inset 0 1px 0 rgba(255,255,255,.05),0 24px 60px rgba(0,0,0,.28)}
 .num{font-variant-numeric:tabular-nums}
+.num .rs,.festa-v .rs{font-size:.5em;font-weight:500;margin-right:.18em;letter-spacing:0;vertical-align:.12em}
+.num .rs{color:var(--muted)}
 
 /* selos */
 .rit{display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 12px 0 10px;border-radius:999px;font-size:13.5px;font-weight:600;white-space:nowrap}
@@ -145,19 +147,19 @@ svg{display:block}
 .un-nome{display:flex;align-items:center;gap:12px;font-size:30px;font-weight:650;letter-spacing:-.02em;line-height:1;white-space:nowrap}
 .un-nome i{width:12px;height:12px;border-radius:50%}
 .un-tags{display:flex;align-items:center;gap:8px;margin-top:10px}
-.un-tag{display:inline-flex;align-items:center;gap:7px;height:26px;padding:0 11px;border-radius:999px;background:rgba(255,255,255,.055);font-size:13.5px;color:var(--muted);white-space:nowrap}
+.un-tag{display:inline-flex;align-items:center;gap:7px;height:30px;padding:0 13px;border-radius:999px;background:rgba(255,255,255,.055);font-size:15px;color:var(--muted);white-space:nowrap}
 .un-tag svg{width:14px;height:14px}
 .un-tag b{color:var(--text);font-weight:600}
 .un-tags .rit{height:26px;font-size:13px}
 .un-tot{text-align:right;flex:none}
 .un-tot b{display:block;font-size:34px;font-weight:650;letter-spacing:-.03em;line-height:1;white-space:nowrap}
-.un-tot>span{display:block;font-size:14px;color:var(--muted);margin-top:9px;white-space:nowrap}
+.un-tot>span{display:block;font-size:15.5px;color:var(--muted);margin-top:9px;white-space:nowrap}
 .un-meta{position:relative;height:4px;border-radius:999px;background:rgba(255,255,255,.06);margin:16px 0 14px;flex:none}
 .un-meta i{position:absolute;left:0;top:0;bottom:0;border-radius:999px;transform-origin:left center}
 
-.podio{display:grid;grid-template-columns:1fr 1.14fr 1fr;gap:14px;align-items:end;height:220px;margin-bottom:12px;flex:none}
+.podio{display:grid;grid-template-columns:1fr 1.14fr 1fr;gap:14px;align-items:end;height:238px;margin-bottom:12px;flex:none}
 .pod{position:relative;height:192px;border-radius:20px;background:linear-gradient(180deg,rgba(255,255,255,.05),rgba(255,255,255,.018));border:1px solid var(--line);display:flex;flex-direction:column;align-items:center;padding:16px 12px 10px;text-align:center;min-width:0}
-.pod.p1{height:220px;padding-top:20px;background:linear-gradient(180deg,rgba(246,196,83,.15),rgba(246,196,83,.025) 72%);border-color:rgba(246,196,83,.38);box-shadow:0 20px 50px rgba(246,196,83,.09)}
+.pod.p1{height:238px;padding-top:18px;background:linear-gradient(180deg,rgba(246,196,83,.15),rgba(246,196,83,.025) 72%);border-color:rgba(246,196,83,.38);box-shadow:0 20px 50px rgba(246,196,83,.09)}
 .pod.vago{background:none;border-style:dashed;border-color:var(--line2);justify-content:center;color:var(--faint);font-size:13.5px}
 .pod-brilho{position:absolute;top:0;right:0;bottom:0;left:0;border-radius:20px;overflow:hidden;pointer-events:none}
 .pod-brilho::before{content:"";position:absolute;top:-20%;bottom:-20%;left:-60%;width:40%;background:linear-gradient(90deg,transparent,rgba(255,255,255,.09),transparent);transform:skewX(-18deg);animation:varre 7s ease-in-out infinite}
@@ -168,32 +170,33 @@ svg{display:block}
 .p2 .pod-pos{background:linear-gradient(135deg,#f3f6fa,#aab4c2)}
 .p3 .pod-pos{background:linear-gradient(135deg,#f3c4a2,#bd7646)}
 .pod-coroa{position:absolute;top:-26px;left:50%;width:40px;height:40px;margin-left:-20px;color:var(--ouro);filter:drop-shadow(0 6px 14px rgba(246,196,83,.55))}
+.pod-eb{margin-top:8px;font-size:12.5px;font-weight:700;letter-spacing:.18em;text-transform:uppercase;color:var(--ouro)}
+.p1 .pod-eb+.pod-nome{margin-top:2px}
 .pod-nome{margin-top:10px;font-size:19px;font-weight:600;max-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .p1 .pod-nome{font-size:21px}
 .pod-v{font-size:26px;font-weight:650;letter-spacing:-.03em;margin-top:2px;white-space:nowrap;font-variant-numeric:tabular-nums}
 .p1 .pod-v{font-size:30px;background:linear-gradient(180deg,#ffe9a8,#f0b52e);-webkit-background-clip:text;background-clip:text;color:transparent}
-.pod-s{display:flex;align-items:center;justify-content:center;gap:4px;font-size:13px;color:var(--muted);margin-top:3px;white-space:nowrap}
+.pod-s{display:flex;align-items:center;justify-content:center;gap:4px;font-size:14.5px;color:var(--muted);margin-top:3px;white-space:nowrap}
 .pod-s.acima{color:var(--em-ink)}
 .pod-s svg{width:13px;height:13px}
 
 .lista{display:grid;grid-template-columns:1fr 1fr;grid-template-rows:repeat(5,50px);grid-auto-flow:column;column-gap:12px;row-gap:8px;flex:none}
 .lin{position:relative;display:flex;align-items:center;gap:12px;padding:0 14px 0 10px;border-radius:14px;background:rgba(255,255,255,.03);overflow:hidden;min-width:0}
 .lin>*{position:relative}
-.lin .lin-meta{position:absolute;left:0;right:0;bottom:0;height:3px;background:rgba(255,255,255,.045)}
-.lin .lin-meta i{position:absolute;left:0;top:0;bottom:0;border-radius:0 3px 3px 0;transform-origin:left center}
+.anel-mini{width:36px;height:36px;flex:none}
 .lin-pos{width:24px;font-family:var(--mono);font-size:14.5px;color:var(--faint);text-align:center;flex:none}
 .lin-txt{flex:1;min-width:0}
 .lin-txt b{display:block;font-size:17px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.lin-txt small{display:flex;align-items:center;gap:4px;font-size:12.5px;color:var(--muted);margin-top:2px;white-space:nowrap}
+.lin-txt small{display:flex;align-items:center;gap:4px;font-size:14px;color:var(--muted);margin-top:2px;white-space:nowrap}
 .lin-txt small.acima{color:var(--em-ink)}
 .lin-txt small svg{width:12px;height:12px}
 .lin-v{text-align:right;flex:none}
 .lin-v b{display:block;font-size:18px;font-weight:650;letter-spacing:-.02em;font-variant-numeric:tabular-nums}
-.lin-v small{display:block;font-size:12px;color:var(--faint);margin-top:1px}
+.lin-v small{display:block;font-size:13.5px;color:var(--muted);margin-top:1px}
 .lin.mais{justify-content:center;color:var(--muted);font-size:14px;background:none;border:1px dashed var(--line)}
 .lista.grande .lin-txt b{font-size:19px}
 .lista.grande .lin-v b{font-size:20px}
-.lista.grande .lin-txt small{font-size:13px}
+.lista.grande .lin-txt small{font-size:14.5px}
 
 /* ---------------- hoje / semana / setor ---------------- */
 .duas{display:grid;grid-template-columns:1fr 1fr;gap:20px;flex:1;min-height:0}
@@ -261,8 +264,11 @@ svg{display:block}
 .legenda i{width:12px;height:12px;border-radius:4px}
 .legenda i.linha{height:0;width:18px;border-radius:0;border-top:2px dashed rgba(255,255,255,.55)}
 .legenda i.pont{height:0;width:18px;border-radius:0;border-top:2px dotted var(--em-ink)}
+.leg-sem{justify-content:center;margin:-4px 0 4px;font-size:14px}
+.legenda i.ant0{height:0;width:18px;border-radius:0;border-top:2.5px solid rgba(203,213,225,.75)}
+.legenda i.ant1{height:0;width:18px;border-radius:0;border-top:2px dotted rgba(203,213,225,.45)}
 .graf-sep{height:1px;background:var(--line2);margin:14px 0 16px;flex:none}
-.eixo{fill:#5e6776;font-size:13px;font-family:var(--fonte)}
+.eixo{fill:#8f99a8;font-size:15px;font-family:var(--fonte)}
 .grade{stroke:rgba(255,255,255,.055);stroke-width:1}
 .entrando .area{animation:aparece 1.2s ease both;animation-delay:.2s}
 @keyframes aparece{from{opacity:0}to{opacity:1}}
@@ -351,6 +357,140 @@ body.mexeu .ctrl{opacity:1;pointer-events:auto}
 .setup small{display:block;color:var(--faint);font-size:13px;margin-top:18px;line-height:1.6}
 .setup kbd{display:inline-block;min-width:22px;padding:1px 6px;border-radius:6px;border:1px solid var(--line);background:rgba(255,255,255,.05);font:12px var(--mono);color:var(--muted);text-align:center}
 
+
+/* ---------------- comparações (selos de alta) ---------------- */
+.dl{display:inline-flex;align-items:center;gap:6px;height:26px;padding:0 11px;border-radius:999px;font-size:13px;font-weight:650;white-space:nowrap;font-variant-numeric:tabular-nums}
+.dl.sobe{background:rgba(52,211,153,.14);color:var(--em-ink)}
+.dl em{font-style:normal;font-weight:500;opacity:.9}
+.dl svg{width:14px;height:14px}
+.dl.grande{height:34px;padding:0 15px;font-size:16px}
+.kpi-pill.sobe{background:rgba(52,211,153,.14);color:var(--em-ink);font-weight:650}
+.kpi-pill.sobe b{color:var(--em-ink)}
+
+/* ---------------- placar do dia ---------------- */
+.placar{display:flex;align-items:center;gap:22px;height:150px;padding:0 24px;margin-bottom:16px;border-radius:20px;background:linear-gradient(180deg,rgba(255,255,255,.04),rgba(255,255,255,.015));border:1px solid var(--line2);flex:none}
+.placar-it{flex:1;min-width:0;display:flex;flex-direction:column;gap:5px;padding-left:20px;border-left:1px solid var(--line2)}
+.placar .anel+.placar-it{border-left:0;padding-left:0}
+.placar-it small{font-size:12.5px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;color:var(--faint);white-space:nowrap}
+.placar-it b{font-size:30px;font-weight:650;letter-spacing:-.03em;white-space:nowrap;font-variant-numeric:tabular-nums}
+.placar-it span{font-size:14px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.placar-it span b{font-size:inherit;font-weight:600;color:var(--text);letter-spacing:0}
+.placar-it em.ok{font-style:normal;display:inline-flex;align-items:center;gap:5px;color:var(--em-ink);font-weight:600}
+.placar-it em svg{width:15px;height:15px}
+
+/* ---------------- cartões internos (gráficos pequenos) ---------------- */
+.cartao{flex:none;padding:16px 20px 10px;border-radius:20px;background:linear-gradient(180deg,rgba(255,255,255,.04),rgba(255,255,255,.015));border:1px solid var(--line2);margin-bottom:16px}
+.cartao:last-child{margin-bottom:0}
+.cartao-h{display:flex;align-items:baseline;justify-content:space-between;gap:12px;height:28px;margin-bottom:4px;white-space:nowrap}
+.cartao-h b{font-size:17px;font-weight:600;letter-spacing:-.01em;flex:none}
+.cartao-h span{font-size:13.5px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;min-width:0}
+.cartao-h span b{font-size:inherit;color:var(--text);font-weight:600}
+.bv{fill:#d5dbe4;font-size:16px;font-weight:600;font-family:var(--fonte)}
+.bv.on{fill:#ffffff;font-size:18px}
+.bv.zero{fill:#5e6776;font-size:15px}
+.bv.sombra{fill:#8f99a8;font-size:14px;font-weight:500}
+.legenda i.sombra{background:none;border:2px dashed rgba(226,232,240,.55);width:14px;height:14px;border-radius:5px}
+.eixo.on{fill:#ffffff;font-weight:600}
+.puxa{flex:1;min-height:0;display:flex;flex-direction:column;margin-bottom:0}
+.puxa-l{flex:1;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;align-items:center;min-height:0}
+.puxa-p{display:flex;flex-direction:column;align-items:center;text-align:center;min-width:0;padding:4px}
+.puxa-p b{font-size:17px;font-weight:600;margin-top:10px;max-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.puxa-p em{font-style:normal;font-size:22px;font-weight:650;letter-spacing:-.02em;margin-top:2px;font-variant-numeric:tabular-nums}
+.puxa-p.p1 em{color:#ffd76a}
+.puxa-p small{display:flex;align-items:center;gap:4px;font-size:12.5px;color:var(--muted);margin-top:3px;white-space:nowrap}
+.puxa-p small.acima{color:var(--em-ink)}
+.puxa-p small svg{width:12px;height:12px}
+.puxa-meta{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px}
+.puxa-meta b{font-size:44px;font-weight:650;letter-spacing:-.03em}
+.puxa-meta span{font-size:15px;color:var(--muted)}
+.dest.mini{height:176px;gap:26px;padding:0 28px}
+.dest.mini .dest-nome{font-size:32px;margin-top:8px}
+.dest.mini .dest-v{font-size:46px}
+.dest.mini .dest-s{font-size:14.5px;margin-top:6px}
+.dest.mini .dest-av{padding-top:16px}
+.dest.mini .pod-coroa{top:-8px;width:38px;height:38px;margin-left:-19px}
+
+/* ---------------- mês a mês ---------------- */
+.meses-pg{display:grid;grid-template-columns:minmax(0,1fr) 540px;gap:20px;flex:1;min-height:0}
+.mm-graf{padding:24px 28px 16px;display:flex;flex-direction:column;min-width:0}
+.mm-lado{display:flex;flex-direction:column;gap:18px;min-height:0}
+.cmp{padding:22px 26px;flex:none}
+.cmp-h small{display:block;font-size:12.5px;font-weight:600;letter-spacing:.16em;text-transform:uppercase;color:var(--faint)}
+.cmp-h span{display:block;font-size:13.5px;color:var(--muted);margin-top:4px}
+.cmp-l{display:flex;align-items:flex-end;justify-content:space-between;gap:14px;margin-top:14px}
+.cmp-m{min-width:0}
+.cmp-m span{display:block;font-size:14px;color:var(--muted)}
+.cmp-m b{display:block;font-size:30px;font-weight:650;letter-spacing:-.03em;margin-top:2px;white-space:nowrap;font-variant-numeric:tabular-nums;color:#b8c0cc}
+.cmp-m.atual b{font-size:42px;color:#ffffff}
+.cmp-m.ant{text-align:right}
+.cmp-res{margin-top:12px;font-size:15px;color:var(--muted)}
+.cmp-res b{color:var(--text);font-weight:600}
+.cmp-un{margin-top:14px;padding-top:14px;border-top:1px solid var(--line2);display:flex;flex-direction:column;gap:10px}
+.cmp-u{display:flex;align-items:center;gap:10px;font-size:15px;white-space:nowrap;height:26px}
+.cmp-u i{width:9px;height:9px;border-radius:50%;flex:none}
+.cmp-u b{font-weight:600}
+.cmp-u span{color:var(--muted);font-variant-numeric:tabular-nums}
+.cmp-u .dl{margin-left:auto}
+.rec{padding:20px 26px;flex:none;display:flex;align-items:center;gap:20px}
+.rec-ic{width:58px;height:58px;border-radius:16px;display:flex;align-items:center;justify-content:center;background:rgba(246,196,83,.12);color:var(--ouro);flex:none}
+.rec-ic svg{width:28px;height:28px}
+.rec small{display:block;font-size:12.5px;font-weight:600;letter-spacing:.16em;text-transform:uppercase;color:var(--faint)}
+.rec b{display:block;font-size:30px;font-weight:650;letter-spacing:-.03em;margin-top:4px;white-space:nowrap}
+.rec b em{font-style:normal;font-size:16px;font-weight:500;color:var(--muted);letter-spacing:0}
+.rec>div>span{display:flex;align-items:center;gap:6px;font-size:14.5px;color:var(--muted);margin-top:6px}
+.rec>div>span b{display:inline;font-size:inherit;margin:0;letter-spacing:0;color:var(--text)}
+.mm-stats{display:grid;grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr;gap:18px;flex:1;min-height:0}
+.mm-stats .stat{padding:18px 20px}
+.mm-stats .stat b{font-size:28px;margin-top:6px}
+.stat-dl{margin-top:8px;min-height:26px}
+
+/* ---------------- campeões ---------------- */
+.camp-g{display:grid;gap:18px;flex:1;min-height:0}
+.camp-c{display:flex;flex-direction:column;gap:14px;min-width:0;min-height:0}
+.camp-h{display:flex;align-items:baseline;justify-content:space-between;gap:10px;height:44px;padding:0 6px;flex:none}
+.camp-h b{font-size:28px;font-weight:650;letter-spacing:-.02em}
+.camp-h span{display:inline-flex;align-items:center;gap:7px;font-size:14px;color:var(--muted)}
+.camp-h span i{width:8px;height:8px;border-radius:50%;background:var(--em);animation:pulso 2s infinite}
+.camp-b{flex:1;min-height:0;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:40px 16px 18px;min-width:0}
+.camp-c.atual .camp-b{border-color:rgba(52,211,153,.3);background:radial-gradient(320px 180px at 50% 0%,rgba(52,211,153,.08),transparent 70%),linear-gradient(180deg,rgba(255,255,255,.042),rgba(255,255,255,.016))}
+.camp-un{position:absolute;top:16px;left:18px;display:inline-flex;align-items:center;gap:8px;font-size:14px;color:var(--muted);font-weight:500}
+.camp-un i{width:9px;height:9px;border-radius:50%}
+.camp-av{position:relative;padding-top:20px}
+.camp-av .pod-coroa{top:-10px}
+.camp-nome{font-size:23px;font-weight:650;letter-spacing:-.02em;margin-top:14px;max-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.camp-v{font-style:normal;font-size:32px;font-weight:700;letter-spacing:-.03em;margin-top:4px;background:linear-gradient(180deg,#ffe9a8,#f0b52e);-webkit-background-clip:text;background-clip:text;color:transparent;font-variant-numeric:tabular-nums}
+.camp-b small{font-size:13.5px;color:var(--muted);margin-top:6px}
+.camp-b small .ok{color:var(--em-ink);font-weight:600}
+.camp-b.sem{color:var(--faint);font-size:15px}
+.camp-sel{display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 12px;margin-top:8px;border-radius:999px;background:rgba(246,196,83,.14);color:#ffd76a;font-size:13.5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase}
+.camp-sel svg{width:15px;height:15px}
+
+
+/* ---------------- líderes ---------------- */
+.lid-g{display:grid;grid-template-rows:1fr 1fr;gap:18px;flex:1;min-height:0}
+.lid-u{padding:18px 22px 20px;display:flex;flex-direction:column;min-height:0}
+.lid-uh{display:flex;align-items:center;justify-content:space-between;height:40px;margin-bottom:14px;flex:none}
+.lid-uh>span{font-size:15px;color:var(--muted)}
+.lid-l{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;flex:1;min-height:0}
+.lid{position:relative;border-radius:22px;padding:18px 22px;display:flex;flex-direction:column;min-width:0;overflow:hidden;
+  background:radial-gradient(420px 220px at 18% 100%,rgba(246,196,83,.16),transparent 70%),linear-gradient(180deg,rgba(255,255,255,.05),rgba(255,255,255,.02));
+  border:1px solid rgba(246,196,83,.32)}
+.lid-cab{display:flex;align-items:center;justify-content:space-between;gap:10px;flex:none}
+.lid-rot{display:inline-flex;align-items:center;gap:8px;height:34px;padding:0 14px;border-radius:999px;background:linear-gradient(135deg,#ffe9a8,#f0b52e);color:#1c1405;font-size:15px;font-weight:750;letter-spacing:.06em;text-transform:uppercase}
+.lid-rot svg{width:18px;height:18px}
+.lid-qd{font-size:14.5px;color:var(--muted);white-space:nowrap}
+.lid-corpo{flex:1;display:flex;align-items:center;gap:22px;min-height:0}
+.lid-av{flex:none}
+.lid-tx{min-width:0;display:flex;flex-direction:column}
+.lid-nome{font-size:28px;font-weight:650;letter-spacing:-.02em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.lid-v{font-style:normal;font-size:40px;font-weight:700;letter-spacing:-.035em;line-height:1.1;margin-top:4px;white-space:nowrap;background:linear-gradient(180deg,#fff0c4,#f0b52e);-webkit-background-clip:text;background-clip:text;color:transparent;font-variant-numeric:tabular-nums}
+.lid small{font-size:15px;color:var(--muted);margin-top:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.lid.aberta{background:linear-gradient(180deg,rgba(255,255,255,.035),rgba(255,255,255,.012));border:1.5px dashed rgba(246,196,83,.4)}
+.lid-aberta{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;gap:6px}
+.lid-aberta-ic{width:76px;height:76px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:rgba(246,196,83,.1);color:var(--ouro);margin-bottom:6px}
+.lid-aberta-ic svg{width:38px;height:38px}
+.lid-aberta b{font-size:26px;font-weight:650;letter-spacing:-.01em}
+.lid-aberta span{font-size:16px;color:var(--muted);max-width:340px;line-height:1.4}
 .leve *,.leve *::before,.leve *::after{animation:none!important;transition:none!important}
 @media (prefers-reduced-motion: reduce){
   .entrando .ani,.entrando .cresce,.entrando .area,.pod-brilho::before,.tk-trilho{animation:none!important}
@@ -562,7 +702,11 @@ function anel(pct, tam, cor, esp, centro, esperado) {
 }
 /* número que sobe contando quando aparece ou quando muda */
 function N(chave, valor, fmt, txt) {
-  return '<span class="num" data-k="' + chave + '" data-v="' + num(valor) + '" data-f="' + fmt + '">' + (txt != null ? txt : formatar(valor, fmt)) + '</span>';
+  return '<span class="num" data-k="' + chave + '" data-v="' + num(valor) + '" data-f="' + fmt + '">' + (txt != null ? txt : formatarHtml(valor, fmt)) + '</span>';
+}
+function formatarHtml(v, f) {
+  if (f === "rs") return '<span class="rs">R$</span>' + Math.round(num(v)).toLocaleString("pt-BR");
+  return formatar(v, f);
 }
 function formatar(v, f) {
   if (f === "rs") return rs(v);
@@ -615,6 +759,153 @@ function setoresDe(dados) {
   return out;
 }
 
+
+/* =====================================================================
+   HISTÓRICO (meses anteriores) — pra comparar com o mês atual.
+   Cada mês passado vem pesado (fotos), então: busca 1 por vez, guarda só
+   um resumo leve e só busca de novo a cada 6 horas (mês passado não muda).
+   ===================================================================== */
+var HIST_MESES = 6;                 // quantos meses pra trás tentar
+var HIST_RECARGA_MS = 6 * 3600000;
+var HIST = { porUnidade: [{}, {}], pronto: false, carregadoEm: 0, buscando: false };
+
+function mesesAntes(mes, n) {
+  var p = String(mes || mesAtual()).split("-"), y = Number(p[0]), m = Number(p[1]), out = [];
+  for (var i = 0; i < n; i++) { m--; if (m < 1) { m = 12; y--; } out.push(y + "-" + String(m).padStart(2, "0")); }
+  return out;
+}
+function nomeMesCurto(mes) { var m = Number(String(mes || "").split("-")[1]); return ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"][m - 1] || ""; }
+function resumoMes(d) {
+  if (!d || d.erro || !d.geral) return null;
+  var g = d.geral, rk = comerciais(d);
+  return {
+    mes: d.mes, venda: num(g.venda), recebido: num(g.recebido), qtd: num(g.qtd), meta: num(g.meta),
+    diasNoMes: num(d.diasNoMes) || 30,
+    porDia: (d.porDia || []).map(function (x) { return num(x.valor); }),
+    qtdDia: (d.porDia || []).map(function (x) { return num(x.qtd); }),
+    top: rk.slice(0, 3).map(function (p) { return { nome: p.nome, foto: p.foto, valor: num(p.valor), qtd: num(p.qtd), meta: num(p.meta) }; })
+  };
+}
+// acumulado até o dia N (inclusive) — pra comparar "até o mesmo dia"
+function acumAte(r, dia) { var s = 0; if (!r) return 0; for (var i = 0; i < Math.min(dia, r.porDia.length); i++) s += r.porDia[i]; return s; }
+function qtdAte(r, dia) { var s = 0; if (!r) return 0; for (var i = 0; i < Math.min(dia, r.qtdDia.length); i++) s += r.qtdDia[i]; return s; }
+// meses com venda de uma unidade, do mais antigo pro mais novo
+function histDe(i) {
+  var h = HIST.porUnidade[i] || {};
+  return Object.keys(h).sort().map(function (k) { return h[k]; }).filter(function (r) { return r && r.venda > 0; });
+}
+// { "2026-09": [resumoToledo|null, resumoJesuitas|null], ... } só meses ANTES do atual
+function mapaHist(mesCur) {
+  var mapa = {};
+  [0, 1].forEach(function (i) { histDe(i).forEach(function (r) { if (r.mes >= mesCur) return; if (!mapa[r.mes]) mapa[r.mes] = [null, null]; mapa[r.mes][i] = r; }); });
+  return mapa;
+}
+function temHistorico(mesCur) { return Object.keys(mapaHist(mesCur)).length > 0; }
+function puxarMes(sis, i, mes) {
+  if (DEMO) return Promise.resolve(demoDados(i, mes));
+  return fetch(sis.url + "/api/vendas/tv?k=" + encodeURIComponent(sis.key) + "&mes=" + mes, { cache: "no-store" })
+    .then(function (r) { return r.ok ? r.json() : null; })
+    .catch(function () { return null; });
+}
+function carregarHistorico(c, mesRef) {
+  if (HIST.buscando) return;
+  if (HIST.pronto && Date.now() - HIST.carregadoEm < HIST_RECARGA_MS) return;
+  HIST.buscando = true;
+  var lista = mesesAntes(mesRef, HIST_MESES), tarefas = [];
+  [0, 1].forEach(function (i) { lista.forEach(function (m) { tarefas.push([i, m]); }); });
+  var novo = [{}, {}], vazios = [0, 0], falhas = 0;
+  function proximo() {
+    var t = tarefas.shift();
+    if (!t) {
+      // se a internet caiu no meio, mantém o que já tinha e tenta de novo daqui a pouco
+      if (falhas && HIST.pronto) { HIST.buscando = false; HIST.carregadoEm = Date.now() - HIST_RECARGA_MS + 600000; return; }
+      HIST.porUnidade = novo; HIST.pronto = true; HIST.carregadoEm = falhas ? Date.now() - HIST_RECARGA_MS + 600000 : Date.now(); HIST.buscando = false;
+      if (ultimo) {
+        paginas = montarPaginas(ultimo.c, ultimo.d1, ultimo.d2);
+        if (idx >= paginas.length) idx = 0;
+        if (irParaTelaPedida()) { inicioPag = Date.now(); render(true); } else render(false);
+        desenharFaixa(ultimo.c, ultimo.d1, ultimo.d2);
+      }
+      return;
+    }
+    var i = t[0], m = t[1];
+    if (vazios[i] >= 2) { proximo(); return; }   // 2 meses seguidos sem venda = acabou o histórico dessa unidade
+    puxarMes(c.sistemas[i], i, m).then(function (d) {
+      if (!d) falhas++;
+      var r = resumoMes(d);
+      if (r && r.venda > 0) { novo[i][m] = r; vazios[i] = 0; } else if (d) vazios[i]++;
+      setTimeout(proximo, DEMO ? 0 : 400);   // um de cada vez, com folga pra TV
+    });
+  }
+  proximo();
+}
+
+/* ---------- datas e comparações ---------- */
+var DSEM = ["dom", "seg", "ter", "qua", "qui", "sex", "sáb"];
+var DSEM_LONGO = ["domingo", "segunda", "terça", "quarta", "quinta", "sexta", "sábado"];
+function cap(s) { s = String(s || ""); return s.charAt(0).toUpperCase() + s.slice(1); }
+function chaveMes(dt) { return dt.getFullYear() + "-" + String(dt.getMonth() + 1).padStart(2, "0"); }
+function dataDe(mes, dia) { var p = String(mes).split("-"); return new Date(Number(p[0]), Number(p[1]) - 1, dia); }
+function hojeDe(d) { return d && d.mes && d.diaHoje ? dataDe(d.mes, d.diaHoje) : new Date(); }
+function maisDias(dt, n) { var x = new Date(dt.getFullYear(), dt.getMonth(), dt.getDate()); x.setDate(x.getDate() + n); return x; }
+// venda de um dia qualquer (mês atual ou anterior); null = ainda não sabemos
+function vendaNoDia(i, d, dt) {
+  var mes = chaveMes(dt), dia = dt.getDate(), cur = (d && d.mes) || mesAtual();
+  if (d && !d.erro && d.mes === mes) { var x = (d.porDia || [])[dia - 1]; return { v: x ? num(x.valor) : 0, q: x ? num(x.qtd) : 0 }; }
+  var r = (HIST.porUnidade[i] || {})[mes];
+  if (r) return { v: r.porDia[dia - 1] || 0, q: r.qtdDia[dia - 1] || 0 };
+  if (HIST.pronto && mes < cur) return { v: 0, q: 0 };   // mês sem venda registrada
+  return null;
+}
+function metaDiaDe(d) { return G(d, "meta") > 0 && d && d.diasNoMes ? G(d, "meta") / d.diasNoMes : 0; }
+function variacao(atual, antes) { if (!(antes > 0)) return null; return Math.round((atual / antes - 1) * 100); }
+// só mostra quando subiu (tom positivo na TV)
+function chipSobe(p, sufixo) {
+  if (p === null || p < 0) return "";
+  return '<span class="dl sobe">▲ ' + p + '%' + (sufixo ? '<em>' + sufixo + '</em>' : '') + '</span>';
+}
+
+/* gráfico de barras simples (SVG) — usado no Hoje e na Semana */
+var GRAD_N = 0;
+function gradBarra(cor, forte) {
+  var id = "gb" + (GRAD_N++);
+  return { id: id, def: '<linearGradient id="' + id + '" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="' + cor + '" stop-opacity="' + (forte ? 1 : .78) + '"/><stop offset="100%" stop-color="' + cor + '" stop-opacity="' + (forte ? .55 : .3) + '"/></linearGradient>' };
+}
+function barrasSvg(itens, W, H, metaLinha, rotMeta) {
+  var pt = 40, pb = 44, pl = 6, pr = 6, max = Math.max(metaLinha || 0, 1);
+  itens.forEach(function (x) { if (x.v > max) max = x.v; if (x.sombra > max) max = x.sombra; });
+  max *= 1.14;
+  var n = Math.max(1, itens.length), bw = (W - pl - pr) / n, larg = Math.min(66, bw * 0.52), rx = Math.min(16, larg / 2);
+  function y(v) { return pt + (1 - v / max) * (H - pt - pb); }
+  var base = H - pb, defs = "", s = "";
+  itens.forEach(function (x, k) {
+    var cx = pl + bw * k + bw / 2, bx = (cx - larg / 2).toFixed(1), lw = larg.toFixed(1);
+    // trilho (cápsula de fundo, altura toda)
+    s += '<rect x="' + bx + '" y="' + pt + '" width="' + lw + '" height="' + (base - pt) + '" rx="' + rx + '" fill="rgba(255,255,255,' + (x.futuro ? .02 : .04) + ')"' + (x.futuro ? ' stroke="rgba(255,255,255,.1)" stroke-dasharray="4 5"' : '') + '/>';
+    // sombra: o mesmo dia da semana passada (contorno = alvo pra bater)
+    if (x.sombra > 0) {
+      var as = Math.max(rx * 2, base - y(x.sombra));
+      s += '<rect x="' + (cx - larg / 2 - 4).toFixed(1) + '" y="' + (base - as).toFixed(1) + '" width="' + (larg + 8).toFixed(1) + '" height="' + as.toFixed(1) + '" rx="' + (rx + 4) + '" fill="none" stroke="rgba(226,232,240,.55)" stroke-width="2" stroke-dasharray="5 5"/>';
+      if (x.futuro) s += '<text x="' + cx.toFixed(1) + '" y="' + (base - as - 12).toFixed(1) + '" class="bv sombra" text-anchor="middle">' + rsK(x.sombra).replace("R$ ", "") + '</text>';
+    }
+    if (x.v !== null && x.v > 0 && !x.futuro) {
+      var g = gradBarra(x.cor, x.destaque); defs += g.def;
+      var alt = Math.max(rx * 2, base - y(x.v));
+      if (x.destaque) s += '<rect x="' + (cx - larg / 2 - 6).toFixed(1) + '" y="' + (base - alt - 6).toFixed(1) + '" width="' + (larg + 12).toFixed(1) + '" height="' + (alt + 6).toFixed(1) + '" rx="' + (rx + 6) + '" fill="' + hexA(x.cor, .16) + '"/>';
+      s += '<rect class="area" x="' + bx + '" y="' + (base - alt).toFixed(1) + '" width="' + lw + '" height="' + alt.toFixed(1) + '" rx="' + rx + '" fill="url(#' + g.id + ')"/>';
+      s += '<text x="' + cx.toFixed(1) + '" y="' + (base - alt - 14).toFixed(1) + '" class="bv' + (x.destaque ? ' on' : '') + '" text-anchor="middle">' + rsK(x.v).replace("R$ ", "") + '</text>';
+    } else if (!x.futuro) {
+      s += '<text x="' + cx.toFixed(1) + '" y="' + (base - 14) + '" class="bv zero" text-anchor="middle">' + (x.v === null ? "…" : "0") + '</text>';
+    }
+    s += '<text x="' + cx.toFixed(1) + '" y="' + (H - 14) + '" class="eixo' + (x.destaque ? ' on' : '') + '" text-anchor="middle">' + x.rot + '</text>';
+  });
+  if (metaLinha > 0) {
+    var ym = y(metaLinha);
+    s += '<line x1="' + pl + '" x2="' + (W - pr) + '" y1="' + ym.toFixed(1) + '" y2="' + ym.toFixed(1) + '" stroke="rgba(255,255,255,.45)" stroke-width="1.5" stroke-dasharray="6 6"/>' +
+      '<text x="' + (W - pr) + '" y="' + (ym - 9).toFixed(1) + '" class="eixo" text-anchor="end" style="fill:#c9d1dc">' + (rotMeta || "meta") + ' ' + rsK(metaLinha).replace("R$ ", "") + '</text>';
+  }
+  return '<svg viewBox="0 0 ' + W + ' ' + H + '" style="width:100%;height:auto;display:block"><defs>' + defs + '</defs>' + s + '</svg>';
+}
 /* =====================================================================
    TELAS
    ===================================================================== */
@@ -629,10 +920,17 @@ function montarPaginas(c, d1, d2) {
   });
   var pgs = [
     { tipo: "geral", aba: "Visão geral", eb: "Painel geral", tit: "Ranking do mês" },
-    { tipo: "hoje", aba: "Hoje", eb: "Ao vivo", tit: "Ranking de hoje" },
-    { tipo: "semana", aba: "Semana", eb: "Domingo a sábado", tit: "Ranking da semana" },
-    { tipo: "ritmo", aba: "Ritmo do mês", eb: "Meta e projeção", tit: "Ritmo do mês" }
+    { tipo: "lideres", aba: "Líderes", eb: "1º do mês, da semana e do dia", tit: "Quem está na frente" },
+    { tipo: "hoje", aba: "Hoje", eb: "Ao vivo", tit: "Placar de hoje" },
+    { tipo: "semana", aba: "Semana", eb: "Domingo a sábado", tit: "Placar da semana" },
+    { tipo: "ritmo", aba: "Ritmo do mês", eb: "Meta, projeção e meses anteriores", tit: "Ritmo do mês" }
   ];
+  // comparação com os meses anteriores (entra quando o histórico chega)
+  var mesCur = (d1 && !d1.erro && d1.mes) || (d2 && !d2.erro && d2.mes) || mesAtual();
+  if (temHistorico(mesCur)) {
+    pgs.push({ tipo: "meses", aba: "Mês a mês", eb: "Comparativo", tit: "Mês a mês" });
+    pgs.push({ tipo: "campeoes", aba: "Campeões", eb: "Hall da fama", tit: "Campeões de cada mês" });
+  }
   // a equipe comercial já aparece na visão geral; a tela própria só entra se tiver mais gente do que cabe lá
   var muitos = comerciais(d1).length > 13 || comerciais(d2).length > 13;
   ord.forEach(function (n) {
@@ -654,9 +952,16 @@ function pagGeral(c, d1, d2) {
   var pctRec = T.venda > 0 ? Math.round((T.recebido / T.venda) * 100) : 0;
   var difProj = T.meta > 0 ? T.projecao - T.meta : 0;
 
+  // mês passado até o mesmo dia (comparação justa)
+  var antM = mesesAntes(T.mes, 1)[0], antDia = 0, temAnt = false;
+  [0, 1].forEach(function (i) { var r = (HIST.porUnidade[i] || {})[antM]; if (r) { temAnt = true; antDia += acumAte(r, T.diaHoje); } });
+  var pvAnt = temAnt ? variacao(T.venda, antDia) : null;
+  var pill = pvAnt !== null
+    ? (pvAnt > 0 ? '<span class="kpi-pill dir sobe">▲ ' + pvAnt + '% vs ' + nomeMesCurto(antM) + '. no dia ' + T.diaHoje + '</span>'
+                 : '<span class="kpi-pill dir">' + nomeMesCurto(antM) + '. no dia ' + T.diaHoje + ': <b style="margin:0 0 0 4px">' + rsK(antDia) + '</b></span>')
+    : '<span class="kpi-pill dir"><b>' + T.qtd.toLocaleString("pt-BR") + '</b>' + (T.qtd === 1 ? "venda" : "vendas") + ' · ticket ' + rs(ticket) + '</span>';
   var kMes = '<article class="pn kpi ani">' +
-    '<div class="kpi-h"><span class="kpi-ic">' + ic("trend") + '</span>Vendido em ' + nomeMes(T.mes) +
-      '<span class="kpi-pill dir"><b>' + T.qtd.toLocaleString("pt-BR") + '</b>' + (T.qtd === 1 ? "venda" : "vendas") + ' · ticket ' + rs(ticket) + '</span></div>' +
+    '<div class="kpi-h"><span class="kpi-ic">' + ic("trend") + '</span>Vendido em ' + nomeMes(T.mes) + pill + '</div>' +
     '<div class="kpi-v xl fit">' + N("g.venda", T.venda, "rs") + '</div>' +
     '<div class="duelo">' +
       '<div class="duelo-t"><span><i style="background:' + CORES[0] + '"></i>' + esc(c.sistemas[0].nome) + ' <b>' + s1 + '%</b></span><span><b>' + s2 + '%</b> ' + esc(c.sistemas[1].nome) + '<i style="background:' + CORES[1] + '"></i></span></div>' +
@@ -725,7 +1030,8 @@ function podio(rk, d) {
     if (!p) return '<div class="pod vago p' + pos + '">' + ord(pos).replace("ª", "º") + ' lugar em aberto</div>';
     var lm = linhaMeta(p, d);
     return '<div class="pod p' + pos + '">' + (pos === 1 ? '<span class="pod-brilho"></span><span class="pod-coroa">' + COROA + '</span>' : '') +
-      '<div class="pod-av">' + avatar(p, pos === 1 ? 78 : 64, ANEL[pos]) + '<span class="pod-pos">' + pos + '</span></div>' +
+      '<div class="pod-av">' + avatar(p, pos === 1 ? 74 : 64, ANEL[pos]) + '<span class="pod-pos">' + pos + '</span></div>' +
+      (pos === 1 ? '<div class="pod-eb">Líder do mês</div>' : '') +
       '<div class="pod-nome">' + esc(p.nome) + '</div>' +
       '<div class="pod-v">' + rs(p.valor) + '</div>' +
       '<div class="pod-s' + (lm.acima ? " acima" : "") + '">' + (p.meta > 0 ? lm.html : pl(num(p.qtd), "venda")) + '</div></div>';
@@ -735,10 +1041,16 @@ function linhaPessoa(p, pos, d, cor, cls) {
   var lm = linhaMeta(p, d);
   var pctFill = p.meta > 0 ? Math.min(100, Math.round((num(p.valor) / p.meta) * 100)) : 0;
   return '<div class="lin ' + (cls || "") + '">' +
-    (pctFill ? '<span class="lin-meta"><i class="cresce" style="width:' + pctFill + '%;background:linear-gradient(90deg,' + hexA(cor, .35) + ',' + cor + ')"></i></span>' : '') +
-    '<span class="lin-pos">' + pos + '</span>' + avatar(p, 38) +
+    '<span class="lin-pos">' + pos + '</span>' + avatar(p, 40) +
     '<div class="lin-txt"><b>' + esc(p.nome) + '</b><small class="' + (lm.acima ? "acima" : "") + '">' + (p.meta > 0 ? lm.html : "") + '</small></div>' +
+    (p.meta > 0 ? anelMini(pctFill, cor) : '') +
     '<div class="lin-v"><b>' + rs(p.valor) + '</b><small>' + pl(num(p.qtd), "venda") + '</small></div></div>';
+}
+// anel pequeno de meta (substitui as barrinhas): mostra quanto da meta a pessoa já fez
+function anelMini(pct, cor) {
+  var r = 15, c = 2 * Math.PI * r, p = Math.max(0, Math.min(100, pct || 0));
+  return '<svg class="anel-mini" viewBox="0 0 40 40" aria-hidden="true"><circle cx="20" cy="20" r="' + r + '" fill="none" stroke="rgba(255,255,255,.09)" stroke-width="5"/>' +
+    (p > 0 ? '<circle cx="20" cy="20" r="' + r + '" fill="none" stroke="' + cor + '" stroke-width="5" stroke-linecap="round" stroke-dasharray="' + c.toFixed(2) + '" stroke-dashoffset="' + (c * (1 - p / 100)).toFixed(2) + '" transform="rotate(-90 20 20)"/>' : '') + '</svg>';
 }
 function listaGeral(rk, d, cor) {
   var resto = rk.slice(3);
@@ -748,7 +1060,7 @@ function listaGeral(rk, d, cor) {
   if (resto.length > cabe) html += '<div class="lin mais">+' + (resto.length - mostra.length) + ' no ranking completo</div>';
   // divide igual nas duas colunas (5 pessoas = 3 + 2), sem deixar uma coluna vazia
   var linhas = Math.max(1, Math.ceil(Math.min(resto.length, cabe) / 2));
-  var alt = Math.min(66, Math.floor((282 - (linhas - 1) * 8) / linhas));   // pouca gente = linha maior, mais fácil de ler de longe
+  var alt = Math.min(66, Math.floor((264 - (linhas - 1) * 8) / linhas));   // pouca gente = linha maior, mais fácil de ler de longe
   return '<div class="lista' + (alt >= 60 ? " grande" : "") + '" style="grid-template-rows:repeat(' + linhas + ',' + alt + 'px)">' + html + '</div>';
 }
 function vazio(icone, titulo, texto, erro) {
@@ -764,43 +1076,268 @@ function periodoTxt(qual) {
   var fim = new Date(ini); fim.setDate(ini.getDate() + 6);
   return ddmm(ini) + " a " + ddmm(fim);
 }
-function pagPeriodo(qual, c, d1, d2) {
-  return '<section class="pg"><div class="duas">' + colunaPeriodo(qual, c.sistemas[0], d1, CORES[0], 0) + colunaPeriodo(qual, c.sistemas[1], d2, CORES[1], 1) + '</div></section>';
+/* ---------- líderes: 1º do mês, da semana e do dia ---------- */
+function pagLideres(c, d1, d2) {
+  return '<section class="pg"><div class="lid-g">' + linhaLideres(c.sistemas[0], d1, CORES[0], 0) + linhaLideres(c.sistemas[1], d2, CORES[1], 1) + '</div></section>';
 }
-function colunaPeriodo(qual, sis, d, cor, i) {
-  var lista = ((d && (qual === "hoje" ? d.rankingHoje : d.rankingSemana)) || []).filter(function (p) { return !p.foraDoPodio; });
-  var tot = lista.reduce(function (s, p) { return s + num(p.valor); }, 0), qtd = lista.reduce(function (s, p) { return s + num(p.qtd); }, 0);
-  var sub = qual === "hoje" ? pl(qtd, "venda") + " hoje · ontem " + rsK(G(d, "ontem")) : pl(qtd, "venda") + " na semana";
+function linhaLideres(sis, d, cor, i) {
+  if (!d || d.erro) return '<div class="pn lid-u ani"><div class="lid-uh">' + cabUnidade(sis, d, cor) + '</div>' + vazio("alerta", "Sem dados de " + esc(sis.nome) + " agora", esc((d && d.erro) || "Sem conexão") + ". Tentando de novo.", true) + '</div>';
+  var mes = comerciais(d)[0] || null;
+  var sem = (d.rankingSemana || []).filter(function (p) { return !p.foraDoPodio; })[0] || null;
+  var dia = (d.rankingHoje || []).filter(function (p) { return !p.foraDoPodio; })[0] || null;
+  var cursoDia = dia && d.destaque && d.destaque.nome === dia.nome && d.destaque.cursoTop ? d.destaque.cursoTop : "";
+  return '<div class="pn lid-u ani"><div class="lid-uh">' + cabUnidade(sis, d, cor) + '<span>quem está na frente agora</span></div><div class="lid-l">' +
+    cartaoLider("mes", "1º do mês", cap(nomeMes(d.mes)), mes, mes ? pl(num(mes.qtd), "venda") + (mes.meta > 0 ? ' · ' + Math.round(num(mes.valor) / mes.meta * 100) + '% da meta' : '') : "", cor) +
+    cartaoLider("semana", "1º da semana", periodoTxt("semana"), sem, sem ? pl(num(sem.qtd), "venda") + ' na semana' : "", cor) +
+    cartaoLider("dia", "1º do dia", periodoTxt("hoje"), dia, dia ? pl(num(dia.qtd), "venda") + ' hoje' + (cursoDia ? ' · ' + esc(cursoDia) : '') : "", cor) +
+    '</div></div>';
+}
+function cartaoLider(tipo, rot, quando, p, sub, cor) {
+  var cab = '<div class="lid-cab"><span class="lid-rot">' + COROA + rot + '</span><span class="lid-qd">' + quando + '</span></div>';
+  if (!p) return '<div class="lid lid-' + tipo + ' aberta">' + cab +
+    '<div class="lid-aberta"><span class="lid-aberta-ic">' + COROA + '</span><b>Coroa em aberto</b><span>quem vender primeiro ' + (tipo === "dia" ? "hoje" : "nesta semana") + ' assume o 1º lugar</span></div></div>';
+  return '<div class="lid lid-' + tipo + '">' + cab +
+    '<div class="lid-corpo"><div class="lid-av">' + avatar(p, 128, ANEL[1]) + '</div>' +
+    '<div class="lid-tx"><b class="lid-nome">' + esc(p.nome) + '</b><em class="lid-v">' + rs(p.valor) + '</em><small>' + sub + '</small></div></div></div>';
+}
+
+/* ---------- hoje ---------- */
+function pagHoje(c, d1, d2) {
+  return '<section class="pg"><div class="duas">' + colunaHoje(c.sistemas[0], d1, CORES[0], 0) + colunaHoje(c.sistemas[1], d2, CORES[1], 1) + '</div></section>';
+}
+function colunaErro(sis, d, cor) {
+  return '<div class="pn un per ani"><div class="un-topo"><div>' + cabUnidade(sis, d, cor) + '</div></div>' +
+    vazio("alerta", "Sem dados de " + esc(sis.nome) + " agora", esc((d && d.erro) || "Sem conexão") + ". O painel tenta de novo sozinho a cada 30 segundos.", true) + '</div>';
+}
+function destaqueCard(top, titulo, extra, mini) {
+  return '<div class="dest' + (mini ? ' mini' : '') + ' ani">' +
+    '<div class="dest-av"><span class="pod-coroa">' + COROA + '</span>' + avatar(top, mini ? 104 : 138, ANEL[1]) + '</div>' +
+    '<div class="dest-tx"><span class="dest-eb">' + ic("brilho") + titulo + '</span>' +
+    '<div class="dest-nome">' + esc(top.nome) + '</div><div class="dest-v">' + rs(top.valor) + '</div>' +
+    '<div class="dest-s"><b>' + pl(num(top.qtd), "venda") + '</b>' + (extra || "") + '</div></div></div>';
+}
+function blocoPlacar(rot, val, sub) { return '<div class="placar-it"><small>' + rot + '</small><b>' + val + '</b><span>' + sub + '</span></div>'; }
+function colunaHoje(sis, d, cor, i) {
+  if (!d || d.erro) return colunaErro(sis, d, cor);
+  var lista = (d.rankingHoje || []).filter(function (p) { return !p.foraDoPodio; });
+  var tot = G(d, "vendidoHoje"), qtd = G(d, "qtdHoje");
+  var hj = hojeDe(d), ontem = vendaNoDia(i, d, maisDias(hj, -1)), semPas = maisDias(hj, -7), vSem = vendaNoDia(i, d, semPas);
+  var mDia = metaDiaDe(d), pd = mDia > 0 ? Math.round((tot / mDia) * 100) : 0;
   var topo = '<div class="un-topo"><div>' + cabUnidade(sis, d, cor) +
-    '<div class="un-tags"><span class="un-tag">' + ic(qual === "hoje" ? "sol" : "calendario") + periodoTxt(qual) + '</span></div></div>' +
-    '<div class="un-tot"><b class="fit">' + N(qual + i, tot, "rs") + '</b><span>' + sub + '</span></div></div>';
-  var corpo, metaDia = "";
-  var mDia = num(G(d, "meta")) > 0 && d && d.diasNoMes ? G(d, "meta") / d.diasNoMes : 0;
-  if (qual === "hoje" && mDia > 0 && !(d && d.erro)) {
-    var pd = Math.round((tot / mDia) * 100);
-    metaDia = '<div class="dia-meta"><div class="dia-meta-t"><span>Meta de hoje</span><b>' + rs(tot) + '<small>de ' + rsK(mDia) + '</small></b>' +
-      (pd >= 100 ? '<em class="ok">' + ic("trofeu") + 'batida!</em>' : '<em>' + pd + '%</em>') + '</div>' +
-      '<div class="dia-meta-b"><i class="cresce" style="width:' + Math.min(100, pd) + '%;background:linear-gradient(90deg,' + hexA(cor, .55) + ',' + cor + ')"></i></div></div>';
-  }
-  if (d && d.erro) corpo = vazio("alerta", "Sem dados de " + esc(sis.nome) + " agora", esc(d.erro) + ". O painel tenta de novo sozinho.", true);
-  else if (!lista.length) corpo = qual === "hoje"
-    ? vazio("sol", "O dia está começando", "A primeira venda de hoje aparece aqui — e o painel comemora junto com o time.")
-    : vazio("calendario", "A semana está começando", "As vendas desde domingo aparecem aqui.");
-  else {
+    '<div class="un-tags"><span class="un-tag">' + ic("sol") + periodoTxt("hoje") + '</span>' + (qtd ? '<span class="un-tag"><b>' + pl(qtd, "venda") + '</b></span>' : '') + '</div></div>' +
+    '<div class="un-tot"><b class="fit">' + N("hoje" + i, tot, "rs") + '</b><span>vendido hoje</span></div></div>';
+  var placar = '<div class="placar ani">' +
+    (mDia > 0 ? anel(pd, 118, cor, 10, '<b style="font-size:27px">' + Math.min(999, pd) + '%</b><small style="font-size:11.5px">da meta do dia</small>', null) : '') +
+    blocoPlacar("Meta de hoje", mDia > 0 ? rsK(mDia) : "—", mDia > 0 ? (tot >= mDia ? '<em class="ok">' + ic("trofeu") + 'meta do dia batida!</em>' : 'faltam <b>' + rsK(mDia - tot) + '</b>') : 'sem meta definida') +
+    blocoPlacar("Ontem", ontem ? rsK(ontem.v) : "—", ontem ? pl(ontem.q, "venda") : "carregando…") +
+    blocoPlacar(cap(DSEM_LONGO[semPas.getDay()]) + " passada", vSem ? rsK(vSem.v) : "—", vSem ? pl(vSem.q, "venda") : "carregando…") +
+    '</div>';
+  var corpo;
+  if (lista.length) {
     var top = lista[0];
-    var curso = qual === "hoje" && d && d.destaque && d.destaque.nome === top.nome && d.destaque.cursoTop ? ' · mais vendido: <b>' + esc(d.destaque.cursoTop) + '</b>' : "";
-    var dest = '<div class="dest">' +
-      '<div class="dest-av"><span class="pod-coroa">' + COROA + '</span>' + avatar(top, 138, ANEL[1]) + '</div>' +
-      '<div class="dest-tx"><span class="dest-eb">' + ic("brilho") + (qual === "hoje" ? "Destaque de hoje" : "Destaque da semana") + '</span>' +
-      '<div class="dest-nome">' + esc(top.nome) + '</div><div class="dest-v">' + rs(top.valor) + '</div>' +
-      '<div class="dest-s"><b>' + pl(num(top.qtd), "venda") + '</b>' + curso + '</div></div></div>';
-    var resto = lista.slice(1), cabe = metaDia ? 6 : 7, mostra = resto.length > cabe ? resto.slice(0, cabe - 1) : resto;
-    var linhas = mostra.map(function (p, j) { return linhaPessoa(p, j + 2, d, cor, "r" + (j + 2)); }).join("");
-    if (resto.length > cabe) linhas += '<div class="lin mais">+' + (resto.length - mostra.length) + ' também venderam</div>';
-    corpo = dest + (resto.length ? '<div class="linhas">' + linhas + '</div>'
-      : '<div class="vazio leve"><div class="vazio-ic">' + ic("brilho") + '</div><b>Quem vai ser o próximo?</b><span>Cada venda ' + (qual === "hoje" ? "de hoje" : "da semana") + ' entra aqui na hora — e o painel comemora junto.</span></div>');
+    var curso = d.destaque && d.destaque.nome === top.nome && d.destaque.cursoTop ? ' · mais vendido: <b>' + esc(d.destaque.cursoTop) + '</b>' : "";
+    corpo = destaqueCard(top, "1º lugar de hoje", curso, true);
+    var resto = lista.slice(1);
+    if (resto.length) {
+      var cabe = 5, mostra = resto.length > cabe ? resto.slice(0, cabe - 1) : resto;
+      var linhas = mostra.map(function (p, j) { return linhaPessoa(p, j + 2, d, cor, "r" + (j + 2)); }).join("");
+      if (resto.length > cabe) linhas += '<div class="lin mais">+' + (resto.length - mostra.length) + ' também venderam hoje</div>';
+      corpo += '<div class="linhas">' + linhas + '</div>';
+    } else corpo += cartaoSeteDias(i, d, cor, hj, mDia, 300);
+  } else corpo = cartaoSeteDias(i, d, cor, hj, mDia, 200) + cartaoPuxando(d, cor, i);
+  return '<div class="pn un per ani">' + topo + placar + corpo + '</div>';
+}
+function cartaoSeteDias(i, d, cor, hj, mDia, alt) {
+  var itens = [], soma7 = 0;
+  for (var k = 6; k >= 0; k--) {
+    var dt = maisDias(hj, -k), v = vendaNoDia(i, d, dt);
+    if (v) soma7 += v.v;
+    itens.push({ rot: k === 0 ? "hoje" : DSEM[dt.getDay()] + " " + dt.getDate(), v: v ? v.v : null, cor: cor, destaque: k === 0 });
   }
-  return '<div class="pn un per ani">' + topo + metaDia + corpo + '</div>';
+  return '<div class="cartao ani"><div class="cartao-h"><b>Últimos 7 dias</b><span><b>' + rsK(soma7) + '</b> no período' + (mDia > 0 ? ' · meta por dia ' + rsK(mDia) : '') + '</span></div>' +
+    barrasSvg(itens, 820, alt, mDia, "meta/dia") + '</div>';
+}
+// quem está puxando o mês (top 3) — se o mês ainda não tem venda, mostra os campeões do mês passado
+function cartaoPuxando(d, cor, i) {
+  var rk = comerciais(d).slice(0, 3), tit = "Quem está puxando o mês", sub = cap(nomeMes(d && d.mes)), passado = false;
+  if (!rk.length) {
+    var ant = (HIST.porUnidade[i] || {})[mesesAntes((d && d.mes) || mesAtual(), 1)[0]];
+    if (ant && ant.top.length) { rk = ant.top; tit = "Campeões de " + nomeMes(ant.mes); sub = "mês passado"; passado = true; }
+  }
+  if (!rk.length) {
+    return '<div class="cartao puxa ani"><div class="cartao-h"><b>Meta do mês</b><span>' + sub + '</span></div><div class="puxa-meta"><b>' + (G(d, "meta") > 0 ? rsK(G(d, "meta")) : "—") + '</b><span>' + pl(Math.max(0, num(d && d.diasNoMes) - num(d && d.diaHoje) + 1), "dia") + ' pela frente</span></div></div>';
+  }
+  var cards = rk.map(function (p, k) {
+    var pct = p.meta > 0 ? Math.round((num(p.valor) / p.meta) * 100) : 0, sub2, bem = false;
+    if (passado) { sub2 = pct >= 100 ? ic("trofeu") + "bateu a meta" : pl(num(p.qtd), "venda"); bem = pct >= 100; }
+    else { var lm = linhaMeta(p, d); sub2 = p.meta > 0 ? lm.html : pl(num(p.qtd), "venda"); bem = lm.acima; }
+    return '<div class="puxa-p p' + (k + 1) + '"><div class="pod-av">' + avatar(p, 76, ANEL[k + 1]) + '<span class="pod-pos">' + (k + 1) + '</span></div>' +
+      '<b>' + esc(p.nome) + '</b><em>' + rs(p.valor) + '</em><small' + (bem ? ' class="acima"' : '') + '>' + sub2 + '</small></div>';
+  }).join("");
+  return '<div class="cartao puxa ani"><div class="cartao-h"><b>' + tit + '</b><span>' + sub + '</span></div><div class="puxa-l">' + cards + '</div></div>';
+}
+
+/* ---------- semana ---------- */
+function pagSemana(c, d1, d2) {
+  return '<section class="pg"><div class="duas">' + colunaSemana(c.sistemas[0], d1, CORES[0], 0) + colunaSemana(c.sistemas[1], d2, CORES[1], 1) + '</div></section>';
+}
+function colunaSemana(sis, d, cor, i) {
+  if (!d || d.erro) return colunaErro(sis, d, cor);
+  var lista = (d.rankingSemana || []).filter(function (p) { return !p.foraDoPodio; });
+  var hj = hojeDe(d), dow = hj.getDay(), ini = maisDias(hj, -dow);
+  var totSem = G(d, "semana"), qtdSem = G(d, "semanaQtd");
+  // semana passada ATÉ O MESMO DIA da semana (comparação justa)
+  var antes = 0, temAntes = true;
+  for (var k = 0; k <= dow; k++) { var v = vendaNoDia(i, d, maisDias(ini, k - 7)); if (!v) { temAntes = false; break; } antes += v.v; }
+  var pv = temAntes ? variacao(totSem, antes) : null;
+  var mDia = metaDiaDe(d), mSem = mDia * 7, pSem = mSem > 0 ? Math.round((totSem / mSem) * 100) : 0;
+  var topo = '<div class="un-topo"><div>' + cabUnidade(sis, d, cor) +
+    '<div class="un-tags"><span class="un-tag">' + ic("calendario") + periodoTxt("semana") + '</span>' + chipSobe(pv, " vs semana passada") + '</div></div>' +
+    '<div class="un-tot"><b class="fit">' + N("sem" + i, totSem, "rs") + '</b><span>' + pl(qtdSem, "venda") + ' na semana</span></div></div>';
+  var itens = [];
+  for (var j = 0; j < 7; j++) {
+    var dt = maisDias(ini, j), fut = j > dow, vv = fut ? null : vendaNoDia(i, d, dt);
+    var vs = vendaNoDia(i, d, maisDias(dt, -7));
+    itens.push({ rot: DSEM[j] + " " + dt.getDate(), v: fut ? null : (vv ? vv.v : null), futuro: fut, cor: cor, destaque: j === dow, sombra: vs ? vs.v : 0 });
+  }
+  var cab = '<span>' + (mSem > 0 ? 'meta da semana ' + rsK(mSem) + ' · <b>' + pSem + '%</b>' : '') +
+    (temAntes ? (mSem > 0 ? ' · ' : '') + 'semana passada até ' + DSEM_LONGO[dow] + ': ' + rsK(antes) : '') + '</span>';
+  var resto = lista.slice(1), alt = !lista.length ? 250 : (resto.length ? 250 : 440);
+  var grafico = '<div class="cartao ani"><div class="cartao-h"><b>Semana dia a dia</b>' + cab + '</div>' + barrasSvg(itens, 820, alt, mDia, "meta/dia") +
+    '<div class="legenda leg-sem"><span><i style="background:' + cor + '"></i>esta semana</span><span><i class="sombra"></i>mesmo dia da semana passada</span></div></div>';
+  var corpo;
+  if (!lista.length) corpo = grafico + cartaoPuxando(d, cor, i);
+  else {
+    corpo = grafico + destaqueCard(lista[0], "1º lugar da semana", "", true);
+    if (resto.length) {
+      var cabe = 3, mostra = resto.length > cabe ? resto.slice(0, cabe - 1) : resto;
+      var linhas = mostra.map(function (p, j) { return linhaPessoa(p, j + 2, d, cor, "r" + (j + 2)); }).join("");
+      if (resto.length > cabe) linhas += '<div class="lin mais">+' + (resto.length - mostra.length) + ' também venderam na semana</div>';
+      corpo += '<div class="linhas">' + linhas + '</div>';
+    }
+  }
+  return '<div class="pn un per ani">' + topo + corpo + '</div>';
+}
+
+/* ---------- mês a mês (comparação com os meses anteriores) ---------- */
+function carregandoHist() { return '<section class="pg"><div class="carregando"><i></i>Buscando os meses anteriores…</div></section>'; }
+function pagMeses(c, d1, d2) {
+  var T = soma(d1, d2), mesCur = T.mes, dia = T.diaHoje;
+  var mapa = mapaHist(mesCur);
+  var passados = Object.keys(mapa).sort().slice(-5);
+  if (!passados.length) return carregandoHist();
+  var col = passados.map(function (m) {
+    var a = mapa[m][0], b = mapa[m][1];
+    return { mes: m, v0: a ? a.venda : 0, v1: b ? b.venda : 0, meta: (a ? a.meta : 0) + (b ? b.meta : 0), qtd: (a ? a.qtd : 0) + (b ? b.qtd : 0) };
+  });
+  col.push({ mes: mesCur, v0: G(d1, "venda"), v1: G(d2, "venda"), meta: T.meta, qtd: T.qtd, atual: true, proj: T.projecao });
+
+  // ---- gráfico de barras mês a mês (as duas unidades empilhadas) ----
+  var W = 1200, H = 720, pl_ = 84, pr = 24, pt = 60, pb = 80;
+  var max = 1;
+  col.forEach(function (x) { max = Math.max(max, x.v0 + x.v1, x.meta || 0, x.proj || 0); });
+  max *= 1.1;
+  function y(v) { return pt + (1 - v / max) * (H - pt - pb); }
+  var base = H - pb, n = col.length, bw = (W - pl_ - pr) / n, larg = Math.min(126, bw * 0.5), s = "", defs = "";
+  var g0 = gradBarra(CORES[0], true), g1 = gradBarra(CORES[1], true), g0f = gradBarra(CORES[0], false), g1f = gradBarra(CORES[1], false);
+  defs = g0.def + g1.def + g0f.def + g1f.def;
+  [0, .25, .5, .75, 1].forEach(function (f) { var v = (max / 1.1) * f; s += '<line x1="' + pl_ + '" x2="' + (W - pr) + '" y1="' + y(v).toFixed(1) + '" y2="' + y(v).toFixed(1) + '" class="grade"/><text x="' + (pl_ - 14) + '" y="' + (y(v) + 4).toFixed(1) + '" class="eixo" text-anchor="end">' + rsK(v).replace("R$ ", "") + '</text>'; });
+  col.forEach(function (x, k) {
+    var cx = pl_ + bw * k + bw / 2, bx = cx - larg / 2, tot = x.v0 + x.v1;
+    var y0 = y(x.v0), y1 = y(tot);
+    s += '<rect x="' + bx.toFixed(1) + '" y="' + pt + '" width="' + larg.toFixed(1) + '" height="' + (base - pt) + '" rx="16" fill="rgba(255,255,255,.035)"/>';
+    if (x.atual && x.proj > tot) {
+      s += '<rect x="' + bx.toFixed(1) + '" y="' + y(x.proj).toFixed(1) + '" width="' + larg.toFixed(1) + '" height="' + (y1 - y(x.proj)).toFixed(1) + '" rx="10" fill="rgba(52,211,153,.06)" stroke="rgba(110,231,183,.6)" stroke-width="2" stroke-dasharray="6 6"/>' +
+        '<text x="' + cx.toFixed(1) + '" y="' + (y(x.proj) - 14).toFixed(1) + '" class="bv" text-anchor="middle" style="fill:#6ee7b7">projeção ' + rsK(x.proj).replace("R$ ", "") + '</text>';
+    }
+    if (x.atual) s += '<rect x="' + (bx - 7).toFixed(1) + '" y="' + (y1 - 7).toFixed(1) + '" width="' + (larg + 14).toFixed(1) + '" height="' + (base - y1 + 7).toFixed(1) + '" rx="20" fill="rgba(52,211,153,.10)"/>';
+    if (x.v0 > 0) s += '<rect class="area" x="' + bx.toFixed(1) + '" y="' + y0.toFixed(1) + '" width="' + larg.toFixed(1) + '" height="' + (base - y0).toFixed(1) + '" rx="14" fill="url(#' + (x.atual ? g0.id : g0f.id) + ')"/>';
+    if (x.v1 > 0) s += '<rect class="area" x="' + bx.toFixed(1) + '" y="' + y1.toFixed(1) + '" width="' + larg.toFixed(1) + '" height="' + Math.max(0, y0 - y1 - (x.v0 > 0 ? 4 : 0)).toFixed(1) + '" rx="14" fill="url(#' + (x.atual ? g1.id : g1f.id) + ')"/>';
+    if (x.meta > 0) s += '<line x1="' + (bx - 16).toFixed(1) + '" x2="' + (bx + larg + 16).toFixed(1) + '" y1="' + y(x.meta).toFixed(1) + '" y2="' + y(x.meta).toFixed(1) + '" stroke="rgba(255,255,255,.55)" stroke-width="2" stroke-dasharray="5 5"/>';
+    var yl = (x.atual && x.proj > tot) ? y1 - 12 : y1 - 14;
+    s += '<text x="' + cx.toFixed(1) + '" y="' + yl.toFixed(1) + '" class="bv on" text-anchor="middle" style="font-size:19px">' + rsK(tot).replace("R$ ", "") + '</text>';
+    s += '<text x="' + cx.toFixed(1) + '" y="' + (H - 44) + '" class="eixo' + (x.atual ? ' on' : '') + '" text-anchor="middle" style="font-size:17px">' + cap(nomeMes(x.mes)) + '</text>' +
+      '<text x="' + cx.toFixed(1) + '" y="' + (H - 20) + '" class="eixo" text-anchor="middle">' + (x.atual ? 'até o dia ' + dia : pl(x.qtd, "venda")) + '</text>';
+  });
+  var graf = '<div class="pn mm-graf ani"><div class="graf-h"><div><b>Vendas mês a mês</b><small>as duas unidades somadas · tracejado = meta de cada mês</small></div>' +
+    '<div class="legenda"><span><i style="background:' + CORES[0] + '"></i>' + esc(c.sistemas[0].nome) + '</span><span><i style="background:' + CORES[1] + '"></i>' + esc(c.sistemas[1].nome) + '</span><span><i class="linha"></i>Meta</span><span><i class="pont"></i>Projeção</span></div></div>' +
+    '<div style="margin-top:10px">' + '<svg viewBox="0 0 ' + W + ' ' + H + '" style="width:100%;height:auto;display:block"><defs>' + defs + '</defs>' + s + '</svg></div></div>';
+
+  // ---- comparação justa: até o mesmo dia do mês anterior ----
+  var ant = passados[passados.length - 1], ra = mapa[ant] || [null, null];
+  var antDia = acumAte(ra[0], dia) + acumAte(ra[1], dia);
+  var pv = variacao(T.venda, antDia);
+  var res = pv === null ? '<span>sem venda em ' + nomeMes(ant) + ' até o dia ' + dia + '</span>'
+    : pv >= 0 ? '<span class="dl sobe grande">▲ ' + pv + '%<em> à frente de ' + nomeMes(ant) + '</em></span>'
+    : '<span class="cmp-falta">faltam <b>' + rsK(antDia - T.venda) + '</b> pra alcançar ' + nomeMes(ant) + ' no mesmo dia</span>';
+  var uns = [0, 1].map(function (i) {
+    var dd = i ? d2 : d1, cur = G(dd, "venda"), pas = acumAte(ra[i], dia);
+    return '<div class="cmp-u"><i style="background:' + CORES[i] + '"></i><b>' + esc(c.sistemas[i].nome) + '</b><span>' + rsK(cur) + ' × ' + (ra[i] ? rsK(pas) : '—') + '</span>' + chipSobe(ra[i] ? variacao(cur, pas) : null) + '</div>';
+  }).join("");
+  var cmp = '<div class="pn cmp ani"><div class="cmp-h"><small>Até o dia ' + dia + '</small><span>mesmos dias de cada mês, comparação justa</span></div>' +
+    '<div class="cmp-l"><div class="cmp-m atual"><span>' + cap(nomeMes(mesCur)) + '</span><b>' + rsK(T.venda) + '</b></div><div class="cmp-m ant"><span>' + cap(nomeMes(ant)) + '</span><b>' + rsK(antDia) + '</b></div></div>' +
+    '<div class="cmp-res">' + res + '</div><div class="cmp-un">' + uns + '</div></div>';
+
+  // ---- recorde ----
+  var rec = null;
+  col.forEach(function (x) { if (!x.atual && (!rec || x.v0 + x.v1 > rec.v)) rec = { mes: x.mes, v: x.v0 + x.v1 }; });
+  var recTxt = !rec ? "" : T.venda > rec.v ? '<span class="dl sobe">' + ic("trofeu") + ' recorde batido!</span>'
+    : (T.projecao >= rec.v && T.diasRestantes > 0 ? 'no ritmo de bater · faltam <b>' + rsK(rec.v - T.venda) + '</b>' : 'faltam <b>' + rsK(rec.v - T.venda) + '</b> pra igualar');
+  var recorde = rec ? '<div class="pn rec ani"><div class="rec-ic">' + ic("trofeu") + '</div><div><small>Melhor mês até agora</small><b>' + rsK(rec.v) + ' <em>em ' + nomeMes(rec.mes) + '</em></b><span>' + recTxt + '</span></div></div>' : '';
+
+  // ---- números lado a lado com o mês anterior ----
+  var ra0 = ra[0], ra1 = ra[1];
+  var antTot = (ra0 ? ra0.venda : 0) + (ra1 ? ra1.venda : 0), antQtd = (ra0 ? ra0.qtd : 0) + (ra1 ? ra1.qtd : 0);
+  var antDias = Math.max(ra0 ? ra0.diasNoMes : 0, ra1 ? ra1.diasNoMes : 0) || 30;
+  var antQtdDia = qtdAte(ra0, dia) + qtdAte(ra1, dia);
+  var mediaCur = T.venda / Math.max(1, dia), mediaAnt = antTot / antDias;
+  var tkCur = T.qtd ? T.venda / T.qtd : 0, tkAnt = antQtd ? antTot / antQtd : 0;
+  function st(rot, v, s2, p) { return '<div class="pn stat ani"><small>' + rot + '</small><b class="fit">' + v + '</b><span>' + s2 + '</span>' + (p ? '<div class="stat-dl">' + p + '</div>' : '') + '</div>'; }
+  var stats = '<div class="mm-stats">' +
+    st("Média por dia", rsK(mediaCur), nomeMesCurto(ant) + ".: " + rsK(mediaAnt), chipSobe(variacao(mediaCur, mediaAnt))) +
+    st("Ticket médio", rs(tkCur), nomeMesCurto(ant) + ".: " + rs(tkAnt), chipSobe(variacao(tkCur, tkAnt))) +
+    st("Vendas até o dia " + dia, T.qtd.toLocaleString("pt-BR"), nomeMesCurto(ant) + ".: " + antQtdDia.toLocaleString("pt-BR"), chipSobe(variacao(T.qtd, antQtdDia))) +
+    st("Projeção do mês", rsK(T.projecao), nomeMes(ant) + " fechou em " + rsK(antTot), chipSobe(variacao(T.projecao, antTot))) +
+    '</div>';
+  return '<section class="pg"><div class="meses-pg">' + graf + '<div class="mm-lado">' + cmp + recorde + stats + '</div></div></section>';
+}
+
+/* ---------- campeões de cada mês ---------- */
+function pagCampeoes(c, d1, d2) {
+  var T = soma(d1, d2), mapa = mapaHist(T.mes);
+  if (!Object.keys(mapa).length) return carregandoHist();
+  var cols = [{ mes: T.mes, atual: true, u: [comerciais(d1)[0] || null, comerciais(d2)[0] || null] }];
+  Object.keys(mapa).sort().reverse().slice(0, 3).forEach(function (m) {
+    cols.push({ mes: m, u: [mapa[m][0] && mapa[m][0].top[0] ? mapa[m][0].top[0] : null, mapa[m][1] && mapa[m][1].top[0] ? mapa[m][1].top[0] : null] });
+  });
+  // quantos meses seguidos a mesma pessoa foi campeã (bicampeão, tricampeão...)
+  var mesesTodos = Object.keys(mapa).sort();
+  function seguidos(i, mes, nome) {
+    var n = 0, ms = mesesTodos.filter(function (m) { return m <= mes; }).reverse();
+    for (var k = 0; k < ms.length; k++) { var t = mapa[ms[k]][i] && mapa[ms[k]][i].top[0]; if (t && t.nome === nome) n++; else break; }
+    return n;
+  }
+  var TITULO = { 2: "Bicampeão", 3: "Tricampeão", 4: "Tetracampeão", 5: "Pentacampeão" };
+  function selCampeao(i, col, p) {
+    if (!p) return "";
+    if (col.atual) { var antes = seguidos(i, mesesAntes(col.mes, 1)[0], p.nome); return antes ? '<span class="camp-sel">' + (antes + 1 <= 5 ? "rumo ao " + (TITULO[antes + 1] || "").toLowerCase().replace("campeão", "") : (antes + 1) + " meses seguidos") + '</span>' : ""; }
+    var n = seguidos(i, col.mes, p.nome);
+    return n >= 2 ? '<span class="camp-sel">' + COROA + (TITULO[n] || n + " meses seguidos") + '</span>' : "";
+  }
+  var html = cols.map(function (col) {
+    var ano = String(col.mes).split("-")[0];
+    var blocos = [0, 1].map(function (i) {
+      var p = col.u[i], un = '<span class="camp-un"><i style="background:' + CORES[i] + '"></i>' + esc(c.sistemas[i].nome) + '</span>';
+      if (!p) return '<div class="pn camp-b sem">' + un + '<span>sem vendas registradas</span></div>';
+      var pct = p.meta > 0 ? Math.round((num(p.valor) / p.meta) * 100) : 0;
+      return '<div class="pn camp-b">' + un +
+        '<div class="camp-av"><span class="pod-coroa">' + COROA + '</span>' + avatar(p, 112, ANEL[1]) + '</div>' +
+        '<b class="camp-nome">' + esc(p.nome) + '</b><em class="camp-v">' + rs(p.valor) + '</em>' + selCampeao(i, col, p) +
+        '<small>' + pl(num(p.qtd), "venda") + (pct >= 100 ? ' · <span class="ok">' + pct + '% da meta</span>' : '') + '</small></div>';
+    }).join("");
+    return '<div class="camp-c' + (col.atual ? ' atual' : '') + ' ani"><div class="camp-h"><b>' + cap(nomeMes(col.mes)) + '</b><span>' + (col.atual ? '<i></i>líder agora' : ano) + '</span></div>' + blocos + '</div>';
+  }).join("");
+  return '<section class="pg"><div class="camp-g" style="grid-template-columns:repeat(' + cols.length + ',minmax(0,1fr))">' + html + '</div></section>';
 }
 
 /* ---------- setor ---------- */
@@ -839,7 +1376,15 @@ function pagRitmo(c, d1, d2) {
   var totalHoje = a1[ate - 1] + a2[ate - 1];
   var proj = ate > 0 ? (totalHoje / ate) * N_ : 0;
   var W = 1160, H = 440, pl_ = 76, pr = 18, pt = 18, pb = 34;
-  var maxY = Math.max(T.meta, proj, totalHoje, 1) * 1.08;
+  // meses anteriores (as duas unidades somadas), alinhados pelo dia do mês
+  var mapaR = mapaHist(T.mes), prevs = Object.keys(mapaR).sort().slice(-2).reverse(), linhasAnt = [];
+  prevs.forEach(function (m) {
+    var ra = mapaR[m][0], rb = mapaR[m][1], dias = Math.max(ra ? ra.diasNoMes : 0, rb ? rb.diasNoMes : 0), acc = 0, pts = [];
+    for (var dd2 = 1; dd2 <= Math.min(dias, N_); dd2++) { acc += (ra ? ra.porDia[dd2 - 1] || 0 : 0) + (rb ? rb.porDia[dd2 - 1] || 0 : 0); pts.push(acc); }
+    linhasAnt.push({ mes: m, pts: pts, total: (ra ? ra.venda : 0) + (rb ? rb.venda : 0), noDia: pts[Math.min(ate, pts.length) - 1] || 0 });
+  });
+  var maxAnt = 0; linhasAnt.forEach(function (l) { maxAnt = Math.max(maxAnt, l.pts[l.pts.length - 1] || 0); });
+  var maxY = Math.max(T.meta, proj, totalHoje, maxAnt, 1) * 1.08;
   function x(d) { return pl_ + ((d - 1) / Math.max(1, N_ - 1)) * (W - pl_ - pr); }
   function y(v) { return pt + (1 - v / maxY) * (H - pt - pb); }
   function caminho(vals) { var s = ""; for (var k = 0; k < ate; k++) s += (k ? "L" : "M") + x(k + 1).toFixed(1) + " " + y(vals[k]).toFixed(1); return s; }
@@ -857,11 +1402,29 @@ function pagRitmo(c, d1, d2) {
   var projLin = ate < N_ && totalHoje > 0 ? '<line x1="' + x(ate) + '" y1="' + y(totalHoje) + '" x2="' + x(N_) + '" y2="' + y(proj) + '" stroke="#6ee7b7" stroke-width="2.5" stroke-dasharray="2 7" stroke-linecap="round"/>' +
     '<circle cx="' + x(N_) + '" cy="' + y(proj) + '" r="5" fill="#6ee7b7"/>' : "";
   var hojeX = x(ate);
+  var la = linhasAnt[0], altB = la ? 64 : 44;
   var marcador = '<line x1="' + hojeX + '" x2="' + hojeX + '" y1="' + pt + '" y2="' + (H - pb) + '" stroke="rgba(255,255,255,.18)" stroke-dasharray="3 5"/>' +
     '<circle cx="' + hojeX + '" cy="' + y(totalHoje) + '" r="7" fill="#fff" stroke="#05070a" stroke-width="3"/>' +
-    '<g transform="translate(' + Math.min(W - pr - 170, Math.max(pl_ + 10, hojeX - 85)) + ',' + Math.max(pt, y(totalHoje) - 64) + ')"><rect width="170" height="44" rx="12" fill="#141a20" stroke="rgba(255,255,255,.12)"/>' +
-    '<text x="85" y="18" text-anchor="middle" style="fill:#98a2b2;font-size:12px;font-family:Geist,sans-serif">hoje, dia ' + ate + '</text><text x="85" y="36" text-anchor="middle" style="fill:#fff;font-size:15px;font-weight:600;font-family:Geist,sans-serif">' + rsK(totalHoje) + '</text></g>';
-  var svgArea = '<svg viewBox="0 0 ' + W + ' ' + H + '" style="width:100%;height:auto">' + grade +
+    '<g transform="translate(' + Math.min(W - pr - 190, Math.max(pl_ + 10, hojeX - 95)) + ',' + Math.max(pt, y(totalHoje) - altB - 20) + ')"><rect width="190" height="' + altB + '" rx="12" fill="#141a20" stroke="rgba(255,255,255,.12)"/>' +
+    '<text x="95" y="18" text-anchor="middle" style="fill:#98a2b2;font-size:12px;font-family:Geist,sans-serif">hoje, dia ' + ate + '</text><text x="95" y="37" text-anchor="middle" style="fill:#fff;font-size:16px;font-weight:600;font-family:Geist,sans-serif">' + rsK(totalHoje) + '</text>' +
+    (la ? '<text x="95" y="56" text-anchor="middle" style="fill:#c9d1dc;font-size:12.5px;font-family:Geist,sans-serif">' + nomeMesCurto(la.mes) + '. no dia ' + ate + ': ' + rsK(la.noDia) + '</text>' : '') + '</g>';
+  // linhas dos meses anteriores (mais recente mais forte)
+  var antSvg = "";
+  // posição dos rótulos: se dois ficarem perto, o de baixo desce
+  linhasAnt.forEach(function (l) { l.yRot = y(l.pts[l.pts.length - 1] || 0) - 10; });
+  if (linhasAnt.length === 2 && Math.abs(linhasAnt[0].yRot - linhasAnt[1].yRot) < 22) {
+    var baixo = linhasAnt[0].yRot > linhasAnt[1].yRot ? linhasAnt[0] : linhasAnt[1];
+    baixo.yRot = Math.max(linhasAnt[0].yRot, linhasAnt[1].yRot) + 30;
+  }
+  linhasAnt.forEach(function (l, k) {
+    var dpath = ""; for (var q2 = 0; q2 < l.pts.length; q2++) dpath += (q2 ? "L" : "M") + x(q2 + 1).toFixed(1) + " " + y(l.pts[q2]).toFixed(1);
+    var cor = k === 0 ? "rgba(203,213,225,.75)" : "rgba(203,213,225,.38)";
+    var ux = x(l.pts.length), uy = y(l.pts[l.pts.length - 1] || 0);
+    antSvg += '<path class="area" d="' + dpath + '" fill="none" stroke="' + cor + '" stroke-width="' + (k === 0 ? 2.5 : 2) + '"' + (k === 0 ? '' : ' stroke-dasharray="2 6"') + ' stroke-linecap="round" stroke-linejoin="round"/>' +
+      '<circle cx="' + ux.toFixed(1) + '" cy="' + uy.toFixed(1) + '" r="4" fill="' + cor + '"/>' +
+      '<text x="' + (ux - 8).toFixed(1) + '" y="' + (l.yRot).toFixed(1) + '" class="eixo" text-anchor="end" style="fill:' + cor + '">' + nomeMes(l.mes) + ' ' + rsK(l.total) + '</text>';
+  });
+  var svgArea = '<svg viewBox="0 0 ' + W + ' ' + H + '" style="width:100%;height:auto">' + grade + antSvg +
     '<path class="area" d="' + area1 + '" fill="url(#gradA0)"/><path class="area" d="' + area2 + '" fill="url(#gradA1)"/>' +
     '<path class="area" d="' + caminho(a1) + '" fill="none" stroke="' + CORES[0] + '" stroke-width="2"/>' +
     '<path d="' + linTot + '" fill="none" stroke="' + CORES[1] + '" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/>' +
@@ -873,20 +1436,23 @@ function pagRitmo(c, d1, d2) {
   for (var q = 0; q < N_; q++) maxB = Math.max(maxB, dia[q]);
   maxB = Math.max(maxB, metaDia) * 1.12;
   function yb(v) { return ptb + (1 - v / maxB) * (HB - ptb - pbb); }
-  var bw = (W - pl_ - pr) / N_, barras = "";
+  var bw = (W - pl_ - pr) / N_, barras = "", rxb = Math.min(6, bw * 0.3);
   for (var b = 1; b <= N_; b++) {
-    var v1 = por1[b] || 0, v2 = por2[b] || 0, bx = pl_ + (b - 1) * bw + bw * 0.2, w = bw * 0.6;
-    if (v1 > 0) barras += '<rect x="' + bx.toFixed(1) + '" y="' + yb(v1).toFixed(1) + '" width="' + w.toFixed(1) + '" height="' + (yb(0) - yb(v1)).toFixed(1) + '" rx="2" fill="' + CORES[0] + '" opacity=".9"/>';
-    if (v2 > 0) barras += '<rect x="' + bx.toFixed(1) + '" y="' + yb(v1 + v2).toFixed(1) + '" width="' + w.toFixed(1) + '" height="' + Math.max(0, yb(v1) - yb(v1 + v2) - (v1 > 0 ? 2 : 0)).toFixed(1) + '" rx="2" fill="' + CORES[1] + '" opacity=".9"/>';
+    var v1 = por1[b] || 0, v2 = por2[b] || 0, bx = pl_ + (b - 1) * bw + bw * 0.18, w = bw * 0.64;
+    barras += '<rect x="' + bx.toFixed(1) + '" y="' + ptb + '" width="' + w.toFixed(1) + '" height="' + (yb(0) - ptb).toFixed(1) + '" rx="' + rxb.toFixed(1) + '" fill="rgba(255,255,255,' + (b > ate ? .02 : .04) + ')"/>';
+    if (b === ate) barras += '<rect x="' + (bx - 3).toFixed(1) + '" y="' + (ptb - 3) + '" width="' + (w + 6).toFixed(1) + '" height="' + (yb(0) - ptb + 3).toFixed(1) + '" rx="' + (rxb + 3).toFixed(1) + '" fill="none" stroke="rgba(110,231,183,.55)" stroke-width="1.5"/>';
+    if (v1 > 0) barras += '<rect class="area" x="' + bx.toFixed(1) + '" y="' + yb(v1).toFixed(1) + '" width="' + w.toFixed(1) + '" height="' + (yb(0) - yb(v1)).toFixed(1) + '" rx="' + rxb.toFixed(1) + '" fill="' + CORES[0] + '"/>';
+    if (v2 > 0) barras += '<rect class="area" x="' + bx.toFixed(1) + '" y="' + yb(v1 + v2).toFixed(1) + '" width="' + w.toFixed(1) + '" height="' + Math.max(0, yb(v1) - yb(v1 + v2) - (v1 > 0 ? 2 : 0)).toFixed(1) + '" rx="' + rxb.toFixed(1) + '" fill="' + CORES[1] + '"/>';
     if (b === 1 || b % 5 === 0 || (b === N_ && N_ % 5 >= 3)) barras += '<text x="' + (pl_ + (b - 0.5) * bw).toFixed(1) + '" y="' + (HB - 8) + '" class="eixo" text-anchor="middle"' + (b === ate ? ' style="fill:#6ee7b7;font-weight:600"' : '') + '>' + b + '</text>';
   }
   var linMetaDia = metaDia ? '<line x1="' + pl_ + '" x2="' + (W - pr) + '" y1="' + yb(metaDia) + '" y2="' + yb(metaDia) + '" stroke="rgba(255,255,255,.5)" stroke-width="1.5" stroke-dasharray="6 6"/><text x="' + (pl_ - 12) + '" y="' + (yb(metaDia) + 4) + '" class="eixo" text-anchor="end">meta/dia</text>' : "";
   var svgBarras = '<svg viewBox="0 0 ' + W + ' ' + HB + '" style="width:100%;height:auto"><line x1="' + pl_ + '" x2="' + (W - pr) + '" y1="' + yb(0) + '" y2="' + yb(0) + '" class="grade"/>' + barras + linMetaDia + '</svg>';
 
   var graf = '<div class="pn graf ani">' +
-    '<div class="graf-h"><div><b>Evolução do mês</b><small>vendido acumulado das duas unidades, dia a dia</small></div>' +
+    '<div class="graf-h"><div><b>Evolução do mês</b><small>vendido acumulado das duas unidades, dia a dia' + (linhasAnt.length ? ', comparado com os meses anteriores' : '') + '</small></div>' +
     '<div class="legenda"><span><i style="background:' + CORES[0] + '"></i>' + esc(c.sistemas[0].nome) + '</span><span><i style="background:' + CORES[1] + '"></i>' + esc(c.sistemas[1].nome) + '</span>' +
-    (T.meta > 0 ? '<span><i class="linha"></i>Ritmo da meta</span>' : '') + '<span><i class="pont"></i>Projeção</span></div></div>' +
+    (T.meta > 0 ? '<span><i class="linha"></i>Ritmo da meta</span>' : '') + '<span><i class="pont"></i>Projeção</span>' +
+    linhasAnt.map(function (l, k) { return '<span><i class="ant' + k + '"></i>' + cap(nomeMes(l.mes)) + '</span>'; }).join("") + '</div></div>' +
     '<div style="margin-top:12px">' + svgArea + '</div><div class="graf-sep"></div>' +
     '<div class="graf-h" style="margin-bottom:6px"><div><b style="font-size:17px">Vendas de cada dia</b></div>' + (melhor ? '<div class="legenda"><span>melhor dia: <b style="color:#fff;margin-left:4px">' + String(melhor.d).padStart(2, "0") + '</b>&nbsp;· ' + rsK(melhor.v) + '</span></div>' : '') + '</div>' +
     svgBarras + '</div>';
@@ -925,6 +1491,14 @@ function itensFaixa(c, d1, d2) {
     if (de && de.nome) it.push(["Destaque de hoje em " + x[1], "<b>" + esc(de.nome) + "</b> · " + rs(de.valor) + (de.cursoTop ? " · " + esc(de.cursoTop) : "")]);
   });
   if (T.semana > 0) it.push(["Semana", "<b>" + rs(T.semana) + "</b> em " + pl(T.semanaQtd, "venda")]);
+  var mapaF = mapaHist(T.mes), antF = Object.keys(mapaF).sort().pop();
+  if (antF) {
+    var rf = mapaF[antF], noDia = acumAte(rf[0], T.diaHoje) + acumAte(rf[1], T.diaHoje);
+    it.push([cap(nomeMes(antF)) + " no dia " + T.diaHoje, "<b>" + rsK(noDia) + "</b> · agora <b>" + rsK(T.venda) + "</b>"]);
+    var recF = null;
+    Object.keys(mapaF).forEach(function (m) { var v = (mapaF[m][0] ? mapaF[m][0].venda : 0) + (mapaF[m][1] ? mapaF[m][1].venda : 0); if (!recF || v > recF.v) recF = { m: m, v: v }; });
+    if (recF) it.push(["Melhor mês", "<b>" + rsK(recF.v) + "</b> em " + nomeMes(recF.m)]);
+  }
   var cursos = {};
   [d1, d2].forEach(function (d) { ((d && d.cursos) || []).forEach(function (k) { var nm = k.curso || "—"; if (!cursos[nm]) cursos[nm] = { q: 0, v: 0 }; cursos[nm].q += num(k.qtd); cursos[nm].v += num(k.valor); }); });
   var cs = Object.keys(cursos).sort(function (a, b) { return cursos[b].q - cursos[a].q || cursos[b].v - cursos[a].v; });
@@ -1057,7 +1631,7 @@ function animarNumero(el, de, ate, f, dur) {
   var t0 = performance.now();
   function passo(t) {
     var x = Math.min(1, (t - t0) / dur), e = 1 - Math.pow(1 - x, 3);
-    el.textContent = formatar(de + (ate - de) * e, f);
+    el.innerHTML = formatarHtml(de + (ate - de) * e, f);
     if (x < 1) requestAnimationFrame(passo);
   }
   requestAnimationFrame(passo);
@@ -1117,9 +1691,12 @@ function render(entrando) {
   ANEIS = [];
   var palco = $("palco");
   palco.innerHTML = p.tipo === "geral" ? pagGeral(c, d1, d2)
-    : p.tipo === "hoje" ? pagPeriodo("hoje", c, d1, d2)
-    : p.tipo === "semana" ? pagPeriodo("semana", c, d1, d2)
+    : p.tipo === "lideres" ? pagLideres(c, d1, d2)
+    : p.tipo === "hoje" ? pagHoje(c, d1, d2)
+    : p.tipo === "semana" ? pagSemana(c, d1, d2)
     : p.tipo === "ritmo" ? pagRitmo(c, d1, d2)
+    : p.tipo === "meses" ? pagMeses(c, d1, d2)
+    : p.tipo === "campeoes" ? pagCampeoes(c, d1, d2)
     : pagSetor(p.setor, c, d1, d2);
   if (entrando) {
     palco.classList.add("entrando");
@@ -1146,6 +1723,13 @@ setInterval(function () {
   if (!pausado() && paginas.length > 1 && Date.now() - inicioPag >= TROCA_MS) passar(1);
 }, 300);
 
+// ?tela=ritmo abre direto numa tela (as de comparação só existem depois que o histórico chega)
+var telaPedida = Q.get("tela");
+function irParaTelaPedida() {
+  if (!telaPedida) return false;
+  for (var i = 0; i < paginas.length; i++) if (paginas[i].tipo === telaPedida || (paginas[i].setor || "").toLowerCase() === telaPedida.toLowerCase()) { idx = i; telaPedida = null; return true; }
+  return false;
+}
 function carregar() {
   var c = cfg();
   if (!c || !c.sistemas || !c.sistemas[0].url || !c.sistemas[0].key) { abrirSetup(); return; }
@@ -1158,8 +1742,7 @@ function carregar() {
     if (idx >= paginas.length) idx = 0;
     if (primeira) {
       // ?tela=ritmo abre direto numa tela; ?fixa=1 deixa ela parada (TV só com essa tela)
-      var t = Q.get("tela");
-      if (t) for (var i = 0; i < paginas.length; i++) if (paginas[i].tipo === t || (paginas[i].setor || "").toLowerCase() === t.toLowerCase()) { idx = i; break; }
+      irParaTelaPedida();
       if (Q.has("fixa")) pausar("fixa");
       inicioPag = Date.now(); render(true);
     }
@@ -1172,6 +1755,7 @@ function carregar() {
     var h = new Date();
     $("tkAt").textContent = erro.length ? erro.map(function (d) { return d.erro; }).join(" · ") : "Atualizado às " + String(h.getHours()).padStart(2, "0") + ":" + String(h.getMinutes()).padStart(2, "0");
     perceberMudancas(c, ds);
+    carregarHistorico(c, (ds[0] && !ds[0].erro && ds[0].mes) || (ds[1] && !ds[1].erro && ds[1].mes) || mesAtual());
   });
 }
 
@@ -1193,7 +1777,9 @@ function salvarSetup() {
     { nome: ($("nome1").value || "Sistema 1").trim(), url: limpa($("url1").value), key: ($("key1").value || "").trim() },
     { nome: ($("nome2").value || "Sistema 2").trim(), url: limpa($("url2").value), key: ($("key2").value || "").trim() }] };
   try { localStorage.setItem(LS, JSON.stringify(s)); } catch (_) {}
-  fecharSetup(); foto = null; ultimo = null; carregar();
+  fecharSetup(); foto = null; ultimo = null;
+  HIST = { porUnidade: [{}, {}], pronto: false, carregadoEm: 0, buscando: false };
+  carregar();
 }
 function telaCheia() { if (document.fullscreenElement) document.exitFullscreen(); else if (document.documentElement.requestFullscreen) document.documentElement.requestFullscreen(); }
 function atualizarBotoes() {
@@ -1282,47 +1868,46 @@ setInterval(tick, 1000); tick();
    MODO DEMONSTRAÇÃO (?demo=1) — dados de exemplo, nada real
    Tecla N simula uma venda nova pra ver a comemoração.
    ===================================================================== */
-var DEMO_EST = null;
-function demoBase() {
-  var hoje = new Date(), dias = new Date(hoje.getFullYear(), hoje.getMonth() + 1, 0).getDate(), dh = hoje.getDate();
-  var cursos = ["PÓS SOLAR", "EQUIPAMENTOS ODONTO", "ESPECIALISTA EM TELEVISORES", "TECNOLOGIAS INVERTER", "PLACAS ELETRÔNICAS", "NOBREAK"];
-  var unidades = [
-    ["Ana Ribeiro", "Bruno Carvalho", "Carla Mendes", "Diego Fontes", "Elisa Prado", "Fábio Nunes", "Giovana Reis", "Heitor Lima"],
-    ["Igor Batista", "Júlia Campos", "Kaique Moreira", "Larissa Duarte", "Marcos Vieira", "Natália Rocha", "Otávio Pires", "Paula Antunes", "Rafael Teles", "Sabrina Melo"]
-  ];
-  var semente = 7;
+var DEMO_EST = {};
+var DEMO_NOMES = [
+  ["Ana Ribeiro", "Bruno Carvalho", "Carla Mendes", "Diego Fontes", "Elisa Prado", "Fábio Nunes", "Giovana Reis", "Heitor Lima"],
+  ["Igor Batista", "Júlia Campos", "Kaique Moreira", "Larissa Duarte", "Marcos Vieira", "Natália Rocha", "Otávio Pires", "Paula Antunes", "Rafael Teles", "Sabrina Melo"]
+];
+var DEMO_CURSOS = ["PÓS SOLAR", "EQUIPAMENTOS ODONTO", "ESPECIALISTA EM TELEVISORES", "TECNOLOGIAS INVERTER", "PLACAS ELETRÔNICAS", "NOBREAK"];
+function demoMes(u, mes) {
+  var chave = u + "|" + mes;
+  if (DEMO_EST[chave]) return DEMO_EST[chave];
+  var hoje = new Date(), p = String(mes).split("-"), ano = Number(p[0]), mm = Number(p[1]);
+  var dias = new Date(ano, mm, 0).getDate(), atual = mes === mesAtual(), dh = atual ? hoje.getDate() : dias;
+  var semente = 7 + u * 101 + ano * 12 + mm * 31;
   function rnd() { semente = (semente * 16807) % 2147483647; return (semente - 1) / 2147483646; }
-  return unidades.map(function (nomes, u) {
-    var pessoas = nomes.map(function (n, i) {
-      var meta = 50000;
-      return { nome: n, foto: "", meta: meta, equipe: (u === 1 && i === nomes.length - 1) ? "Marketing" : "Comercial", vendas: [] };
-    });
-    pessoas.forEach(function (p, i) {
-      var alvo = p.meta * Math.max(0.03, (0.62 - i * 0.07)) * (dh / dias) * 2.0 * (0.8 + rnd() * 0.4);
-      var feito = 0;
-      while (feito < alvo) {
-        var v = [997, 1497, 1997, 2497, 2997, 3497][Math.floor(rnd() * 6)];
-        var d = 1 + Math.floor(rnd() * Math.max(1, dh - 1));
-        p.vendas.push({ dia: d, valor: v, curso: cursos[Math.floor(rnd() * cursos.length)], forma: ["Pix", "Cartão", "Boleto"][Math.floor(rnd() * 3)] });
-        feito += v;
-      }
-    });
-    return { pessoas: pessoas, dias: dias, dh: dh };
+  var forca = 0.7 + rnd() * 0.7;   // cada mês com um resultado diferente
+  var pessoas = DEMO_NOMES[u].map(function (n, i) { return { nome: n, foto: "", meta: 50000, equipe: (u === 1 && i === DEMO_NOMES[u].length - 1) ? "Marketing" : "Comercial", vendas: [] }; });
+  var ordem = pessoas.map(function (_, i) { return { i: i, r: rnd() }; }).sort(function (a, b) { return a.r - b.r; });
+  ordem.forEach(function (o, pos) {
+    var pz = pessoas[o.i];
+    var alvo = pz.meta * Math.max(0.03, (0.62 - pos * 0.07)) * (dh / dias) * 2.0 * forca * (0.8 + rnd() * 0.4);
+    var feito = 0, lim = 0;
+    while (feito < alvo && lim++ < 400) {
+      var v = [997, 1497, 1997, 2497, 2997, 3497][Math.floor(rnd() * 6)];
+      var d = 1 + Math.floor(rnd() * Math.max(1, atual ? dh - 1 : dias));
+      pz.vendas.push({ dia: d, valor: v, curso: DEMO_CURSOS[Math.floor(rnd() * DEMO_CURSOS.length)], forma: ["Pix", "Cartão", "Boleto"][Math.floor(rnd() * 3)] });
+      feito += v;
+    }
   });
+  DEMO_EST[chave] = { pessoas: pessoas, dias: dias, dh: dh, mes: mes, ano: ano, mm: mm };
+  return DEMO_EST[chave];
 }
 function demoNovaVenda() {
-  if (!DEMO_EST) DEMO_EST = demoBase();
-  var u = Math.floor(Math.random() * 2), un = DEMO_EST[u];
+  var u = Math.floor(Math.random() * 2), un = demoMes(u, mesAtual());
   var p = un.pessoas[Math.floor(Math.random() * (un.pessoas.length - 1))];
   p.vendas.push({ dia: un.dh, valor: [1497, 1997, 2497, 2997][Math.floor(Math.random() * 4)], curso: "PÓS SOLAR", forma: "Pix" });
 }
-function demoDados(u) {
-  if (!DEMO_EST) DEMO_EST = demoBase();
-  var un = DEMO_EST[u], dias = un.dias, dh = un.dh, hoje = new Date();
-  var mes = hoje.getFullYear() + "-" + String(hoje.getMonth() + 1).padStart(2, "0");
+function demoDados(u, mes) {
+  var un = demoMes(u, mes || mesAtual()), dias = un.dias, dh = un.dh;
   var porDia = []; for (var i = 1; i <= dias; i++) porDia.push({ dia: i, valor: 0, qtd: 0 });
   var ranking = [], rankingHoje = [], rankingSemana = [], cursos = {}, formas = {};
-  var iniSem = dh - hoje.getDay();
+  var ref = new Date(un.ano, un.mm - 1, dh), iniSem = dh - ref.getDay();
   un.pessoas.forEach(function (p) {
     var v = 0, q = 0, vh = 0, qh = 0, vs = 0, qs = 0, cs = {};
     p.vendas.forEach(function (s) {
@@ -1332,7 +1917,7 @@ function demoDados(u) {
       cursos[s.curso] = cursos[s.curso] || { curso: s.curso, qtd: 0, valor: 0 }; cursos[s.curso].qtd++; cursos[s.curso].valor += s.valor;
       formas[s.forma] = formas[s.forma] || { forma: s.forma, qtd: 0, valor: 0 }; formas[s.forma].qtd++; formas[s.forma].valor += s.valor;
     });
-    ranking.push({ nome: p.nome, foto: p.foto, valor: v, qtd: q, recebido: v * 0.4, meta: p.meta, pct: Math.round(v / p.meta * 100), equipe: p.equipe, foraDoPodio: false });
+    if (q) ranking.push({ nome: p.nome, foto: p.foto, valor: v, qtd: q, recebido: v * 0.4, meta: p.meta, pct: Math.round(v / p.meta * 100), equipe: p.equipe, foraDoPodio: false });
     if (qh) { var top = Object.keys(cs).sort(function (a, b) { return cs[b] - cs[a]; })[0]; rankingHoje.push({ nome: p.nome, foto: p.foto, valor: vh, qtd: qh, equipe: p.equipe, foraDoPodio: false, cursoTop: top }); }
     if (qs) rankingSemana.push({ nome: p.nome, foto: p.foto, valor: vs, qtd: qs, equipe: p.equipe, foraDoPodio: false });
   });
@@ -1342,12 +1927,18 @@ function demoDados(u) {
   var meta = un.pessoas.length * 50000;
   var vendidoHoje = porDia[dh - 1].valor, qtdHoje = porDia[dh - 1].qtd;
   var sem = rankingSemana.reduce(function (s, p) { return s + p.valor; }, 0), semQ = rankingSemana.reduce(function (s, p) { return s + p.qtd; }, 0);
+  var semanas = [], primeiroDow = new Date(un.ano, un.mm - 1, 1).getDay(), w0 = 1 - primeiroDow;
+  for (var w = w0; w <= dias; w += 7) {
+    var sv = 0, sq = 0;
+    for (var dd = Math.max(1, w); dd <= Math.min(dias, w + 6); dd++) { sv += porDia[dd - 1].valor; sq += porDia[dd - 1].qtd; }
+    semanas.push({ rot: ddmm(new Date(un.ano, un.mm - 1, w)) + " a " + ddmm(new Date(un.ano, un.mm - 1, w + 6)), valor: sv, qtd: sq, recebido: sv * 0.4, atual: mes === mesAtual() && dh >= w && dh <= w + 6, cruzaMes: w < 1 || w + 6 > dias });
+  }
   return {
-    mes: mes, diasNoMes: dias, diaHoje: dh, atualizadoEm: Date.now(),
+    mes: un.mes, diasNoMes: dias, diaHoje: dh, atualizadoEm: Date.now(),
     geral: { venda: venda, recebido: venda * 0.38, qtd: qtd, meta: meta, pct: Math.round(venda / meta * 100), falta: Math.max(0, meta - venda),
       vendidoHoje: vendidoHoje, qtdHoje: qtdHoje, ontem: dh > 1 ? porDia[dh - 2].valor : 0, semana: sem, semanaQtd: semQ,
       mediaDia: venda / dh, projecao: Math.round(venda / dh * dias), diasRestantes: dias - dh },
-    ranking: ranking, rankingHoje: rankingHoje, rankingSemana: rankingSemana, porDia: porDia,
+    ranking: ranking, rankingHoje: rankingHoje, rankingSemana: rankingSemana, porDia: porDia, semanas: semanas,
     destaque: rankingHoje[0] || null,
     cursos: Object.keys(cursos).map(function (k) { return cursos[k]; }).sort(function (a, b) { return b.qtd - a.qtd; }),
     formas: Object.keys(formas).map(function (k) { return formas[k]; }).sort(function (a, b) { return b.qtd - a.qtd; })
