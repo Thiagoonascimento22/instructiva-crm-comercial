@@ -40,7 +40,7 @@ svg{display:block}
   -webkit-mask-image:radial-gradient(ellipse 85% 65% at 50% 0%,#000 15%,transparent 72%);
   mask-image:radial-gradient(ellipse 85% 65% at 50% 0%,#000 15%,transparent 72%)}
 
-.wrap{position:absolute;top:50%;left:50%;z-index:1;width:1920px;height:1080px;padding:30px 44px 26px;display:flex;flex-direction:column;transform-origin:center center}
+.wrap{position:absolute;top:0;left:0;z-index:1;width:1920px;height:1080px;padding:30px 44px 26px;display:flex;flex-direction:column;-webkit-transform-origin:0 0;transform-origin:0 0}
 
 /* ---------------- topo ---------------- */
 .topo{height:76px;flex:none;display:flex;align-items:center;gap:28px;margin-bottom:22px}
@@ -387,6 +387,9 @@ body.mexeu .ctrl{opacity:1;pointer-events:auto}
   <button onclick="alternarPausa()" title="Pausar ou continuar (espaço)" id="bPausa"></button>
   <button onclick="passar(1)" title="Próxima tela (seta →)" id="bProx"></button>
   <span class="sep"></span>
+  <button onclick="ajustarMargem(-0.04)" title="Diminuir o painel (tecla −)" id="bMenos"></button>
+  <button onclick="ajustarMargem(0.04)" title="Aumentar o painel (tecla +)" id="bMais"></button>
+  <span class="sep"></span>
   <button onclick="telaCheia()" title="Tela cheia (F)" id="bCheia"></button>
   <button onclick="abrirSetup()" id="bCfg"></button>
 </div>
@@ -407,7 +410,7 @@ body.mexeu .ctrl{opacity:1;pointer-events:auto}
     </div>
     <small>No endereço coloque só até <b>.app</b>. As telas passam sozinhas a cada 25 segundos.<br>
       Pra deixar uma TV só numa tela, use no endereço <b>?tela=ritmo&amp;fixa=1</b> (ou geral, hoje, semana). TV muito lenta: <b>?leve=1</b>.<br>
-      Atalhos: <kbd>←</kbd> <kbd>→</kbd> trocar tela · <kbd>espaço</kbd> pausar · <kbd>F</kbd> tela cheia · <kbd>+</kbd> <kbd>−</kbd> ajustar o tamanho se a TV cortar as bordas.</small>
+      Atalhos: <kbd>←</kbd> <kbd>→</kbd> trocar tela · <kbd>espaço</kbd> pausar · <kbd>F</kbd> tela cheia · <kbd>+</kbd> <kbd>−</kbd> aumentar/diminuir (ou canal +/− no controle) · <kbd>0</kbd> volta ao tamanho automático. Se a TV continuar grande demais, coloque <b>?zoom=0.5</b> no fim do endereço.</small>
   </div>
 </div>
 
@@ -454,7 +457,9 @@ var ICO = {
   play: '<path d="M7 5l12 7-12 7z"/>',
   cheia: '<path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/>',
   engrenagem: '<circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M2 12h3M19 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1"/>',
-  alerta: '<path d="M12 3l9.5 17h-19z"/><path d="M12 10v4M12 17.5v.01"/>'
+  alerta: '<path d="M12 3l9.5 17h-19z"/><path d="M12 10v4M12 17.5v.01"/>',
+  menos: '<circle cx="11" cy="11" r="7"/><path d="M8 11h6M20 20l-4-4"/>',
+  mais: '<circle cx="11" cy="11" r="7"/><path d="M8 11h6M11 8v6M20 20l-4-4"/>'
 };
 function ic(n, cls) {
   return '<svg class="' + (cls || "") + '" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + ICO[n] + '</svg>';
@@ -1122,6 +1127,7 @@ function render(entrando) {
     for (var i = 0; i < anis.length; i++) anis[i].style.animationDelay = (Math.min(i, 10) * 70) + "ms";
     clearTimeout(render.t); render.t = setTimeout(function () { palco.classList.remove("entrando"); }, 2600);
   } else palco.classList.remove("entrando");
+  ajustarEscala();
   encaixarTextos(palco);
   contarNumeros(palco);
   animarAneis(entrando);
@@ -1195,6 +1201,7 @@ function atualizarBotoes() {
   $("aovivoTxt").textContent = pausas.usuario ? "Pausado" : "Ao vivo";
 }
 $("bAnt").innerHTML = ic("esq"); $("bProx").innerHTML = ic("dir"); $("bCheia").innerHTML = ic("cheia");
+$("bMenos").innerHTML = ic("menos"); $("bMais").innerHTML = ic("mais");
 $("bCfg").innerHTML = ic("engrenagem") + "Configurar"; $("tkRot").innerHTML = ic("brilho") + "Destaques";
 atualizarBotoes();
 
@@ -1205,8 +1212,9 @@ document.addEventListener("keydown", function (e) {
   else if (e.key === "ArrowLeft") passar(-1);
   else if (e.key === " " || k === "p") { e.preventDefault(); alternarPausa(); }
   else if (k === "f") telaCheia();
-  else if (e.key === "+" || e.key === "=") ajustarMargem(0.02);
-  else if (e.key === "-" || e.key === "_") ajustarMargem(-0.02);
+  else if (e.key === "+" || e.key === "=" || e.key === "PageUp" || e.key === "ChannelUp") ajustarMargem(0.04);
+  else if (e.key === "-" || e.key === "_" || e.key === "PageDown" || e.key === "ChannelDown") ajustarMargem(-0.04);
+  else if (k === "0") { try { localStorage.removeItem("painel_margem"); } catch (_) {} escalaAtual = ""; ajustarEscala(); }
   else if (k === "n" && DEMO) { demoNovaVenda(); carregar(); }
 });
 // mouse parado = esconde cursor e controles (na TV fica só o painel)
@@ -1216,20 +1224,50 @@ document.addEventListener("mousemove", function () {
   clearTimeout(tMouse); tMouse = setTimeout(function () { document.body.classList.remove("mexeu"); }, 2800);
 });
 
+/* ---------- TAMANHO NA TELA ----------
+   O painel é desenhado em 1920x1080 e encolhido/aumentado pra caber na tela.
+   Algumas TVs informam um tamanho errado logo que a página abre (e não avisam
+   quando corrigem), então o tamanho é conferido de novo a cada 2 segundos. */
+var escalaAtual = "";
+function tamanhoTela() {
+  // cada TV mede a tela de um jeito; usa a MENOR medida válida, assim o painel nunca passa do que aparece
+  var ws = [window.innerWidth, document.documentElement && document.documentElement.clientWidth];
+  var hs = [window.innerHeight, document.documentElement && document.documentElement.clientHeight];
+  var f = document.querySelector(".fundo");
+  if (f && f.getBoundingClientRect) { var r = f.getBoundingClientRect(); ws.push(r.width); hs.push(r.height); }
+  if (window.visualViewport) { ws.push(window.visualViewport.width); hs.push(window.visualViewport.height); }
+  function menor(lista, minimo, padrao) {
+    var m = 0;
+    for (var i = 0; i < lista.length; i++) { var v = Number(lista[i]) || 0; if (v >= minimo && (!m || v < m)) m = v; }
+    return m || padrao;
+  }
+  return { w: menor(ws, 300, 1920), h: menor(hs, 200, 1080) };
+}
+function margemSalva() {
+  var m = 0.96;
+  try { var v = parseFloat(localStorage.getItem("painel_margem")); if (!isNaN(v) && v >= 0.3 && v <= 1) m = v; } catch (_) {}
+  return m;
+}
 function ajustarEscala() {
-  // escala o palco fixo (1920x1080) pra caber inteiro, com folga pra TV que corta as bordas
-  var margem = 0.96;
-  try { var m = parseFloat(localStorage.getItem("painel_margem")); if (!isNaN(m) && m >= 0.7 && m <= 1) margem = m; } catch (_) {}
-  var escala = Math.min(window.innerWidth / 1920, window.innerHeight / 1080) * margem;
-  $("wrap").style.transform = "translate(-50%,-50%) scale(" + escala + ")";
+  var t = tamanhoTela(), escala;
+  var fixo = parseFloat(Q.get("zoom"));   // ?zoom=0.5 força um tamanho (último recurso)
+  if (!isNaN(fixo) && fixo >= 0.1 && fixo <= 3) escala = fixo;
+  else escala = Math.min(t.w / 1920, t.h / 1080) * margemSalva();
+  // centraliza a partir do canto de cima (que sempre aparece), não do meio da página
+  var x = Math.max(0, Math.round((t.w - 1920 * escala) / 2)), y = Math.max(0, Math.round((t.h - 1080 * escala) / 2));
+  var tr = "translate(" + x + "px," + y + "px) scale(" + escala.toFixed(4) + ")";
+  if (tr === escalaAtual) return;
+  escalaAtual = tr;
+  var w = $("wrap"); w.style.webkitTransform = tr; w.style.transform = tr;
 }
 function ajustarMargem(delta) {
-  var m = 0.96; try { var v = parseFloat(localStorage.getItem("painel_margem")); if (!isNaN(v)) m = v; } catch (_) {}
-  m = Math.min(1, Math.max(0.7, m + delta));
+  var m = Math.min(1, Math.max(0.3, margemSalva() + delta));
   try { localStorage.setItem("painel_margem", m.toFixed(2)); } catch (_) {}
-  ajustarEscala();
+  escalaAtual = ""; ajustarEscala();
 }
-window.addEventListener("resize", ajustarEscala);
+["resize", "load", "orientationchange", "fullscreenchange", "webkitfullscreenchange", "pageshow"].forEach(function (ev) { window.addEventListener(ev, ajustarEscala); });
+document.addEventListener("visibilitychange", ajustarEscala);
+setInterval(ajustarEscala, 2000);
 ajustarEscala();
 
 function tick() {
