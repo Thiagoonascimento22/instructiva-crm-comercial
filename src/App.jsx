@@ -2053,10 +2053,9 @@ function ModalDisparo({ isGer = true, numeros, showToast, onClose, onDone, prese
   const [templates, setTemplates] = useState([]);
   const [carregandoTpl, setCarregandoTpl] = useState(false);
   const [template, setTemplate] = useState(null);
-  // formato: "texto" (só mensagem) | "imagem" (só a imagem) | "imagem_texto" (imagem + mensagem embaixo)
-  const [formato, setFormato] = useState("texto");
+  // imagem é opcional: sem imagem = só mensagem; com imagem = "imagem_texto" (imagem + mensagem) ou "imagem" (só a imagem)
   const [midia, setMidia] = useState(null);       // { tipo, arquivo, previa, nome, tamanho }
-  const [semModelo, setSemModelo] = useState(false); // só a imagem, sem modelo (só quem falou nas últimas 24h)
+  const [envio, setEnvio] = useState("imagem_texto");
   // variáveis do template: {{1}} = nome do contato (ou texto fixo); as outras, iguais pra todos
   const [varNome, setVarNome] = useState(true);
   const [semNome, setSemNome] = useState("pessoal");
@@ -2094,15 +2093,40 @@ function ModalDisparo({ isGer = true, numeros, showToast, onClose, onDone, prese
     api.ofIAs().then((lista) => setIas((lista || []).filter((x) => x.ativa))).catch(() => setIas([]));
   }, [isGer]);
 
-  useEffect(() => {
+  // todos os templates (inclusive os que a Meta ainda está aprovando) — pra mostrar o status da versão com imagem
+  const [todosTpl, setTodosTpl] = useState([]);
+  const [pedindoImg, setPedindoImg] = useState("");
+  function carregarTemplates(silencioso) {
     if (!numeroId) return;
-    setCarregandoTpl(true);
+    if (!silencioso) setCarregandoTpl(true);
     api.ofTemplates(numeroId)
-      .then((r) => setTemplates(r.templates || []))
-      .catch((e) => { showToast(e.message); setTemplates([]); })
+      .then((r) => { setTemplates(r.templates || []); setTodosTpl(r.todos || []); })
+      .catch((e) => { showToast(e.message); if (!silencioso) setTemplates([]); })
       .finally(() => setCarregandoTpl(false));
-    setTemplate(null);
-  }, [numeroId]);
+  }
+  useEffect(() => { carregarTemplates(false); setTemplate(null); }, [numeroId]); // eslint-disable-line
+
+  /* template aprovado só com texto não aceita imagem (regra do WhatsApp). Aqui pede pra Meta
+     aprovar uma CÓPIA com o mesmo texto e a imagem escolhida: nome_original + "_imagem" */
+  const RE_VERSAO = /_imagem\d*$/;
+  const versoesDe = (t, lista) => lista.filter((x) => x.name !== t.name && RE_VERSAO.test(x.name) && x.name.replace(RE_VERSAO, "") === t.name);
+  const nomeVersaoImg = (t) => { const n = versoesDe(t, todosTpl).length; return (t.name + "_imagem" + (n ? n + 1 : "")).slice(0, 512); };
+  async function pedirVersaoComImagem(t) {
+    if (!midia || midia.tipo !== "image" || !midia.previa) { showToast("Escolha a imagem primeiro"); return; }
+    setPedindoImg(t.name);
+    const nome = nomeVersaoImg(t);
+    try {
+      const r = await api.ofCriarTemplate(numeroId, {
+        nome, corpo: t.texto, idioma: t.language || "pt_BR",
+        categoria: t.category === "UTILITY" ? "UTILITY" : "MARKETING",
+        imagemBase64: midia.previa.split(",")[1], imagemMime: "image/jpeg",
+      });
+      showToast(r.status === "APPROVED" ? "✓ Liberado! Já dá pra usar." : "✓ Pedido enviado. A Meta costuma liberar em poucos minutos.");
+      setTodosTpl((xs) => [...xs.filter((x) => x.name !== nome), { name: nome, status: r.status || "PENDING" }]);
+      setTimeout(() => carregarTemplates(true), 2500);
+    } catch (e) { showToast("✗ " + e.message); }
+    finally { setPedindoImg(""); }
+  }
 
   function parseContatos(txt) {
     const linhas = String(txt).split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
@@ -2143,14 +2167,13 @@ function ModalDisparo({ isGer = true, numeros, showToast, onClose, onDone, prese
     }
     setEnviando(true);
     try {
-      const usaModelo = !!template && !(formato === "imagem" && semModelo);
       const r = await api.ofDisparar({
         numeroId, modo: formato === "imagem" ? "imagem" : "template",
-        template: usaModelo ? template.name : "", idioma: usaModelo ? template.language : "pt_BR",
-        midiaArquivo: formato !== "texto" && midia ? midia.arquivo : undefined,
-        midiaNome: formato !== "texto" && midia ? midia.nome : undefined,
-        variaveisCfg: usaModelo && template.vars > 0 ? { qtd: template.vars, nome: varNome, semNome, fixas } : undefined,
-        nomeCampanha: nomeCampanha || (usaModelo ? template.name : "Só imagem"), contatos, iaId: iaId || null,
+        template: tplEnvio.name, idioma: tplEnvio.language || "pt_BR",
+        midiaArquivo: midia ? midia.arquivo : undefined,
+        midiaNome: midia ? midia.nome : undefined,
+        variaveisCfg: tplEnvio.vars > 0 ? { qtd: tplEnvio.vars, nome: varNome, semNome, fixas } : undefined,
+        nomeCampanha: nomeCampanha || template.name, contatos, iaId: iaId || null,
         pularRecebidos, agendarPara: agendarPara || undefined, destinoLeads,
         vendedorDestino: destinoLeads === "vendedor" ? (vendedorDestino || null) : null,
       });
@@ -2164,27 +2187,42 @@ function ModalDisparo({ isGer = true, numeros, showToast, onClose, onDone, prese
   const numeroSel = numeros.find((n) => n.id === numeroId);
   const minDataHora = () => { const d = new Date(Date.now() + 120000); const p = (n) => String(n).padStart(2, "0"); return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`; };
   const PASSOS = ["Número", "Mensagem", "Contatos", "Revisar"];
-  // templates de cada formato: texto puro x com mídia no topo
-  const tplsDoFormato = templates.filter((t) => {
-    const temMidia = !!MIDIA_CABECALHO[t.header];
-    if (formato === "texto") return !temMidia;
-    if (formato === "imagem") return t.header === "IMAGE";
-    return temMidia;
-  });
-  // "só a imagem": modelo de texto curtinho primeiro (é o que vai pra quem não falou nas 24h)
-  if (formato === "imagem") tplsDoFormato.sort((a, b) => (a.texto || "").length - (b.texto || "").length);
-  const tipoMidia = formato === "texto" ? null : formato === "imagem" ? "image" : (template && MIDIA_CABECALHO[template.header]) || "image";
-  const midiaOk = !tipoMidia || (!!midia && midia.tipo === tipoMidia && !!midia.arquivo);
-  const modeloOk = formato === "imagem" ? (semModelo || !!template) : !!template;
-  const qtdComImagem = templates.filter((t) => MIDIA_CABECALHO[t.header]).length;
-  const usaModeloRev = !!template && !(formato === "imagem" && semModelo);
-  const qtdVars = usaModeloRev ? (template.vars || 0) : 0;
+  // LISTA ÚNICA: os templates de sempre. A cópia com imagem (nome_imagem) fica escondida atrás do original.
+  const nomesTodos = new Set(todosTpl.map((x) => x.name));
+  const itensTpl = templates.filter((t) => !(RE_VERSAO.test(t.name) && nomesTodos.has(t.name.replace(RE_VERSAO, ""))));
+  const imgPropria = (t) => !!(t && MIDIA_CABECALHO[t.header]);
+  const versaoAprovada = (t) => versoesDe(t, templates).find((x) => x.header === "IMAGE") || null;
+  const statusVersao = (t) => {
+    const vs = versoesDe(t, todosTpl);
+    if (vs.some((x) => x.status === "APPROVED")) return "APPROVED";
+    if (vs.some((x) => x.status === "PENDING" || x.status === "IN_APPEAL")) return "PENDING";
+    return vs.length ? "REJECTED" : "";
+  };
+  const formato = midia ? envio : "texto";
+  const tipoMidia = imgPropria(template) ? MIDIA_CABECALHO[template.header] : "image";
+  const midiaCerta = !!midia && midia.tipo === tipoMidia && !!midia.arquivo;
+  // template que sai de verdade: o próprio (texto ou com imagem própria) ou a cópia com imagem já liberada
+  const tplEnvio = !template ? null
+    : !midia ? (imgPropria(template) ? null : template)
+    : imgPropria(template) ? (midiaCerta ? template : null)
+    : (midia.tipo === "image" ? versaoAprovada(template) : null);
+  const stVersao = template && midia && !imgPropria(template) ? statusVersao(template) : "";
+  const aguardandoMeta = !!template && !!midia && !imgPropria(template) && !tplEnvio && stVersao === "PENDING";
+  const usaModeloRev = !!tplEnvio;
+  const qtdVars = tplEnvio ? (tplEnvio.vars || 0) : 0;
   const varsCfg = qtdVars ? { qtd: qtdVars, nome: varNome, semNome, fixas } : null;
   const varsOk = !varsCfg || Array.from({ length: qtdVars }, (_, i) => i).every((i) => limparVar(i === 0 && varNome ? semNome : fixas[i]));
   const contatoEx = contatos[0] || null;
   const textoEx = usaModeloRev ? aplicarVariaveis(template.texto, variaveisDoContato(varsCfg, contatoEx ? contatoEx.nome : "Maria")) : "";
   const semNomeQtd = varsCfg && varNome ? contatos.filter((c) => !primeiroNomeContato(c.nome)).length : 0;
-  const podeAvancar = passo === 1 ? !!numeroId : passo === 2 ? (modeloOk && midiaOk && varsOk) : passo === 3 ? contatos.length > 0 : true;
+  const podeAvancar = passo === 1 ? !!numeroId : passo === 2 ? (!!tplEnvio && varsOk) : passo === 3 ? contatos.length > 0 : true;
+  // enquanto a Meta libera a imagem, confere sozinho a cada 30s (sem precisar clicar em nada)
+  useEffect(() => {
+    if (passo !== 2 || !aguardandoMeta) return;
+    const t = setInterval(() => { if (!document.hidden) carregarTemplates(true); }, 30000);
+    return () => clearInterval(t);
+    // eslint-disable-next-line
+  }, [passo, aguardandoMeta]);
 
   return (
     <Portal>
@@ -2226,106 +2264,113 @@ function ModalDisparo({ isGer = true, numeros, showToast, onClose, onDone, prese
 
           {passo === 2 && (
             <div className="dispm-fade">
-              <h3 className="dispm-titulo">O que vai enviar?</h3>
-              <p className="dispm-sub">Escolha o formato. Só templates aprovados pela Meta aparecem aqui.</p>
-              <div className="dispm-formatos" role="radiogroup" aria-label="Formato do disparo">
-                {FORMATOS_DISPARO.map((f) => (
-                  <button key={f.k} type="button" role="radio" aria-checked={formato === f.k}
-                    className={"dispm-fmt" + (formato === f.k ? " on" : "")}
-                    onClick={() => { if (formato !== f.k) { setFormato(f.k); setTemplate(null); setSemModelo(false); } }}>
-                    <IconeFormato k={f.k} />
-                    <b>{f.titulo}</b>
-                    <span>{f.sub}</span>
-                  </button>
-                ))}
-              </div>
-
-              {formato !== "texto" && (
-                <div className="dispm-bloco">
-                  <div className="dispm-bloco-h"><span className="dispm-n">1</span> Escolha {(ROTULO_MIDIA[tipoMidia] || ROTULO_MIDIA.image).art}</div>
-                  <EscolherMidia key={tipoMidia} tipo={tipoMidia} valor={midia && midia.tipo === tipoMidia ? midia : null} onChange={setMidia} showToast={showToast} />
+              <h3 className="dispm-titulo">Qual mensagem vai enviar?</h3>
+              <p className="dispm-sub">Escolha a mensagem. Se quiser, coloque uma imagem logo abaixo.</p>
+              {carregandoTpl ? (
+                <div className="dispm-load"><span className="spin" /> Carregando templates…</div>
+              ) : itensTpl.length === 0 ? (
+                <div className="dispm-vazio">
+                  <I.chat className="ico" />
+                  <div><b>Nenhum template aprovado nesse número.</b><span>Crie um na aba Templates. A Meta costuma aprovar em minutos.</span></div>
                 </div>
-              )}
-
-              <div className="dispm-bloco">
-                {formato !== "texto" && (
-                  <div className="dispm-bloco-h"><span className="dispm-n">2</span> {formato === "imagem" ? "Modelo pra quem não falou com vocês nas últimas 24h" : "Escolha o template com imagem"}</div>
-                )}
-                {formato === "imagem" && (
-                  <div className="dispm-aviso">
-                    <I.clock className="ico" />
-                    <span>Quem falou com vocês nas <b>últimas 24h</b> recebe <b>só a imagem</b>, sem texto. Para os outros, o WhatsApp só entrega com template aprovado, e todo template tem uma linha de texto. Use um com texto bem curtinho, como “Escola Instructiva”.</span>
-                  </div>
-                )}
-                {carregandoTpl ? (
-                  <div className="dispm-load"><span className="spin" /> Carregando templates…</div>
-                ) : (
-                  <div className="dispm-tpl-grid">
-                    {formato === "imagem" && (
-                      <button className={"dispm-tpl" + (semModelo ? " on" : "")} onClick={() => { setSemModelo(true); setTemplate(null); }}>
-                        <div className="dispm-tpl-head"><b>Sem template</b></div>
-                        <div className="dispm-tpl-txt">Só quem falou com vocês nas últimas 24h recebe. Os outros ficam de fora.</div>
-                      </button>
-                    )}
-                    {tplsDoFormato.map((t) => (
-                      <button key={t.name + t.language} className={!semModelo && template && template.name === t.name ? "dispm-tpl on" : "dispm-tpl"} onClick={() => { setTemplate(t); setSemModelo(false); }}>
+              ) : (
+                <div className="dispm-tpl-grid">
+                  {itensTpl.map((t) => {
+                    const st = imgPropria(t) ? "" : statusVersao(t);
+                    return (
+                      <button key={t.name + t.language} className={template && template.name === t.name ? "dispm-tpl on" : "dispm-tpl"} onClick={() => setTemplate(t)}>
                         <div className="dispm-tpl-head">
                           <b>{t.name}</b>
                           <span className="dispm-tpl-tags">
-                            {MIDIA_CABECALHO[t.header] && <span className="dispm-tag-img"><I.image className="ico" /> {t.header === "VIDEO" ? "Vídeo" : t.header === "DOCUMENT" ? "PDF" : "Imagem"}</span>}
-                            {formato === "imagem" && (t.texto || "").length <= 40 && <span className="dispm-tag-curto">texto curtinho</span>}
-                            <span className="of-tag">{t.language}</span>
+                            {imgPropria(t) ? <span className="dispm-tag-img"><I.image className="ico" /> {t.header === "VIDEO" ? "Com vídeo" : t.header === "DOCUMENT" ? "Com PDF" : "Com imagem"}</span>
+                              : st === "APPROVED" ? <span className="dispm-tag-img"><I.check className="ico" /> Imagem liberada</span>
+                              : st === "PENDING" ? <span className="dispm-tag-curto"><I.clock className="ico" /> Liberando imagem</span> : null}
                           </span>
                         </div>
                         <div className="dispm-tpl-txt">{t.texto || "(sem corpo)"}</div>
-                        {t.vars > 0 && <div className="dispm-tpl-var">usa {t.vars} variável(eis)</div>}
                       </button>
-                    ))}
-                    {tplsDoFormato.length === 0 && (
-                      <div className="dispm-vazio">
-                        <I.image className="ico" />
+                    );
+                  })}
+                </div>
+              )}
+
+              {template && (
+                <div className="dispm-bloco dispm-img-bloco">
+                  <div className="dispm-bloco-h">
+                    <I.image className="ico dispm-bloco-ic" /> {imgPropria(template) ? "Imagem" : "Quer mandar com imagem?"}
+                    <span className="dispm-opc">{imgPropria(template) ? "esse template pede " + (ROTULO_MIDIA[tipoMidia] || ROTULO_MIDIA.image).art : "opcional"}</span>
+                  </div>
+                  <EscolherMidia key={tipoMidia} tipo={tipoMidia} valor={midia && midia.tipo === tipoMidia ? midia : null} onChange={setMidia} showToast={showToast} />
+
+                  {midia && tipoMidia === "image" && (
+                    <div className="dispm-modo dispm-envio" role="radiogroup" aria-label="Como enviar">
+                      <button type="button" role="radio" aria-checked={envio === "imagem_texto"} className={envio === "imagem_texto" ? "dispm-modo-btn on" : "dispm-modo-btn"} onClick={() => setEnvio("imagem_texto")}>
+                        <IconeFormato k="imagem_texto" /> Imagem + mensagem
+                      </button>
+                      <button type="button" role="radio" aria-checked={envio === "imagem"} className={envio === "imagem" ? "dispm-modo-btn on" : "dispm-modo-btn"} onClick={() => setEnvio("imagem")}>
+                        <IconeFormato k="imagem" /> Só a imagem
+                      </button>
+                    </div>
+                  )}
+                  {midia && envio === "imagem" && tipoMidia === "image" && (
+                    <div className="dispm-aviso">
+                      <I.clock className="ico" />
+                      <span>Quem falou com vocês nas <b>últimas 24h</b> recebe <b>só a imagem</b>. Os outros recebem a imagem com a mensagem, porque o WhatsApp exige.</span>
+                    </div>
+                  )}
+
+                  {/* texto aprovado sem imagem: um clique pra Meta liberar a imagem nele */}
+                  {midia && !imgPropria(template) && (
+                    tplEnvio ? (
+                      <div className="dispm-liberar ok"><I.check className="ico" /><div><b>Pronto pra enviar com imagem</b><span>Essa mensagem já está liberada com imagem pela Meta.</span></div></div>
+                    ) : stVersao === "PENDING" ? (
+                      <div className="dispm-liberar espera">
+                        <span className="spin" />
+                        <div><b>A Meta está liberando a imagem nessa mensagem</b><span>Costuma levar poucos minutos. Pode deixar esta janela aberta: quando liberar, o botão Continuar acende sozinho.</span></div>
+                      </div>
+                    ) : (
+                      <div className="dispm-liberar">
                         <div>
-                          <b>{formato === "texto" ? "Nenhum template só de texto aprovado." : "Nenhum template com imagem aprovado ainda."}</b>
-                          <span>{formato === "texto"
-                            ? "Crie um na aba Templates."
-                            : "Crie um em Templates › Novo template › " + (formato === "imagem" ? "Só a imagem" : "Imagem + mensagem") + ". A Meta costuma aprovar em minutos."}</span>
+                          <b>{stVersao === "REJECTED" ? "A Meta não aprovou da última vez" : "Falta só liberar a imagem nessa mensagem"}</b>
+                          <span>{stVersao === "REJECTED" ? "Troque a imagem e peça de novo." : "O WhatsApp pede uma aprovação da Meta na primeira vez. Depois, é só usar."}</span>
                         </div>
+                        <button type="button" className="btn btn-primary btn-sm" disabled={!!pedindoImg} onClick={() => pedirVersaoComImagem(template)}>
+                          {pedindoImg ? <><span className="spin" /> Pedindo…</> : stVersao === "REJECTED" ? "Pedir de novo" : "Liberar imagem"}
+                        </button>
                       </div>
-                    )}
-                  </div>
-                )}
-                {qtdVars > 0 && (
-                  <div className="dispm-vars">
-                    <div className="dispm-bloco-h">{formato !== "texto" && <span className="dispm-n">3</span>} Complete o template</div>
-                    <div className="dispm-vars-ex"><span>Fica assim</span>{aplicarVariaveis(template.texto, variaveisDoContato(varsCfg, "Maria Souza"))}</div>
-                    {Array.from({ length: qtdVars }, (_, i) => (
-                      <div key={i} className="dispm-var">
-                        <span className="dispm-var-tag">{"{{" + (i + 1) + "}}"}</span>
-                        <div className="dispm-var-campo">
-                          {i === 0 && (
-                            <div className="dispm-modo compacto">
-                              <button type="button" className={varNome ? "dispm-modo-btn on" : "dispm-modo-btn"} onClick={() => setVarNome(true)}>Nome do contato</button>
-                              <button type="button" className={!varNome ? "dispm-modo-btn on" : "dispm-modo-btn"} onClick={() => setVarNome(false)}>Texto igual pra todos</button>
-                            </div>
-                          )}
-                          {i === 0 && varNome ? (
-                            <label className="dispm-var-lab">
-                              <span>Quem estiver sem nome na lista recebe</span>
-                              <input className="input" value={semNome} onChange={(e) => setSemNome(e.target.value)} placeholder="ex.: pessoal" />
-                            </label>
-                          ) : (
-                            <input className="input" value={fixas[i] || ""} onChange={(e) => setFixa(i, e.target.value)}
-                              placeholder={i === 0 ? "Ex.: Energia Solar" : "Vale pra todos os contatos"} />
-                          )}
-                        </div>
+                    )
+                  )}
+                </div>
+              )}
+
+              {qtdVars > 0 && (
+                <div className="dispm-vars">
+                  <div className="dispm-bloco-h">Complete a mensagem</div>
+                  <div className="dispm-vars-ex"><span>Fica assim</span>{aplicarVariaveis(template.texto, variaveisDoContato(varsCfg, "Maria Souza"))}</div>
+                  {Array.from({ length: qtdVars }, (_, i) => (
+                    <div key={i} className="dispm-var">
+                      <span className="dispm-var-tag">{"{{" + (i + 1) + "}}"}</span>
+                      <div className="dispm-var-campo">
+                        {i === 0 && (
+                          <div className="dispm-modo compacto">
+                            <button type="button" className={varNome ? "dispm-modo-btn on" : "dispm-modo-btn"} onClick={() => setVarNome(true)}>Nome do contato</button>
+                            <button type="button" className={!varNome ? "dispm-modo-btn on" : "dispm-modo-btn"} onClick={() => setVarNome(false)}>Texto igual pra todos</button>
+                          </div>
+                        )}
+                        {i === 0 && varNome ? (
+                          <label className="dispm-var-lab">
+                            <span>Quem estiver sem nome na lista recebe</span>
+                            <input className="input" value={semNome} onChange={(e) => setSemNome(e.target.value)} placeholder="ex.: pessoal" />
+                          </label>
+                        ) : (
+                          <input className="input" value={fixas[i] || ""} onChange={(e) => setFixa(i, e.target.value)}
+                            placeholder={i === 0 ? "Ex.: Energia Solar" : "Vale pra todos os contatos"} />
+                        )}
                       </div>
-                    ))}
-                  </div>
-                )}
-                {formato === "texto" && qtdComImagem === 0 && templates.length > 0 && (
-                  <div className="dispm-dica"><I.image className="ico" /> Quer mandar com imagem? Escolha <b>Só a imagem</b> ou <b>Imagem + mensagem</b> lá em cima.</div>
-                )}
-              </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           )}
 
@@ -2356,7 +2401,7 @@ function ModalDisparo({ isGer = true, numeros, showToast, onClose, onDone, prese
               <div className="dispm-review">
                 <div className="dispm-rev"><span>📱 Número</span><b>{numeroSel ? numeroSel.apelido : "—"}</b></div>
                 <div className="dispm-rev"><span>🖼️ Formato</span><b>{(FORMATOS_DISPARO.find((f) => f.k === formato) || {}).titulo}</b></div>
-                <div className="dispm-rev"><span>💬 Template</span><b>{usaModeloRev ? template.name : formato === "imagem" ? "Sem template" : "—"}</b></div>
+                <div className="dispm-rev"><span>💬 Template</span><b>{template ? template.name : "—"}</b></div>
                 <div className="dispm-rev"><span>👥 Contatos</span><b>{contatos.length}</b></div>
                 {varsCfg && varNome && (
                   <div className="dispm-rev"><span>🔤 {"{{1}}"}</span><b>Primeiro nome de cada um{semNomeQtd ? ` · ${semNomeQtd} sem nome recebe${semNomeQtd > 1 ? "m" : ""} “${limparVar(semNome)}”` : ""}</b></div>
@@ -2432,12 +2477,10 @@ function ModalDisparo({ isGer = true, numeros, showToast, onClose, onDone, prese
                 {formato === "imagem" ? (
                   <div className="pw-dupla">
                     <PreviaWhats formato="IMAGE" imagem={midia && midia.previa} rotulo="Quem falou nas últimas 24h" />
-                    {usaModeloRev
-                      ? <PreviaWhats formato="IMAGE" imagem={midia && midia.previa} texto={textoEx} rodape={template.rodape} botoes={template.botoes} rotulo="Os demais (template)" />
-                      : <div className="pw-fora">Quem não falou nas últimas 24h <b>não recebe</b> (o disparo está sem template).</div>}
+                    <PreviaWhats formato="IMAGE" imagem={midia && midia.previa} texto={textoEx} rodape={template.rodape} botoes={template.botoes} rotulo="Os demais (regra do WhatsApp)" />
                   </div>
                 ) : template ? (
-                  <PreviaWhats formato={MIDIA_CABECALHO[template.header] ? template.header : null} imagem={midia && midia.previa}
+                  <PreviaWhats formato={midia ? (imgPropria(template) ? template.header : "IMAGE") : null} imagem={midia && midia.previa}
                     texto={textoEx} rodape={template.rodape} botoes={template.botoes}
                     rotulo={varsCfg && contatoEx ? "Exemplo: " + (contatoEx.nome || contatoEx.telefone) : ""} />
                 ) : null}

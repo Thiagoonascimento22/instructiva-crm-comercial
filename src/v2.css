@@ -1876,3 +1876,48 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--brand); }
 .dispm-modo.compacto .dispm-modo-btn { padding: 9px 10px; font-size: 13px; }
 .dispm-var-lab { display: flex; flex-direction: column; gap: 5px; }
 .dispm-var-lab > span { font-size: 12px; color: var(--muted); font-weight: 600; }
+
+/* "Pedir versão com imagem" de um template que hoje é só texto */
+.dispm-versoes { margin-top: 14px; padding: 14px; border-radius: 14px; border: 1px solid var(--line); background: var(--card); }
+.dispm-versoes-h { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 10px; }
+.dispm-versoes-h b { display: block; font-size: 14px; font-weight: 650; color: var(--text); }
+.dispm-versoes-h span { display: block; font-size: 12.5px; line-height: 1.5; color: var(--muted); margin-top: 3px; }
+.dispm-versoes-h .btn { flex: none; display: inline-flex; align-items: center; gap: 5px; }
+.dispm-versoes-h .btn .ico { width: 14px; height: 14px; }
+.dispm-versao { display: flex; align-items: center; gap: 12px; padding: 10px 0; border-top: 1px solid var(--line); }
+.dispm-versao-info { flex: 1; min-width: 0; }
+.dispm-versao-info b { display: block; font-size: 13.5px; font-weight: 650; color: var(--text); }
+.dispm-versao-info span { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; font-size: 12.5px; line-height: 1.45; color: var(--muted); margin-top: 2px; white-space: pre-line; }
+.dispm-versao .btn { flex: none; display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+.dispm-versao .btn .ico { width: 14px; height: 14px; }
+.dispm-versao-st { flex: none; display: inline-flex; align-items: center; gap: 5px; height: 28px; padding: 0 10px; border-radius: 999px; font-size: 12px; font-weight: 600; background: var(--surface-2); color: var(--muted); white-space: nowrap; }
+.dispm-versao-st .ico { width: 13px; height: 13px; }
+.dispm-versao-st.ok { background: var(--brand-soft); color: var(--brand-soft-ink); }
+.dispm-versao-st.nao { background: rgba(217, 119, 6, .12); color: #b45309; }
+:root[data-theme="dark"] .dispm-versao-st.nao { color: #fbbf24; }
+.dispm-versoes-dica { margin-top: 8px; font-size: 12px; color: var(--faint); }
+@media (max-width: 640px) { .dispm-versao { flex-wrap: wrap; } .dispm-versao .btn, .dispm-versao-st { margin-left: auto; } }
+
+/* passo 2 simples: lista única + imagem opcional + "Liberar imagem" num clique */
+.dispm-img-bloco { margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--line); }
+.dispm-bloco-ic { width: 17px !important; height: 17px !important; color: var(--brand); }
+.dispm-opc { margin-left: auto; font-size: 12px; font-weight: 500; color: var(--faint); }
+.dispm-envio { margin: 10px 0 0; }
+.dispm-envio .dispm-modo-btn { display: inline-flex; align-items: center; justify-content: center; gap: 10px; color: var(--text); }
+.dispm-envio .dispm-modo-btn.on { color: var(--brand-soft-ink); }
+.dispm-envio .fmt-ic { width: 30px; height: 30px; padding: 4px; gap: 3px; border-radius: 7px; }
+.dispm-envio .fmt-ic-img { height: 10px; border-radius: 3px; }
+.dispm-envio .fmt-ic.imagem .fmt-ic-img { height: 20px; }
+.dispm-envio .fmt-ic-l { height: 3px; }
+.dispm-envio + .dispm-aviso { margin-top: 10px; margin-bottom: 0; }
+.dispm-tag-curto .ico { width: 12px !important; height: 12px !important; margin-right: 4px; }
+.dispm-liberar { display: flex; align-items: center; gap: 12px; margin-top: 12px; padding: 13px 14px; border-radius: 13px; border: 1px solid color-mix(in srgb, var(--brand) 35%, var(--line)); background: color-mix(in srgb, var(--brand-soft) 60%, var(--card)); }
+.dispm-liberar > div { flex: 1; min-width: 0; }
+.dispm-liberar b { display: block; font-size: 13.5px; font-weight: 650; color: var(--text); }
+.dispm-liberar span:not(.spin) { display: block; font-size: 12.5px; line-height: 1.45; color: var(--muted); margin-top: 2px; }
+.dispm-liberar .btn { flex: none; white-space: nowrap; }
+.dispm-liberar > .ico { width: 20px; height: 20px; flex: none; color: var(--brand); }
+.dispm-liberar.ok { background: var(--brand-soft); }
+.dispm-liberar.espera { border-color: var(--line); background: var(--surface-2); }
+.dispm-liberar.espera > .spin { flex: none; }
+@media (max-width: 640px) { .dispm-liberar { flex-wrap: wrap; } .dispm-liberar .btn { width: 100%; } }
