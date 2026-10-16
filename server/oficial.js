@@ -676,24 +676,32 @@ export function instalarCanalOficial({ app, getDb, saveDB, saveSoon, proximoId, 
     }
   }
 
-  /* monta os components do template a partir das variáveis do lead */
-  function montarComponents(template, variaveis) {
+  /* monta os components do template a partir das variáveis do lead
+     (e da imagem/vídeo/documento do topo, quando o template tem cabeçalho de mídia) */
+  function montarComponents(template, variaveis, cabecalho) {
+    const comps = [];
+    // cabecalho: { tipo: "image" | "video" | "document", id: media_id da Meta, filename? }
+    if (cabecalho && cabecalho.id && ["image", "video", "document"].includes(cabecalho.tipo)) {
+      const obj = { id: cabecalho.id };
+      if (cabecalho.tipo === "document" && cabecalho.filename) obj.filename = cabecalho.filename;
+      comps.push({ type: "header", parameters: [{ type: cabecalho.tipo, [cabecalho.tipo]: obj }] });
+    }
     // variaveis: array de strings pro corpo ({{1}}, {{2}}...)
-    if (!variaveis || !variaveis.length) return undefined;
-    return [
-      {
+    if (variaveis && variaveis.length) {
+      comps.push({
         type: "body",
         parameters: variaveis.map((v) => ({ type: "text", text: String(v) })),
-      },
-    ];
+      });
+    }
+    return comps.length ? comps : undefined;
   }
 
-  async function enviarTemplate(numeroCfg, telefone, templateName, idioma, variaveis) {
+  async function enviarTemplate(numeroCfg, telefone, templateName, idioma, variaveis, cabecalho) {
     const template = {
       name: templateName,
       language: { code: idioma || "pt_BR" },
     };
-    const comps = montarComponents(templateName, variaveis);
+    const comps = montarComponents(templateName, variaveis, cabecalho);
     if (comps) template.components = comps;
     return graphPost(numeroCfg, {
       messaging_product: "whatsapp",
@@ -701,6 +709,136 @@ export function instalarCanalOficial({ app, getDb, saveDB, saveSoon, proximoId, 
       type: "template",
       template,
     });
+  }
+
+  /* ---- DISPARO COM IMAGEM ----
+     A imagem do topo fica salva UMA vez no volume (disp_xxx.jpg) e todas as conversas
+     da campanha apontam pro mesmo arquivo (não duplica nada). Pra Meta, sobe uma vez
+     por número e reaproveita o id (a Meta guarda a mídia por 30 dias). */
+  const MIME_DISPARO = { "image/jpeg": "jpg", "image/png": "png", "video/mp4": "mp4", "application/pdf": "pdf" };
+  const RE_ARQ_DISPARO = /^disp_[a-z0-9]+\.(jpg|png|mp4|pdf)$/;
+  const VALIDADE_MIDIA_META = 20 * 86400000; // renova antes dos 30 dias da Meta
+  function caminhoMidiaDisparo(arquivo) {
+    const a = String(arquivo || "");
+    if (!RE_ARQ_DISPARO.test(a) || !MEDIA_DIR || !fs || !path) return null;
+    const fp = path.join(MEDIA_DIR, a);
+    return fs.existsSync(fp) ? fp : null;
+  }
+  // monta o objeto "midia" guardado na campanha (null = arquivo não existe)
+  function midiaDisparoDe(arquivo, nome) {
+    if (!caminhoMidiaDisparo(arquivo)) return null;
+    const ext = String(arquivo).split(".").pop();
+    const mime = Object.keys(MIME_DISPARO).find((m) => MIME_DISPARO[m] === ext);
+    const midia = { arquivo: String(arquivo), mime, tipo: tipoPorMime(mime) };
+    if (midia.tipo === "document") midia.filename = String(nome || "documento.pdf").slice(0, 120);
+    return midia;
+  }
+  async function idMidiaNaMeta(numeroCfg, midia) {
+    if (!midia.metaIds || typeof midia.metaIds !== "object") midia.metaIds = {};
+    const ja = midia.metaIds[numeroCfg.id];
+    if (ja && ja.id && Date.now() - (ja.em || 0) < VALIDADE_MIDIA_META) return ja.id;
+    const fp = caminhoMidiaDisparo(midia.arquivo);
+    if (!fp) throw new Error("A imagem desse disparo não está mais no servidor. Escolha a imagem de novo.");
+    const buf = await fs.promises.readFile(fp);
+    const id = await uploadMidiaMeta(numeroCfg, buf, midia.mime, midia.filename || midia.arquivo);
+    midia.metaIds[numeroCfg.id] = { id, em: Date.now() };
+    return id;
+  }
+  // mensagem do disparo na conversa: com a imagem junto, pra o vendedor ver o que o lead recebeu
+  function msgDisparo(content, ts, mid, midia) {
+    const msg = { role: "me", content, ts, template: true, wamid: mid || null, status: mid ? "sent" : null };
+    if (midia && midia.arquivo) {
+      msg.tipo = midia.tipo;
+      msg.arquivo = midia.arquivo;
+      msg.mimetype = midia.mime;
+      msg.mid = "ofdisp" + ts.toString(36) + Math.random().toString(36).slice(2, 6);
+      if (midia.filename) msg.filename = midia.filename;
+    }
+    return msg;
+  }
+  /* ---- VARIÁVEIS DO TEMPLATE ({{1}}, {{2}}…) no disparo em massa ----
+     cfg: { qtd, nome: true -> {{1}} vira o primeiro nome do contato, semNome: texto pra quem
+     está sem nome na lista, fixas: [valores iguais pra todo mundo] }. Fica salvo na campanha
+     pra o re-disparo montar igual. */
+  function limparVar(v) {
+    // a Meta recusa variável com quebra de linha, tab ou muitos espaços seguidos
+    return String(v == null ? "" : v).replace(/\s+/g, " ").trim().slice(0, 300);
+  }
+  function primeiroNomeContato(nome) {
+    const n = limparVar(nome);
+    if (!n || /^[\d\s+().-]+$/.test(n)) return ""; // sem nome (ou o "nome" é só o número)
+    const p = n.split(" ")[0];
+    return p.charAt(0).toLocaleUpperCase("pt-BR") + p.slice(1).toLocaleLowerCase("pt-BR");
+  }
+  function cfgVariaveis(bruto) {
+    const qtd = Math.min(10, parseInt(bruto && bruto.qtd) || 0);
+    if (!qtd) return null;
+    return {
+      qtd,
+      nome: bruto.nome !== false,
+      semNome: limparVar(bruto.semNome),
+      fixas: (Array.isArray(bruto.fixas) ? bruto.fixas : []).slice(0, 10).map(limparVar),
+    };
+  }
+  function variaveisDoContato(cfg, nome) {
+    if (!cfg || !(cfg.qtd > 0)) return [];
+    const out = [];
+    for (let i = 0; i < cfg.qtd; i++) {
+      if (i === 0 && cfg.nome) out.push(primeiroNomeContato(nome) || cfg.semNome || "pessoal");
+      else out.push((cfg.fixas || [])[i] || "-");
+    }
+    return out;
+  }
+
+  // o lead falou com a gente há menos de 23h? (janela de 24h do WhatsApp, com 1h de folga)
+  // Dentro dela dá pra mandar a imagem PURA, sem template e sem texto nenhum.
+  function dentroDaJanela(numeroId, telefone) {
+    const ch = db.waChats[chaveChat(numeroId, telefone)];
+    if (!ch || !Array.isArray(ch.mensagens)) return false;
+    for (let i = ch.mensagens.length - 1; i >= 0; i--) {
+      if (ch.mensagens[i].role === "them") return Date.now() - (ch.mensagens[i].ts || 0) < 23 * 3600000;
+    }
+    return false;
+  }
+
+  /* ---- template com imagem no topo: a Meta pede uma imagem de EXEMPLO,
+     enviada pelo "upload retomável" (precisa do App ID do token) ---- */
+  const appIdCache = {};
+  async function appIdDoToken(numeroCfg) {
+    if (process.env.META_APP_ID) return String(process.env.META_APP_ID).trim();
+    const tk = tokenDe(numeroCfg);
+    if (appIdCache[tk]) return appIdCache[tk];
+    const tentativas = [
+      { url: `${GRAPH}/app`, pega: (d) => d && d.id },
+      { url: `${GRAPH}/debug_token?input_token=${encodeURIComponent(tk)}`, pega: (d) => d && d.data && d.data.app_id },
+    ];
+    for (const t of tentativas) {
+      try {
+        const r = await fetch(t.url, { headers: { Authorization: "Bearer " + tk } });
+        const d = await r.json();
+        const id = r.ok ? t.pega(d) : null;
+        if (id) { appIdCache[tk] = String(id); return appIdCache[tk]; }
+      } catch (_) {}
+    }
+    throw new Error("Não consegui descobrir o App ID da Meta pra subir a imagem. Coloque a variável META_APP_ID no Railway (o número do app no developers.facebook.com).");
+  }
+  async function subirExemploTemplate(numeroCfg, buffer, mime, nome) {
+    const appId = await appIdDoToken(numeroCfg);
+    const tk = tokenDe(numeroCfg);
+    const r1 = await fetch(
+      `${GRAPH}/${appId}/uploads?file_name=${encodeURIComponent(nome)}&file_length=${buffer.length}&file_type=${encodeURIComponent(mime)}`,
+      { method: "POST", headers: { Authorization: "OAuth " + tk } }
+    );
+    const d1 = await r1.json().catch(() => null);
+    if (!r1.ok || !d1 || !d1.id) throw new Error((d1 && d1.error && d1.error.message) || ("Erro ao iniciar upload da imagem (" + r1.status + ")"));
+    const r2 = await fetch(`${GRAPH}/${d1.id}`, {
+      method: "POST",
+      headers: { Authorization: "OAuth " + tk, file_offset: "0", "Content-Type": mime },
+      body: buffer,
+    });
+    const d2 = await r2.json().catch(() => null);
+    if (!r2.ok || !d2 || !d2.h) throw new Error((d2 && d2.error && d2.error.message) || ("Erro ao subir a imagem de exemplo (" + r2.status + ")"));
+    return d2.h;
   }
 
   /* ============================================================
@@ -1106,8 +1244,20 @@ export function instalarCanalOficial({ app, getDb, saveDB, saveSoon, proximoId, 
       const todos = (data.data || []).map((t) => {
         const body = (t.components || []).find((c) => c.type === "BODY");
         const texto = body ? body.text || "" : "";
-        const vars = (texto.match(/\{\{\d+\}\}/g) || []).length;
-        return { name: t.name, language: t.language, category: t.category, status: t.status, vars, texto };
+        const vars = new Set(texto.match(/\{\{\d+\}\}/g) || []).size; // {{1}} repetido conta uma vez
+        // cabeçalho: IMAGE / VIDEO / DOCUMENT pedem a mídia na hora do disparo
+        const head = (t.components || []).find((c) => c.type === "HEADER");
+        const rodape = (t.components || []).find((c) => c.type === "FOOTER");
+        const botoes = (t.components || []).find((c) => c.type === "BUTTONS");
+        const exemplo = head && head.example && Array.isArray(head.example.header_handle) ? head.example.header_handle[0] : "";
+        return {
+          name: t.name, language: t.language, category: t.category, status: t.status, vars, texto,
+          header: head ? String(head.format || "TEXT").toUpperCase() : null,
+          headerTexto: head && head.format === "TEXT" ? head.text || "" : "",
+          headerExemplo: /^https:\/\//.test(exemplo) ? exemplo : "",
+          rodape: rodape ? rodape.text || "" : "",
+          botoes: botoes && Array.isArray(botoes.buttons) ? botoes.buttons.map((x) => x.text).filter(Boolean).slice(0, 3) : [],
+        };
       });
       const aprovados = todos.filter((t) => t.status === "APPROVED");
       res.json({ templates: aprovados, todos });
@@ -1127,7 +1277,26 @@ export function instalarCanalOficial({ app, getDb, saveDB, saveSoon, proximoId, 
     const categoria = String(b.categoria || "MARKETING").toUpperCase(); // MARKETING | UTILITY
     const idioma = String(b.idioma || "pt_BR").trim();
     if (!nome || !corpo) return res.status(400).json({ error: "Informe o nome e o texto do template" });
+    // imagem no topo (opcional): a Meta pede uma imagem de exemplo pra aprovar
+    const imgB64 = String(b.imagemBase64 || "");
+    const imgMime = String(b.imagemMime || "image/jpeg").toLowerCase();
+    let imgBuf = null;
+    if (imgB64) {
+      if (imgMime !== "image/jpeg" && imgMime !== "image/png") return res.status(400).json({ error: "A imagem precisa ser JPG ou PNG" });
+      try { imgBuf = Buffer.from(imgB64, "base64"); } catch (_) { return res.status(400).json({ error: "Imagem inválida" }); }
+      if (!imgBuf.length) return res.status(400).json({ error: "Imagem vazia" });
+      if (imgBuf.length > 5 * 1024 * 1024) return res.status(400).json({ error: "A imagem passa de 5MB" });
+    }
+    // texto com {{1}}, {{2}}… precisa de exemplo, senão a Meta recusa
+    const nVars = new Set(corpo.match(/\{\{\d+\}\}/g) || []).size; // {{1}} repetido conta uma vez só
+    const body = { type: "BODY", text: corpo };
+    if (nVars > 0) body.example = { body_text: [Array.from({ length: nVars }, (_, i) => (i === 0 ? "Maria" : "exemplo"))] };
     try {
+      const components = [body];
+      if (imgBuf) {
+        const handle = await subirExemploTemplate(n, imgBuf, imgMime, nome + (imgMime === "image/png" ? ".png" : ".jpg"));
+        components.unshift({ type: "HEADER", format: "IMAGE", example: { header_handle: [handle] } });
+      }
       const r = await fetch(`${GRAPH}/${n.wabaId}/message_templates`, {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: "Bearer " + tokenDe(n) },
@@ -1135,7 +1304,7 @@ export function instalarCanalOficial({ app, getDb, saveDB, saveSoon, proximoId, 
           name: nome,
           language: idioma,
           category: categoria === "UTILITY" ? "UTILITY" : "MARKETING",
-          components: [{ type: "BODY", text: corpo }],
+          components,
         }),
       });
       const data = await r.json();
@@ -3212,17 +3381,55 @@ export function instalarCanalOficial({ app, getDb, saveDB, saveSoon, proximoId, 
     return { usado, base, bonus, limite, restante: Math.max(0, limite - usado) };
   }
 
+  /* guarda a imagem (ou vídeo/PDF) que vai no topo do disparo — o front já manda
+     a imagem comprimida. Devolve o nome do arquivo pra usar no /disparar. */
+  app.post("/api/oficial/midia-disparo", auth, async (req, res) => {
+    if (!MEDIA_DIR || !fs || !path) return res.status(500).json({ error: "Servidor sem pasta de mídia" });
+    const b = req.body || {};
+    const mime = String(b.mime || "").toLowerCase().split(";")[0];
+    const ext = MIME_DISPARO[mime];
+    if (!ext) return res.status(400).json({ error: "Formato não aceito. Use foto JPG ou PNG (ou vídeo MP4 / PDF)." });
+    let buf;
+    try { buf = Buffer.from(String(b.base64 || ""), "base64"); } catch (_) { return res.status(400).json({ error: "Arquivo inválido" }); }
+    if (!buf || !buf.length) return res.status(400).json({ error: "Arquivo vazio" });
+    const max = ext === "jpg" || ext === "png" ? 5 : ext === "mp4" ? 16 : 25;
+    if (buf.length > max * 1024 * 1024) return res.status(400).json({ error: `O arquivo passa de ${max}MB` });
+    const arquivo = "disp_" + Date.now().toString(36) + Math.random().toString(36).slice(2, 8) + "." + ext;
+    try {
+      await fs.promises.writeFile(path.join(MEDIA_DIR, arquivo), buf);
+      res.json({ ok: true, arquivo, mime, tipo: tipoPorMime(mime), tamanho: buf.length });
+    } catch (e) {
+      res.status(500).json({ error: "Não consegui salvar o arquivo: " + e.message });
+    }
+  });
+
   app.post("/api/oficial/disparar", auth, async (req, res) => {
     const b = req.body || {};
     const numeroCfg = numeroPermitido(req, b.numeroId);
     if (!numeroCfg) return res.status(400).json({ error: "Escolha um número válido (ou você não tem acesso a ele)" });
     if (!numeroCfg.ativo) return res.status(400).json({ error: "Esse número está inativo" });
+    // modo: "template" (texto, ou imagem + texto embaixo) | "imagem" (só a imagem)
+    const modo = b.modo === "imagem" ? "imagem" : "template";
     const templateName = String(b.template || "").trim();
-    if (!templateName) return res.status(400).json({ error: "Escolha um template" });
+    if (!templateName && modo !== "imagem") return res.status(400).json({ error: "Escolha um template" });
     const idioma = String(b.idioma || "pt_BR").trim();
     const contatos = Array.isArray(b.contatos) ? b.contatos : [];
     if (contatos.length === 0) return res.status(400).json({ error: "Nenhum contato na lista" });
     if (contatos.length > 5000) return res.status(400).json({ error: "Máximo de 5000 por disparo" });
+    // imagem no topo (só pra template com cabeçalho de imagem/vídeo/documento)
+    let midia = null;
+    if (b.midiaArquivo) {
+      midia = midiaDisparoDe(b.midiaArquivo, b.midiaNome);
+      if (!midia) return res.status(400).json({ error: "A imagem do disparo não foi encontrada. Escolha a imagem de novo." });
+    }
+    if (modo === "imagem" && !midia) return res.status(400).json({ error: "Escolha a imagem do disparo" });
+    // variáveis do template ({{1}} = nome do contato, as outras iguais pra todos)
+    const varsCfg = templateName ? cfgVariaveis(b.variaveisCfg) : null;
+    if (varsCfg) {
+      const faltando = Array.from({ length: varsCfg.qtd }, (_, i) => i).some((i) =>
+        i === 0 && varsCfg.nome ? !varsCfg.semNome : !varsCfg.fixas[i]);
+      if (faltando) return res.status(400).json({ error: "Preencha as informações do template ({{1}}, {{2}}…)" });
+    }
 
     // AGENDAMENTO: se vier "agendarPara" (ms) no futuro, a campanha só dispara naquela hora
     let agendadoPara = parseInt(b.agendarPara) || 0;
@@ -3251,7 +3458,7 @@ export function instalarCanalOficial({ app, getDb, saveDB, saveSoon, proximoId, 
 
     const campanha = {
       id: proximoId("camp"),
-      nome: String(b.nomeCampanha || templateName).trim(),
+      nome: String(b.nomeCampanha || templateName || "Só imagem").trim(),
       numeroId: numeroCfg.id,
       criadoPor: req.user.id,        // quem disparou (pro vendedor ver só as dele)
       criadoPorNome: req.user.nome,
@@ -3273,12 +3480,15 @@ export function instalarCanalOficial({ app, getDb, saveDB, saveSoon, proximoId, 
       falhas: 0,
       total: contatos.length,
       // fila salva no banco: lista de quem ainda falta enviar (sobrevive a reinício)
-      pendentes: contatos.map((c) => ({ telefone: c.telefone, nome: c.nome || "", variaveis: c.variaveis || [] })),
+      pendentes: contatos.map((c) => ({ telefone: c.telefone, nome: c.nome || "", variaveis: varsCfg ? variaveisDoContato(varsCfg, c.nome) : (c.variaveis || []) })),
       pularRecebidos: b.pularRecebidos === true,
       agendadoPara: agendadoPara || null,               // ms de quando vai disparar (null = agora)
       status: agendadoPara ? "agendada" : "rodando",    // agendada | rodando | concluida | parada
       criadoEm: Date.now(),
     };
+    if (midia) campanha.midia = midia;   // { arquivo, mime, tipo, filename?, metaIds }
+    if (modo === "imagem") campanha.modo = "imagem";
+    if (varsCfg) campanha.variaveisCfg = varsCfg;
     db.oficial.campanhas.unshift(campanha);
     salvar();
 
@@ -3333,6 +3543,23 @@ export function instalarCanalOficial({ app, getDb, saveDB, saveSoon, proximoId, 
     campanha.status = "rodando";
     const templateName = campanha.template;
     const idioma = campanha.idioma || "pt_BR";
+    // disparo com imagem: sobe a imagem pra Meta UMA vez e usa o mesmo id pra todo mundo.
+    // Se não der, pausa a campanha (a fila fica guardada e dá pra retomar).
+    let cabecalho = null;
+    if (campanha.midia && campanha.midia.arquivo) {
+      try {
+        cabecalho = { tipo: campanha.midia.tipo, id: await idMidiaNaMeta(numeroCfg, campanha.midia), filename: campanha.midia.filename };
+        salvar();
+      } catch (e) {
+        campanha.status = "parada";
+        campanha.ultimoErro = "Não consegui enviar a imagem pra Meta: " + ((e && e.message) || e);
+        campanha.ultimoErroEm = Date.now();
+        campanha._rodando = false;
+        console.error(`[oficial] campanha ${campanha.nome}: imagem não subiu —`, e && e.message);
+        salvar();
+        return;
+      }
+    }
 
     while (campanha.pendentes && campanha.pendentes.length > 0) {
       const c = campanha.pendentes[0]; // pega o primeiro
@@ -3345,7 +3572,17 @@ export function instalarCanalOficial({ app, getDb, saveDB, saveSoon, proximoId, 
       }
       const nome = (c.nome || "").trim() || telefone;
       try {
-        const resp = await enviarTemplate(numeroCfg, telefone, templateName, idioma, c.variaveis || []);
+        // SÓ A IMAGEM: quem falou com a gente nas últimas 24h recebe a imagem pura (sem texto).
+        // Os outros recebem o modelo com imagem (o WhatsApp exige modelo fora da janela).
+        let resp, conteudo = `[disparo] ${templateName}`;
+        if (campanha.modo === "imagem" && cabecalho && dentroDaJanela(numeroCfg.id, telefone)) {
+          resp = await enviarMidiaOficial(numeroCfg, telefone, cabecalho.tipo, cabecalho.id, "", cabecalho.filename);
+          conteudo = "[disparo] só imagem";
+        } else if (templateName) {
+          resp = await enviarTemplate(numeroCfg, telefone, templateName, idioma, c.variaveis || [], cabecalho);
+        } else {
+          throw new Error("Fora da janela de 24h (131047): esse contato não falou com vocês nas últimas 24h e o disparo não tem modelo — o WhatsApp não deixa mandar só a imagem pra ele.");
+        }
         campanha.enviados++;
         const mid = resp && resp.messages && resp.messages[0] && resp.messages[0].id;
         if (mid) {
@@ -3353,6 +3590,9 @@ export function instalarCanalOficial({ app, getDb, saveDB, saveSoon, proximoId, 
           db.oficial.msgCampanha[mid] = campanha.id;
         }
         const chat = acharOuCriarChat(numeroCfg.id, telefone, nome);
+        // nome que veio na lista (o boot troca o nome de quem não respondeu pelo número;
+        // esse fica guardado pra o re-disparo continuar chamando a pessoa pelo nome)
+        if (limparVar(c.nome)) chat.nomeLista = limparVar(c.nome).slice(0, 80);
         chat.origemDisparo = true;
         chat.campanha = campanha.nome;
         chat.campanhaId = campanha.id;
@@ -3377,7 +3617,7 @@ export function instalarCanalOficial({ app, getDb, saveDB, saveSoon, proximoId, 
         const ts = Date.now();
         // guarda o "comprovante" (wamid) na mensagem E no índice, senão o aviso de
         // entregue/lida que a Meta manda depois não acha essa mensagem pra atualizar
-        chat.mensagens.push({ role: "me", content: `[disparo] ${templateName}`, ts, template: true, wamid: mid || null, status: mid ? "sent" : null });
+        chat.mensagens.push(msgDisparo(conteudo, ts, mid, cabecalho ? campanha.midia : null));
         if (mid) { if (!db.oficial.wamidChat) db.oficial.wamidChat = {}; db.oficial.wamidChat[mid] = chat.id; }
         chat.atualizadoEm = ts;
       } catch (e) {
@@ -3424,14 +3664,20 @@ export function instalarCanalOficial({ app, getDb, saveDB, saveSoon, proximoId, 
     if (!template) return res.status(400).json({ error: "Escolha um template" });
     const idioma = String(b.idioma || "pt_BR");
     const nome = String(b.nome || "").trim() || telefone;
+    let midia = null;
+    if (b.midiaArquivo) {
+      midia = midiaDisparoDe(b.midiaArquivo, b.midiaNome);
+      if (!midia) return res.status(400).json({ error: "A imagem não foi encontrada. Escolha a imagem de novo." });
+    }
     try {
-      const resp = await enviarTemplate(numeroCfg, telefone, template, idioma, b.variaveis || []);
+      const cabecalho = midia ? { tipo: midia.tipo, id: await idMidiaNaMeta(numeroCfg, midia), filename: midia.filename } : null;
+      const resp = await enviarTemplate(numeroCfg, telefone, template, idioma, b.variaveis || [], cabecalho);
       const mid = resp && resp.messages && resp.messages[0] && resp.messages[0].id;
       const chat = acharOuCriarChat(numeroCfg.id, telefone, nome);
       if (!chat.vendedorId) { chat.vendedorId = req.user.id; chat.vendedorNome = req.user.nome; chat.atribuidoEm = Date.now(); }
       chat.iaPausada = true; // conversa iniciada por humano
       const ts = Date.now();
-      chat.mensagens.push({ role: "me", content: `[template] ${template}`, ts, template: true, wamid: mid || null, status: mid ? "sent" : null });
+      chat.mensagens.push(msgDisparo(`[template] ${template}`, ts, mid, midia));
       if (mid) { if (!db.oficial.wamidChat) db.oficial.wamidChat = {}; db.oficial.wamidChat[mid] = chat.id; }
       chat.atualizadoEm = ts;
       salvar();
@@ -3472,7 +3718,7 @@ export function instalarCanalOficial({ app, getDb, saveDB, saveSoon, proximoId, 
     for (const ch of Object.values(db.waChats || {})) {
       if (ch && ch.canal === "oficial" && ch.campanhaId === campanha.id && !ch.respondeu) {
         const tel = normalizaTelefone(ch.numero);
-        if (tel) alvo.push({ telefone: tel, nome: ch.nome || "", variaveis: [] });
+        if (tel) alvo.push({ telefone: tel, nome: ch.nome || "", variaveis: variaveisDoContato(campanha.variaveisCfg, ch.nomeLista || ch.nome) });
       }
     }
     if (alvo.length === 0) {

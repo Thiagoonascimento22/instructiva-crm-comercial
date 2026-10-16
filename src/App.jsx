@@ -266,9 +266,12 @@ function AvisoAtualizacao() {
 
 /* ============================ NOVIDADES DA VERSÃO (v2.2) ============================ */
 // Aparece uma vez só pra cada pessoa (fica marcado no servidor). Dá pra rever clicando na versão, no rodapé do menu.
-const VERSAO_NOVIDADES = "v2.2";
-function Novidades({ user, perfil, pode, ehMac, onClose }) {
+const VERSAO_NOVIDADES = "v2.3";
+function Novidades({ user, perfil, pode, ehMac, onClose, soNovos = false }) {
   const itens = [
+    { ic: I.image, t: "Disparo com imagem", d: "No Disparo, escolha Só a imagem ou Imagem + mensagem. Dá pra arrastar a foto direto pra tela e ver a prévia igual no WhatsApp.", para: "comercial", se: pode.disparo, novo: true },
+    { ic: I.megaphone, t: "Template com imagem", d: "Em Disparo › Templates, crie o seu com foto. Assim que a Meta aprovar, ele já aparece na hora de disparar.", para: "comercial", se: pode.disparo, novo: true },
+    { ic: I.user, t: "Nome do cliente no disparo", d: "Template com {{1}} sai com o primeiro nome de cada contato da lista. Quem estiver sem nome recebe um texto que você escolhe.", para: "comercial", se: pode.disparo, novo: true },
     { ic: I.brilho, t: "Visual novo", d: "Cores grafite e esmeralda, modo claro e escuro e um menu que recolhe pra sobrar mais espaço na tela.", para: "todos" },
     { ic: I.trend, t: "Painel de Vendas", d: "Veja na hora se está acima do ritmo da meta, quanto precisa vender por dia e qual foi o melhor dia do mês.", para: "comercial", se: pode.vendas },
     { ic: I.user, t: "Ficha do lead na conversa", d: "Clique na foto ou no nome do contato e veja etapa, tarefas e anotações sem sair do chat.", para: "comercial", se: pode.caixa && pode.crm },
@@ -282,24 +285,29 @@ function Novidades({ user, perfil, pode, ehMac, onClose }) {
   ].filter((it) => it.se !== false && (it.para === "todos"
     || (it.para === "comercial" && perfil !== "suporte")
     || it.para === perfil));
+  // quem já viu a 2.2 vê só o que é novo; pelo rodapé do menu aparece tudo
+  const novos = itens.filter((it) => it.novo);
+  const lista = soNovos ? novos : itens;
+  useEffect(() => { if (!lista.length) onClose(); /* nada novo pra essa pessoa: marca como visto */ }, []); // eslint-disable-line
   useEffect(() => {
     const esc = (e) => { if (e.key === "Escape") onClose(); };
     window.addEventListener("keydown", esc);
     return () => window.removeEventListener("keydown", esc);
   }, [onClose]);
   const nome = primeiroNome(user && user.nome);
+  if (!lista.length) return null;
   return (
     <Portal>
       <div className="nov-bg" onClick={(e) => e.target === e.currentTarget && onClose()}>
         <div className="nov" role="dialog" aria-modal="true" aria-labelledby="nov-tit">
           <div className="nov-topo">
             <button type="button" className="nov-x" onClick={onClose} aria-label="Fechar"><I.x className="ico" /></button>
-            <span className="nov-selo"><I.brilho className="ico" /> Novidades · versão 2.2</span>
-            <h2 id="nov-tit">O sistema ficou de cara nova</h2>
-            <p>{nome ? "Oi, " + nome + "! " : ""}Separamos o que mudou pra deixar o seu dia mais fácil e as vendas mais rápidas.</p>
+            <span className="nov-selo"><I.brilho className="ico" /> Novidades · versão 2.3</span>
+            <h2 id="nov-tit">{soNovos ? "Disparo com imagem e com o nome do cliente" : "O sistema ficou de cara nova"}</h2>
+            <p>{nome ? "Oi, " + nome + "! " : ""}{soNovos ? "Foto e o nome da pessoa chamam atenção e vendem mais. Veja como usar:" : "Separamos o que mudou pra deixar o seu dia mais fácil e as vendas mais rápidas."}</p>
           </div>
           <div className="nov-grade">
-            {itens.map((it, i) => (
+            {lista.map((it, i) => (
               <div key={it.t} className="nov-item" style={{ animationDelay: 80 + i * 45 + "ms" }}>
                 <span className="nov-ic"><it.ic className="ico" /></span>
                 <div className="nov-item-txt">
@@ -311,7 +319,7 @@ function Novidades({ user, perfil, pode, ehMac, onClose }) {
             ))}
           </div>
           <div className="nov-pe">
-            <span>Pra ver de novo, clique em <b>v2.2</b> no rodapé do menu.</span>
+            <span>Pra ver de novo, clique em <b>v2.3</b> no rodapé do menu.</span>
             <button type="button" className="btn btn-primary nov-btn" onClick={onClose}>{perfil === "suporte" ? "Entendi, vamos lá" : "Bora vender!"}</button>
           </div>
         </div>
@@ -330,6 +338,7 @@ export default function App() {
   const [aviso, setAviso] = useState(null);
   const novaVersao = useVersaoNova();   // v2.2: saiu versão nova? (aí todo mundo se atualiza sozinho)
   const [novidades, setNovidades] = useState(false);
+  const [novidadesSoNovos, setNovidadesSoNovos] = useState(false); // já viu a versão anterior -> mostra só o novo
   const carregarModulos = () => api.getModulos().then((r) => { setModulos(r.modulos); setEhDono(!!r.dono); }).catch(() => {});
   const carregarAcessoVend = () => api.ofAcessoVend().then((r) => setAcessoVend(r.acessoVend || {})).catch(() => {});
   useEffect(() => { if (user) api.aviso().then(setAviso).catch(() => {}); }, [user]);
@@ -419,7 +428,10 @@ export default function App() {
     if (!user || user.precisaOnboarding) return;
     let local = "";
     try { local = localStorage.getItem("instructiva_novidades_" + user.id) || ""; } catch (_) {}
-    if (user.novidadesVistas !== VERSAO_NOVIDADES && local !== VERSAO_NOVIDADES) setNovidades(true);
+    if (user.novidadesVistas !== VERSAO_NOVIDADES && local !== VERSAO_NOVIDADES) {
+      setNovidadesSoNovos(user.novidadesVistas === "v2.2" || local === "v2.2");
+      setNovidades(true);
+    }
   }, [user]);
   function fecharNovidades() {
     setNovidades(false);
@@ -539,7 +551,7 @@ export default function App() {
             </div>
             <button className="side-sair" onClick={logout} title="Sair" aria-label="Sair"><I.out className="ico" /></button>
           </div>
-          <button type="button" className="side-versao" onClick={() => setNovidades(true)} title="Ver as novidades desta versão">v2.2 · novidades</button>
+          <button type="button" className="side-versao" onClick={() => { setNovidadesSoNovos(false); setNovidades(true); }} title="Ver as novidades desta versão">v2.3 · novidades</button>
         </div>
       </aside>
 
@@ -590,8 +602,8 @@ export default function App() {
         />
       )}
       {novidades && (
-        <Novidades user={user} perfil={isGer ? "gerente" : isSuporte ? "suporte" : "vendedor"} ehMac={ehMac} onClose={fecharNovidades}
-          pode={{ vendas: (isGer || vendPode("vendas")) && mod("vendas"), crm: (isGer || vendPode("crm")) && mod("crm"), caixa: !isSuporte && mod("caixa") }} />
+        <Novidades user={user} perfil={isGer ? "gerente" : isSuporte ? "suporte" : "vendedor"} ehMac={ehMac} onClose={fecharNovidades} soNovos={novidadesSoNovos}
+          pode={{ disparo: (isGer || isVend) && mod("disparo"), vendas: (isGer || vendPode("vendas")) && mod("vendas"), crm: (isGer || vendPode("crm")) && mod("crm"), caixa: !isSuporte && mod("caixa") }} />
       )}
       {novaVersao && <AvisoAtualizacao />}
       {toast && (() => {
@@ -1256,6 +1268,10 @@ function explicaErroMeta(msg) {
     return "Número não registrado na Cloud API. No número, clique no botão 🔑 (Registrar) e informe o PIN de 6 dígitos da verificação em 2 etapas.";
   if (/132001|template.*(not exist|does not exist)|does not exist/i.test(m))
     return "Esse template não existe nessa WABA (ou o nome/idioma está diferente). Confira na aba Templates.";
+  if (/132012|parameter format|format.*does not match|header.*(image|media|format)/i.test(m))
+    return "Esse template tem imagem no topo e ela não foi junto (ou é de outro tipo). No disparo, escolha a imagem de novo.";
+  if (/imagem pra Meta|imagem desse disparo/i.test(m))
+    return "A imagem não subiu pra Meta, então o disparo pausou antes de enviar. Ninguém recebeu nada pela metade. Confira a imagem e clique em Retomar.";
   if (/132000|number of parameters|parameter.*mismatch|expected.*parameters/i.test(m))
     return "As variáveis do template não batem (a quantidade de {{ }} é diferente do que foi enviado).";
   if (/access token|oauth|expired|session has expired|token.*invalid/i.test(m))
@@ -1750,7 +1766,7 @@ function OficialDisparo({ isGer = true, showToast, preset = null, onPresetUsado 
                   <span className={"disp-row-dot " + cls} />
                   <span className="disp-row-main">
                     <span className="disp-row-nome">{c.nome}</span>
-                    <span className="disp-row-meta">{c.template}{c.criadoPorNome ? " · " + c.criadoPorNome : ""}</span>
+                    <span className="disp-row-meta">{c.template || "Só a imagem"}{c.midia ? (c.modo === "imagem" ? (c.template ? " · só a imagem" : "") : " · com imagem") : ""}{c.criadoPorNome ? " · " + c.criadoPorNome : ""}</span>
                   </span>
                   {!agendada && (
                     <span className="dsx-envio" title={(c.enviados || 0) + " de " + (c.total || c.enviados || 0) + " enviados"}>
@@ -1877,12 +1893,176 @@ function LimitesVendedores({ showToast }) {
 }
 
 /* ---------- MODAL DE DISPARO (passo a passo moderno) ---------- */
+/* ============================================================
+   DISPARO COM IMAGEM
+   A foto é reduzida no navegador (máx. 1600px, JPG) antes de subir:
+   fica leve pro servidor e dentro do limite do WhatsApp (5MB).
+   ============================================================ */
+const MIDIA_CABECALHO = { IMAGE: "image", VIDEO: "video", DOCUMENT: "document" };
+const ROTULO_MIDIA = {
+  image: { nome: "imagem", art: "a imagem", pronta: "Imagem pronta", dica: "JPG ou PNG · clique ou arraste aqui", accept: "image/jpeg,image/png,image/webp" },
+  video: { nome: "vídeo", art: "o vídeo", pronta: "Vídeo pronto", dica: "MP4 de até 16MB · clique ou arraste aqui", accept: "video/mp4" },
+  document: { nome: "PDF", art: "o PDF", pronta: "PDF pronto", dica: "PDF de até 25MB · clique ou arraste aqui", accept: "application/pdf" },
+};
+function lerComoBase64(file) {
+  return new Promise((ok, erro) => {
+    const r = new FileReader();
+    r.onload = () => ok(String(r.result || "").split(",")[1] || "");
+    r.onerror = () => erro(new Error("Não consegui ler o arquivo"));
+    r.readAsDataURL(file);
+  });
+}
+function reduzirImagem(file, max = 1600) {
+  return new Promise((ok, erro) => {
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      const esc = Math.min(1, max / Math.max(img.naturalWidth || 1, img.naturalHeight || 1));
+      const w = Math.max(1, Math.round(img.naturalWidth * esc)), h = Math.max(1, Math.round(img.naturalHeight * esc));
+      const cv = document.createElement("canvas");
+      cv.width = w; cv.height = h;
+      const ctx = cv.getContext("2d");
+      ctx.fillStyle = "#ffffff"; ctx.fillRect(0, 0, w, h); // PNG transparente não fica com fundo preto
+      ctx.drawImage(img, 0, 0, w, h);
+      URL.revokeObjectURL(url);
+      const dataUrl = cv.toDataURL("image/jpeg", 0.86);
+      ok({ base64: dataUrl.split(",")[1] || "", mime: "image/jpeg", previa: dataUrl });
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); erro(new Error("Esse arquivo não abriu como imagem. Use JPG ou PNG.")); };
+    img.src = url;
+  });
+}
+function tamanhoTxt(b) { return !b ? "" : b < 1024 * 1024 ? Math.max(1, Math.round(b / 1024)) + " KB" : (b / 1024 / 1024).toFixed(1).replace(".", ",") + " MB"; }
+
+/* escolher a imagem (ou vídeo/PDF) do topo. subir=true já guarda no servidor (disparo);
+   subir=false só prepara o arquivo (criação de template manda junto com o formulário) */
+function EscolherMidia({ tipo = "image", valor, onChange, showToast, subir = true }) {
+  const ref = useRef(null);
+  const [preparando, setPreparando] = useState(false);
+  const [arrastando, setArrastando] = useState(false);
+  const R = ROTULO_MIDIA[tipo] || ROTULO_MIDIA.image;
+  async function escolher(file) {
+    if (!file || preparando) return;
+    setPreparando(true);
+    try {
+      let dados;
+      if (tipo === "image") dados = await reduzirImagem(file);
+      else {
+        const lim = tipo === "video" ? 16 : 25, mime = tipo === "video" ? "video/mp4" : "application/pdf";
+        if (file.size > lim * 1024 * 1024) throw new Error(`O arquivo passa de ${lim}MB`);
+        if (file.type && file.type !== mime) throw new Error(tipo === "video" ? "Use um vídeo MP4" : "Use um arquivo PDF");
+        dados = { base64: await lerComoBase64(file), mime, previa: "" };
+      }
+      const tamanho = Math.round(dados.base64.length * 0.75);
+      if (subir) {
+        const r = await api.ofMidiaDisparo({ base64: dados.base64, mime: dados.mime });
+        onChange({ tipo, arquivo: r.arquivo, previa: dados.previa, nome: file.name, tamanho: r.tamanho || tamanho });
+      } else {
+        onChange({ tipo, base64: dados.base64, mime: dados.mime, previa: dados.previa, nome: file.name, tamanho });
+      }
+    } catch (e) { showToast(e.message); }
+    finally { setPreparando(false); if (ref.current) ref.current.value = ""; }
+  }
+  const abrir = () => { if (ref.current) ref.current.click(); };
+  return (
+    <div className={"midia-esc" + (valor ? " tem" : "") + (arrastando ? " arrasta" : "")}
+      onDragOver={(e) => { e.preventDefault(); setArrastando(true); }}
+      onDragLeave={() => setArrastando(false)}
+      onDrop={(e) => { e.preventDefault(); setArrastando(false); escolher(e.dataTransfer.files && e.dataTransfer.files[0]); }}>
+      <input ref={ref} type="file" accept={R.accept} style={{ display: "none" }} onChange={(e) => escolher(e.target.files && e.target.files[0])} />
+      {valor ? (
+        <>
+          <button type="button" className="midia-esc-thumb" onClick={abrir} title="Trocar">
+            {valor.previa ? <img src={valor.previa} alt="" /> : <I.clip className="ico" />}
+          </button>
+          <div className="midia-esc-info">
+            <b><I.check className="ico" /> {R.pronta}</b>
+            <span>{valor.nome}{valor.tamanho ? " · " + tamanhoTxt(valor.tamanho) : ""}</span>
+          </div>
+          <div className="midia-esc-acoes">
+            <button type="button" className="btn btn-sm" disabled={preparando} onClick={abrir}>{preparando ? <span className="spin" /> : "Trocar"}</button>
+            <button type="button" className="btn btn-sm" onClick={() => onChange(null)} title="Remover"><I.x className="ico" /></button>
+          </div>
+        </>
+      ) : (
+        <button type="button" className="midia-esc-vazio" disabled={preparando} onClick={abrir}>
+          <span className="midia-esc-ic">{preparando ? <span className="spin" /> : <I.image className="ico" />}</span>
+          <b>{preparando ? "Preparando…" : "Escolher " + R.nome}</b>
+          <span>{R.dica}</span>
+        </button>
+      )}
+    </div>
+  );
+}
+
+/* prévia no jeitinho do WhatsApp (imagem em cima, texto embaixo) */
+function PreviaWhats({ formato, imagem, texto, rodape, botoes, rotulo }) {
+  const comMidia = formato && formato !== "TEXT";
+  return (
+    <div className="pw">
+      {rotulo && <div className="pw-rot">{rotulo}</div>}
+      <div className={"pw-bolha" + (comMidia && !texto ? " so-midia" : "")}>
+        {comMidia && (imagem
+          ? <img className="pw-img" src={imagem} alt="" />
+          : <div className="pw-img vazio"><I.image className="ico" /><span>{formato === "VIDEO" ? "o vídeo aparece aqui" : formato === "DOCUMENT" ? "o PDF aparece aqui" : "a imagem aparece aqui"}</span></div>)}
+        {texto ? <div className="pw-txt">{texto}</div> : null}
+        {rodape ? <div className="pw-rod">{rodape}</div> : null}
+        <span className="pw-hora">agora</span>
+      </div>
+      {botoes && botoes.length > 0 && <div className="pw-botoes">{botoes.map((b, i) => <span key={i}>{b}</span>)}</div>}
+    </div>
+  );
+}
+
+const FORMATOS_DISPARO = [
+  { k: "texto", titulo: "Só mensagem", sub: "O texto do template" },
+  { k: "imagem", titulo: "Só a imagem", sub: "A imagem, sem texto" },
+  { k: "imagem_texto", titulo: "Imagem + mensagem", sub: "Imagem com o texto embaixo" },
+];
+/* variáveis do template no disparo: {{1}} = primeiro nome do contato, as outras iguais pra todos
+   (mesmas regras do servidor — aqui é só pra prévia) */
+function limparVar(v) { return String(v == null ? "" : v).replace(/\s+/g, " ").trim(); }
+function primeiroNomeContato(nome) {
+  const n = limparVar(nome);
+  if (!n || /^[\d\s+().-]+$/.test(n)) return "";
+  const p = n.split(" ")[0];
+  return p.charAt(0).toLocaleUpperCase("pt-BR") + p.slice(1).toLocaleLowerCase("pt-BR");
+}
+function variaveisDoContato(cfg, nome) {
+  if (!cfg || !(cfg.qtd > 0)) return [];
+  return Array.from({ length: cfg.qtd }, (_, i) => (i === 0 && cfg.nome)
+    ? (primeiroNomeContato(nome) || limparVar(cfg.semNome) || "pessoal")
+    : (limparVar((cfg.fixas || [])[i]) || "{{" + (i + 1) + "}}"));
+}
+function aplicarVariaveis(texto, vals) {
+  return String(texto || "").replace(/\{\{(\d+)\}\}/g, (m, n) => vals[Number(n) - 1] || m);
+}
+
+function IconeFormato({ k }) {
+  return (
+    <span className={"fmt-ic " + k} aria-hidden="true">
+      {k !== "texto" && <i className="fmt-ic-img" />}
+      {k !== "imagem" && <><i className="fmt-ic-l" /><i className="fmt-ic-l curta" /></>}
+    </span>
+  );
+}
+
 function ModalDisparo({ isGer = true, numeros, showToast, onClose, onDone, preset = null }) {
   const [passo, setPasso] = useState(1);
   const [numeroId, setNumeroId] = useState(numeros[0] ? numeros[0].id : "");
   const [templates, setTemplates] = useState([]);
   const [carregandoTpl, setCarregandoTpl] = useState(false);
   const [template, setTemplate] = useState(null);
+  // formato: "texto" (só mensagem) | "imagem" (só a imagem) | "imagem_texto" (imagem + mensagem embaixo)
+  const [formato, setFormato] = useState("texto");
+  const [midia, setMidia] = useState(null);       // { tipo, arquivo, previa, nome, tamanho }
+  const [semModelo, setSemModelo] = useState(false); // só a imagem, sem modelo (só quem falou nas últimas 24h)
+  // variáveis do template: {{1}} = nome do contato (ou texto fixo); as outras, iguais pra todos
+  const [varNome, setVarNome] = useState(true);
+  const [semNome, setSemNome] = useState("pessoal");
+  const [fixas, setFixas] = useState([]);
+  useEffect(() => { setFixas(Array.from({ length: (template && template.vars) || 0 }, () => "")); }, [template]);
+  const setFixa = (i, v) => setFixas((xs) => { const n = xs.slice(); n[i] = v; return n; });
   const [modoContato, setModoContato] = useState("manual");
   const [contatos, setContatos] = useState([]);
   const [textoManual, setTextoManual] = useState("");
@@ -1963,9 +2143,14 @@ function ModalDisparo({ isGer = true, numeros, showToast, onClose, onDone, prese
     }
     setEnviando(true);
     try {
+      const usaModelo = !!template && !(formato === "imagem" && semModelo);
       const r = await api.ofDisparar({
-        numeroId, template: template.name, idioma: template.language,
-        nomeCampanha: nomeCampanha || template.name, contatos, iaId: iaId || null,
+        numeroId, modo: formato === "imagem" ? "imagem" : "template",
+        template: usaModelo ? template.name : "", idioma: usaModelo ? template.language : "pt_BR",
+        midiaArquivo: formato !== "texto" && midia ? midia.arquivo : undefined,
+        midiaNome: formato !== "texto" && midia ? midia.nome : undefined,
+        variaveisCfg: usaModelo && template.vars > 0 ? { qtd: template.vars, nome: varNome, semNome, fixas } : undefined,
+        nomeCampanha: nomeCampanha || (usaModelo ? template.name : "Só imagem"), contatos, iaId: iaId || null,
         pularRecebidos, agendarPara: agendarPara || undefined, destinoLeads,
         vendedorDestino: destinoLeads === "vendedor" ? (vendedorDestino || null) : null,
       });
@@ -1979,7 +2164,27 @@ function ModalDisparo({ isGer = true, numeros, showToast, onClose, onDone, prese
   const numeroSel = numeros.find((n) => n.id === numeroId);
   const minDataHora = () => { const d = new Date(Date.now() + 120000); const p = (n) => String(n).padStart(2, "0"); return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`; };
   const PASSOS = ["Número", "Mensagem", "Contatos", "Revisar"];
-  const podeAvancar = passo === 1 ? !!numeroId : passo === 2 ? !!template : passo === 3 ? contatos.length > 0 : true;
+  // templates de cada formato: texto puro x com mídia no topo
+  const tplsDoFormato = templates.filter((t) => {
+    const temMidia = !!MIDIA_CABECALHO[t.header];
+    if (formato === "texto") return !temMidia;
+    if (formato === "imagem") return t.header === "IMAGE";
+    return temMidia;
+  });
+  // "só a imagem": modelo de texto curtinho primeiro (é o que vai pra quem não falou nas 24h)
+  if (formato === "imagem") tplsDoFormato.sort((a, b) => (a.texto || "").length - (b.texto || "").length);
+  const tipoMidia = formato === "texto" ? null : formato === "imagem" ? "image" : (template && MIDIA_CABECALHO[template.header]) || "image";
+  const midiaOk = !tipoMidia || (!!midia && midia.tipo === tipoMidia && !!midia.arquivo);
+  const modeloOk = formato === "imagem" ? (semModelo || !!template) : !!template;
+  const qtdComImagem = templates.filter((t) => MIDIA_CABECALHO[t.header]).length;
+  const usaModeloRev = !!template && !(formato === "imagem" && semModelo);
+  const qtdVars = usaModeloRev ? (template.vars || 0) : 0;
+  const varsCfg = qtdVars ? { qtd: qtdVars, nome: varNome, semNome, fixas } : null;
+  const varsOk = !varsCfg || Array.from({ length: qtdVars }, (_, i) => i).every((i) => limparVar(i === 0 && varNome ? semNome : fixas[i]));
+  const contatoEx = contatos[0] || null;
+  const textoEx = usaModeloRev ? aplicarVariaveis(template.texto, variaveisDoContato(varsCfg, contatoEx ? contatoEx.nome : "Maria")) : "";
+  const semNomeQtd = varsCfg && varNome ? contatos.filter((c) => !primeiroNomeContato(c.nome)).length : 0;
+  const podeAvancar = passo === 1 ? !!numeroId : passo === 2 ? (modeloOk && midiaOk && varsOk) : passo === 3 ? contatos.length > 0 : true;
 
   return (
     <Portal>
@@ -2021,23 +2226,106 @@ function ModalDisparo({ isGer = true, numeros, showToast, onClose, onDone, prese
 
           {passo === 2 && (
             <div className="dispm-fade">
-              <h3 className="dispm-titulo">Qual mensagem enviar?</h3>
-              <p className="dispm-sub">Só templates aprovados pela Meta aparecem aqui.</p>
-              {carregandoTpl ? (
-                <div className="dispm-load"><span className="spin" /> Carregando templates…</div>
-              ) : templates.length === 0 ? (
-                <div className="dispm-load">Nenhum template aprovado. Crie um na aba Templates.</div>
-              ) : (
-                <div className="dispm-tpl-grid">
-                  {templates.map((t) => (
-                    <button key={t.name + t.language} className={template && template.name === t.name ? "dispm-tpl on" : "dispm-tpl"} onClick={() => setTemplate(t)}>
-                      <div className="dispm-tpl-head"><b>{t.name}</b><span className="of-tag">{t.language}</span></div>
-                      <div className="dispm-tpl-txt">{t.texto || "(sem corpo)"}</div>
-                      {t.vars > 0 && <div className="dispm-tpl-var">usa {t.vars} variável(eis)</div>}
-                    </button>
-                  ))}
+              <h3 className="dispm-titulo">O que vai enviar?</h3>
+              <p className="dispm-sub">Escolha o formato. Só templates aprovados pela Meta aparecem aqui.</p>
+              <div className="dispm-formatos" role="radiogroup" aria-label="Formato do disparo">
+                {FORMATOS_DISPARO.map((f) => (
+                  <button key={f.k} type="button" role="radio" aria-checked={formato === f.k}
+                    className={"dispm-fmt" + (formato === f.k ? " on" : "")}
+                    onClick={() => { if (formato !== f.k) { setFormato(f.k); setTemplate(null); setSemModelo(false); } }}>
+                    <IconeFormato k={f.k} />
+                    <b>{f.titulo}</b>
+                    <span>{f.sub}</span>
+                  </button>
+                ))}
+              </div>
+
+              {formato !== "texto" && (
+                <div className="dispm-bloco">
+                  <div className="dispm-bloco-h"><span className="dispm-n">1</span> Escolha {(ROTULO_MIDIA[tipoMidia] || ROTULO_MIDIA.image).art}</div>
+                  <EscolherMidia key={tipoMidia} tipo={tipoMidia} valor={midia && midia.tipo === tipoMidia ? midia : null} onChange={setMidia} showToast={showToast} />
                 </div>
               )}
+
+              <div className="dispm-bloco">
+                {formato !== "texto" && (
+                  <div className="dispm-bloco-h"><span className="dispm-n">2</span> {formato === "imagem" ? "Modelo pra quem não falou com vocês nas últimas 24h" : "Escolha o template com imagem"}</div>
+                )}
+                {formato === "imagem" && (
+                  <div className="dispm-aviso">
+                    <I.clock className="ico" />
+                    <span>Quem falou com vocês nas <b>últimas 24h</b> recebe <b>só a imagem</b>, sem texto. Para os outros, o WhatsApp só entrega com template aprovado, e todo template tem uma linha de texto. Use um com texto bem curtinho, como “Escola Instructiva”.</span>
+                  </div>
+                )}
+                {carregandoTpl ? (
+                  <div className="dispm-load"><span className="spin" /> Carregando templates…</div>
+                ) : (
+                  <div className="dispm-tpl-grid">
+                    {formato === "imagem" && (
+                      <button className={"dispm-tpl" + (semModelo ? " on" : "")} onClick={() => { setSemModelo(true); setTemplate(null); }}>
+                        <div className="dispm-tpl-head"><b>Sem template</b></div>
+                        <div className="dispm-tpl-txt">Só quem falou com vocês nas últimas 24h recebe. Os outros ficam de fora.</div>
+                      </button>
+                    )}
+                    {tplsDoFormato.map((t) => (
+                      <button key={t.name + t.language} className={!semModelo && template && template.name === t.name ? "dispm-tpl on" : "dispm-tpl"} onClick={() => { setTemplate(t); setSemModelo(false); }}>
+                        <div className="dispm-tpl-head">
+                          <b>{t.name}</b>
+                          <span className="dispm-tpl-tags">
+                            {MIDIA_CABECALHO[t.header] && <span className="dispm-tag-img"><I.image className="ico" /> {t.header === "VIDEO" ? "Vídeo" : t.header === "DOCUMENT" ? "PDF" : "Imagem"}</span>}
+                            {formato === "imagem" && (t.texto || "").length <= 40 && <span className="dispm-tag-curto">texto curtinho</span>}
+                            <span className="of-tag">{t.language}</span>
+                          </span>
+                        </div>
+                        <div className="dispm-tpl-txt">{t.texto || "(sem corpo)"}</div>
+                        {t.vars > 0 && <div className="dispm-tpl-var">usa {t.vars} variável(eis)</div>}
+                      </button>
+                    ))}
+                    {tplsDoFormato.length === 0 && (
+                      <div className="dispm-vazio">
+                        <I.image className="ico" />
+                        <div>
+                          <b>{formato === "texto" ? "Nenhum template só de texto aprovado." : "Nenhum template com imagem aprovado ainda."}</b>
+                          <span>{formato === "texto"
+                            ? "Crie um na aba Templates."
+                            : "Crie um em Templates › Novo template › " + (formato === "imagem" ? "Só a imagem" : "Imagem + mensagem") + ". A Meta costuma aprovar em minutos."}</span>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+                {qtdVars > 0 && (
+                  <div className="dispm-vars">
+                    <div className="dispm-bloco-h">{formato !== "texto" && <span className="dispm-n">3</span>} Complete o template</div>
+                    <div className="dispm-vars-ex"><span>Fica assim</span>{aplicarVariaveis(template.texto, variaveisDoContato(varsCfg, "Maria Souza"))}</div>
+                    {Array.from({ length: qtdVars }, (_, i) => (
+                      <div key={i} className="dispm-var">
+                        <span className="dispm-var-tag">{"{{" + (i + 1) + "}}"}</span>
+                        <div className="dispm-var-campo">
+                          {i === 0 && (
+                            <div className="dispm-modo compacto">
+                              <button type="button" className={varNome ? "dispm-modo-btn on" : "dispm-modo-btn"} onClick={() => setVarNome(true)}>Nome do contato</button>
+                              <button type="button" className={!varNome ? "dispm-modo-btn on" : "dispm-modo-btn"} onClick={() => setVarNome(false)}>Texto igual pra todos</button>
+                            </div>
+                          )}
+                          {i === 0 && varNome ? (
+                            <label className="dispm-var-lab">
+                              <span>Quem estiver sem nome na lista recebe</span>
+                              <input className="input" value={semNome} onChange={(e) => setSemNome(e.target.value)} placeholder="ex.: pessoal" />
+                            </label>
+                          ) : (
+                            <input className="input" value={fixas[i] || ""} onChange={(e) => setFixa(i, e.target.value)}
+                              placeholder={i === 0 ? "Ex.: Energia Solar" : "Vale pra todos os contatos"} />
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {formato === "texto" && qtdComImagem === 0 && templates.length > 0 && (
+                  <div className="dispm-dica"><I.image className="ico" /> Quer mandar com imagem? Escolha <b>Só a imagem</b> ou <b>Imagem + mensagem</b> lá em cima.</div>
+                )}
+              </div>
             </div>
           )}
 
@@ -2067,8 +2355,12 @@ function ModalDisparo({ isGer = true, numeros, showToast, onClose, onDone, prese
               <p className="dispm-sub">Confira e dispare.</p>
               <div className="dispm-review">
                 <div className="dispm-rev"><span>📱 Número</span><b>{numeroSel ? numeroSel.apelido : "—"}</b></div>
-                <div className="dispm-rev"><span>💬 Template</span><b>{template ? template.name : "—"}</b></div>
+                <div className="dispm-rev"><span>🖼️ Formato</span><b>{(FORMATOS_DISPARO.find((f) => f.k === formato) || {}).titulo}</b></div>
+                <div className="dispm-rev"><span>💬 Template</span><b>{usaModeloRev ? template.name : formato === "imagem" ? "Sem template" : "—"}</b></div>
                 <div className="dispm-rev"><span>👥 Contatos</span><b>{contatos.length}</b></div>
+                {varsCfg && varNome && (
+                  <div className="dispm-rev"><span>🔤 {"{{1}}"}</span><b>Primeiro nome de cada um{semNomeQtd ? ` · ${semNomeQtd} sem nome recebe${semNomeQtd > 1 ? "m" : ""} “${limparVar(semNome)}”` : ""}</b></div>
+                )}
               </div>
               <div className="dispm-campo">
                 <label>Quem atende quem responder?</label>
@@ -2137,7 +2429,18 @@ function ModalDisparo({ isGer = true, numeros, showToast, onClose, onDone, prese
               </div>
               <div className="dispm-previa">
                 <span className="dispm-previa-lab">Prévia</span>
-                <div className="dispm-previa-bolha">{template ? template.texto : ""}</div>
+                {formato === "imagem" ? (
+                  <div className="pw-dupla">
+                    <PreviaWhats formato="IMAGE" imagem={midia && midia.previa} rotulo="Quem falou nas últimas 24h" />
+                    {usaModeloRev
+                      ? <PreviaWhats formato="IMAGE" imagem={midia && midia.previa} texto={textoEx} rodape={template.rodape} botoes={template.botoes} rotulo="Os demais (template)" />
+                      : <div className="pw-fora">Quem não falou nas últimas 24h <b>não recebe</b> (o disparo está sem template).</div>}
+                  </div>
+                ) : template ? (
+                  <PreviaWhats formato={MIDIA_CABECALHO[template.header] ? template.header : null} imagem={midia && midia.previa}
+                    texto={textoEx} rodape={template.rodape} botoes={template.botoes}
+                    rotulo={varsCfg && contatoEx ? "Exemplo: " + (contatoEx.nome || contatoEx.telefone) : ""} />
+                ) : null}
               </div>
             </div>
           )}
@@ -2204,7 +2507,7 @@ function ModalMetricas({ camp, isGer = true, onClose, onRetomar, onRedisparar, o
         <div className="mh"><b>{camp.nome}</b><button className="x-btn" onClick={onClose}><I.x /></button></div>
         <div className="mb">
           <div className="panel-sub" style={{ marginBottom: 14 }}>
-            Template <b>{camp.template}</b> · {new Date(camp.criadoEm).toLocaleString("pt-BR")} · total {camp.total} contato(s)
+            {camp.template ? <>Template <b>{camp.template}</b></> : <b>Só a imagem</b>}{camp.midia ? (camp.modo === "imagem" ? " · só a imagem" : " · com imagem") : ""} · {new Date(camp.criadoEm).toLocaleString("pt-BR")} · total {camp.total} contato(s)
             {camp.criadoPorNome ? <> · disparado por <b>{camp.criadoPorNome}</b></> : null}
           </div>
 
@@ -2215,9 +2518,9 @@ function ModalMetricas({ camp, isGer = true, onClose, onRetomar, onRedisparar, o
             </div>
           ) : (
             <>
-              {camp.falhas > 0 && camp.ultimoErro && (
+              {(camp.falhas > 0 || (camp.status === "parada" && camp.pendentes > 0)) && camp.ultimoErro && (
                 <div style={{ marginBottom: 14, fontSize: 13, lineHeight: 1.5, color: "#b91c1c", background: "#fef2f2", border: "1px solid #fecaca", borderRadius: 10, padding: "12px 14px" }}>
-                  <div style={{ fontWeight: 700, marginBottom: 4 }}>⚠️ Por que {camp.falhas} falhou</div>
+                  <div style={{ fontWeight: 700, marginBottom: 4 }}>{camp.falhas > 0 ? `⚠️ Por que ${camp.falhas} falhou` : "⏸ O disparo pausou"}</div>
                   {explicaErroMeta(camp.ultimoErro)}
                   <div style={{ marginTop: 6, fontSize: 11.5, opacity: .8 }}>Erro cru da Meta: {camp.ultimoErro}</div>
                 </div>
@@ -2418,9 +2721,15 @@ function OficialTemplates({ isGer = true, showToast }) {
 
   async function criar() {
     if (!form.nome || !form.corpo) return showToast("Preencha nome e texto");
+    const comImagem = form.formato !== "texto";
+    if (comImagem && !form.imagem) return showToast("Escolha a imagem do template");
     setSalvando(true);
     try {
-      const r = await api.ofCriarTemplate(numeroId, form);
+      const r = await api.ofCriarTemplate(numeroId, {
+        nome: form.nome, corpo: form.corpo, categoria: form.categoria, idioma: form.idioma,
+        imagemBase64: comImagem ? form.imagem.base64 : undefined,
+        imagemMime: comImagem ? form.imagem.mime : undefined,
+      });
       showToast(`Template enviado! Status: ${r.status === "APPROVED" ? "aprovado" : "aguardando aprovação da Meta"}`);
       setForm(null);
       setTimeout(carregar, 1500);
@@ -2451,7 +2760,7 @@ function OficialTemplates({ isGer = true, showToast }) {
             </select>
           )}
           <button className="btn btn-sm" onClick={carregar}><I.refresh className="ico" /></button>
-          <button className="btn btn-primary btn-sm" onClick={() => setForm({ nome: "", corpo: "", categoria: "MARKETING", idioma: "pt_BR" })}>
+          <button className="btn btn-primary btn-sm" onClick={() => setForm({ nome: "", corpo: "", categoria: "MARKETING", idioma: "pt_BR", formato: "texto", imagem: null })}>
             <I.plus className="ico" /> Novo template
           </button>
         </div>
@@ -2466,7 +2775,7 @@ function OficialTemplates({ isGer = true, showToast }) {
           {lista.map((t) => (
             <div key={t.name + t.language} className="of-tpl-row">
               <div className="of-tpl-row-info">
-                <b>{t.name}</b>
+                <b>{t.name}{MIDIA_CABECALHO[t.header] && <span className="dispm-tag-img"><I.image className="ico" /> {t.header === "VIDEO" ? "Vídeo" : t.header === "DOCUMENT" ? "PDF" : "Imagem"}</span>}</b>
                 <div className="of-tpl-row-txt">{t.texto || "(sem corpo)"}</div>
               </div>
               <span className={"of-cat " + t.category}>{rotuloCat(t.category)}</span>
@@ -2500,12 +2809,44 @@ function OficialTemplates({ isGer = true, showToast }) {
                 </div>
               </div>
               <div className="field">
-                <label className="lab">Texto da mensagem</label>
-                <textarea className="textarea" rows={5} placeholder="Olá! Tudo bem? Aqui é da Escola Instructiva…" value={form.corpo} onChange={(e) => setForm({ ...form, corpo: e.target.value })} />
-                <div className="panel-sub" style={{ fontSize: 11.5, marginTop: 6 }}>
-                  Para personalizar com o nome, use <code>{"{{1}}"}</code> (ex: "Olá {"{{1}}"}!"). Aí no disparo você preenche pelo CSV.
+                <label className="lab">Formato</label>
+                <div className="dispm-formatos compacto" role="radiogroup" aria-label="Formato do template">
+                  {FORMATOS_DISPARO.map((f) => (
+                    <button key={f.k} type="button" role="radio" aria-checked={form.formato === f.k}
+                      className={"dispm-fmt" + (form.formato === f.k ? " on" : "")}
+                      onClick={() => setForm({ ...form, formato: f.k, corpo: f.k === "imagem" && !form.corpo.trim() ? "Escola Instructiva" : form.corpo })}>
+                      <IconeFormato k={f.k} />
+                      <b>{f.titulo}</b>
+                    </button>
+                  ))}
                 </div>
               </div>
+              {form.formato !== "texto" && (
+                <div className="field">
+                  <label className="lab">Imagem</label>
+                  <EscolherMidia tipo="image" subir={false} valor={form.imagem} onChange={(img) => setForm((f) => ({ ...f, imagem: img }))} showToast={showToast} />
+                  <div className="panel-sub" style={{ fontSize: 11.5, marginTop: 6 }}>
+                    Essa imagem vai pra Meta como exemplo na aprovação. Na hora do disparo, você pode trocar por outra imagem.
+                  </div>
+                </div>
+              )}
+              <div className="field">
+                <label className="lab">{form.formato === "imagem" ? "Linha de texto (o WhatsApp exige)" : "Texto da mensagem"}</label>
+                <textarea className="textarea" rows={form.formato === "imagem" ? 2 : 5} placeholder={form.formato === "imagem" ? "Escola Instructiva" : "Olá! Tudo bem? Aqui é da Escola Instructiva…"} value={form.corpo} onChange={(e) => setForm({ ...form, corpo: e.target.value })} />
+                <div className="panel-sub" style={{ fontSize: 11.5, marginTop: 6 }}>
+                  {form.formato === "imagem"
+                    ? "Todo template precisa de pelo menos uma linha de texto. Deixe bem curtinho: quem falou com vocês nas últimas 24h recebe só a imagem, sem esse texto."
+                    : <>Para personalizar com o nome, use <code>{"{{1}}"}</code> (ex: "Olá {"{{1}}"}!"). No disparo, o {"{{1}}"} vira o primeiro nome de cada contato da lista.</>}
+                </div>
+              </div>
+              {(form.corpo.trim() || form.imagem) && (
+                <div className="field">
+                  <label className="lab">Prévia</label>
+                  <div className="dispm-previa" style={{ marginTop: 0 }}>
+                    <PreviaWhats formato={form.formato !== "texto" ? "IMAGE" : null} imagem={form.imagem && form.imagem.previa} texto={form.corpo} />
+                  </div>
+                </div>
+              )}
             </div>
             <div className="mf">
               <button className="btn" onClick={() => setForm(null)}>Cancelar</button>
@@ -8347,6 +8688,7 @@ function InboxOficial({ isGer, ehLider, showToast, onIrParaEvolution, target, on
   const [tpls, setTpls] = useState([]);
   const [tplSel, setTplSel] = useState("");
   const [vars, setVars] = useState([]);
+  const [midiaNova, setMidiaNova] = useState(null); // imagem do topo (template com imagem)
   const [carregandoTpl, setCarregandoTpl] = useState(false);
   const [erroNova, setErroNova] = useState("");
   const [enviandoTpl, setEnviandoTpl] = useState(false);
@@ -8540,7 +8882,7 @@ function InboxOficial({ isGer, ehLider, showToast, onIrParaEvolution, target, on
 
   // Ao iniciar uma conversa nova: carrega os números que ESTE usuário pode usar
   useEffect(() => {
-    if (!novaConv) { setTpls([]); setTplSel(""); setErroNova(""); return; }
+    if (!novaConv) { setTpls([]); setTplSel(""); setErroNova(""); setMidiaNova(null); return; }
     setErroNova("");
     api.ofMeusNumeros().then((r) => {
       const ns = r.numeros || [];
@@ -8572,6 +8914,8 @@ function InboxOficial({ isGer, ehLider, showToast, onIrParaEvolution, target, on
 
   async function enviarNovaConv() {
     if (!novaConv || !numSel || !tplObj) { showToast("Escolha o número e o template"); return; }
+    const tipoMidiaNova = MIDIA_CABECALHO[tplObj.header] || null;
+    if (tipoMidiaNova && !(midiaNova && midiaNova.tipo === tipoMidiaNova)) { showToast("Escolha " + ROTULO_MIDIA[tipoMidiaNova].art + " desse template"); return; }
     if ((tplObj.vars || 0) > 0 && vars.some((v) => !String(v || "").trim())) {
       showToast("Preencha as informações do template"); return;
     }
@@ -8584,6 +8928,8 @@ function InboxOficial({ isGer, ehLider, showToast, onIrParaEvolution, target, on
         template: tplObj.name,
         idioma: tplObj.language || "pt_BR", // idioma REAL do template (não chutar pt_BR)
         variaveis: vars,
+        midiaArquivo: MIDIA_CABECALHO[tplObj.header] && midiaNova ? midiaNova.arquivo : undefined,
+        midiaNome: MIDIA_CABECALHO[tplObj.header] && midiaNova ? midiaNova.nome : undefined,
       });
       showToast("✓ Conversa iniciada");
       setNovaConv(null);
@@ -8904,8 +9250,15 @@ function InboxOficial({ isGer, ehLider, showToast, onIrParaEvolution, target, on
                 <div className="of-nova-semtpl">{erroNova || "Nenhum template aprovado nesse número."}</div>
               ) : (
                 <select className="input" value={tplSel} onChange={(e) => setTplSel(e.target.value)}>
-                  {tpls.map((t) => <option key={t.name} value={t.name}>{t.name}</option>)}
+                  {tpls.map((t) => <option key={t.name} value={t.name}>{t.name}{MIDIA_CABECALHO[t.header] ? " · com imagem" : ""}</option>)}
                 </select>
+              )}
+
+              {tplObj && MIDIA_CABECALHO[tplObj.header] && (
+                <div style={{ marginTop: 10 }}>
+                  <label className="lbl-mini">{tplObj.header === "VIDEO" ? "Vídeo" : tplObj.header === "DOCUMENT" ? "PDF" : "Imagem"} que vai no topo</label>
+                  <EscolherMidia key={tplObj.header} tipo={MIDIA_CABECALHO[tplObj.header]} valor={midiaNova && midiaNova.tipo === MIDIA_CABECALHO[tplObj.header] ? midiaNova : null} onChange={setMidiaNova} showToast={showToast} />
+                </div>
               )}
 
               {tplObj && tplObj.texto && (
@@ -9212,7 +9565,7 @@ function InboxOficial({ isGer, ehLider, showToast, onIrParaEvolution, target, on
                       {item.m.tipo && item.m.tipo !== "text" && item.m.mid && item.m.arquivo && (
                         <OfMidia chatId={conversa.id} m={item.m} />
                       )}
-                      {(!item.m.tipo || item.m.tipo === "text" || !item.m.arquivo) && item.m.content}
+                      {(!item.m.tipo || item.m.tipo === "text" || !item.m.arquivo || item.m.template) && item.m.content}
                       <span className="of-msg-hora">{horaCurta(item.m.ts)}{item.m.role === "me" && <Ticks status={item.m.status} erro={item.m.erro} erroCodigo={item.m.erroCodigo} lidoEm={item.m.lidoEm} texto={!!item.m.template || item.m.status === "read"} />}</span>
                     </div>
                   </div>
