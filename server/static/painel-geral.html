@@ -334,6 +334,14 @@ svg{display:block}
 @keyframes gira{to{transform:rotate(360deg)}}
 
 /* ---------------- controles (só aparecem quando mexe o mouse) ---------------- */
+.aviso-som{position:absolute;left:50%;bottom:92px;z-index:19;display:flex;align-items:center;gap:14px;height:60px;padding:0 26px 0 20px;border-radius:999px;background:rgba(17,20,25,.94);border:1px solid rgba(251,191,36,.35);box-shadow:0 18px 44px rgba(0,0,0,.5);color:var(--text);font-size:21px;font-weight:500;white-space:nowrap;transform:translate(-50%,16px);opacity:0;visibility:hidden;transition:opacity .4s,transform .4s,visibility 0s linear .4s}
+.aviso-som.on{opacity:1;visibility:visible;transform:translate(-50%,0);transition:opacity .4s,transform .4s}
+.aviso-som svg{width:26px;height:26px;color:#fcd34d;flex:none}
+.aviso-som b{font-weight:700;color:#fcd34d}
+.aviso-som.ok{border-color:rgba(52,211,153,.4)}
+.aviso-som.ok svg,.aviso-som.ok b{color:var(--em-ink)}
+.setup-som{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:6px}
+.setup-som .setup-btn{height:38px;padding:0 14px;font-size:14px}
 .ctrl{position:fixed;right:22px;bottom:22px;z-index:40;display:flex;gap:4px;padding:6px;border-radius:14px;background:rgba(17,20,25,.94);border:1px solid var(--line);box-shadow:0 14px 34px rgba(0,0,0,.45);opacity:0;pointer-events:none;transition:opacity .3s}
 body.mexeu .ctrl{opacity:1;pointer-events:auto}
 .ctrl button{height:38px;min-width:38px;padding:0 10px;border-radius:10px;border:0;background:transparent;color:var(--muted);display:flex;align-items:center;justify-content:center;gap:7px;font:500 13.5px var(--fonte);cursor:pointer}
@@ -521,6 +529,7 @@ body.mexeu .ctrl{opacity:1;pointer-events:auto}
     <div class="tk-at"><i id="tkDot"></i><span id="tkAt">—</span></div>
   </footer>
   <div class="festa" id="festa"></div>
+  <div class="aviso-som" id="avisoSom"></div>
   <canvas id="confete" width="1920" height="1080"></canvas>
 </div>
 
@@ -533,6 +542,7 @@ body.mexeu .ctrl{opacity:1;pointer-events:auto}
   <button onclick="ajustarMargem(0.04)" title="Aumentar o painel (tecla +)" id="bMais"></button>
   <span class="sep"></span>
   <button onclick="telaCheia()" title="Tela cheia (F)" id="bCheia"></button>
+  <button onclick="alternarSom()" title="Ligar ou desligar o som das comemorações" id="bSom"></button>
   <button onclick="abrirSetup()" id="bCfg"></button>
 </div>
 
@@ -546,12 +556,18 @@ body.mexeu .ctrl{opacity:1;pointer-events:auto}
     <label>Sistema 2 — nome</label><input id="nome2" placeholder="Jesuítas">
     <label>Sistema 2 — endereço e código de TV</label>
     <div class="par"><input id="url2" placeholder="https://...railway.app"><input id="key2" placeholder="código"></div>
+    <label>Som das comemorações</label>
+    <div class="setup-som">
+      <button class="setup-btn sec" onclick="testarSom('venda')">▶ Testar venda</button>
+      <button class="setup-btn sec" onclick="testarSom('lider')">▶ Testar novo líder</button>
+      <button class="setup-btn sec" id="bSomSetup" onclick="alternarSom()"></button>
+    </div>
     <div class="setup-acoes">
       <button class="setup-btn sec" onclick="fecharSetup()">Cancelar</button>
       <button class="setup-btn" onclick="salvarSetup()">Salvar e mostrar painel</button>
     </div>
     <small>No endereço coloque só até <b>.app</b>. As telas passam sozinhas a cada 25 segundos.<br>
-      Pra deixar uma TV só numa tela, use no endereço <b>?tela=ritmo&amp;fixa=1</b> (ou geral, hoje, semana). TV muito lenta: <b>?leve=1</b>.<br>
+      Pra deixar uma TV só numa tela, use no endereço <b>?tela=ritmo&amp;fixa=1</b> (ou geral, hoje, semana). TV muito lenta: <b>?leve=1</b>. Sem som: <b>?som=0</b>.<br>
       Atalhos: <kbd>←</kbd> <kbd>→</kbd> trocar tela · <kbd>espaço</kbd> pausar · <kbd>F</kbd> tela cheia · <kbd>+</kbd> <kbd>−</kbd> aumentar/diminuir (ou canal +/− no controle) · <kbd>0</kbd> volta ao tamanho automático. Se a TV continuar grande demais, coloque <b>?zoom=0.5</b> no fim do endereço.</small>
   </div>
 </div>
@@ -602,6 +618,8 @@ var ICO = {
   cheia: '<path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/>',
   engrenagem: '<circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M2 12h3M19 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1"/>',
   alerta: '<path d="M12 3l9.5 17h-19z"/><path d="M12 10v4M12 17.5v.01"/>',
+  som: '<path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z"/><path d="M15.5 9a4.2 4.2 0 0 1 0 6M18.3 6.4a8 8 0 0 1 0 11.2"/>',
+  mudo: '<path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z"/><path d="M16 9.5l5 5M21 9.5l-5 5"/>',
   menos: '<circle cx="11" cy="11" r="7"/><path d="M8 11h6M20 20l-4-4"/>',
   mais: '<circle cx="11" cy="11" r="7"/><path d="M8 11h6M11 8v6M20 20l-4-4"/>'
 };
@@ -1602,6 +1620,229 @@ function perceberMudancas(c, ds) {
   if (fila.length > 6) fila = fila.slice(-6);   // depois de queda de internet, não fica comemorando pra sempre
   if (!festaAtiva && fila.length) mostrarFesta(fila.shift());
 }
+/* =====================================================================
+   SOM DAS COMEMORAÇÕES — feito na hora pelo navegador (Web Audio), sem arquivo:
+   nova venda = "cha-ching" de caixa registradora · novo líder / meta batida = fanfarra.
+   A maioria das TVs só libera som depois que alguém aperta uma tecla UMA vez:
+   até lá aparece um aviso "aperte OK no controle". ?som=0 no endereço desliga.
+   ===================================================================== */
+var SOM = { ctx: null, saida: null, avisoT: null, porTecla: false };   // porTecla: só tocou depois de alguém apertar (navegador bloqueia)
+function somDesligado() {
+  if (Q.get("som") === "0") return true;
+  try { return localStorage.getItem("painel_som") === "0"; } catch (_) { return false; }
+}
+function somCtx() {
+  if (SOM.ctx) return SOM.ctx;
+  var AC = window.AudioContext || window.webkitAudioContext;
+  if (!AC) return null;
+  try { var c = new AC(); montarSaida(c); SOM.ctx = c; } catch (_) { SOM.ctx = null; }
+  return SOM.ctx;
+}
+/* tudo que toca passa por: mistura → eco de salão → compressor → volume → limitador.
+   Resultado: bem alto e encorpado, sem estourar o alto-falante da TV. */
+function montarSaida(c) {
+  var mix = c.createGain(), bus = c.createGain();
+  mix.connect(bus);
+  try {                                           // eco de salão (gerado na hora, sem arquivo)
+    var n = Math.floor(c.sampleRate * 2.2), ir = c.createBuffer(2, n, c.sampleRate);
+    for (var ch = 0; ch < 2; ch++) { var d = ir.getChannelData(ch); for (var i = 0; i < n; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / n, 3.4); }
+    var rev = c.createConvolver(), envio = c.createGain();
+    rev.buffer = ir; envio.gain.value = LEVE ? 0 : 0.22;
+    mix.connect(envio); envio.connect(rev); rev.connect(bus);
+  } catch (_) {}
+  var fim = bus;
+  if (c.createDynamicsCompressor) {
+    var k = c.createDynamicsCompressor();
+    k.threshold.value = -22; k.knee.value = 6; k.ratio.value = 8; k.attack.value = 0.002; k.release.value = 0.18;
+    fim.connect(k); fim = k;
+  }
+  var vol = c.createGain(); vol.gain.value = 1.2;   // volume alto (bem alto e ainda limpo)
+  fim.connect(vol);
+  var lim = c.createWaveShaper(), curva = new Float32Array(4096);
+  for (var j = 0; j < 4096; j++) {                 // limitador suave: entrada até ±2 → saída no máximo ±0,98
+    var v = (j / 4095 * 2 - 1) * 2, a = Math.abs(v);
+    curva[j] = (a < 0.6 ? a : 0.6 + 0.38 * Math.tanh((a - 0.6) / 0.38)) * (v < 0 ? -1 : 1);
+  }
+  lim.curve = curva;   // sem "oversample": a saída nunca passa de 0,98
+  vol.connect(lim); lim.connect(c.destination);
+  SOM.saida = mix;
+  return mix;
+}
+function somLiberado() { return !!(SOM.ctx && SOM.ctx.state === "running"); }
+function destravarSom() {
+  if (somDesligado()) return;
+  var c = somCtx(); if (!c) return;
+  var antes = somLiberado();
+  if (!antes && c.resume) { try { var pr = c.resume(); if (pr && pr.then) pr.then(function () { if (somLiberado()) SOM.porTecla = true; avisoSom(!antes); }); } catch (_) {} }
+  try { var b = c.createBuffer(1, 1, 22050), src = c.createBufferSource(); src.buffer = b; src.connect(c.destination); src.start(0); } catch (_) {}
+  setTimeout(function () { avisoSom(!antes); }, 350);
+}
+// aviso no rodapé: "aperte OK pra ligar o som" (som travado) ou "som ligado" (acabou de liberar)
+function avisoSom(acabouDeLiberar) {
+  var el = $("avisoSom"); if (!el) return;
+  clearTimeout(SOM.avisoT);
+  if (somDesligado() || !somCtx()) { el.className = "aviso-som"; return; }
+  if (!somLiberado()) {
+    el.innerHTML = ic("mudo") + "<span>O navegador da TV bloqueou o som · <b>libere a reprodução automática</b> no navegador (ou aperte OK)</span>";
+    el.className = "aviso-som on";
+  } else if (acabouDeLiberar) {
+    el.innerHTML = ic("som") + "<span><b>Som ligado</b> · vendas e novos líderes vão tocar</span>";
+    el.className = "aviso-som ok on";
+    SOM.avisoT = setTimeout(function () { el.className = "aviso-som ok"; }, 3500);
+  } else el.className = "aviso-som";
+}
+function botaoSom() {
+  var on = !somDesligado();
+  if ($("bSom")) $("bSom").innerHTML = ic(on ? "som" : "mudo");
+  if ($("bSomSetup")) $("bSomSetup").textContent = on ? "Som ligado (desligar)" : "Som desligado (ligar)";
+}
+function alternarSom() {
+  var ligar = somDesligado();
+  try { localStorage.setItem("painel_som", ligar ? "1" : "0"); } catch (_) {}
+  botaoSom();
+  if (ligar) { destravarSom(); setTimeout(function () { tocarSom("venda"); }, 150); } else avisoSom(false);
+}
+function testarSom(tipo) { destravarSom(); setTimeout(function () { tocarSom(tipo, true); }, 150); }
+
+/* peças do som */
+function somTom(t0, freq, dur, tipo, vol, ataque, freqFim, detune) {
+  var c = SOM.ctx, o = c.createOscillator(), g = c.createGain();
+  o.type = tipo || "sine";
+  o.frequency.setValueAtTime(freq, t0);
+  if (freqFim) o.frequency.exponentialRampToValueAtTime(freqFim, t0 + dur);
+  if (detune) o.detune.value = detune;
+  g.gain.setValueAtTime(0.0001, t0);
+  g.gain.exponentialRampToValueAtTime(vol, t0 + (ataque || 0.004));
+  g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+  o.connect(g); g.connect(SOM.saida);
+  o.start(t0); o.stop(t0 + dur + 0.05);
+}
+var RUIDO = null;   // um buffer de ruído só, reaproveitado (leve pra TV)
+function bufRuido(c) {
+  if (RUIDO && RUIDO.sampleRate === c.sampleRate && RUIDO._ctx === c) return RUIDO;
+  var n = Math.floor(c.sampleRate * 2.5), b = c.createBuffer(1, n, c.sampleRate), d = b.getChannelData(0);
+  for (var i = 0; i < n; i++) d[i] = Math.random() * 2 - 1;
+  b._ctx = c; RUIDO = b; return b;
+}
+function somRuido(t0, dur, vol, filtro, freq, q, ataque) {
+  var c = SOM.ctx, src = c.createBufferSource(), f = c.createBiquadFilter(), g = c.createGain();
+  src.buffer = bufRuido(c); src.loop = true; f.type = filtro; f.frequency.value = freq; if (q) f.Q.value = q;
+  if (ataque) { g.gain.setValueAtTime(0.0001, t0); g.gain.exponentialRampToValueAtTime(vol, t0 + ataque); }
+  else g.gain.setValueAtTime(vol, t0);
+  g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+  src.connect(f); f.connect(g); g.connect(SOM.saida);
+  src.start(t0, Math.random() * 0.5); src.stop(t0 + dur + 0.02);
+}
+// sino brilhante (parciais de sino, com leve batimento)
+function somSino(t0, f0, vol, dur) {
+  somTom(t0, f0, dur, "sine", vol, 0.002);
+  somTom(t0, f0 * 1.003, dur * 0.9, "sine", vol * 0.6, 0.002);
+  somTom(t0, f0 * 2.76, dur * 0.5, "sine", vol * 0.28, 0.002);
+  somTom(t0, f0 * 5.4, dur * 0.28, "sine", vol * 0.12, 0.002);
+}
+// metal (trompete/trombone): 3 serras levemente desafinadas + oitava abaixo, "sopro" no ataque e vibrato nas notas longas
+function somMetal(t0, freq, dur, vol, brilho) {
+  var c = SOM.ctx, f = c.createBiquadFilter(), g = c.createGain(), b = brilho || 1;
+  f.type = "lowpass"; f.Q.value = 1.1;
+  f.frequency.setValueAtTime(Math.min(11000, freq * 2), t0);
+  f.frequency.linearRampToValueAtTime(Math.min(12000, freq * 9 * b), t0 + 0.04);
+  f.frequency.exponentialRampToValueAtTime(Math.min(10000, freq * 4.5 * b), t0 + 0.3);
+  g.gain.setValueAtTime(0.0001, t0);
+  g.gain.exponentialRampToValueAtTime(vol, t0 + 0.025);
+  g.gain.exponentialRampToValueAtTime(vol * 0.8, t0 + 0.12);
+  g.gain.setValueAtTime(vol * 0.8, t0 + Math.max(0.13, dur - 0.05));
+  g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur + 0.22);
+  f.connect(g); g.connect(SOM.saida);
+  var vib = null, fimO = t0 + dur + 0.3;
+  if (dur > 0.45) {
+    var lfo = c.createOscillator(); vib = c.createGain();
+    lfo.frequency.value = 5.6; vib.gain.setValueAtTime(0, t0); vib.gain.setValueAtTime(0, t0 + 0.2); vib.gain.linearRampToValueAtTime(freq * 0.008, t0 + 0.55);
+    lfo.connect(vib); lfo.start(t0); lfo.stop(fimO);
+  }
+  [["sawtooth", 1, 0, 1], ["sawtooth", 1, 9, 0.8], ["sawtooth", 1, -9, 0.8], ["triangle", 0.5, 0, 0.6]].forEach(function (v) {
+    var o = c.createOscillator(), og = c.createGain(), fr = freq * v[1];
+    o.type = v[0]; o.detune.value = v[2]; og.gain.value = v[3];
+    o.frequency.setValueAtTime(fr * 0.97, t0); o.frequency.linearRampToValueAtTime(fr, t0 + 0.035);   // "sopro" entrando na nota
+    if (vib) vib.connect(o.frequency);
+    o.connect(og); og.connect(f); o.start(t0); o.stop(fimO);
+  });
+}
+function somTimpano(t0, freq, vol) { somTom(t0, freq * 1.6, 0.7, "sine", vol, 0.003, freq); somTom(t0, freq * 2.4, 0.35, "sine", vol * 0.3, 0.003, freq * 1.5); somRuido(t0, 0.07, vol * 0.3, "lowpass", 900); }
+function somBumbo(t0, vol) { somTom(t0, 130, 0.32, "sine", vol, 0.002, 42); somRuido(t0, 0.03, vol * 0.4, "lowpass", 2500); }
+function somCaixaClara(t0, vol) { somRuido(t0, 0.16, vol, "bandpass", 1900, 0.7); somTom(t0, 210, 0.08, "triangle", vol * 0.5, 0.002, 160); }
+function somPrato(t0, vol, dur) { somRuido(t0, dur || 2.4, vol, "highpass", 5200); somRuido(t0, (dur || 2.4) * 0.6, vol * 0.5, "bandpass", 9000, 0.8); }
+function somRufar(t0, dur, vol) {                  // rufar de caixa crescendo + prato subindo
+  var passos = Math.floor(dur / 0.045);
+  for (var i = 0; i < passos; i++) somCaixaClara(t0 + i * 0.045, vol * (0.25 + 0.75 * i / passos));
+  somRuido(t0, dur + 0.05, vol * 0.5, "highpass", 6000, 0, dur);
+  for (var j = 0; j < 4; j++) somTimpano(t0 + j * dur / 4, 73.4, vol * (0.4 + j * 0.15));
+}
+function acorde(t0, notas, dur, vol, brilho) { notas.forEach(function (f) { somMetal(t0, f, dur, vol, brilho); }); }
+
+// NOVA VENDA: "cha-ching!" forte + "ta-dã!" de metais + chuva de moedas
+function somCaixa(t) {
+  somRuido(t, 0.05, 0.55, "bandpass", 2400, 1.2);          // "tre"
+  somTom(t, 160, 0.1, "sine", 0.6, 0.002, 65);             // gaveta
+  somRuido(t + 0.06, 0.09, 0.4, "bandpass", 1300, 1.5);    // "chunk"
+  somSino(t + 0.14, 2093, 0.6, 2.0);                        // "chiiiing"
+  somSino(t + 0.145, 2637, 0.4, 1.7);
+  somSino(t + 0.15, 3136, 0.18, 1.2);
+  for (var i = 0; i < 14; i++) {                            // moedas caindo
+    var tc = t + 0.28 + i * 0.06 + Math.random() * 0.04;
+    somTom(tc, 3000 + Math.random() * 3200, 0.1 + Math.random() * 0.1, "triangle", 0.1 + Math.random() * 0.08, 0.002);
+  }
+  // "ta-dã!" (sol → dó com acorde) + bumbo e prato
+  var G5 = 783.99, C6 = 1046.5, E5 = 659.25, G4 = 392, C5 = 523.25, C3 = 130.81;
+  somMetal(t + 0.55, G5, 0.12, 0.2); somCaixaClara(t + 0.55, 0.3);
+  somMetal(t + 0.7, C6, 0.85, 0.22); acorde(t + 0.7, [G4, C5, E5], 0.85, 0.1);
+  somTom(t + 0.7, C3, 1.0, "triangle", 0.4, 0.01);
+  somBumbo(t + 0.7, 0.8); somPrato(t + 0.7, 0.2, 1.6);
+}
+
+/* NOVO LÍDER: trilha de vitória (original), ~7 s — rufar, fanfarra com harmonia e acorde final grande.
+   Ré maior: I – I/3 – IV – V – I */
+function somFanfarra(t, grande) {
+  var N = { D2: 73.42, Fs2: 92.5, G2: 98, A2: 110, D3: 146.83, A3: 220, B3: 246.94, Cs4: 277.18, D4: 293.66, E4: 329.63, Fs4: 369.99, G4: 392, A4: 440,
+            B4: 493.88, Cs5: 554.37, D5: 587.33, E5: 659.25, Fs5: 739.99, G5: 783.99, A5: 880, B5: 987.77, Cs6: 1108.73, D6: 1174.66 };
+  var V = 0.17;                                      // volume da melodia
+  somRufar(t, 0.8, 0.5);                             // tambor subindo
+  // frase 1: "ta-ta-ta TAAAM"
+  [0.8, 0.93, 1.06].forEach(function (x) { somMetal(t + x, N.A4, 0.11, V); somCaixaClara(t + x, 0.35); });
+  somMetal(t + 1.19, N.D5, 0.55, V * 1.15); acorde(t + 1.19, [N.A3, N.D4, N.Fs4], 0.55, V * 0.55);
+  somTom(t + 1.19, N.D2, 0.7, "triangle", 0.5, 0.01); somTimpano(t + 1.19, N.D2, 0.7); somBumbo(t + 1.19, 0.9); somPrato(t + 1.19, 0.22, 2.0);
+  // frase 2: "ta-ta-ta TAAAM" (um degrau acima)
+  [[1.78, N.Cs5], [1.91, N.D5], [2.04, N.E5]].forEach(function (x) { somMetal(t + x[0], x[1], 0.11, V); somCaixaClara(t + x[0], 0.35); });
+  somMetal(t + 2.17, N.Fs5, 0.55, V * 1.15); acorde(t + 2.17, [N.A3, N.D4, N.Fs4], 0.55, V * 0.55);
+  somTom(t + 2.17, N.Fs2, 0.7, "triangle", 0.5, 0.01); somTimpano(t + 2.17, N.Fs2, 0.65); somBumbo(t + 2.17, 0.85);
+  // frase 3: subindo pro clímax
+  [[2.76, N.E5], [2.96, N.Fs5], [3.16, N.G5]].forEach(function (x) { somMetal(t + x[0], x[1], 0.17, V); somCaixaClara(t + x[0], 0.3); });
+  somMetal(t + 3.36, N.A5, 0.85, V * 1.2); acorde(t + 3.36, [N.B3, N.D4, N.G4], 0.85, V * 0.55);
+  somTom(t + 3.36, N.G2, 0.95, "triangle", 0.5, 0.01); somTimpano(t + 3.36, N.G2, 0.7); somBumbo(t + 3.36, 0.9); somPrato(t + 3.36, 0.16, 1.5);
+  // "ta-ta-ta" na dominante
+  [[4.3, N.A5], [4.47, N.B5], [4.64, N.Cs6]].forEach(function (x) { somMetal(t + x[0], x[1], 0.14, V); acorde(t + x[0], [N.Cs4, N.E4, N.A4], 0.14, V * 0.45); somCaixaClara(t + x[0], 0.45); });
+  somTom(t + 4.3, N.A2, 0.5, "triangle", 0.45, 0.01); somTimpano(t + 4.3, N.A2, 0.55);
+  // ACORDE FINAL GRANDE
+  var fim = grande ? 2.6 : 2.2, tf = t + 4.8;
+  somMetal(tf, N.D6, fim, V * 1.25, 1.2);
+  acorde(tf, [N.D4, N.Fs4, N.A4, N.D5, N.Fs5], fim, V * 0.6, 1.1);
+  somTom(tf, N.D2, fim + 0.4, "triangle", 0.55, 0.01); somTom(tf, N.D3, fim + 0.3, "sawtooth", 0.12, 0.02);
+  somBumbo(tf, 1); somTimpano(tf, N.D2, 0.85); somPrato(tf, 0.3, 3.0);
+  for (var r = 0; r < 10; r++) somTimpano(tf + 0.9 + r * 0.07, N.D2, 0.18 + r * 0.03);    // rufar de tímpano no fim
+  somTimpano(tf + fim - 0.15, N.D2, 0.9); somBumbo(tf + fim - 0.15, 0.9); somPrato(tf + fim - 0.15, 0.2, 2.0);
+  [N.D5 * 2, N.Fs5 * 2, N.A5 * 2, N.D6 * 2].forEach(function (f, i) { somSino(tf + 0.1 + i * 0.09, f, 0.07, 1.6); });   // brilho
+  if (grande) [N.A5 * 2, N.D6 * 2].forEach(function (f, i) { somSino(tf + 0.8 + i * 0.12, f, 0.06, 1.3); });
+}
+function tocarSom(tipo, forcar) {
+  if (somDesligado() && !forcar) return;
+  var c = somCtx();
+  if (!c || !somLiberado()) { avisoSom(false); return; }
+  var t = c.currentTime + 0.05;
+  try {
+    if (tipo === "venda") somCaixa(t);
+    else somFanfarra(t, tipo === "meta");
+  } catch (_) {}
+}
+
 function mostrarFesta(f) {
   festaAtiva = true; pausar("festa");
   var el = $("festa");
@@ -1630,6 +1871,7 @@ function mostrarFesta(f) {
   void el.offsetWidth;
   corrigirGap(el);
   el.classList.add("on");
+  tocarSom(f.tipo);
   if (LEVE) $("festaV").textContent = rs(f.valor);
   else { animarNumero($("festaV"), 0, f.valor, "rs", 1600); confete([f.un.cor, "#f6c453", "#ffffff", "#6ee7b7"]); }
   setTimeout(function () {
@@ -1891,7 +2133,18 @@ document.addEventListener("keydown", function (e) {
   else if (e.key === "-" || e.key === "_" || e.key === "PageDown" || e.key === "ChannelDown") ajustarMargem(-0.04);
   else if (k === "0") { try { localStorage.removeItem("painel_margem"); } catch (_) {} escalaAtual = ""; ajustarEscala(); }
   else if (k === "n" && DEMO) { demoNovaVenda(); carregar(); }
+  else if ((k === "l" || k === "m") && DEMO) {
+    var un = { nome: "Toledo", cor: CORES[0] };
+    fila.push(k === "l" ? { tipo: "lider", un: un, nome: "Ana Ribeiro", foto: "", valor: 48250, passou: "Bruno Carvalho" }
+                        : { tipo: "meta", un: un, nome: "Ana Ribeiro", foto: "", valor: 50120 });
+    if (!festaAtiva) mostrarFesta(fila.shift());
+  }
 });
+// a TV só libera som depois de uma tecla/clique: qualquer tecla do controle já destrava
+["keydown", "mousedown", "touchstart", "pointerdown"].forEach(function (ev) { document.addEventListener(ev, destravarSom, true); });
+botaoSom();
+somCtx();
+setTimeout(function () { avisoSom(false); }, 2500);
 // mouse parado = esconde cursor e controles (na TV fica só o painel)
 var tMouse = null;
 document.addEventListener("mousemove", function () {
@@ -2049,7 +2302,9 @@ function conferirVersao() {
     else if (hs !== assinaturaPagina && !festaAtiva) location.reload();
   }).catch(function () {});
   var agora = new Date();
-  if (agora.getHours() === 5 && Date.now() - abertoEm > 6 * 3600000 && !festaAtiva) location.reload();
+  // recarga diária: se o som só funcionou porque alguém apertou OK, não recarrega (travaria de novo).
+  // Com a reprodução automática liberada no navegador, recarrega normal.
+  if (agora.getHours() === 5 && Date.now() - abertoEm > 6 * 3600000 && !festaAtiva && !SOM.porTecla) location.reload();
 }
 conferirVersao();
 setInterval(conferirVersao, 10 * 60000);
