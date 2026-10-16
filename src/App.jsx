@@ -5007,6 +5007,7 @@ function PainelVendas({ showToast, isGer = true, ehLider = false }) {
   const [pessoaRapida, setPessoaRapida] = useState(null);
   const [porEquipe, setPorEquipe] = useState(true);   // ranking separado por time
   const [buscaVenda, setBuscaVenda] = useState("");
+  const [cursoSel, setCursoSel] = useState(""); // filtro "Curso" da lista do mês (chave sem acento/maiúscula)
   const [menuAberto, setMenuAberto] = useState(false);
   const [showAnalise, setShowAnalise] = useState(false);
 
@@ -5022,18 +5023,70 @@ function PainelVendas({ showToast, isGer = true, ehLider = false }) {
     ]).catch((e) => showToast(e.message)).finally(() => setCarregando(false));
   };
   useEffect(() => { carregar(); /* eslint-disable-next-line */ }, []);
-  function trocarMes(m) { setMes(m); carregar(m); }
+  function trocarMes(m) { setMes(m); setCursoSel(""); carregar(m); }
   function trocarEscopo(e) { setEscopo(e); setVerLista(false); carregar(mes, e); }
 
-  // lista de vendas filtrada pela busca (cliente, curso, plataforma, código, vendedor)
+  // cursos vendidos no mês ("INVERTER" e "Inverter" contam como o mesmo curso)
+  const chaveCurso = (c) => String(c || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim().toLowerCase().replace(/\s+/g, " ") || "__sem";
+  const cursosDoMes = useMemo(() => {
+    const m = {};
+    (vendas || []).forEach((v) => {
+      const k = chaveCurso(v.curso);
+      const o = m[k] || (m[k] = { k, qtd: 0, valor: 0, nomes: {} });
+      o.qtd++; o.valor += Number(v.valor || 0);
+      const nm = String(v.curso || "").trim() || "Sem curso informado";
+      o.nomes[nm] = (o.nomes[nm] || 0) + 1;
+    });
+    return Object.values(m)
+      .map((o) => ({ k: o.k, qtd: o.qtd, valor: o.valor, nome: Object.keys(o.nomes).sort((a, b) => o.nomes[b] - o.nomes[a])[0] }))
+      .sort((a, b) => b.qtd - a.qtd || a.nome.localeCompare(b.nome, "pt-BR"));
+    // eslint-disable-next-line
+  }, [vendas]);
+  const cursoAtual = cursosDoMes.find((c) => c.k === cursoSel) || null;
+
+  // lista de vendas filtrada pelo curso e pela busca (cliente, curso, plataforma, código, vendedor)
   const vendasFiltradas = useMemo(() => {
+    let lista = vendas || [];
+    if (cursoSel) lista = lista.filter((v) => chaveCurso(v.curso) === cursoSel);
     const q = (buscaVenda || "").trim().toLowerCase();
-    if (!q) return vendas;
-    return (vendas || []).filter((v) =>
+    if (!q) return lista;
+    return lista.filter((v) =>
       [v.cliente, v.curso, v.plataforma, v.codigo, v.pessoaNome, v.email, v.telefone]
         .some((c) => String(c || "").toLowerCase().includes(q))
     );
-  }, [vendas, buscaVenda]);
+    // eslint-disable-next-line
+  }, [vendas, buscaVenda, cursoSel]);
+
+  /* baixa a planilha dos compradores (o que está filtrado: curso, busca e período De/Até).
+     CSV com ";" e acento certo: abre direto no Excel em colunas. */
+  function baixarCompradores() {
+    let lista = vendasFiltradas || [];
+    const tsDe = expDe ? new Date(expDe + "T00:00:00").getTime() : 0;
+    const tsAte = expAte ? new Date(expAte + "T23:59:59").getTime() : 0;
+    if (tsDe || tsAte) lista = lista.filter((v) => { const t = new Date(v.data).getTime(); return (!tsDe || t >= tsDe) && (!tsAte || t <= tsAte); });
+    if (!lista.length) { showToast("Nenhuma venda pra baixar com esse filtro"); return; }
+    // telefone legível: o Excel não transforma em "5,5E+12"
+    const fone = (t) => {
+      const d = String(t || "").replace(/\D/g, "");
+      const n = d.length >= 12 && d.startsWith("55") ? d.slice(2) : d;
+      if (n.length === 11) return "(" + n.slice(0, 2) + ") " + n.slice(2, 7) + "-" + n.slice(7);
+      if (n.length === 10) return "(" + n.slice(0, 2) + ") " + n.slice(2, 6) + "-" + n.slice(6);
+      return d;
+    };
+    const valorBR = (n) => Number(n || 0).toFixed(2).replace(".", ",");
+    const cab = ["Nome", "E-mail", "Telefone", "Valor", "Curso", "Data da compra", "Forma de pagamento", "Vendedor"];
+    const linhas = lista.map((v) => [
+      v.cliente || "", v.email || "", fone(v.telefone), valorBR(v.valor), v.curso || "",
+      v.data ? new Date(v.data).toLocaleDateString("pt-BR") : "", v.formaLabel || v.forma || "", v.pessoaNome || "",
+    ]);
+    const esc = (x) => { const t = String(x == null ? "" : x); return /[";\r\n]/.test(t) ? '"' + t.replace(/"/g, '""') + '"' : t; };
+    const csv = "\uFEFF" + [cab, ...linhas].map((r) => r.map(esc).join(";")).join("\r\n");
+    const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
+    const slug = (cursoAtual ? cursoAtual.nome : "todos-os-cursos").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+    const a = document.createElement("a"); a.href = url; a.download = "compradores-" + slug + "-" + mes + ".csv"; a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    showToast(`✓ ${lista.length} comprador(es) na planilha`);
+  }
 
   const [exportandoV, setExportandoV] = useState(false);
   const [expDe, setExpDe] = useState("");
@@ -5288,15 +5341,33 @@ function PainelVendas({ showToast, isGer = true, ehLider = false }) {
         </>
       ) : verLista ? (
         <>
-        <div className="vd-busca">
-          <I.search className="ico" />
-          <input value={buscaVenda} onChange={(e) => setBuscaVenda(e.target.value)}
-            placeholder="Buscar por nome do cliente, curso, plataforma ou código…" />
-          {buscaVenda && <button className="vd-busca-x" onClick={() => setBuscaVenda("")}>✕</button>}
+        <div className="vd-filtros">
+          <div className="vd-busca">
+            <I.search className="ico" />
+            <input value={buscaVenda} onChange={(e) => setBuscaVenda(e.target.value)}
+              placeholder="Buscar por nome do cliente, curso, plataforma ou código…" />
+            {buscaVenda && <button className="vd-busca-x" onClick={() => setBuscaVenda("")}>✕</button>}
+          </div>
+          <label className={"vd-curso" + (cursoSel ? " on" : "")} title="Ver só quem comprou um curso">
+            <I.funnel className="ico" />
+            <select value={cursoSel} onChange={(e) => setCursoSel(e.target.value)} aria-label="Filtrar por curso">
+              <option value="">Todos os cursos ({vendas.length})</option>
+              {cursosDoMes.map((c) => <option key={c.k} value={c.k}>{c.nome} ({c.qtd})</option>)}
+            </select>
+          </label>
+          <button className="btn btn-primary vd-baixar" onClick={baixarCompradores} title="Planilha com nome, e-mail, telefone e valor de quem está na lista">
+            <I.download className="ico" /> Baixar compradores
+          </button>
         </div>
+        {cursoAtual && (
+          <div className="vd-curso-resumo">
+            <span><b>{vendasFiltradas.length}</b> {vendasFiltradas.length === 1 ? "venda" : "vendas"} de <b>{cursoAtual.nome}</b> em {mesLegivel(mes)} · <b>{dinheiro(vendasFiltradas.reduce((s, v) => s + Number(v.valor || 0), 0))}</b></span>
+            <button className="vd-busca-x" onClick={() => setCursoSel("")}>✕ Ver todos os cursos</button>
+          </div>
+        )}
         <div className="vd-lista-top">
           <span>
-            <b>{vendasFiltradas.length}</b>{buscaVenda ? ` de ${vendas.length}` : ""} {isGer ? "venda(s) lançada(s)" : "venda(s) sua(s)"} em {mesLegivel(mes)}
+            <b>{vendasFiltradas.length}</b>{(buscaVenda || cursoSel) ? ` de ${vendas.length}` : ""} {isGer ? "venda(s) lançada(s)" : "venda(s) sua(s)"} em {mesLegivel(mes)}
           </span>
           <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
             <span style={{ fontSize: 12, color: "var(--muted)" }}>Exportar de</span>

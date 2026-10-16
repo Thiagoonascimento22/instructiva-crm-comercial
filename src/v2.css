@@ -1928,3 +1928,19 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--brand); }
 .dispm-liberar-erro small { display: block; font-size: 11.5px; color: var(--muted); margin-top: 3px; word-break: break-word; }
 :root[data-theme="dark"] .dispm-liberar-erro .ico { color: #fbbf24; }
 .dispm-liberar > .dispm-liberar-erro { flex: 1 1 100%; }
+
+/* Vendas do mês: filtro por curso + baixar compradores */
+.vd-filtros { display: flex; align-items: stretch; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; }
+.vd-filtros .vd-busca { flex: 1 1 320px; margin-bottom: 0; }
+.vd-curso { position: relative; display: flex; align-items: center; gap: 8px; flex: 0 1 300px; min-width: 200px; padding: 0 12px; border-radius: 11px; border: 1px solid var(--line); background: var(--surface-2); cursor: pointer; }
+.vd-curso .ico { width: 15px; height: 15px; color: var(--muted); flex: none; }
+.vd-curso select { flex: 1; min-width: 0; height: 40px; border: 0; background: transparent; color: var(--text); font: inherit; font-size: 13.5px; outline: none; cursor: pointer; text-overflow: ellipsis; }
+.vd-curso.on { border-color: var(--brand); background: var(--brand-soft); }
+.vd-curso.on .ico, .vd-curso.on select { color: var(--brand-soft-ink); font-weight: 600; }
+.vd-curso:focus-within { box-shadow: 0 0 0 3px color-mix(in srgb, var(--brand) 18%, transparent); }
+.vd-baixar { display: inline-flex; align-items: center; gap: 7px; white-space: nowrap; }
+.vd-baixar .ico { width: 15px; height: 15px; }
+.vd-curso-resumo { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin: -2px 0 10px; padding: 9px 12px; border-radius: 10px; background: var(--brand-soft); color: var(--muted); font-size: 13px; }
+.vd-curso-resumo b { color: var(--text); font-weight: 650; }
+.vd-curso-resumo .vd-busca-x { font-weight: 600; color: var(--brand-soft-ink); }
+@media (max-width: 640px) { .vd-curso, .vd-baixar { flex: 1 1 100%; justify-content: center; } }
