@@ -803,41 +803,79 @@ export function instalarCanalOficial({ app, getDb, saveDB, saveSoon, proximoId, 
 
   /* ---- template com imagem no topo: a Meta pede uma imagem de EXEMPLO,
      enviada pelo "upload retomável" (precisa do App ID do token) ---- */
+  /* App ID pra subir a imagem de exemplo. Junta TODAS as fontes (a que já deu certo vem
+     primeiro) e a rota tenta uma por uma até a Meta aceitar:
+     META_APP_ID (Railway) → app do token (/app) → debug_token → app ligado à WABA (subscribed_apps) */
   const appIdCache = {};
-  async function appIdDoToken(numeroCfg) {
-    if (process.env.META_APP_ID) return String(process.env.META_APP_ID).trim();
+  async function appIdsCandidatos(numeroCfg) {
     const tk = tokenDe(numeroCfg);
-    if (appIdCache[tk]) return appIdCache[tk];
-    const tentativas = [
-      { url: `${GRAPH}/app`, pega: (d) => d && d.id },
-      { url: `${GRAPH}/debug_token?input_token=${encodeURIComponent(tk)}`, pega: (d) => d && d.data && d.data.app_id },
-    ];
-    for (const t of tentativas) {
-      try {
-        const r = await fetch(t.url, { headers: { Authorization: "Bearer " + tk } });
-        const d = await r.json();
-        const id = r.ok ? t.pega(d) : null;
-        if (id) { appIdCache[tk] = String(id); return appIdCache[tk]; }
-      } catch (_) {}
+    const lista = [];
+    const add = (id) => { const x = String(id || "").trim(); if (/^\d+$/.test(x) && !lista.includes(x)) lista.push(x); };
+    if (appIdCache[tk]) add(appIdCache[tk]);
+    if (process.env.META_APP_ID) add(process.env.META_APP_ID);
+    const t = encodeURIComponent(tk);
+    const pegar = async (url, f) => {
+      try { const r = await fetch(url); const d = await r.json(); if (r.ok) [].concat(f(d) || []).forEach(add); } catch (_) {}
+    };
+    await pegar(`${GRAPH}/app?access_token=${t}`, (d) => d && d.id);
+    await pegar(`${GRAPH}/debug_token?input_token=${t}&access_token=${t}`, (d) => d && d.data && d.data.app_id);
+    if (numeroCfg.wabaId) {
+      await pegar(`${GRAPH}/${numeroCfg.wabaId}/subscribed_apps?access_token=${t}`,
+        (d) => ((d && d.data) || []).map((x) => x && x.whatsapp_business_api_data && x.whatsapp_business_api_data.id));
     }
-    throw new Error("Não consegui descobrir o App ID da Meta pra subir a imagem. Coloque a variável META_APP_ID no Railway (o número do app no developers.facebook.com).");
+    return lista;
   }
-  async function subirExemploTemplate(numeroCfg, buffer, mime, nome) {
-    const appId = await appIdDoToken(numeroCfg);
+  /* erro da Meta com o motivo de verdade: "Invalid parameter" é genérico, o detalhe
+     vem em error_user_title / error_user_msg */
+  function erroDaMeta(data, status, etapa) {
+    const e = (data && data.error) || {};
+    const detalhe = [e.error_user_title, e.error_user_msg].filter(Boolean).join(" — ") || e.message || ("Erro " + status);
+    const err = new Error(detalhe);
+    err.meta = { etapa, code: e.code, subcode: e.error_subcode, message: e.message, title: e.error_user_title, user_msg: e.error_user_msg, fbtrace_id: e.fbtrace_id };
+    return err;
+  }
+  // motivos mais comuns da Meta recusar um template, em português
+  function explicarErroTemplate(err) {
+    const m = err.meta || {};
+    if (m.etapa === "app") return err.message;
+    // classifica pelo motivo detalhado (título + mensagem pro usuário); "Invalid parameter" sozinho não diz nada
+    const u = [m.title, m.user_msg].filter(Boolean).join(" ").toLowerCase();
+    if (m.etapa === "upload" || /handle|media|image|imagem|header|sample/.test(u))
+      return "A Meta não aceitou a imagem de exemplo. Tente de novo com outra imagem (JPG). Se continuar, coloque a variável META_APP_ID no Railway.";
+    if (/variable|placeholder|parameters/.test(u)) return "A Meta não aceitou as variáveis ({{1}}…) desse texto. Use menos variáveis ou um texto um pouco maior.";
+    if (/new ?lines?|line ?breaks?/.test(u)) return "O texto tem linhas em branco demais pra Meta.";
+    if (/character|too long|exceed/.test(u)) return "O texto passou do limite de tamanho da Meta.";
+    if (/already exists|same name|being deleted/.test(u)) return "Já existe um template com esse nome na Meta.";
+    return "A Meta recusou o pedido: " + err.message;
+  }
+  const erroDaImagem = (err) => {
+    const m = (err && err.meta) || {};
+    if (m.etapa === "upload" || !m.user_msg) return true;
+    return /handle|media|image|header|sample|example/i.test([m.title, m.user_msg, m.message].filter(Boolean).join(" "));
+  };
+  const nomeEmUso = (err) => {
+    const m = err.meta || {};
+    const t = [m.title, m.user_msg, m.message].filter(Boolean).join(" ").toLowerCase();
+    return [2388023, 2388024].includes(m.subcode) || /already exists|same name|being deleted|content in this language/.test(t);
+  };
+
+  async function subirExemploTemplate(numeroCfg, appId, buffer, mime, nome) {
     const tk = tokenDe(numeroCfg);
+    // passo 1 (exemplo oficial da Meta): o token vai no endereço
     const r1 = await fetch(
-      `${GRAPH}/${appId}/uploads?file_name=${encodeURIComponent(nome)}&file_length=${buffer.length}&file_type=${encodeURIComponent(mime)}`,
-      { method: "POST", headers: { Authorization: "OAuth " + tk } }
+      `${GRAPH}/${appId}/uploads?file_name=${encodeURIComponent(nome)}&file_length=${buffer.length}&file_type=${encodeURIComponent(mime)}&access_token=${encodeURIComponent(tk)}`,
+      { method: "POST" }
     );
     const d1 = await r1.json().catch(() => null);
-    if (!r1.ok || !d1 || !d1.id) throw new Error((d1 && d1.error && d1.error.message) || ("Erro ao iniciar upload da imagem (" + r1.status + ")"));
+    if (!r1.ok || !d1 || !d1.id) throw erroDaMeta(d1, r1.status, "upload");
+    // igual ao exemplo oficial da Meta: só o token e o file_offset no cabeçalho, bytes puros no corpo
     const r2 = await fetch(`${GRAPH}/${d1.id}`, {
       method: "POST",
-      headers: { Authorization: "OAuth " + tk, file_offset: "0", "Content-Type": mime },
+      headers: { Authorization: "OAuth " + tk, file_offset: "0" },
       body: buffer,
     });
     const d2 = await r2.json().catch(() => null);
-    if (!r2.ok || !d2 || !d2.h) throw new Error((d2 && d2.error && d2.error.message) || ("Erro ao subir a imagem de exemplo (" + r2.status + ")"));
+    if (!r2.ok || !d2 || !d2.h) throw erroDaMeta(d2, r2.status, "upload");
     return d2.h;
   }
 
@@ -1273,7 +1311,8 @@ export function instalarCanalOficial({ app, getDb, saveDB, saveSoon, proximoId, 
     if (!n.wabaId) return res.status(400).json({ error: "Esse número não tem WABA ID configurado" });
     const b = req.body || {};
     const nome = String(b.nome || "").trim().toLowerCase().replace(/[^a-z0-9_]/g, "_");
-    const corpo = String(b.corpo || "").trim();
+    // linhas em branco em excesso / espaço no fim da linha: a Meta costuma recusar
+    const corpo = String(b.corpo || "").replace(/\r\n?/g, "\n").replace(/[ \t]+\n/g, "\n").replace(/\n{3,}/g, "\n\n").trim();
     const categoria = String(b.categoria || "MARKETING").toUpperCase(); // MARKETING | UTILITY
     const idioma = String(b.idioma || "pt_BR").trim();
     if (!nome || !corpo) return res.status(400).json({ error: "Informe o nome e o texto do template" });
@@ -1292,29 +1331,55 @@ export function instalarCanalOficial({ app, getDb, saveDB, saveSoon, proximoId, 
     const body = { type: "BODY", text: corpo };
     if (nVars > 0) body.example = { body_text: [Array.from({ length: nVars }, (_, i) => (i === 0 ? "Maria" : "exemplo"))] };
     try {
-      const components = [body];
+      const tk = tokenDe(n);
+      const candidatos = imgBuf ? await appIdsCandidatos(n) : [null];
+      if (!candidatos.length) {
+        const e = new Error("Não consegui descobrir o App ID da Meta pra subir a imagem. Coloque a variável META_APP_ID no Railway (o número do app em developers.facebook.com).");
+        e.meta = { etapa: "app" };
+        throw e;
+      }
+      let ultimo = null;
+      for (const appId of candidatos) {
+      let components = [body];
       if (imgBuf) {
-        const handle = await subirExemploTemplate(n, imgBuf, imgMime, nome + (imgMime === "image/png" ? ".png" : ".jpg"));
-        components.unshift({ type: "HEADER", format: "IMAGE", example: { header_handle: [handle] } });
+        try {
+          const handle = await subirExemploTemplate(n, appId, imgBuf, imgMime, nome + (imgMime === "image/png" ? ".png" : ".jpg"));
+          components = [{ type: "HEADER", format: "IMAGE", example: { header_handle: [handle] } }, body];
+        } catch (e) {
+          ultimo = e;
+          console.error("[template] imagem de exemplo não subiu (app " + appId + "):", JSON.stringify({ erro: e.message, ...(e.meta || {}) }));
+          continue; // tenta o próximo App ID
+        }
       }
-      const r = await fetch(`${GRAPH}/${n.wabaId}/message_templates`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: "Bearer " + tokenDe(n) },
-        body: JSON.stringify({
-          name: nome,
-          language: idioma,
-          category: categoria === "UTILITY" ? "UTILITY" : "MARKETING",
-          components,
-        }),
-      });
-      const data = await r.json();
-      if (!r.ok) {
-        const msg = (data && data.error && data.error.message) || ("Erro Graph " + r.status);
-        return res.status(400).json({ error: msg });
+      // se o nome já estiver em uso (ou apagado há pouco), tenta nome2, nome3
+      for (let tentativa = 0; tentativa < 3; tentativa++) {
+        const nomeTent = tentativa ? (nome + (tentativa + 1)).slice(0, 512) : nome;
+        const r = await fetch(`${GRAPH}/${n.wabaId}/message_templates`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: "Bearer " + tokenDe(n) },
+          body: JSON.stringify({
+            name: nomeTent,
+            language: idioma,
+            category: categoria === "UTILITY" ? "UTILITY" : "MARKETING",
+            components,
+          }),
+        });
+        const data = await r.json().catch(() => null);
+        if (r.ok && data) {
+          if (appId) appIdCache[tk] = appId; // da próxima vez já começa pelo App ID que funcionou
+          return res.json({ ok: true, id: data.id, nome: nomeTent, status: data.status || "PENDING", category: data.category || categoria });
+        }
+        ultimo = erroDaMeta(data, r.status, "template");
+        console.error("[template] Meta recusou (app " + (appId || "-") + ", nome " + nomeTent + "):", JSON.stringify({ erro: ultimo.message, ...ultimo.meta }));
+        if (!nomeEmUso(ultimo)) break;
       }
-      res.json({ ok: true, id: data.id, status: data.status || "PENDING", category: data.category || categoria });
+      // erro do texto (não da imagem): não adianta tentar outro App ID
+      if (!imgBuf || !erroDaImagem(ultimo)) break;
+      }
+      throw ultimo;
     } catch (e) {
-      res.status(500).json({ error: e.message });
+      console.error("[template] Meta recusou:", JSON.stringify({ nome, comImagem: !!imgBuf, erro: e.message, ...(e.meta || {}) }));
+      res.status(400).json({ error: explicarErroTemplate(e), detalhe: e.message, meta: e.meta || null });
     }
   });
   // estatísticas gerais do canal oficial (pra Monitoria): disparos, IA, atendimento

@@ -2096,6 +2096,7 @@ function ModalDisparo({ isGer = true, numeros, showToast, onClose, onDone, prese
   // todos os templates (inclusive os que a Meta ainda está aprovando) — pra mostrar o status da versão com imagem
   const [todosTpl, setTodosTpl] = useState([]);
   const [pedindoImg, setPedindoImg] = useState("");
+  const [erroLiberar, setErroLiberar] = useState(null); // { tpl, msg, detalhe } — motivo que a Meta deu
   function carregarTemplates(silencioso) {
     if (!numeroId) return;
     if (!silencioso) setCarregandoTpl(true);
@@ -2114,6 +2115,7 @@ function ModalDisparo({ isGer = true, numeros, showToast, onClose, onDone, prese
   async function pedirVersaoComImagem(t) {
     if (!midia || midia.tipo !== "image" || !midia.previa) { showToast("Escolha a imagem primeiro"); return; }
     setPedindoImg(t.name);
+    setErroLiberar(null);
     const nome = nomeVersaoImg(t);
     try {
       const r = await api.ofCriarTemplate(numeroId, {
@@ -2122,9 +2124,13 @@ function ModalDisparo({ isGer = true, numeros, showToast, onClose, onDone, prese
         imagemBase64: midia.previa.split(",")[1], imagemMime: "image/jpeg",
       });
       showToast(r.status === "APPROVED" ? "✓ Liberado! Já dá pra usar." : "✓ Pedido enviado. A Meta costuma liberar em poucos minutos.");
-      setTodosTpl((xs) => [...xs.filter((x) => x.name !== nome), { name: nome, status: r.status || "PENDING" }]);
+      const nomeFinal = r.nome || nome; // se o nome estava em uso, o servidor usa nome2, nome3
+      setTodosTpl((xs) => [...xs.filter((x) => x.name !== nomeFinal), { name: nomeFinal, status: r.status || "PENDING" }]);
       setTimeout(() => carregarTemplates(true), 2500);
-    } catch (e) { showToast("✗ " + e.message); }
+    } catch (e) {
+      const d = e.dados || {};
+      setErroLiberar({ tpl: t.name, msg: e.message, detalhe: d.detalhe && d.detalhe !== e.message ? d.detalhe : "" });
+    }
     finally { setPedindoImg(""); }
   }
 
@@ -2335,8 +2341,14 @@ function ModalDisparo({ isGer = true, numeros, showToast, onClose, onDone, prese
                           <span>{stVersao === "REJECTED" ? "Troque a imagem e peça de novo." : "O WhatsApp pede uma aprovação da Meta na primeira vez. Depois, é só usar."}</span>
                         </div>
                         <button type="button" className="btn btn-primary btn-sm" disabled={!!pedindoImg} onClick={() => pedirVersaoComImagem(template)}>
-                          {pedindoImg ? <><span className="spin" /> Pedindo…</> : stVersao === "REJECTED" ? "Pedir de novo" : "Liberar imagem"}
+                          {pedindoImg ? <><span className="spin" /> Pedindo…</> : (stVersao === "REJECTED" || (erroLiberar && erroLiberar.tpl === template.name)) ? "Tentar de novo" : "Liberar imagem"}
                         </button>
+                        {erroLiberar && erroLiberar.tpl === template.name && (
+                          <div className="dispm-liberar-erro">
+                            <I.alert className="ico" />
+                            <div><b>{erroLiberar.msg}</b>{erroLiberar.detalhe && <small>O que a Meta respondeu: {erroLiberar.detalhe}</small>}</div>
+                          </div>
+                        )}
                       </div>
                     )
                   )}
