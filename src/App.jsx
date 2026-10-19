@@ -266,12 +266,14 @@ function AvisoAtualizacao() {
 
 /* ============================ NOVIDADES DA VERSÃO (v2.2) ============================ */
 // Aparece uma vez só pra cada pessoa (fica marcado no servidor). Dá pra rever clicando na versão, no rodapé do menu.
-const VERSAO_NOVIDADES = "v2.3";
+const VERSAO_NOVIDADES = "v2.4";
 function Novidades({ user, perfil, pode, ehMac, onClose, soNovos = false }) {
   const itens = [
-    { ic: I.image, t: "Disparo com imagem", d: "No Disparo, escolha Só a imagem ou Imagem + mensagem. Dá pra arrastar a foto direto pra tela e ver a prévia igual no WhatsApp.", para: "comercial", se: pode.disparo, novo: true },
-    { ic: I.megaphone, t: "Template com imagem", d: "Em Disparo › Templates, crie o seu com foto. Assim que a Meta aprovar, ele já aparece na hora de disparar.", para: "comercial", se: pode.disparo, novo: true },
-    { ic: I.user, t: "Nome do cliente no disparo", d: "Template com {{1}} sai com o primeiro nome de cada contato da lista. Quem estiver sem nome recebe um texto que você escolhe.", para: "comercial", se: pode.disparo, novo: true },
+    { ic: I.list, t: "Curso escolhido da lista", d: "Na hora de lançar a venda é só clicar e escolher o curso, ou digitar \"inv\", \"solar\", \"odonto\" que ele aparece. Nada de nome escrito errado.", para: "comercial", se: pode.vendas, novo: true },
+    { ic: I.cash, t: "Lançar venda de cara nova", d: "Tudo em 4 passos, com forma de pagamento e plataforma num clique. Combo e Todos os cursos já pedem os itens e a oferta.", para: "comercial", se: pode.vendas, novo: true },
+    { ic: I.nota, t: "Cursos padronizados", d: "Em Vendas › Gerenciar: Padronizar cursos deixa as vendas antigas com o nome certo, e Cursos cadastra os novos.", para: "gerente", novo: true },
+    { ic: I.image, t: "Disparo com imagem", d: "No Disparo, escolha Só a imagem ou Imagem + mensagem. Dá pra arrastar a foto direto pra tela e ver a prévia igual no WhatsApp.", para: "comercial", se: pode.disparo },
+    { ic: I.user, t: "Nome do cliente no disparo", d: "Template com {{1}} sai com o primeiro nome de cada contato da lista. Quem estiver sem nome recebe um texto que você escolhe.", para: "comercial", se: pode.disparo },
     { ic: I.brilho, t: "Visual novo", d: "Cores grafite e esmeralda, modo claro e escuro e um menu que recolhe pra sobrar mais espaço na tela.", para: "todos" },
     { ic: I.trend, t: "Painel de Vendas", d: "Veja na hora se está acima do ritmo da meta, quanto precisa vender por dia e qual foi o melhor dia do mês.", para: "comercial", se: pode.vendas },
     { ic: I.user, t: "Ficha do lead na conversa", d: "Clique na foto ou no nome do contato e veja etapa, tarefas e anotações sem sair do chat.", para: "comercial", se: pode.caixa && pode.crm },
@@ -302,9 +304,9 @@ function Novidades({ user, perfil, pode, ehMac, onClose, soNovos = false }) {
         <div className="nov" role="dialog" aria-modal="true" aria-labelledby="nov-tit">
           <div className="nov-topo">
             <button type="button" className="nov-x" onClick={onClose} aria-label="Fechar"><I.x className="ico" /></button>
-            <span className="nov-selo"><I.brilho className="ico" /> Novidades · versão 2.3</span>
-            <h2 id="nov-tit">{soNovos ? "Disparo com imagem e com o nome do cliente" : "O sistema ficou de cara nova"}</h2>
-            <p>{nome ? "Oi, " + nome + "! " : ""}{soNovos ? "Foto e o nome da pessoa chamam atenção e vendem mais. Veja como usar:" : "Separamos o que mudou pra deixar o seu dia mais fácil e as vendas mais rápidas."}</p>
+            <span className="nov-selo"><I.brilho className="ico" /> Novidades · versão 2.4</span>
+            <h2 id="nov-tit">{soNovos ? "Lançar venda ficou mais fácil" : "O sistema ficou de cara nova"}</h2>
+            <p>{nome ? "Oi, " + nome + "! " : ""}{soNovos ? "Agora o curso é escolhido da lista, sem digitar. Veja o que mudou:" : "Separamos o que mudou pra deixar o seu dia mais fácil e as vendas mais rápidas."}</p>
           </div>
           <div className="nov-grade">
             {lista.map((it, i) => (
@@ -319,7 +321,7 @@ function Novidades({ user, perfil, pode, ehMac, onClose, soNovos = false }) {
             ))}
           </div>
           <div className="nov-pe">
-            <span>Pra ver de novo, clique em <b>v2.3</b> no rodapé do menu.</span>
+            <span>Pra ver de novo, clique em <b>v2.4</b> no rodapé do menu.</span>
             <button type="button" className="btn btn-primary nov-btn" onClick={onClose}>{perfil === "suporte" ? "Entendi, vamos lá" : "Bora vender!"}</button>
           </div>
         </div>
@@ -429,7 +431,7 @@ export default function App() {
     let local = "";
     try { local = localStorage.getItem("instructiva_novidades_" + user.id) || ""; } catch (_) {}
     if (user.novidadesVistas !== VERSAO_NOVIDADES && local !== VERSAO_NOVIDADES) {
-      setNovidadesSoNovos(user.novidadesVistas === "v2.2" || local === "v2.2");
+      setNovidadesSoNovos(!!(user.novidadesVistas || local));   // já viu uma versão antes: mostra só o que é novo
       setNovidades(true);
     }
   }, [user]);
@@ -551,7 +553,7 @@ export default function App() {
             </div>
             <button className="side-sair" onClick={logout} title="Sair" aria-label="Sair"><I.out className="ico" /></button>
           </div>
-          <button type="button" className="side-versao" onClick={() => { setNovidadesSoNovos(false); setNovidades(true); }} title="Ver as novidades desta versão">v2.3 · novidades</button>
+          <button type="button" className="side-versao" onClick={() => { setNovidadesSoNovos(false); setNovidades(true); }} title="Ver as novidades desta versão">v2.4 · novidades</button>
         </div>
       </aside>
 
@@ -3809,37 +3811,49 @@ function tipoDaColuna(lb) {
   if (/perdid|perda|perdeu|descartad|sem interesse|desistiu|não quis|nao quis/.test(t)) return "perda";
   return null;
 }
-// Frases que aparecem na comemoração (sorteia uma a cada venda)
-const CURSOS = [
-  "AMPLIFICADORES",
-  "ANÁLISE DC AVANÇADA",
-  "ELETRÔNICA DE POTÊNCIA",
-  "ELETRÔNICA DIGITAL",
-  "ELETRÔNICA INICIAL",
-  "EMAC",
-  "EMAC 3.0",
-  "EMAC 4.0",
-  "ESTEIRAS",
-  "FONTE DE GAME",
-  "FONTES CHAVEADAS",
-  "IMERSÃO EM ANÁLISE DE DEFEITOS",
-  "INTELIGÊNCIA ARTIFICIAL",
-  "INVERTER",
-  "LIVRO ANÁLISE DE CIRCUITOS",
-  "LIVRO FONTES FLYBACK",
-  "LIVRO FONTES RETIFICADOR PFC",
-  "LIVRO POTÊNCIA CONVERSORES CC-CC",
-  "LIVRO POTÊNCIA RETIFICADORES",
-  "LIVRO POTÊNCIA SEMICONDUTORES",
-  "MANUSEIO DE OSCILOSCÓPIO",
-  "NOBREAK",
-  "ODONTO",
-  "PROGRAMAÇÃO",
-  "SOFT-STARTER",
-  "SOLAR",
-  "TELEVISORES",
-  "TMTD",
-];
+/* ============================================================
+   CATÁLOGO DE CURSOS (lista padrão que vem do servidor)
+   Fica guardado aqui pra todas as telas mostrarem o mesmo nome.
+   ============================================================ */
+let CATALOGO = { cursos: [], grupos: [], ofertas: [], pronto: false };
+let _catPromessa = null;
+function carregarCatalogo(forcar) {
+  if (_catPromessa && !forcar) return _catPromessa;
+  _catPromessa = api.vdCursos()
+    .then((d) => { CATALOGO = { cursos: d.cursos || [], grupos: d.grupos || [], ofertas: d.ofertas || [], pronto: true }; return CATALOGO; })
+    .catch((e) => { _catPromessa = null; throw e; });
+  return _catPromessa;
+}
+function useCatalogo() {
+  const [cat, setCat] = useState(CATALOGO);
+  useEffect(() => {
+    let vivo = true;
+    carregarCatalogo().then((c) => { if (vivo) setCat({ ...c }); }).catch(() => {});
+    return () => { vivo = false; };
+  }, []);
+  const recarregar = () => carregarCatalogo(true).then((c) => { setCat({ ...c }); return c; });
+  return [cat, recarregar];
+}
+const normTxt = (s) => String(s || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/\s+/g, " ").trim();
+function itemCurso(nome) {
+  const k = normTxt(nome);
+  return k ? (CATALOGO.cursos.find((c) => normTxt(c.nome) === k || normTxt(c.curto) === k) || null) : null;
+}
+function curtoCurso(nome) { const c = itemCurso(nome); return c ? c.curto : String(nome || ""); }
+// curso de uma venda em texto curto: "Inverter", "Combo: EMAC + Fontes Chaveadas", "Todos os cursos · Pré-Black"
+function cursoTxt(v) {
+  if (!v || !v.curso) return "";
+  const it = itemCurso(v.curso);
+  const itens = v.cursoItens || [];
+  if (it && String(it.tipo || "").indexOf("combo") === 0 && itens.length) return (it.tipo === "combo-livros" ? "Combo de livros: " : "Combo: ") + itens.map(curtoCurso).join(" + ");
+  if (it && it.tipo === "pacote") return it.curto + (v.cursoOferta ? " · " + v.cursoOferta : "");
+  return it ? it.curto : v.curso;
+}
+// curso completo (pra planilha): nome padrão + itens do combo + oferta
+function cursoCompleto(v) {
+  if (!v || !v.curso) return "";
+  return [v.curso, (v.cursoItens || []).length ? "(" + v.cursoItens.join(" + ") + ")" : "", v.cursoOferta ? "· " + v.cursoOferta : ""].filter(Boolean).join(" ");
+}
 const PLATAFORMAS = ["Hotmart", "Greenn", "Guru", "TMB", "Assiny", "Cademi", "Pix direto", "Outra"];
 const FORMAS_PG = ["Pix", "Cartão", "Boleto", "Recorrência", "Dinheiro", "Outro"];
 const dinheiro = (n) => "R$ " + Number(n || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -3994,7 +4008,7 @@ function acharDuplicadas(pessoas) {
 function casaBusca(v, termo) {
   const t = String(termo || "").trim().toLowerCase();
   if (!t) return true;
-  const alvo = [v.cliente, v.curso, v.plataforma, v.codigo, v.formaLabel || v.forma, v.pessoaNome]
+  const alvo = [v.cliente, v.curso, cursoTxt(v), v.plataforma, v.codigo, v.formaLabel || v.forma, v.pessoaNome]
     .filter(Boolean).join(" ")
     .normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
   return t.normalize("NFD").replace(/[\u0300-\u036f]/g, "").split(/\s+/).every((p) => alvo.includes(p));
@@ -4254,7 +4268,7 @@ function ModalPessoaRapida({ pessoa, pessoas, mes, isGer = true, onVerPainel, on
                       {d.vendas.map((v) => (
                         <div key={v.id} className="vd-dia-item">
                           <div className="vd-dia-cli">{v.cliente || "—"}
-                            <small>{[v.curso, v.formaLabel || v.forma, v.parcelas ? v.parcelas + "x" : "", v.plataforma].filter(Boolean).join(" · ")}</small>
+                            <small title={cursoCompleto(v)}>{[cursoTxt(v), v.formaLabel || v.forma, v.parcelas ? v.parcelas + "x" : "", v.plataforma].filter(Boolean).join(" · ")}</small>
                           </div>
                           <div className="vd-dia-vals">{dinheiro(v.valor)}<small>recebido {dinheiro(v.recebido)}</small></div>
                         </div>
@@ -4332,7 +4346,7 @@ function ModalDuplicadas({ mes, onClose, onMudou, showToast }) {
                     <div key={v.id} className="vd-dupvenda">
                       <div>
                         <b>{v.cliente || "—"}</b>
-                        <small>{new Date(v.data).toLocaleDateString("pt-BR")} · {v.pessoaNome}{v.curso ? " · " + v.curso : ""}{v.plataforma ? " · " + v.plataforma : ""}</small>
+                        <small>{new Date(v.data).toLocaleDateString("pt-BR")} · {v.pessoaNome}{v.curso ? " · " + cursoTxt(v) : ""}{v.plataforma ? " · " + v.plataforma : ""}</small>
                       </div>
                       <span className="vd-dupvalor">{dinheiro(v.valor)}</span>
                       <button className="crm-lote-del" disabled={apagando === v.id} onClick={() => apagar(v)}>
@@ -4504,7 +4518,7 @@ function DiaADia({ vendas, onEditar, onExcluir }) {
           {d.vendas.map((v) => (
             <div key={v.id} className="vd-dia-item">
               <div className="vd-dia-cli">{v.cliente || "—"}
-                <small>{[v.curso, v.formaLabel || v.forma, v.parcelas ? v.parcelas + "x" : "", v.plataforma].filter(Boolean).join(" · ")}</small>
+                <small title={cursoCompleto(v)}>{[cursoTxt(v), v.formaLabel || v.forma, v.parcelas ? v.parcelas + "x" : "", v.plataforma].filter(Boolean).join(" · ")}</small>
               </div>
               <div className="vd-dia-vals">{dinheiro(v.valor)}<small>recebido {dinheiro(v.recebido)}</small></div>
               {(onEditar || onExcluir) && (
@@ -4892,7 +4906,7 @@ function DashVendas({ dados, vendas, mes, ehMesCorrente, diaSel, setDiaSel, vend
     return Object.values(m).sort((a, b) => b.valor - a.valor);
   };
   const porForma = agrupar((v) => v.formaLabel || v.forma).slice(0, 5);
-  const porCurso = agrupar((v) => v.curso).slice(0, 5);
+  const porCurso = agrupar((v) => (v.curso ? curtoCurso(v.curso) : "")).slice(0, 5);
   const totalLista = (vendas || []).reduce((s, v) => s + (Number(v.valor) || 0), 0);
   let fraseRitmo = null;
   if (ritmo && ehMesCorrente) {
@@ -5004,6 +5018,9 @@ function PainelVendas({ showToast, isGer = true, ehLider = false }) {
   const [showInteg, setShowInteg] = useState(false);
   const [showPeriodo, setShowPeriodo] = useState(false);
   const [showDup, setShowDup] = useState(false);
+  const [showCursos, setShowCursos] = useState(false);          // lista padrão de cursos
+  const [showPadronizar, setShowPadronizar] = useState(false);  // trocar nomes antigos pelo padrão
+  const [cat] = useCatalogo();                                  // nomes curtos dos cursos nas listas
   const [pessoaRapida, setPessoaRapida] = useState(null);
   const [porEquipe, setPorEquipe] = useState(true);   // ranking separado por time
   const [buscaVenda, setBuscaVenda] = useState("");
@@ -5026,28 +5043,27 @@ function PainelVendas({ showToast, isGer = true, ehLider = false }) {
   function trocarMes(m) { setMes(m); setCursoSel(""); carregar(m); }
   function trocarEscopo(e) { setEscopo(e); setVerLista(false); carregar(mes, e); }
 
-  // cursos vendidos no mês ("INVERTER" e "Inverter" contam como o mesmo curso)
-  const chaveCurso = (c) => String(c || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim().toLowerCase().replace(/\s+/g, " ") || "__sem";
+  // cursos vendidos no mês, pela lista padrão (quem comprou num combo também conta no curso)
+  const chaveCurso = (c) => { const it = itemCurso(c); return it ? "id:" + it.id : (normTxt(c) || "__sem"); };
+  const chavesDaVenda = (v) => Array.from(new Set([chaveCurso(v.curso), ...(v.cursoItens || []).map(chaveCurso)]));
   const cursosDoMes = useMemo(() => {
     const m = {};
     (vendas || []).forEach((v) => {
-      const k = chaveCurso(v.curso);
-      const o = m[k] || (m[k] = { k, qtd: 0, valor: 0, nomes: {} });
-      o.qtd++; o.valor += Number(v.valor || 0);
-      const nm = String(v.curso || "").trim() || "Sem curso informado";
-      o.nomes[nm] = (o.nomes[nm] || 0) + 1;
+      chavesDaVenda(v).forEach((k, i) => {
+        const nomeBruto = i === 0 ? v.curso : (v.cursoItens || []).find((x) => chaveCurso(x) === k);
+        const o = m[k] || (m[k] = { k, qtd: 0, valor: 0, nome: nomeBruto ? curtoCurso(nomeBruto) : "Sem curso informado" });
+        o.qtd++; o.valor += Number(v.valor || 0);
+      });
     });
-    return Object.values(m)
-      .map((o) => ({ k: o.k, qtd: o.qtd, valor: o.valor, nome: Object.keys(o.nomes).sort((a, b) => o.nomes[b] - o.nomes[a])[0] }))
-      .sort((a, b) => b.qtd - a.qtd || a.nome.localeCompare(b.nome, "pt-BR"));
+    return Object.values(m).sort((a, b) => b.qtd - a.qtd || a.nome.localeCompare(b.nome, "pt-BR"));
     // eslint-disable-next-line
-  }, [vendas]);
+  }, [vendas, cat]);
   const cursoAtual = cursosDoMes.find((c) => c.k === cursoSel) || null;
 
   // lista de vendas filtrada pelo curso e pela busca (cliente, curso, plataforma, código, vendedor)
   const vendasFiltradas = useMemo(() => {
     let lista = vendas || [];
-    if (cursoSel) lista = lista.filter((v) => chaveCurso(v.curso) === cursoSel);
+    if (cursoSel) lista = lista.filter((v) => chavesDaVenda(v).includes(cursoSel));
     const q = (buscaVenda || "").trim().toLowerCase();
     if (!q) return lista;
     return lista.filter((v) =>
@@ -5076,7 +5092,7 @@ function PainelVendas({ showToast, isGer = true, ehLider = false }) {
     const valorBR = (n) => Number(n || 0).toFixed(2).replace(".", ",");
     const cab = ["Nome", "E-mail", "Telefone", "Valor", "Curso", "Data da compra", "Forma de pagamento", "Vendedor"];
     const linhas = lista.map((v) => [
-      v.cliente || "", v.email || "", fone(v.telefone), valorBR(v.valor), v.curso || "",
+      v.cliente || "", v.email || "", fone(v.telefone), valorBR(v.valor), cursoCompleto(v),
       v.data ? new Date(v.data).toLocaleDateString("pt-BR") : "", v.formaLabel || v.forma || "", v.pessoaNome || "",
     ]);
     const esc = (x) => { const t = String(x == null ? "" : x); return /[";\r\n]/.test(t) ? '"' + t.replace(/"/g, '""') + '"' : t; };
@@ -5150,7 +5166,7 @@ function PainelVendas({ showToast, isGer = true, ehLider = false }) {
           html += '</div>';
           // linha de infos (curso, plataforma, data, código)
           const chip = (t) => t ? '<span style="display:inline-block; background:#f0fdf4; color:#166534; border:1px solid #bbf7d0; border-radius:20px; padding:2px 10px; font-size:11px; font-weight:600; margin:6px 6px 0 0;">' + esc(t) + '</span>' : '';
-          html += '<div style="margin-top:2px;">' + chip(v.curso) + chip(v.plataforma) + chip(v.parcelas ? v.parcelas + "x" : "") + chip(dataBR(v.data)) + (v.codigo ? '<span style="display:inline-block; color:#67707e; font-size:11px; margin:6px 0 0 2px;">cód ' + esc(v.codigo) + '</span>' : '') + '</div>';
+          html += '<div style="margin-top:2px;">' + chip(cursoTxt(v)) + chip(v.plataforma) + chip(v.parcelas ? v.parcelas + "x" : "") + chip(dataBR(v.data)) + (v.codigo ? '<span style="display:inline-block; color:#67707e; font-size:11px; margin:6px 0 0 2px;">cód ' + esc(v.codigo) + '</span>' : '') + '</div>';
           // contato (email + telefone)
           if (v.email || v.telefone) {
             html += '<div style="margin-top:9px; padding-top:9px; border-top:1px dashed #e6eaef; font-size:12px; color:#4a5361;">';
@@ -5271,6 +5287,8 @@ function PainelVendas({ showToast, isGer = true, ehLider = false }) {
                     <button onClick={() => { setShowImportarV(true); setMenuAberto(false); }}><I.clip className="ico" /> Importar planilha</button>
                     <button onClick={() => { setShowInteg(true); setMenuAberto(false); }}><I.link className="ico" /> Integrar sistema</button>
                     <button onClick={() => { setShowDup(true); setMenuAberto(false); }}><I.search className="ico" /> Conferir repetidas</button>
+                    <button onClick={() => { setShowCursos(true); setMenuAberto(false); }}><I.nota className="ico" /> Cursos</button>
+                    <button onClick={() => { setShowPadronizar(true); setMenuAberto(false); }}><I.list className="ico" /> Padronizar cursos</button>
                   </div>
                 </>
               )}
@@ -5301,7 +5319,7 @@ function PainelVendas({ showToast, isGer = true, ehLider = false }) {
                 <div key={v.id} className="vd-dodia-item">
                   <span className="vd-dodia-vend">{v.pessoaNome}</span>
                   <div className="vd-dodia-cli">{v.cliente || "—"}
-                    <small>{[v.curso, v.formaLabel || v.forma, v.parcelas ? v.parcelas + "x" : "", v.plataforma].filter(Boolean).join(" · ")}</small>
+                    <small title={cursoCompleto(v)}>{[cursoTxt(v), v.formaLabel || v.forma, v.parcelas ? v.parcelas + "x" : "", v.plataforma].filter(Boolean).join(" · ")}</small>
                   </div>
                   <div className="vd-dodia-vals">{dinheiro(v.valor)}<small>recebido {dinheiro(v.recebido)}</small></div>
                 </div>
@@ -5565,7 +5583,9 @@ function PainelVendas({ showToast, isGer = true, ehLider = false }) {
         </>
       )}
 
-      {form && <FormVenda form={form} setForm={setForm} pessoas={pessoas} isGer={isGer} onSalvo={() => { setForm(null); carregar(); }} showToast={showToast} />}
+      {form && <FormVenda form={form} setForm={setForm} pessoas={pessoas} isGer={isGer} vendasMes={vendas} onSalvo={() => { setForm(null); carregar(); }} showToast={showToast} />}
+      {showCursos && <ModalCursos onClose={() => { setShowCursos(false); carregar(); }} showToast={showToast} />}
+      {showPadronizar && <ModalPadronizarCursos onClose={() => setShowPadronizar(false)} onFeito={carregar} showToast={showToast} />}
       {showPeriodo && <ModalVendasPeriodo isGer={isGer} onClose={() => setShowPeriodo(false)} showToast={showToast} />}
       {pessoaRapida && <ModalPessoaRapida pessoa={pessoaRapida} pessoas={pessoas} mes={mes} isGer={isGer} onVerPainel={(id) => trocarEscopo(id)} onClose={() => setPessoaRapida(null)} onSalvo={carregar} showToast={showToast} />}
       {showDup && <ModalDuplicadas mes={mes} onClose={() => setShowDup(false)} onMudou={carregar} showToast={showToast} />}
@@ -5586,7 +5606,7 @@ function ListaVendas({ vendas, onEditar, onExcluir }) {
             <div className="vd-item-cli">{v.cliente || "—"}<span className="vd-item-vend">{v.pessoaNome}</span></div>
             <div className="vd-item-sub">
               {new Date(v.data).toLocaleDateString("pt-BR")}
-              {v.curso ? " · " + v.curso : ""}
+              {v.curso ? " · " + cursoTxt(v) : ""}
               {(v.formaLabel || v.forma) ? " · " + (v.formaLabel || v.forma) : ""}
               {v.parcelas ? " " + v.parcelas + "x" : ""}
               {v.plataforma ? " · " + v.plataforma : ""}
@@ -5607,19 +5627,248 @@ function ListaVendas({ vendas, onEditar, onExcluir }) {
   );
 }
 
-function FormVenda({ form, setForm, pessoas, isGer = true, onSalvo, showToast }) {
+/* ============================================================
+   ESCOLHER O CURSO (lançamento de venda)
+   Lista padrão com busca: digita "inv" e aparece Inverter.
+   Combo = marca quais cursos/livros foram; Todos os cursos = escolhe a oferta.
+   ============================================================ */
+const ICONE_GRUPO = { "Cursos especialistas": "medal", "Outros cursos": "cog", "Livros e apostilas": "nota", "Entradas VIP": "estrela", "Combos e pacotes": "spark" };
+const GRUPOS_COMBO_CURSOS = ["Cursos especialistas", "Outros cursos"];
+function opcoesDoCombo(cursos, tipo) {
+  const simples = (c) => (c.tipo || "simples") === "simples" && c.ativo !== false;
+  if (tipo === "combo-livros") return cursos.filter((c) => simples(c) && c.grupo === "Livros e apostilas");
+  if (tipo === "combo-cursos") return cursos.filter((c) => simples(c) && GRUPOS_COMBO_CURSOS.includes(c.grupo));
+  return [];
+}
+function IconeGrupo({ g }) { const C = I[ICONE_GRUPO[g]] || I.nota; return <C className="ico" />; }
+
+function SeletorCurso({ valor, onChange, cat, maisVendidos = [], isGer = false, onCadastrar, erro }) {
+  const [aberto, setAberto] = useState(false);
+  const [q, setQ] = useState("");
+  const [ativo, setAtivo] = useState(0);
+  const [novo, setNovo] = useState(null);           // cadastro rápido de curso (só gerente)
+  const listaRef = useRef(null);
+  const cursos = (cat.cursos || []).filter((c) => c.ativo !== false);
+  const grupos = cat.grupos && cat.grupos.length ? cat.grupos : Array.from(new Set(cursos.map((c) => c.grupo)));
+  const sel = itemCurso(valor.curso);
+  const antigo = valor.curso && !sel ? valor.curso : "";
+  const termos = normTxt(q).split(" ").filter(Boolean);
+  // busca: começo do nome curto vale mais, depois palavras-chave, depois o nome completo
+  const pontua = (c) => {
+    const curto = normTxt(c.curto), nome = normTxt(c.nome), chaves = (c.chaves || []).map(normTxt);
+    let total = 0;
+    for (const t of termos) {
+      let p = 0;
+      if (curto.startsWith(t)) p = 6;
+      else if (curto.split(" ").some((w) => w.startsWith(t))) p = 5;
+      else if (chaves.some((k) => k.startsWith(t))) p = 4;
+      else if (nome.split(/[ ()-]+/).some((w) => w.startsWith(t))) p = 3;
+      else if (curto.includes(t) || nome.includes(t) || chaves.some((k) => k.includes(t))) p = 1;
+      if (!p) return 0;
+      total += p;
+    }
+    return total;
+  };
+  const achados = termos.length
+    ? cursos.map((c) => ({ c, p: pontua(c) })).filter((x) => x.p > 0).sort((a, b) => b.p - a.p || a.c.curto.localeCompare(b.c.curto, "pt-BR")).map((x) => x.c)
+    : null;
+  const plano = achados || grupos.flatMap((g) => cursos.filter((c) => c.grupo === g));
+  useEffect(() => { setAtivo(0); }, [q]);
+  useEffect(() => {
+    if (!aberto || !listaRef.current) return;
+    const el = listaRef.current.querySelector('[data-i="' + ativo + '"]');
+    if (el && el.scrollIntoView) el.scrollIntoView({ block: "nearest" });
+  }, [ativo, aberto]);
+
+  function fechar() { setAberto(false); setQ(""); setNovo(null); }
+  function escolher(c) {
+    const tipo = c.tipo || "simples";
+    const mesmo = sel && sel.id === c.id;
+    onChange({
+      curso: c.nome,
+      cursoItens: tipo.indexOf("combo") === 0 ? (mesmo ? valor.cursoItens || [] : []) : [],
+      cursoOferta: tipo === "pacote" ? (mesmo ? valor.cursoOferta || "" : "") : "",
+    });
+    fechar();
+  }
+  function teclas(e) {
+    if (e.key === "ArrowDown") { e.preventDefault(); setAtivo((i) => Math.min(plano.length - 1, i + 1)); }
+    else if (e.key === "ArrowUp") { e.preventDefault(); setAtivo((i) => Math.max(0, i - 1)); }
+    else if (e.key === "Enter") { e.preventDefault(); if (plano[ativo]) escolher(plano[ativo]); }
+    else if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); fechar(); }
+  }
+  const tipoSel = sel ? sel.tipo || "simples" : "";
+  const opcoesCombo = sel ? opcoesDoCombo(cursos, tipoSel) : [];
+  const itens = valor.cursoItens || [];
+  const alternarItem = (nome) => onChange({ ...valor, cursoItens: itens.includes(nome) ? itens.filter((x) => x !== nome) : [...itens, nome] });
+  let idx = -1;
+  const opcao = (c) => {
+    idx++;
+    const i = idx;
+    const escolhido = sel && sel.id === c.id;
+    return (
+      <button type="button" key={c.id} data-i={i} className={"sc-op" + (i === ativo ? " ativo" : "") + (escolhido ? " sel" : "")}
+        onMouseEnter={() => setAtivo(i)} onClick={() => escolher(c)}>
+        <span className="sc-op-ic"><IconeGrupo g={c.grupo} /></span>
+        <span className="sc-op-txt"><b>{c.curto}</b><small>{c.nome}</small></span>
+        {(c.tipo || "simples") !== "simples" && <em>{c.tipo === "pacote" ? "escolhe a oferta" : "marca os itens"}</em>}
+        {escolhido && <I.check className="ico sc-op-ok" />}
+      </button>
+    );
+  };
+
+  return (
+    <div className={"sc" + (erro ? " erro" : "")}>
+      {!aberto ? (
+        <button type="button" className={"sc-campo" + (sel ? " ok" : "")} onClick={() => setAberto(true)}>
+          {sel ? (
+            <>
+              <span className="sc-campo-ic"><IconeGrupo g={sel.grupo} /></span>
+              <span className="sc-campo-txt"><b>{sel.curto}</b><small>{sel.nome}</small></span>
+              <span className="sc-trocar">Trocar</span>
+            </>
+          ) : (
+            <>
+              <span className="sc-campo-ic vazio"><I.search className="ico" /></span>
+              <span className="sc-campo-txt">
+                <b>{antigo ? "Escolha o curso padrão" : "Clique para escolher o curso"}</b>
+                <small>{antigo ? "Estava escrito: “" + antigo + "”" : "Dá pra digitar o nome e buscar"}</small>
+              </span>
+            </>
+          )}
+        </button>
+      ) : (
+        <div className="sc-painel">
+          <div className="sc-busca">
+            <I.search className="ico" />
+            <input autoFocus value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={teclas}
+              placeholder="Digite: inverter, solar, odonto, livro, combo…" aria-label="Buscar curso" />
+            <button type="button" className="sc-fechar" onClick={fechar}>Fechar</button>
+          </div>
+          {!termos.length && maisVendidos.length > 0 && (
+            <div className="sc-top">
+              <span>Mais vendidos</span>
+              {maisVendidos.map((c) => <button type="button" key={c.id} className="sc-top-chip" onClick={() => escolher(c)}>{c.curto}</button>)}
+            </div>
+          )}
+          <div className="sc-lista" ref={listaRef}>
+            {achados ? (
+              achados.length ? achados.map(opcao) : (
+                <div className="sc-vazio">
+                  <b>Nenhum curso com “{q}”.</b>
+                  {isGer
+                    ? <button type="button" className="btn btn-sm" onClick={() => setNovo({ nome: q.toUpperCase(), grupo: "Outros cursos" })}><I.plus className="ico" /> Cadastrar curso novo</button>
+                    : <span>Confira a escrita ou peça para o gerente cadastrar o curso.</span>}
+                </div>
+              )
+            ) : grupos.map((g) => {
+              const doGrupo = cursos.filter((c) => c.grupo === g);
+              return doGrupo.length ? (
+                <div key={g} className="sc-grupo">
+                  <div className="sc-grupo-h">{g}</div>
+                  {doGrupo.map(opcao)}
+                </div>
+              ) : null;
+            })}
+          </div>
+          {isGer && !novo && !termos.length && (
+            <button type="button" className="sc-novo-link" onClick={() => setNovo({ nome: "", grupo: "Outros cursos" })}><I.plus className="ico" /> Cadastrar um curso que não está na lista</button>
+          )}
+          {novo && (
+            <div className="sc-novo">
+              <input className="input" autoFocus value={novo.nome} onChange={(e) => setNovo({ ...novo, nome: e.target.value })} placeholder="Nome completo do curso" />
+              <select className="input" value={novo.grupo} onChange={(e) => setNovo({ ...novo, grupo: e.target.value })}>
+                {grupos.filter((g) => g !== "Combos e pacotes").map((g) => <option key={g} value={g}>{g}</option>)}
+              </select>
+              <button type="button" className="btn btn-primary btn-sm" onClick={async () => { const c = await onCadastrar(novo); if (c) escolher(c); }}>Cadastrar</button>
+              <button type="button" className="btn btn-sm" onClick={() => setNovo(null)}>Cancelar</button>
+            </div>
+          )}
+        </div>
+      )}
+      {sel && opcoesCombo.length > 0 && (
+        <div className="sc-sub">
+          <div className="sc-sub-h">
+            <b>Quais {tipoSel === "combo-livros" ? "livros" : "cursos"} foram no combo?</b>
+            <span className={itens.length >= 2 ? "ok" : ""}>{itens.length ? itens.length + " marcado(s)" : "marque 2 ou mais"}</span>
+          </div>
+          <div className="sc-chips">
+            {opcoesCombo.map((c) => {
+              const on = itens.includes(c.nome);
+              return <button type="button" key={c.id} className={"sc-chip" + (on ? " on" : "")} onClick={() => alternarItem(c.nome)}>{on && <I.check className="ico" />}{c.curto}</button>;
+            })}
+          </div>
+        </div>
+      )}
+      {sel && tipoSel === "pacote" && (
+        <div className="sc-sub">
+          <div className="sc-sub-h"><b>Qual oferta?</b></div>
+          <div className="sc-chips">
+            {(cat.ofertas || []).map((o) => (
+              <button type="button" key={o} className={"sc-chip" + (valor.cursoOferta === o ? " on" : "")} onClick={() => onChange({ ...valor, cursoOferta: o })}>
+                {valor.cursoOferta === o && <I.check className="ico" />}{o}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+const valorNumero = (s) => Number(String(s || "").replace(/[^\d,.-]/g, "").replace(/\.(?=\d{3}\b)/g, "").replace(",", ".")) || 0;
+function mascaraFone(v) {
+  const d = String(v || "").replace(/\D/g, "");
+  const n = d.length >= 12 && d.startsWith("55") ? d.slice(2) : d;
+  if (n.length === 11) return "(" + n.slice(0, 2) + ") " + n.slice(2, 7) + "-" + n.slice(7);
+  if (n.length === 10) return "(" + n.slice(0, 2) + ") " + n.slice(2, 6) + "-" + n.slice(6);
+  return v;
+}
+
+function FormVenda({ form, setForm, pessoas, isGer = true, onSalvo, showToast, vendasMes = [] }) {
   const [salvando, setSalvando] = useState(false);
   const [repetida, setRepetida] = useState(null);   // aviso de código já usado
-  const [outroCurso, setOutroCurso] = useState(false);
-  const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
+  const [erros, setErros] = useState({});
+  const [cat, recarregarCat] = useCatalogo();
+  const set = (k, v) => { setForm((f) => ({ ...f, [k]: v })); if (erros[k]) setErros((e) => ({ ...e, [k]: false })); };
+  const cursoVal = { curso: form.curso || "", cursoItens: form.cursoItens || [], cursoOferta: form.cursoOferta || "" };
+  // atalho: os cursos mais vendidos do mês aparecem no topo da lista
+  const maisVendidos = useMemo(() => {
+    const cont = {};
+    (vendasMes || []).forEach((v) => { const it = itemCurso(v.curso); if (it && (it.tipo || "simples") === "simples") cont[it.id] = (cont[it.id] || 0) + 1; });
+    return Object.keys(cont).sort((a, b) => cont[b] - cont[a]).slice(0, 6)
+      .map((id) => (cat.cursos || []).find((c) => c.id === id && c.ativo !== false)).filter(Boolean);
+  }, [vendasMes, cat]);
 
+  async function cadastrarCurso(novo) {
+    if (!String(novo.nome || "").trim()) { showToast("Digite o nome do curso"); return null; }
+    try {
+      const r = await api.vdCriarCurso({ nome: novo.nome, grupo: novo.grupo });
+      await recarregarCat();
+      showToast("✓ Curso cadastrado");
+      return r.curso;
+    } catch (e) { showToast("✗ " + e.message); return null; }
+  }
+  function validar() {
+    const e = {};
+    if (isGer && !form.pessoaId) e.pessoaId = "Escolha quem vendeu";
+    const it = itemCurso(form.curso);
+    if (!it) e.curso = form.curso ? "Escolha o curso padrão da lista" : "Escolha o curso vendido";
+    else if (String(it.tipo || "").indexOf("combo") === 0 && (form.cursoItens || []).length < 2) e.curso = "Marque pelo menos 2 itens do combo";
+    else if (it.tipo === "pacote" && !form.cursoOferta) e.curso = "Escolha a oferta do pacote";
+    if (!(valorNumero(form.valor) > 0)) e.valor = "Informe o valor vendido";
+    setErros(e);
+    const k = Object.keys(e);
+    if (k.length) { showToast(e[k[0]]); return false; }
+    return true;
+  }
   async function salvar(confirmar) {
-    if (isGer && !form.pessoaId) { showToast("Escolha de quem é a venda"); return; }
-    if (!(Number(String(form.valor).replace(",", ".")) > 0)) { showToast("Informe o valor vendido"); return; }
+    if (!validar()) return;
     setSalvando(true);
     const dados = {
       pessoaId: form.pessoaId, cliente: form.cliente, email: form.email, telefone: form.telefone,
-      curso: form.curso, forma: form.forma, plataforma: form.plataforma, codigo: form.codigo,
+      curso: form.curso, cursoItens: form.cursoItens || [], cursoOferta: form.cursoOferta || "",
+      forma: form.forma, plataforma: form.plataforma, codigo: form.codigo,
       parcelas: form.parcelas, valor: form.valor, recebido: form.recebido,
       data: form.data, confirmar: !!confirmar,
     };
@@ -5634,65 +5883,82 @@ function FormVenda({ form, setForm, pessoas, isGer = true, onSalvo, showToast })
     } finally { setSalvando(false); }
   }
 
+  const comParcela = /cart|boleto|recorr/i.test(form.forma || "");
+  const vNum = valorNumero(form.valor);
+  const resumo = [vNum > 0 ? dinheiro(vNum) : null, form.curso && itemCurso(form.curso) ? cursoTxt(form) : null, form.forma].filter(Boolean).join(" · ");
+
   return (
     <Portal>
     <div className="pop-bg centro" onClick={(e) => e.target === e.currentTarget && setForm(null)}>
-      <div className="pop-sheet" style={{ maxWidth: 720 }}>
-        <div className="pop-head"><b>{form.id ? "Editar venda" : "Lançar venda"}</b><button className="crm-x" onClick={() => setForm(null)}>✕</button></div>
-        <div className="pop-body">
+      <div className="pop-sheet vf" style={{ maxWidth: 760 }}>
+        <div className="vf-topo">
+          <span className="vf-topo-ic"><I.cash className="ico" /></span>
+          <div className="vf-topo-txt">
+            <b>{form.id ? "Editar venda" : "Lançar venda"}</b>
+            <span>{form.id ? "Ajuste o que precisar e salve." : "Leva menos de 1 minuto. Os campos com * são obrigatórios."}</span>
+          </div>
+          <button className="crm-x" onClick={() => setForm(null)}>✕</button>
+        </div>
+        <div className="pop-body vf-corpo">
           {isGer && pessoas.length === 0 && (
             <div className="of-nova-semtpl" style={{ marginBottom: 14 }}>
               Nenhuma pessoa cadastrada ainda. Feche aqui e clique em <b>Equipe & metas</b> pra cadastrar o time (dá pra puxar todo mundo do sistema de uma vez).
             </div>
           )}
-          <div className="vd-form">
-            <div><label className="lbl-mini">Data</label><input className="input" type="date" value={form.data} onChange={(e) => set("data", e.target.value)} /></div>
-            {isGer ? (
-              <div><label className="lbl-mini">Vendedor(a)</label>
-                <select className="input" value={form.pessoaId} onChange={(e) => set("pessoaId", e.target.value)}>
-                  <option value="">Escolher…</option>
-                  {pessoas.filter((p) => p.ativo).map((p) => <option key={p.id} value={p.id}>{p.nome}</option>)}
-                </select>
-              </div>
-            ) : (
-              <div><label className="lbl-mini">Vendedor(a)</label>
-                <input className="input" value="Você" disabled />
-              </div>
-            )}
-            <div className="vd-full"><label className="lbl-mini">Nome do cliente</label><input className="input" value={form.cliente} onChange={(e) => set("cliente", e.target.value)} placeholder="Quem comprou" /></div>
-            <div><label className="lbl-mini">E-mail</label><input className="input" value={form.email} onChange={(e) => set("email", e.target.value)} placeholder="cliente@email.com" /></div>
-            <div><label className="lbl-mini">Telefone</label><input className="input" value={form.telefone} onChange={(e) => set("telefone", e.target.value)} placeholder="44 99999-9999" /></div>
-            <div className="vd-full"><label className="lbl-mini">Curso vendido</label>
-              {outroCurso ? (
-                <div style={{ display: "flex", gap: 8 }}>
-                  <input className="input" autoFocus value={form.curso} onChange={(e) => set("curso", e.target.value)} placeholder="Digite o nome do curso" />
-                  <button className="btn btn-sm" onClick={() => { setOutroCurso(false); set("curso", ""); }}>Ver lista</button>
-                </div>
+
+          <section className="vf-sec">
+            <div className="vf-sec-h"><span>1</span>Quem vendeu</div>
+            <div className="vf-grid">
+              {isGer ? (
+                <label className={"vf-campo" + (erros.pessoaId ? " erro" : "")}><span>Vendedor(a) *</span>
+                  <select className="input" value={form.pessoaId} onChange={(e) => set("pessoaId", e.target.value)}>
+                    <option value="">Escolher…</option>
+                    {pessoas.filter((p) => p.ativo).map((p) => <option key={p.id} value={p.id}>{p.nome}</option>)}
+                  </select>
+                </label>
               ) : (
-                <select className="input" value={CURSOS.includes(form.curso) ? form.curso : (form.curso ? "__manter" : "")}
-                  onChange={(e) => { if (e.target.value === "__outro") { setOutroCurso(true); set("curso", ""); } else if (e.target.value !== "__manter") set("curso", e.target.value); }}>
-                  <option value="">Escolher curso…</option>
-                  {form.curso && !CURSOS.includes(form.curso) && <option value="__manter">{form.curso} (como estava)</option>}
-                  {CURSOS.map((c) => <option key={c} value={c}>{c}</option>)}
-                  <option value="__outro">Outro — digitar…</option>
-                </select>
+                <label className="vf-campo"><span>Vendedor(a)</span><input className="input" value="Você" disabled /></label>
               )}
+              <label className="vf-campo"><span>Data da venda</span><input className="input" type="date" value={form.data} onChange={(e) => set("data", e.target.value)} /></label>
             </div>
-            <div><label className="lbl-mini">Forma de pagamento</label>
-              <select className="input" value={form.forma} onChange={(e) => set("forma", e.target.value)}>
-                {FORMAS_PG.map((f) => <option key={f} value={f}>{f}</option>)}
-              </select>
+          </section>
+
+          <section className="vf-sec">
+            <div className="vf-sec-h"><span>2</span>Curso vendido *</div>
+            <SeletorCurso valor={cursoVal} cat={cat} maisVendidos={maisVendidos} isGer={isGer} onCadastrar={cadastrarCurso} erro={!!erros.curso}
+              onChange={(c) => { setForm((f) => ({ ...f, ...c })); if (erros.curso) setErros((e) => ({ ...e, curso: false })); }} />
+            {erros.curso && <div className="vf-erro">{erros.curso}</div>}
+          </section>
+
+          <section className="vf-sec">
+            <div className="vf-sec-h"><span>3</span>Cliente</div>
+            <div className="vf-grid">
+              <label className="vf-campo vf-full"><span>Nome do cliente</span><input className="input" value={form.cliente} onChange={(e) => set("cliente", e.target.value)} placeholder="Quem comprou" /></label>
+              <label className="vf-campo"><span>Telefone</span><input className="input" inputMode="tel" value={form.telefone} onChange={(e) => set("telefone", e.target.value)} onBlur={(e) => set("telefone", mascaraFone(e.target.value))} placeholder="(44) 99999-9999" /></label>
+              <label className="vf-campo"><span>E-mail</span><input className="input" type="email" value={form.email} onChange={(e) => set("email", e.target.value)} placeholder="cliente@email.com" /></label>
             </div>
-            <div><label className="lbl-mini">Plataforma</label>
-              <select className="input" value={form.plataforma} onChange={(e) => set("plataforma", e.target.value)}>
-                {PLATAFORMAS.map((f) => <option key={f} value={f}>{f}</option>)}
-              </select>
+          </section>
+
+          <section className="vf-sec">
+            <div className="vf-sec-h"><span>4</span>Pagamento</div>
+            <div className="vf-grid">
+              <label className={"vf-campo" + (erros.valor ? " erro" : "")}><span>Valor vendido *</span>
+                <div className="vf-rs"><i>R$</i><input className="input" inputMode="decimal" value={form.valor} onChange={(e) => set("valor", e.target.value)} placeholder="2.497,00" /></div>
+              </label>
+              <div className="vf-campo"><span>Valor recebido {vNum > 0 && <button type="button" className="vf-link" onClick={() => set("recebido", form.valor)}>recebeu tudo</button>}</span>
+                <div className="vf-rs"><i>R$</i><input className="input" inputMode="decimal" value={form.recebido} onChange={(e) => set("recebido", e.target.value)} placeholder="quanto já caiu" aria-label="Valor recebido" /></div>
+              </div>
             </div>
-            <div><label className="lbl-mini">Código da venda</label><input className="input" value={form.codigo} onChange={(e) => set("codigo", e.target.value)} placeholder="Código da plataforma" /></div>
-            <div><label className="lbl-mini">Quantidade de parcelas</label><input className="input" type="number" min="0" max="60" value={form.parcelas} onChange={(e) => set("parcelas", e.target.value)} placeholder="Ex.: 12" /></div>
-            <div><label className="lbl-mini">Valor vendido</label><input className="input" value={form.valor} onChange={(e) => set("valor", e.target.value)} placeholder="2497,00" /></div>
-            <div><label className="lbl-mini">Valor recebido</label><input className="input" value={form.recebido} onChange={(e) => set("recebido", e.target.value)} placeholder="quanto já caiu" /></div>
-          </div>
+            <div className="vf-rot">Forma de pagamento</div>
+            <div className="vf-chips">{FORMAS_PG.map((f) => <button type="button" key={f} className={"vf-chip" + (form.forma === f ? " on" : "")} onClick={() => set("forma", f)}>{f}</button>)}</div>
+            <div className="vf-rot">Plataforma</div>
+            <div className="vf-chips">{PLATAFORMAS.map((f) => <button type="button" key={f} className={"vf-chip" + (form.plataforma === f ? " on" : "")} onClick={() => set("plataforma", f)}>{f}</button>)}</div>
+            <div className="vf-grid" style={{ marginTop: 12 }}>
+              {comParcela && <label className="vf-campo"><span>Parcelas</span><input className="input" type="number" min="0" max="60" value={form.parcelas} onChange={(e) => set("parcelas", e.target.value)} placeholder="Ex.: 12" /></label>}
+              <label className={"vf-campo" + (comParcela ? "" : " vf-full")}><span>Código da venda</span><input className="input" value={form.codigo} onChange={(e) => set("codigo", e.target.value)} placeholder="Código da plataforma (se tiver)" /></label>
+            </div>
+          </section>
+
           {repetida && (
             <div className="vd-repetida">
               <b>⚠ Já existe venda com o código {repetida.codigo}</b>
@@ -5705,22 +5971,234 @@ function FormVenda({ form, setForm, pessoas, isGer = true, onSalvo, showToast })
               <span className="vd-repetida-p">Quer lançar mesmo assim? (às vezes a mesma venda é dividida entre dois vendedores)</span>
             </div>
           )}
-          <div className="vd-rodape">
-            <button className="btn" onClick={() => setForm(null)}>Cancelar</button>
-            {repetida ? (
-              <>
-                <button className="btn" onClick={() => setRepetida(null)}>Voltar e revisar</button>
-                <button className="onum-add" disabled={salvando} onClick={() => salvar(true)}>
-                  {salvando ? "Lançando…" : "Lançar mesmo assim"}
-                </button>
-              </>
-            ) : (
-              <button className="onum-add" disabled={salvando} onClick={() => salvar(false)}>
-                {salvando ? "Salvando…" : form.id ? "Salvar alterações" : "Lançar venda"}
-              </button>
-            )}
-          </div>
         </div>
+        <div className="vf-pe">
+          <div className="vf-resumo">{resumo || "Escolha o curso e o valor"}</div>
+          <button className="btn" onClick={() => setForm(null)}>Cancelar</button>
+          {repetida ? (
+            <>
+              <button className="btn" onClick={() => setRepetida(null)}>Voltar e revisar</button>
+              <button className="onum-add" disabled={salvando} onClick={() => salvar(true)}>{salvando ? "Lançando…" : "Lançar mesmo assim"}</button>
+            </>
+          ) : (
+            <button className="onum-add" disabled={salvando} onClick={() => salvar(false)}>
+              {salvando ? "Salvando…" : form.id ? "Salvar alterações" : "Lançar venda"}
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+    </Portal>
+  );
+}
+
+/* ============================================================
+   PADRONIZAR CURSOS — troca os nomes antigos pelo nome padrão
+   Mostra cada escrita antiga, para onde vai e quantas vendas mudam.
+   Só aplica quando o gerente confirma (o servidor guarda cópia antes).
+   ============================================================ */
+function ModalPadronizarCursos({ onClose, showToast, onFeito }) {
+  const [cat] = useCatalogo();
+  const [dados, setDados] = useState(null);
+  const [escolhas, setEscolhas] = useState({});
+  const [aplicando, setAplicando] = useState(false);
+  const [feito, setFeito] = useState(null);
+  const carregar = () => api.vdRevisaoCursos().then((d) => {
+    setDados(d);
+    const e = {};
+    (d.lista || []).forEach((x) => {
+      e[x.nome] = x.sugestao
+        ? { curso: x.sugestao.curso, itens: x.sugestao.itens || [], oferta: x.sugestao.oferta || "", usar: true }
+        : { curso: "", itens: [], oferta: "", usar: false };
+    });
+    setEscolhas(e);
+  }).catch((e) => showToast("✗ " + e.message));
+  useEffect(() => { carregar(); /* eslint-disable-next-line */ }, []);
+  const lista = (dados && dados.lista) || [];
+  const cursos = (cat.cursos || []).filter((c) => c.ativo !== false);
+  const grupos = cat.grupos || [];
+  const setE = (nome, patch) => setEscolhas((e) => ({ ...e, [nome]: { ...e[nome], ...patch } }));
+  const marcadas = lista.filter((x) => escolhas[x.nome] && escolhas[x.nome].usar && escolhas[x.nome].curso);
+  const qtdVendas = marcadas.reduce((s2, x) => s2 + x.qtd, 0);
+  const totalFora = lista.reduce((s2, x) => s2 + x.qtd, 0);
+  async function aplicar() {
+    if (!marcadas.length) return;
+    if (!window.confirm(`Padronizar ${qtdVendas} venda(s) (${marcadas.length} escrita(s) diferente(s))?\n\nO sistema guarda uma cópia de segurança antes, e o nome antigo fica salvo em cada venda.`)) return;
+    setAplicando(true);
+    try {
+      const r = await api.vdAplicarCursos(marcadas.map((x) => ({ de: x.nome, ...escolhas[x.nome] })));
+      setFeito(r.alteradas);
+      showToast(`✓ ${r.alteradas} venda(s) padronizada(s)`);
+      await carregar();
+      if (onFeito) onFeito();
+    } catch (e) { showToast("✗ " + e.message); }
+    finally { setAplicando(false); }
+  }
+  return (
+    <Portal>
+    <div className="pop-bg centro" onClick={(e) => e.target === e.currentTarget && onClose()}>
+      <div className="pop-sheet vf" style={{ maxWidth: 980 }}>
+        <div className="vf-topo">
+          <span className="vf-topo-ic"><I.list className="ico" /></span>
+          <div className="vf-topo-txt"><b>Padronizar cursos</b><span>Deixa cada curso com um nome só, pra métrica por curso ficar certa.</span></div>
+          <button className="crm-x" onClick={onClose}>✕</button>
+        </div>
+        <div className="pop-body vf-corpo">
+          {!dados ? <div className="panel-sub"><span className="spin" /> Lendo as vendas…</div> : (
+            <>
+              <div className="pc-resumo">
+                <div><b>{dados.jaPadrao}</b><span>vendas já no padrão</span></div>
+                <div className={totalFora ? "destaque" : ""}><b>{totalFora}</b><span>com nome diferente ({lista.length} escritas)</span></div>
+                <div><b>{dados.semCurso}</b><span>sem curso (ficam como estão)</span></div>
+              </div>
+              {feito !== null && <div className="pc-ok"><I.check className="ico" /> {feito} venda(s) padronizada(s). O nome antigo ficou guardado em cada uma.</div>}
+              {lista.length === 0 ? (
+                <div className="pc-ok"><I.check className="ico" /> Tudo padronizado! As vendas novas já entram com o nome certo.</div>
+              ) : (
+                <>
+                  <p className="pc-dica">Confira para onde vai cada nome antigo. Já deixei a sugestão marcada: é só trocar o que não estiver certo. O que ficar desmarcado não muda.</p>
+                  <div className="pc-lista">
+                    {lista.map((x) => {
+                      const e = escolhas[x.nome] || {};
+                      const alvo = itemCurso(e.curso);
+                      const tipo = alvo ? alvo.tipo || "simples" : "";
+                      const ops = opcoesDoCombo(cursos, tipo);
+                      return (
+                        <div key={x.nome} className={"pc-linha" + (e.usar ? "" : " off")}>
+                          <input type="checkbox" checked={!!e.usar} disabled={!e.curso} onChange={(ev) => setE(x.nome, { usar: ev.target.checked })} aria-label={"Padronizar " + x.nome} />
+                          <div className="pc-de"><b>{x.nome}</b><span>{x.qtd} venda(s)</span></div>
+                          <I.seta className="ico pc-seta" />
+                          <div className="pc-para">
+                            <select className="input" value={e.curso || ""} onChange={(ev) => setE(x.nome, { curso: ev.target.value, itens: [], oferta: "", usar: !!ev.target.value })}>
+                              <option value="">— deixar como está —</option>
+                              {grupos.map((g) => (
+                                <optgroup key={g} label={g}>
+                                  {cursos.filter((c) => c.grupo === g).map((c) => <option key={c.id} value={c.nome}>{c.curto}</option>)}
+                                </optgroup>
+                              ))}
+                            </select>
+                            {ops.length > 0 && (
+                              <div className="pc-itens">
+                                {ops.map((c) => {
+                                  const on = (e.itens || []).includes(c.nome);
+                                  return <button type="button" key={c.id} className={"sc-chip mini" + (on ? " on" : "")} onClick={() => setE(x.nome, { itens: on ? e.itens.filter((n) => n !== c.nome) : [...(e.itens || []), c.nome] })}>{c.curto}</button>;
+                                })}
+                              </div>
+                            )}
+                            {tipo === "pacote" && (
+                              <div className="pc-itens">
+                                {(cat.ofertas || []).map((o) => <button type="button" key={o} className={"sc-chip mini" + (e.oferta === o ? " on" : "")} onClick={() => setE(x.nome, { oferta: o })}>{o}</button>)}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </>
+              )}
+            </>
+          )}
+        </div>
+        <div className="vf-pe">
+          <div className="vf-resumo">{lista.length ? `${marcadas.length} escrita(s) · ${qtdVendas} venda(s) vão mudar` : ""}</div>
+          <button className="btn" onClick={onClose}>Fechar</button>
+          {lista.length > 0 && (
+            <button className="onum-add" disabled={aplicando || !marcadas.length} onClick={aplicar}>
+              {aplicando ? "Padronizando…" : `Padronizar ${qtdVendas} venda(s)`}
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+    </Portal>
+  );
+}
+
+/* ============================================================
+   CURSOS — a lista padrão (gerente cadastra, renomeia, esconde)
+   ============================================================ */
+function LinhaCurso({ c, onSalvar }) {
+  const [nome, setNome] = useState(c.nome);
+  const [curto, setCurto] = useState(c.curto);
+  useEffect(() => { setNome(c.nome); setCurto(c.curto); }, [c.nome, c.curto]);
+  const salvarNome = () => {
+    const novo = nome.trim().replace(/\s+/g, " ").toUpperCase();
+    if (!novo || novo === c.nome) { setNome(c.nome); return; }
+    if (!window.confirm(`Renomear para "${novo}"?\n\nAs vendas que já usam esse curso também passam a ter o nome novo.`)) { setNome(c.nome); return; }
+    onSalvar(c, "nome", novo);
+  };
+  const aoTeclar = (e) => { if (e.key === "Enter") e.currentTarget.blur(); };
+  return (
+    <div className={"cu-linha" + (c.ativo ? "" : " off")}>
+      <button className={c.ativo ? "of-switch on" : "of-switch"} onClick={() => onSalvar(c, "ativo", !c.ativo)} title={c.ativo ? "Aparece na hora de lançar" : "Escondido (não aparece pra escolher)"}><span className="of-switch-dot" /></button>
+      <input className="input cu-curto" value={curto} onChange={(e) => setCurto(e.target.value)} onKeyDown={aoTeclar}
+        onBlur={() => { if (curto.trim() && curto.trim() !== c.curto) onSalvar(c, "curto", curto.trim()); else setCurto(c.curto); }} aria-label="Nome curto" />
+      <input className="input cu-nome" value={nome} onChange={(e) => setNome(e.target.value)} onKeyDown={aoTeclar} onBlur={salvarNome} aria-label="Nome completo" />
+      {(c.tipo || "simples") !== "simples" && <span className="cu-tipo">{c.tipo === "pacote" ? "escolhe a oferta" : "marca os itens"}</span>}
+    </div>
+  );
+}
+function ModalCursos({ onClose, showToast }) {
+  const [cat, recarregar] = useCatalogo();
+  const [novo, setNovo] = useState({ nome: "", curto: "", grupo: "Cursos especialistas" });
+  const [busca, setBusca] = useState("");
+  const [criando, setCriando] = useState(false);
+  async function salvarCampo(c, campo, valor) {
+    try {
+      const r = await api.vdEditarCurso(c.id, { [campo]: valor });
+      await recarregar();
+      showToast(r.renomeadas ? `✓ Salvo · ${r.renomeadas} venda(s) com o nome novo` : "✓ Salvo");
+    } catch (e) { showToast("✗ " + e.message); await recarregar(); }
+  }
+  async function criar() {
+    if (!novo.nome.trim()) { showToast("Digite o nome completo do curso"); return; }
+    setCriando(true);
+    try {
+      await api.vdCriarCurso(novo);
+      await recarregar();
+      setNovo({ nome: "", curto: "", grupo: novo.grupo });
+      showToast("✓ Curso cadastrado");
+    } catch (e) { showToast("✗ " + e.message); }
+    finally { setCriando(false); }
+  }
+  const grupos = cat.grupos || [];
+  const termo = normTxt(busca);
+  const lista = (cat.cursos || []).filter((c) => !termo || normTxt(c.nome + " " + c.curto).includes(termo));
+  return (
+    <Portal>
+    <div className="pop-bg centro" onClick={(e) => e.target === e.currentTarget && onClose()}>
+      <div className="pop-sheet vf" style={{ maxWidth: 900 }}>
+        <div className="vf-topo">
+          <span className="vf-topo-ic"><I.nota className="ico" /></span>
+          <div className="vf-topo-txt"><b>Cursos</b><span>A lista que aparece na hora de lançar a venda. O nome curto é o que aparece no painel e nas métricas.</span></div>
+          <button className="crm-x" onClick={onClose}>✕</button>
+        </div>
+        <div className="pop-body vf-corpo">
+          <div className="cu-novo">
+            <input className="input" value={novo.nome} onChange={(e) => setNovo({ ...novo, nome: e.target.value })} placeholder="Nome completo do curso novo" />
+            <input className="input" value={novo.curto} onChange={(e) => setNovo({ ...novo, curto: e.target.value })} placeholder="Nome curto (ex.: Inverter)" />
+            <select className="input" value={novo.grupo} onChange={(e) => setNovo({ ...novo, grupo: e.target.value })}>
+              {grupos.filter((g) => g !== "Combos e pacotes").map((g) => <option key={g} value={g}>{g}</option>)}
+            </select>
+            <button className="onum-add" disabled={criando} onClick={criar}><I.plus className="ico" /> Cadastrar</button>
+          </div>
+          <div className="vd-busca" style={{ marginTop: 14 }}>
+            <I.search className="ico" />
+            <input value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Procurar curso…" />
+          </div>
+          <div className="cu-cab"><span /><span>Nome curto</span><span>Nome completo (o que fica na venda)</span></div>
+          {grupos.map((g) => {
+            const doGrupo = lista.filter((c) => c.grupo === g);
+            return doGrupo.length ? (
+              <div key={g} className="cu-grupo">
+                <div className="sc-grupo-h">{g}</div>
+                {doGrupo.map((c) => <LinhaCurso key={c.id} c={c} onSalvar={salvarCampo} />)}
+              </div>
+            ) : null;
+          })}
+        </div>
+        <div className="vf-pe"><div className="vf-resumo">{(cat.cursos || []).filter((c) => c.ativo !== false).length} curso(s) na lista</div><button className="btn" onClick={onClose}>Fechar</button></div>
       </div>
     </div>
     </Portal>

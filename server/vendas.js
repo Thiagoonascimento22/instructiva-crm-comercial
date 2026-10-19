@@ -203,13 +203,311 @@ export function instalarVendas({ app, getDb, saveDB, proximoId, auth, gerenteOnl
     return {
       id: v.id, pessoaId: v.pessoaId, pessoaNome: p ? p.nome : (v.pessoaNome || ""),
       cliente: v.cliente || "", email: v.email || "", telefone: v.telefone || "",
-      curso: v.curso || "", forma: v.forma || "", formaLabel: formaCanonica(v), plataforma: v.plataforma || "",
+      curso: v.curso || "", cursoItens: v.cursoItens || [], cursoOferta: v.cursoOferta || "", cursoOriginal: v.cursoOriginal || "",
+      forma: v.forma || "", formaLabel: formaCanonica(v), plataforma: v.plataforma || "",
       codigo: v.codigo || "", parcelas: Number(v.parcelas) || 0,
       valor: num(v.valor), recebido: num(v.recebido), aGerar: num(v.aGerar),
       obs: v.obs || "", data: v.data, mes: mesDe(v.data),
       criadoPorNome: v.criadoPorNome || "", criadoEm: v.criadoEm,
     };
   }
+
+  /* ============================================================
+     CATÁLOGO DE CURSOS — a lista padrão (sem nome repetido nem escrita diferente)
+     A venda guarda o nome padrão em "curso". Combo guarda quais cursos/livros foram
+     em "cursoItens"; o pacote "Todos os cursos" guarda a oferta em "cursoOferta".
+     O nome que estava digitado antes fica em "cursoOriginal" (nada se perde).
+     ============================================================ */
+  const G_ESP = "Cursos especialistas", G_MAN = "Outros cursos", G_LIV = "Livros e apostilas",
+        G_VIP = "Entradas VIP", G_CMB = "Combos e pacotes";
+  const CURSOS_PADRAO = [
+    { id: "solar", nome: "ESPECIALISTA EM MANUTENÇÃO EM INVERSORES SOLARES", curto: "Inversores Solares", grupo: G_ESP, chaves: ["solar", "pós solar", "inversor solar", "fotovoltaico"] },
+    { id: "inverter", nome: "ESPECIALISTA EM MANUTENÇÃO EM TECNOLOGIAS INVERTER", curto: "Inverter", grupo: G_ESP, chaves: ["inverter", "ar condicionado", "ar inverter"] },
+    { id: "soft", nome: "ESPECIALISTA EM MANUTENÇÃO EM INVERSOR DE FREQUÊNCIA E SOFT-STARTER", curto: "Soft-Starter", grupo: G_ESP, chaves: ["soft", "soft start", "frequência", "inversor de frequência"] },
+    { id: "esteiras", nome: "ESPECIALISTA EM MANUTENÇÃO EM ESTEIRAS DE ACADEMIA", curto: "Esteiras", grupo: G_ESP, chaves: ["esteira", "academia"] },
+    { id: "emac", nome: "ESPECIALISTA EM MANUTENÇÃO EM PLACAS ELETRÔNICAS (EMAC)", curto: "EMAC", grupo: G_ESP, chaves: ["emac", "placas", "placa eletrônica"] },
+    { id: "televisores", nome: "ESPECIALISTA EM MANUTENÇÃO EM TELEVISORES LED E LCD", curto: "Televisores", grupo: G_ESP, chaves: ["tv", "televisor", "led", "lcd"] },
+    { id: "amplificadores", nome: "ESPECIALISTA EM MANUTENÇÃO EM AMPLIFICADORES DE ÁUDIO", curto: "Amplificadores", grupo: G_ESP, chaves: ["amplificador", "áudio", "som", "jbl"] },
+    { id: "fontes", nome: "ESPECIALISTA EM MANUTENÇÃO EM FONTES CHAVEADAS", curto: "Fontes Chaveadas", grupo: G_ESP, chaves: ["fonte", "fontes", "pós fontes"] },
+    { id: "odonto", nome: "ESPECIALISTA EM MANUTENÇÃO EM EQUIPAMENTOS ODONTO", curto: "Odonto", grupo: G_ESP, chaves: ["odonto", "estético", "fisio", "dentista"] },
+    { id: "nobreak", nome: "MANUTENÇÃO EM NOBREAK", curto: "Nobreak", grupo: G_MAN, chaves: ["nobreak"] },
+    { id: "geladeira", nome: "MANUTENÇÃO EM GELADEIRA", curto: "Geladeira", grupo: G_MAN, chaves: ["geladeira", "refrigerador"] },
+    { id: "solda", nome: "MANUTENÇÃO EM MÁQUINAS DE SOLDA", curto: "Máquinas de Solda", grupo: G_MAN, chaves: ["solda", "inversora de solda"] },
+    { id: "osciloscopio", nome: "MANUSEIO DE OSCILOSCÓPIO", curto: "Osciloscópio", grupo: G_MAN, chaves: ["osciloscópio"] },
+    { id: "eletronica-potencia", nome: "CURSO ELETRÔNICA DE POTÊNCIA", curto: "Eletrônica de Potência", grupo: G_MAN, chaves: ["potência"] },
+    { id: "autoclave", nome: "MANUTENÇÃO EM AUTOCLAVE", curto: "Autoclave", grupo: G_MAN, chaves: ["autoclave"] },
+    { id: "notebooks", nome: "MANUTENÇÃO EM NOTEBOOKS", curto: "Notebooks", grupo: G_MAN, chaves: ["notebook"] },
+    { id: "videogame", nome: "MANUTENÇÃO EM VIDEO GAME", curto: "Video Game", grupo: G_MAN, chaves: ["video game", "videogame", "console"] },
+    { id: "lava-seca", nome: "MANUTENÇÃO EM LAVA E SECA", curto: "Lava e Seca", grupo: G_MAN, chaves: ["lava e seca", "lavadora"] },
+    { id: "microondas", nome: "MANUTENÇÃO EM MICROONDAS", curto: "Microondas", grupo: G_MAN, chaves: ["microondas", "micro-ondas"] },
+    { id: "fonte-game", nome: "MANUTENÇÃO EM FONTE DE GAME", curto: "Fonte de Game", grupo: G_MAN, chaves: ["fonte de game"] },
+    { id: "programacao", nome: "PROGRAMAÇÃO", curto: "Programação", grupo: G_MAN, chaves: ["programação"] },
+    { id: "eletronica-inicial", nome: "ELETRÔNICA INICIAL", curto: "Eletrônica Inicial", grupo: G_MAN, chaves: ["eletrônica inicial", "iniciante"] },
+    { id: "analise-dc", nome: "ANÁLISE DC AVANÇADA", curto: "Análise DC", grupo: G_MAN, chaves: ["análise dc"] },
+    { id: "20-dicas", nome: "20 DICAS FONTES CHAVEADAS", curto: "20 Dicas Fontes", grupo: G_MAN, chaves: ["20 dicas", "dicas"] },
+    { id: "low-ticket", nome: "LOW TICKET", curto: "Low Ticket", grupo: G_MAN, chaves: ["low ticket", "lt"] },
+    { id: "livro-ccc", nome: "LIVRO ELETRÔNICA DE POTÊNCIA CONVERSORES CC-CC", curto: "Livro Conversores CC-CC", grupo: G_LIV, chaves: ["livro", "conversores", "cc-cc", "potência"] },
+    { id: "livro-retif", nome: "LIVRO ELETRÔNICA DE POTÊNCIA RETIFICADORES", curto: "Livro Retificadores", grupo: G_LIV, chaves: ["livro", "retificadores", "potência"] },
+    { id: "livro-semi", nome: "LIVRO ELETRÔNICA DE POTÊNCIA SEMICONDUTORES", curto: "Livro Semicondutores", grupo: G_LIV, chaves: ["livro", "semicondutores", "potência"] },
+    { id: "livro-flyback", nome: "LIVRO FONTES CHAVEADAS TOPOLOGIA FLYBACK", curto: "Livro Flyback", grupo: G_LIV, chaves: ["livro", "flyback", "topologia", "fontes"] },
+    { id: "livro-pfc", nome: "LIVRO FONTES CHAVEADAS RETIFICADOR PFC", curto: "Livro PFC", grupo: G_LIV, chaves: ["livro", "pfc", "fontes"] },
+    { id: "livro-proc", nome: "LIVRO FONTES CHAVEADAS ANÁLISE E PROCEDIMENTOS", curto: "Livro Análise e Procedimentos", grupo: G_LIV, chaves: ["livro", "procedimentos", "3º livro", "fontes"] },
+    { id: "livro-circuitos", nome: "LIVRO ANÁLISE DE CIRCUITOS E DEFEITOS", curto: "Livro Análise de Circuitos", grupo: G_LIV, chaves: ["livro", "circuitos", "defeitos", "exercícios"] },
+    { id: "apostila-potencia", nome: "APOSTILA ELETRÔNICA DE POTÊNCIA", curto: "Apostila Eletrônica de Potência", grupo: G_LIV, chaves: ["apostila", "potência"] },
+    { id: "vip-soft", nome: "ENTRADA VIP - SOFT-STARTER", curto: "Entrada VIP Soft-Starter", grupo: G_VIP, chaves: ["entrada", "vip", "ingresso", "soft"] },
+    { id: "vip-solar", nome: "ENTRADA VIP - INVERSOR SOLAR", curto: "Entrada VIP Inversor Solar", grupo: G_VIP, chaves: ["entrada", "vip", "ingresso", "solar", "híbrido", "imersão"] },
+    { id: "vip-inverter", nome: "ENTRADA VIP - INVERTER", curto: "Entrada VIP Inverter", grupo: G_VIP, chaves: ["entrada", "vip", "ingresso", "inverter"] },
+    { id: "vip-odonto", nome: "ENTRADA VIP - ODONTO", curto: "Entrada VIP Odonto", grupo: G_VIP, chaves: ["entrada", "vip", "ingresso", "odonto"] },
+    { id: "combo-cursos", nome: "COMBO DE CURSOS", curto: "Combo de cursos", grupo: G_CMB, tipo: "combo-cursos", chaves: ["combo", "dois cursos", "pacote"] },
+    { id: "combo-livros", nome: "COMBO DE LIVROS", curto: "Combo de livros", grupo: G_CMB, tipo: "combo-livros", chaves: ["combo", "livros"] },
+    { id: "todos", nome: "TODOS OS CURSOS", curto: "Todos os cursos", grupo: G_CMB, tipo: "pacote", chaves: ["todos", "pacote", "pré-black", "black", "vitalício"] },
+  ];
+  const OFERTAS_PACOTE = ["Oferta normal", "Pré-Black", "Black Friday", "Vitalício"];
+  const GRUPOS_CURSO = [G_ESP, G_MAN, G_LIV, G_VIP, G_CMB];
+  const normCurso = (t) => String(t == null ? "" : t).normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/\s+/g, " ").trim();
+
+  let _catConferido = null;   // confere a lista uma vez só (o painel da TV chama isso pra cada venda)
+  function catalogo() {
+    const atual = db.vendas;
+    if (_catConferido === atual && Array.isArray(atual.cursosCatalogo) && atual.cursoApelidos) return atual.cursosCatalogo;
+    garantir();
+    let mudou = false;
+    if (!Array.isArray(db.vendas.cursosCatalogo)) { db.vendas.cursosCatalogo = []; mudou = true; }
+    if (!Array.isArray(db.vendas.cursosRemovidos)) db.vendas.cursosRemovidos = [];
+    if (!db.vendas.cursoApelidos || typeof db.vendas.cursoApelidos !== "object") { db.vendas.cursoApelidos = {}; mudou = true; }
+    // cursos padrão que ainda não estão na lista (primeira vez, ou curso novo numa versão nova)
+    CURSOS_PADRAO.forEach((c) => {
+      if (!db.vendas.cursosCatalogo.some((x) => x.id === c.id) && !db.vendas.cursosRemovidos.includes(c.id)) {
+        db.vendas.cursosCatalogo.push({ tipo: "simples", ...c, ativo: true }); mudou = true;
+      }
+    });
+    if (mudou) salvar();
+    _catConferido = db.vendas;
+    return db.vendas.cursosCatalogo;
+  }
+  function itemPorNome(nome) {
+    const k = normCurso(nome);
+    if (!k) return null;
+    return catalogo().find((c) => normCurso(c.nome) === k || normCurso(c.curto) === k) || null;
+  }
+  const nomeDoItem = (id) => { const c = catalogo().find((x) => x.id === id); return c ? c.nome : null; };
+
+  /* Sugere o curso padrão pra um nome digitado do jeito antigo (ou que veio de outro sistema).
+     Primeiro o que o gerente já decidiu (de-para), depois o nome exato, depois as regras. */
+  function sugerirCurso(bruto) {
+    const t = normCurso(bruto);
+    if (!t) return null;
+    const ap = catalogo() && db.vendas.cursoApelidos[t];
+    if (ap && ap.curso && itemPorNome(ap.curso)) return { curso: itemPorNome(ap.curso).nome, itens: ap.itens || [], oferta: ap.oferta || "" };
+    const exato = itemPorNome(bruto);
+    if (exato) return { curso: exato.nome, itens: [], oferta: "" };
+    const tem = (...ps) => ps.some((x) => t.includes(x));
+    const palavra = (p) => new RegExp("(^|[^a-z0-9])" + p + "([^a-z0-9]|$)").test(t);
+    const res = (id, extra) => { const n = nomeDoItem(id); return n ? Object.assign({ curso: n, itens: [], oferta: "" }, extra || {}) : null; };
+    const lista = (ids) => ids.map(nomeDoItem).filter(Boolean);
+
+    // pacote "todos os cursos" (pré-black, black, vitalício)
+    if (tem("todos", "black")) return res("todos", { oferta: tem("pre black", "pre-black", "preblack") ? "Pré-Black" : tem("black") ? "Black Friday" : tem("vitalic") ? "Vitalício" : "Oferta normal" });
+    // entrada VIP / ingresso / imersão (evento)
+    if (tem("entrada vip", "entrava vip", "ingresso", "imersao")) {
+      if (tem("soft")) return res("vip-soft");
+      if (tem("odonto")) return res("vip-odonto");
+      if (tem("hibrid", "solar", "inversor")) return res("vip-solar");
+      if (tem("inverter")) return res("vip-inverter");
+    }
+    // livros que o nome cita
+    const livros = [];
+    const addL = (id, ok) => { if (ok && !livros.includes(id)) livros.push(id); };
+    addL("livro-ccc", tem("conversor", "cc-cc", "cc cc"));
+    addL("livro-semi", tem("semicondut"));
+    addL("livro-retif", tem("retificador") && !tem("pfc"));
+    addL("livro-flyback", tem("flyback", "flayback", "topologia"));
+    addL("livro-pfc", tem("pfc"));
+    addL("livro-proc", tem("procediment", "analise e manutencao", "3º", "3°", "3o livro", "livro novo"));
+    addL("livro-circuitos", tem("livro") && tem("analise de circuito", "exercicio"));
+    const ehLivro = tem("livro", "apostila") || livros.length > 0;
+    // cursos que o nome cita
+    const C = [];
+    const add = (id, ok) => { if (ok && !C.includes(id)) C.push(id); };
+    const solda = tem("solda"), freq = tem("frequencia", "soft"), geladeira = tem("geladeira"), pos = palavra("pos");
+    add("solda", solda);
+    add("soft", freq);
+    add("geladeira", geladeira);
+    add("solar", tem("solar") || (pos && tem("inversor") && !freq && !solda));
+    add("inverter", !geladeira && (tem("inverter", "ar condicionado") || /inverte($|[^a-z])/.test(t) ||
+      (tem("inversor") && !tem("solar") && !pos && !freq && !solda) || (tem("tecnologia") && /( e |\+|,)/.test(t))));
+    add("esteiras", tem("esteira", "esteria", "academia"));
+    add("emac", tem("emac"));
+    add("televisores", tem("televis", "curso de tv") || palavra("tv"));
+    add("amplificadores", tem("amplific", "jbl"));
+    add("fontes", (tem("fonte") && !tem("fonte de game")) || /(^|[^a-z])f\.c\.?([^a-z]|$)/.test(t));
+    add("odonto", tem("odonto", "ondonto"));
+    add("nobreak", tem("nobreak"));
+    add("osciloscopio", tem("osciloscop", "oscilosop"));
+    add("microondas", tem("microond", "micro-ond"));
+    add("notebooks", tem("notebook"));
+    add("videogame", tem("video game", "videogame"));
+    add("lava-seca", tem("lava e seca"));
+    add("autoclave", tem("autoclave"));
+    add("programacao", tem("programa"));
+    add("eletronica-inicial", tem("eletronica inicial"));
+    add("analise-dc", tem("analise dc"));
+    add("fonte-game", tem("fonte de game"));
+    add("eletronica-potencia", tem("eletronica de potencia"));
+    add("low-ticket", tem("low ticket") || /(^|[^a-z])lt$/.test(t));
+    const fortes = C.filter((id) => id !== "fontes" && id !== "eletronica-potencia");
+
+    if (ehLivro && !fortes.length) {
+      if (tem("apostila")) return res("apostila-potencia");
+      const combo = tem("combo") || /(^|[^0-9])[2-9] livro/.test(t) || (palavra("livros") && !livros.length);
+      if (tem("potencia", "potecia") && combo && !livros.length) return res("combo-livros", { itens: lista(["livro-ccc", "livro-retif", "livro-semi"]) });
+      if (/(^|[^0-9])3 livro/.test(t) && tem("fonte") && !livros.length) return res("combo-livros", { itens: lista(["livro-flyback", "livro-pfc", "livro-proc"]) });
+      if (livros.length >= 2 || combo) return res("combo-livros", { itens: lista(livros) });
+      if (livros.length === 1) return res(livros[0]);
+      if (tem("fonte")) return res("livro-proc");
+      if (tem("circuito")) return res("livro-circuitos");
+      return null;   // "LIVRO" sozinho: não dá pra saber qual
+    }
+    if (!C.length) return null;
+    if (C.length === 1) return res(C[0]);
+    return res("combo-cursos", { itens: lista(C) });
+  }
+
+  /* curso que chega no lançamento / importação / outro sistema -> nome padrão */
+  function cursoDaEntrada(b) {
+    const bruto = String(b.curso || "").trim().slice(0, 90);
+    if (!bruto) return { curso: "" };
+    let alvo = itemPorNome(bruto), itens = [], oferta = "", original = null, curso = bruto;
+    if (alvo) curso = alvo.nome;
+    else {
+      const s = sugerirCurso(bruto);
+      if (s) { curso = s.curso; itens = s.itens || []; oferta = s.oferta || ""; original = bruto; alvo = itemPorNome(s.curso); }
+    }
+    if (alvo && String(alvo.tipo || "").indexOf("combo") === 0 && Array.isArray(b.cursoItens)) {
+      itens = b.cursoItens.map((x) => { const c = itemPorNome(x); return c ? c.nome : null; }).filter(Boolean);
+    }
+    if (alvo && alvo.tipo === "pacote" && b.cursoOferta) oferta = String(b.cursoOferta).trim().slice(0, 40);
+    const r = { curso };
+    if (itens.length) r.cursoItens = Array.from(new Set(itens));
+    if (oferta) r.cursoOferta = oferta;
+    if (original) r.cursoOriginal = original;
+    return r;
+  }
+  // grava os campos de curso numa venda (tira o que não vale mais, ex.: itens de um combo antigo)
+  function aplicarCursoNaVenda(v, cur) {
+    v.curso = cur.curso;
+    if (cur.cursoItens && cur.cursoItens.length) v.cursoItens = cur.cursoItens; else delete v.cursoItens;
+    if (cur.cursoOferta) v.cursoOferta = cur.cursoOferta; else delete v.cursoOferta;
+    if (cur.cursoOriginal && !v.cursoOriginal) v.cursoOriginal = cur.cursoOriginal;
+  }
+
+  /* ---- rotas do catálogo ---- */
+  app.get("/api/vendas/cursos", auth, permiteVend("vendas"), (req, res) => {
+    const ger = req.user.role === "gerente";
+    res.json({
+      cursos: catalogo().filter((c) => ger || c.ativo !== false).map((c) => ({ id: c.id, nome: c.nome, curto: c.curto || c.nome, grupo: c.grupo || G_MAN, tipo: c.tipo || "simples", chaves: c.chaves || [], ativo: c.ativo !== false })),
+      grupos: GRUPOS_CURSO, ofertas: OFERTAS_PACOTE,
+    });
+  });
+  // cadastrar curso novo (só gerente)
+  app.post("/api/vendas/cursos", auth, gerenteOnly, (req, res) => {
+    const b = req.body || {};
+    const nome = String(b.nome || "").trim().replace(/\s+/g, " ").slice(0, 90).toUpperCase();
+    if (!nome) return res.status(400).json({ error: "Informe o nome do curso" });
+    if (itemPorNome(nome)) return res.status(400).json({ error: "Já existe um curso com esse nome" });
+    const grupo = GRUPOS_CURSO.includes(b.grupo) ? b.grupo : G_MAN;
+    let id = normCurso(nome).replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 40) || "curso";
+    while (catalogo().some((c) => c.id === id)) id += "-2";
+    const c = { id, nome, curto: String(b.curto || "").trim().slice(0, 40) || nome, grupo, tipo: "simples",
+      chaves: (Array.isArray(b.chaves) ? b.chaves : String(b.chaves || "").split(",")).map((x) => String(x).trim()).filter(Boolean).slice(0, 12), ativo: true, criadoEm: Date.now() };
+    catalogo().push(c);
+    salvar();
+    res.json({ ok: true, curso: c });
+  });
+  // editar (renomear também troca o nome nas vendas que já usam esse curso)
+  app.put("/api/vendas/cursos/:id", auth, gerenteOnly, (req, res) => {
+    const c = catalogo().find((x) => x.id === req.params.id);
+    if (!c) return res.status(404).json({ error: "Curso não encontrado" });
+    const b = req.body || {};
+    let renomeadas = 0;
+    if (b.nome !== undefined) {
+      const novo = String(b.nome || "").trim().replace(/\s+/g, " ").slice(0, 90).toUpperCase();
+      if (!novo) return res.status(400).json({ error: "O nome não pode ficar vazio" });
+      const outro = itemPorNome(novo);
+      if (outro && outro.id !== c.id) return res.status(400).json({ error: "Já existe um curso com esse nome" });
+      if (novo !== c.nome) {
+        const antigo = c.nome;
+        db.vendas.lista.forEach((v) => {
+          let mexeu = false;
+          if (v.curso === antigo) { v.curso = novo; mexeu = true; }
+          if (Array.isArray(v.cursoItens) && v.cursoItens.includes(antigo)) { v.cursoItens = v.cursoItens.map((x) => (x === antigo ? novo : x)); mexeu = true; }
+          if (mexeu) renomeadas++;
+        });
+        Object.values(db.vendas.cursoApelidos).forEach((a) => {
+          if (a.curso === antigo) a.curso = novo;
+          if (Array.isArray(a.itens)) a.itens = a.itens.map((x) => (x === antigo ? novo : x));
+        });
+        c.nome = novo;
+      }
+    }
+    if (b.curto !== undefined) c.curto = String(b.curto || "").trim().slice(0, 40) || c.nome;
+    if (b.grupo !== undefined && GRUPOS_CURSO.includes(b.grupo)) c.grupo = b.grupo;
+    if (b.chaves !== undefined) c.chaves = (Array.isArray(b.chaves) ? b.chaves : String(b.chaves || "").split(",")).map((x) => String(x).trim()).filter(Boolean).slice(0, 12);
+    if (b.ativo !== undefined) c.ativo = !!b.ativo;
+    salvar();
+    res.json({ ok: true, curso: c, renomeadas });
+  });
+  // revisão: nomes fora do padrão nas vendas já lançadas, com a sugestão de cada um
+  app.get("/api/vendas/cursos/revisao", auth, gerenteOnly, (req, res) => {
+    const padrao = new Set(catalogo().map((c) => c.nome));
+    const mapa = {};
+    let semCurso = 0, jaPadrao = 0;
+    db.vendas.lista.forEach((v) => {
+      const nome = String(v.curso || "").trim();
+      if (!nome) { semCurso++; return; }
+      if (padrao.has(nome)) { jaPadrao++; return; }
+      (mapa[nome] = mapa[nome] || { nome, qtd: 0 }).qtd++;
+    });
+    const lista = Object.values(mapa).map((o) => ({ ...o, sugestao: sugerirCurso(o.nome) }))
+      .sort((a, b) => (a.sugestao ? 1 : 0) - (b.sugestao ? 1 : 0) || b.qtd - a.qtd);
+    res.json({ lista, semCurso, jaPadrao, total: db.vendas.lista.length });
+  });
+  // aplica: troca os nomes antigos pelo padrão (guarda cópia antes) e lembra o de-para pro futuro
+  app.post("/api/vendas/cursos/aplicar", auth, gerenteOnly, (req, res) => {
+    const pedido = Array.isArray(req.body && req.body.mapa) ? req.body.mapa : [];
+    const validos = {};
+    pedido.forEach((m) => {
+      const de = String((m && m.de) || "").trim();
+      const alvo = itemPorNome(m && m.curso);
+      if (!de || !alvo) return;
+      const tipo = alvo.tipo || "simples";
+      const itens = tipo.indexOf("combo") === 0
+        ? Array.from(new Set((Array.isArray(m.itens) ? m.itens : []).map((x) => { const c = itemPorNome(x); return c ? c.nome : null; }).filter(Boolean)))
+        : [];
+      validos[de] = { curso: alvo.nome, itens, oferta: tipo === "pacote" ? String(m.oferta || "Oferta normal").trim().slice(0, 40) : "" };
+    });
+    const nomes = Object.keys(validos);
+    if (!nomes.length) return res.status(400).json({ error: "Nada pra padronizar" });
+    try {
+      const dir = path.join(path.dirname(VENDAS_PATH), "backups");
+      if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+      fs.writeFileSync(path.join(dir, "vendas-antes-de-padronizar-cursos-" + Date.now() + ".json"), JSON.stringify(db.vendas));
+    } catch (e) {
+      return res.status(500).json({ error: "Não consegui guardar a cópia de segurança, então não mexi em nada: " + e.message });
+    }
+    let alteradas = 0;
+    db.vendas.lista.forEach((v) => {
+      const nome = String(v.curso || "").trim();
+      const alvo = validos[nome];
+      if (!alvo) return;
+      aplicarCursoNaVenda(v, { curso: alvo.curso, cursoItens: alvo.itens, cursoOferta: alvo.oferta, cursoOriginal: nome });
+      alteradas++;
+    });
+    nomes.forEach((de) => { db.vendas.cursoApelidos[normCurso(de)] = validos[de]; });
+    salvar();
+    console.log(`[vendas] cursos padronizados: ${alteradas} venda(s), ${nomes.length} nome(s)`);
+    res.json({ ok: true, alteradas, nomes: nomes.length });
+  });
 
   /* ---------------- PESSOAS (quem aparece no painel) ---------------- */
   app.get("/api/vendas/pessoas", auth, permiteVend("vendas"), (req, res) => {
@@ -344,6 +642,8 @@ export function instalarVendas({ app, getDb, saveDB, proximoId, auth, gerenteOnl
         return res.status(409).json({ jaExiste: true, codigo: cod, vendas: iguais.map(vendaPublica) });
       }
     }
+    const cur = cursoDaEntrada(b);
+    if (!cur.curso) return res.status(400).json({ error: "Escolha o curso da venda" });
     const data = paraData(b.data);
     const v = {
       id: proximoId ? proximoId("vnd") : "vnd_" + Date.now().toString(36) + Math.random().toString(36).slice(2, 5),
@@ -352,7 +652,7 @@ export function instalarVendas({ app, getDb, saveDB, proximoId, auth, gerenteOnl
       cliente: String(b.cliente || "").trim().slice(0, 90),
       email: String(b.email || "").trim().slice(0, 120),
       telefone: String(b.telefone || "").replace(/\D/g, "").slice(0, 15),
-      curso: String(b.curso || "").trim().slice(0, 90),
+      ...cur,
       valor,
       recebido: num(b.recebido),
       aGerar: b.aGerar !== undefined && b.aGerar !== "" ? num(b.aGerar) : Math.max(0, valor - num(b.recebido)),
@@ -388,7 +688,11 @@ export function instalarVendas({ app, getDb, saveDB, proximoId, auth, gerenteOnl
     if (b.cliente !== undefined) v.cliente = String(b.cliente).trim().slice(0, 90);
     if (b.email !== undefined) v.email = String(b.email).trim().slice(0, 120);
     if (b.telefone !== undefined) v.telefone = String(b.telefone).replace(/\D/g, "").slice(0, 15);
-    if (b.curso !== undefined) v.curso = String(b.curso).trim().slice(0, 90);
+    if (b.curso !== undefined) {
+      const cur = cursoDaEntrada(b);
+      if (!cur.curso) return res.status(400).json({ error: "Escolha o curso da venda" });
+      aplicarCursoNaVenda(v, cur);
+    }
     if (b.valor !== undefined) v.valor = num(b.valor);
     if (b.recebido !== undefined) v.recebido = num(b.recebido);
     if (b.aGerar !== undefined) v.aGerar = num(b.aGerar);
@@ -500,7 +804,7 @@ export function instalarVendas({ app, getDb, saveDB, proximoId, auth, gerenteOnl
         cliente: String(r.cliente || "").trim().slice(0, 90),
         email: String(r.email || "").trim().slice(0, 120),
         telefone: String(r.telefone || "").replace(/\D/g, "").slice(0, 15),
-        curso: String(r.curso || "").trim().slice(0, 90),
+        ...cursoDaEntrada(r),
         valor, recebido,
         aGerar: Math.max(0, valor - recebido),
         forma: String(r.forma || "").trim().slice(0, 30),
@@ -588,13 +892,13 @@ export function instalarVendas({ app, getDb, saveDB, proximoId, auth, gerenteOnl
           pessoaId: p.id, pessoaNome: p.nome, cliente,
           email: String(b.email || "").trim().slice(0, 120),
           telefone: String(b.telefone || "").replace(/\D/g, "").slice(0, 15),
-          curso: String(b.curso || "").trim().slice(0, 90),
           valor, recebido, aGerar: Math.max(0, valor - recebido),
           forma: String(b.forma || b.formaPagamento || atual.forma || "").trim().slice(0, 30),
           plataforma: String(b.plataforma || atual.plataforma || "").trim().slice(0, 40),
           codigo, parcelas: Math.max(0, Math.min(60, parseInt(b.parcelas, 10) || atual.parcelas || 0)),
           data, atualizadoEm: Date.now(),
         });
+        aplicarCursoNaVenda(atual, cursoDaEntrada(b));
         salvar();
         return res.json({ ok: true, atualizada: true, id: atual.id });
       }
@@ -613,7 +917,7 @@ export function instalarVendas({ app, getDb, saveDB, proximoId, auth, gerenteOnl
       pessoaId: p.id, pessoaNome: p.nome,
       cliente, email: String(b.email || "").trim().slice(0, 120),
       telefone: String(b.telefone || "").replace(/\D/g, "").slice(0, 15),
-      curso: String(b.curso || "").trim().slice(0, 90),
+      ...cursoDaEntrada(b),
       valor, recebido, aGerar: Math.max(0, valor - recebido),
       forma: String(b.forma || b.formaPagamento || "").trim().slice(0, 30),
       plataforma: String(b.plataforma || "").trim().slice(0, 40),
@@ -801,6 +1105,10 @@ export function instalarVendas({ app, getDb, saveDB, proximoId, auth, gerenteOnl
   /* Junta as variações do mesmo curso: "Odonto, Estetico, Fisio", "odontomedico",
      "ODONTOLÓGICOS" -> tudo vira ODONTO. Sem isso a métrica por curso não presta. */
   function cursoCanonico(txt) {
+    // primeiro o catálogo (nome padrão -> nome curto, ex.: "Inverter"); depois as regras antigas
+    let it = itemPorNome(txt);
+    if (!it) { const sug = sugerirCurso(txt); if (sug) it = itemPorNome(sug.curso); }
+    if (it) return String(it.curto || it.nome).toUpperCase();
     const t = String(txt || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
     if (!t) return "Sem curso";
     const tem = (...ps) => ps.some((x) => t.includes(x));
