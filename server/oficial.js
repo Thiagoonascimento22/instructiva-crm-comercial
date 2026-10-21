@@ -19,21 +19,41 @@ const GRAPH = "https://graph.facebook.com/v21.0";
 // 1) ffmpeg-static: binário embutido via npm — NÃO depende do PATH do servidor
 //    (no Railway/nixpacks o "ffmpeg" some do PATH em runtime e todo áudio falha).
 // 2) fallback: "ffmpeg" do PATH / caminhos comuns do sistema.
-const FFMPEG_BIN = (() => {
+function candidatosFfmpeg() {
+  const lista = [];
   try {
     const est = require("ffmpeg-static");
-    if (est && typeof est === "string") {
-      try { const f = require("fs"); if (f.existsSync(est)) return est; } catch (_) { return est; }
-    }
+    if (est && typeof est === "string") lista.push(est);
   } catch (_) {}
   try {
+    const p = require("path");
+    String(process.env.PATH || "").split(":").filter(Boolean).forEach((d) => lista.push(p.join(d, "ffmpeg")));
+  } catch (_) {}
+  lista.push("/root/.nix-profile/bin/ffmpeg", "/nix/var/nix/profiles/default/bin/ffmpeg", "/usr/bin/ffmpeg", "/usr/local/bin/ffmpeg", "/opt/homebrew/bin/ffmpeg", "/bin/ffmpeg");
+  return Array.from(new Set(lista));
+}
+const FFMPEG_BIN = (() => {
+  try {
     const f = require("fs");
-    for (const c of ["/usr/bin/ffmpeg", "/usr/local/bin/ffmpeg", "/opt/homebrew/bin/ffmpeg", "/bin/ffmpeg"]) {
-      if (f.existsSync(c)) return c;
+    for (const c of candidatosFfmpeg()) {
+      if (!f.existsSync(c)) continue;
+      try { f.accessSync(c, f.constants.X_OK); } catch (_) { try { f.chmodSync(c, 0o755); } catch (_) {} }
+      return c;
     }
   } catch (_) {}
   return "ffmpeg"; // último recurso: procura no PATH
 })();
+
+/* saúde da mídia (áudio/foto): fica visível em /api/versao, sem nenhum dado sensível,
+   pra dar pra ver na hora se o problema é ffmpeg, disco ou a Meta */
+export const SAUDE_MIDIA = { ffmpeg: null, ffmpegOrigem: "", ultimoErro: "", ultimoErroEm: 0, ultimoOkEm: 0, falhasSeguidas: 0 };
+function registrarErroMidia(etapa, msg) {
+  SAUDE_MIDIA.ultimoErro = (etapa + ": " + String(msg || "erro")).slice(0, 240);
+  SAUDE_MIDIA.ultimoErroEm = Date.now();
+  SAUDE_MIDIA.falhasSeguidas++;
+  console.log("[midia] FALHOU " + SAUDE_MIDIA.ultimoErro);
+}
+function registrarOkMidia() { SAUDE_MIDIA.ultimoOkEm = Date.now(); SAUDE_MIDIA.falhasSeguidas = 0; }
 
 export function instalarCanalOficial({ app, getDb, saveDB, saveSoon, proximoId, auth, gerenteOnly, MEDIA_DIR, fs, path }) {
   // O index.js REATRIBUI o objeto db dentro de loadDB(). Por isso resolvemos
@@ -513,13 +533,20 @@ export function instalarCanalOficial({ app, getDb, saveDB, saveSoon, proximoId, 
      reencodar: é instantâneo e não perde qualidade).
      Safari já grava em MP4, que a Meta aceita: passa direto.
      ------------------------------------------------------------ */
-  let _ffmpegOkCache = null;
+  let _ffmpegOkCache = null, _ffmpegOkEm = 0;
   function ffmpegOk() {
-    if (_ffmpegOkCache !== null) return Promise.resolve(_ffmpegOkCache);
+    if (_ffmpegOkCache === true || (_ffmpegOkCache === false && Date.now() - _ffmpegOkEm < 10 * 60000)) return Promise.resolve(_ffmpegOkCache);
     return new Promise((resolve) => {
-      execFile(FFMPEG_BIN, ["-version"], (err) => { _ffmpegOkCache = !err; resolve(_ffmpegOkCache); });
+      execFile(FFMPEG_BIN, ["-version"], (err) => {
+        _ffmpegOkCache = !err; _ffmpegOkEm = Date.now();
+        SAUDE_MIDIA.ffmpeg = _ffmpegOkCache;
+        SAUDE_MIDIA.ffmpegOrigem = /ffmpeg-static/.test(FFMPEG_BIN) ? "embutido" : FFMPEG_BIN === "ffmpeg" ? "PATH" : "sistema";
+        if (err) console.log("[audio] ffmpeg NÃO funciona (" + FFMPEG_BIN + "): " + String(err.message || err).slice(0, 160));
+        resolve(_ffmpegOkCache);
+      });
     });
   }
+  setTimeout(() => { ffmpegOk().then((ok) => console.log("[audio] ffmpeg " + (ok ? "OK" : "INDISPONÍVEL") + " — " + FFMPEG_BIN)); }, 3000);
   async function audioParaMeta(buffer, mime) {
     const m = String(mime || "").toLowerCase();
     if (!m.startsWith("audio/")) return { buffer, mime: m, filename: null, ok: true };
@@ -619,32 +646,66 @@ export function instalarCanalOficial({ app, getDb, saveDB, saveSoon, proximoId, 
   }
 
   // baixa a mídia recebida do Meta (2 passos: pega a URL pelo id, depois baixa os bytes)
+  const UA_MIDIA = "curl/8.5.0";   // a Meta recusa baixar mídia com o "User-Agent" padrão do Node em alguns casos
+  async function baixarMidiaMetaUmaVez(numeroCfg, mediaId) {
+    const auth = { Authorization: "Bearer " + tokenDe(numeroCfg), "User-Agent": UA_MIDIA };
+    // passo 1: pega a URL temporária do arquivo
+    const r1 = await fetch(`${GRAPH}/${mediaId}`, { headers: auth });
+    const meta = await r1.json().catch(() => null);
+    if (!r1.ok || !meta || !meta.url) {
+      const e = (meta && meta.error && meta.error.message) || ("HTTP " + r1.status);
+      throw new Error("Meta (endereço da mídia): " + e);
+    }
+    // passo 2: baixa os bytes (precisa do token também)
+    const r2 = await fetch(meta.url, { headers: auth });
+    if (!r2.ok) throw new Error("Meta (download da mídia): HTTP " + r2.status);
+    const buf = Buffer.from(await r2.arrayBuffer());
+    if (!buf.length) throw new Error("Meta mandou o arquivo vazio");
+    const mime = meta.mime_type || r2.headers.get("content-type") || "application/octet-stream";
+    const fname = "of_" + mediaId + "." + extPorMime(mime);
+    try { await fs.promises.writeFile(path.join(MEDIA_DIR, fname), buf); }
+    catch (e) { throw new Error((e.code === "ENOSPC" ? "DISCO CHEIO no servidor" : "não consegui gravar no disco") + " (" + (e.code || e.message) + ")"); }
+    return { arquivo: fname, mimetype: mime, buffer: buf, tamanho: buf.length };
+  }
   async function baixarMidiaMeta(numeroCfg, mediaId) {
     if (!MEDIA_DIR || !fs || !path || !mediaId) return null;
-    try {
-      // passo 1: pega a URL temporária do arquivo
-      const r1 = await fetch(`${GRAPH}/${mediaId}`, {
-        headers: { Authorization: "Bearer " + tokenDe(numeroCfg) },
-      });
-      if (!r1.ok) return null;
-      const meta = await r1.json();
-      if (!meta || !meta.url) return null;
-      // passo 2: baixa os bytes (precisa do token também)
-      const r2 = await fetch(meta.url, {
-        headers: { Authorization: "Bearer " + tokenDe(numeroCfg) },
-      });
-      if (!r2.ok) return null;
-      const ab = await r2.arrayBuffer();
-      const buf = Buffer.from(ab);
-      const mime = meta.mime_type || "application/octet-stream";
-      const ext = extPorMime(mime);
-      const fname = "of_" + mediaId + "." + ext;
-      await fs.promises.writeFile(path.join(MEDIA_DIR, fname), buf);
-      return { arquivo: fname, mimetype: mime, buffer: buf, tamanho: buf.length };
-    } catch (e) {
-      console.log("[oficial] erro ao baixar mídia:", e.message);
-      return null;
+    let ultimo = null;
+    for (let tentativa = 1; tentativa <= 3; tentativa++) {
+      try {
+        const r = await baixarMidiaMetaUmaVez(numeroCfg, mediaId);
+        registrarOkMidia();
+        return r;
+      } catch (e) {
+        ultimo = e;
+        if (/DISCO CHEIO/.test(e.message)) break;     // não adianta tentar de novo
+        await new Promise((ok) => setTimeout(ok, 700 * tentativa));
+      }
     }
+    registrarErroMidia("baixar mídia recebida", ultimo && ultimo.message);
+    return null;
+  }
+
+  // baixa de novo uma mídia que falhou na hora (e transcreve o áudio)
+  async function completarMidia(chat, m) {
+    const numeroCfg = acharNumero(chat.numeroOficialId);
+    if (!numeroCfg || !m.mediaId) return false;
+    const b = await baixarMidiaMeta(numeroCfg, m.mediaId);
+    if (!b) return false;
+    m.arquivo = b.arquivo; m.mimetype = b.mimetype;
+    if (m.tipo === "audio" && !m.transcricao) { try { const t = await transcreverAudio(b.buffer, b.mimetype); if (t) m.transcricao = t; } catch (_) {} }
+    salvar();
+    return true;
+  }
+  // tenta de novo sozinho daqui a 30 s, 2 min e 10 min (a Meta às vezes demora pra liberar o arquivo)
+  function agendarNovoDownload(numeroCfg, chatId, mid) {
+    [30000, 120000, 600000].forEach((ms) => setTimeout(async () => {
+      try {
+        const chat = db.waChats[chatId];
+        const m = chat && (chat.mensagens || []).find((x) => x.mid === mid);
+        if (!m || m.arquivo) return;
+        await completarMidia(chat, m);
+      } catch (_) {}
+    }, ms));
   }
 
   // transcreve áudio com Groq Whisper (pra IA "ouvir"); retorna o texto ou null
@@ -4544,13 +4605,19 @@ export function instalarCanalOficial({ app, getDb, saveDB, saveSoon, proximoId, 
   });
 
   /* serve a mídia recebida do lead (foto, áudio, vídeo, documento) pro frontend */
-  app.get("/api/oficial/chats/:id/midia/:mid", auth, (req, res) => {
+  app.get("/api/oficial/chats/:id/midia/:mid", auth, async (req, res) => {
     if (!MEDIA_DIR || !fs || !path) return res.status(404).end();
     const db = getDb();
     const chat = db.waChats[req.params.id];
     if (!chat || chat.canal !== "oficial") return res.status(404).json({ error: "Conversa não encontrada" });
     const m = (chat.mensagens || []).find((x) => x.mid === req.params.mid);
-    if (!m || !m.arquivo) return res.status(404).json({ error: "Mídia não encontrada" });
+    if (!m) return res.status(404).json({ error: "Mídia não encontrada" });
+    // não tinha baixado (ou o arquivo sumiu): tenta baixar da Meta agora
+    if ((!m.arquivo || !fs.existsSync(path.join(MEDIA_DIR, m.arquivo))) && m.mediaId) {
+      const ok = await completarMidia(chat, m);
+      if (!ok) return res.status(502).json({ error: "Não consegui baixar da Meta agora (" + (SAUDE_MIDIA.ultimoErro || "tente de novo") + ")" });
+    }
+    if (!m.arquivo) return res.status(404).json({ error: "Mídia não encontrada" });
     const fp = path.join(MEDIA_DIR, m.arquivo);
     if (!fs.existsSync(fp)) return res.status(404).json({ error: "Arquivo não encontrado" });
     res.setHeader("Content-Type", m.mimetype || "application/octet-stream");
@@ -4589,7 +4656,7 @@ export function instalarCanalOficial({ app, getDb, saveDB, saveSoon, proximoId, 
     try {
       // áudio gravado no navegador vem em WebM: converte pra OGG/Opus antes de subir
       const conv = await audioParaMeta(buffer, mime);
-      if (conv.ok === false) return res.status(400).json({ error: conv.motivo || "Não consegui preparar o áudio." });
+      if (conv.ok === false) { registrarErroMidia("converter áudio enviado", conv.motivo); return res.status(400).json({ error: conv.motivo || "Não consegui preparar o áudio." }); }
       buffer = conv.buffer;
       const mimeFinal = conv.mime;
       const nomeFinal = conv.filename || filename;
@@ -4632,8 +4699,10 @@ export function instalarCanalOficial({ app, getDb, saveDB, saveSoon, proximoId, 
       if (chat.mensagens.length > 300) chat.mensagens = chat.mensagens.slice(-300);
       chat.atualizadoEm = ts;
       salvar();
+      registrarOkMidia();
       res.json({ ok: true });
     } catch (e) {
+      registrarErroMidia("enviar mídia", e.message);
       res.status(400).json({ error: e.message });
     }
   });
@@ -5169,6 +5238,7 @@ export function instalarCanalOficial({ app, getDb, saveDB, saveSoon, proximoId, 
             const msgObj = { role: "them", content, ts };
             if (midiaTipo !== "text") {
               msgObj.tipo = midiaTipo;
+              if (mediaIdMeta) msgObj.mediaId = mediaIdMeta;   // se o download falhou agora, dá pra baixar depois
               if (midiaArquivo) msgObj.arquivo = midiaArquivo;
               if (midiaMime) msgObj.mimetype = midiaMime;
               if (midiaFilename) msgObj.filename = midiaFilename;
@@ -5176,6 +5246,7 @@ export function instalarCanalOficial({ app, getDb, saveDB, saveSoon, proximoId, 
             }
             if (transcricao) msgObj.transcricao = transcricao;
             chat.mensagens.push(msgObj);
+            if (mediaIdMeta && !midiaArquivo) agendarNovoDownload(numeroCfg, chat.id, msgObj.mid);
             chat.ultimaMsgLeadId = m.id || null; // pro indicador "digitando"
             if (chat.mensagens.length > 300) chat.mensagens = chat.mensagens.slice(-300);
             chat.naoLidas = (chat.naoLidas || 0) + 1;

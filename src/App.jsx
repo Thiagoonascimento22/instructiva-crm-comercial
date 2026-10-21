@@ -8916,7 +8916,12 @@ function OfMidia({ chatId, m }) {
     // eslint-disable-next-line
   }, []);
 
-  if (erro) return <div className="of-midia-erro">⚠️ Não foi possível carregar a mídia</div>;
+  if (erro) return (
+    <div className="of-midia-erro">
+      ⚠️ Não foi possível carregar {m.tipo === "audio" ? "o áudio" : "a mídia"}
+      <button type="button" className="of-midia-btn" style={{ marginLeft: 8 }} onClick={() => { setErro(false); setCarregando(false); setTimeout(carregar, 0); }}>Tentar de novo</button>
+    </div>
+  );
 
   if (m.tipo === "image") {
     return url
@@ -10166,10 +10171,10 @@ function InboxOficial({ isGer, ehLider, showToast, onIrParaEvolution, target, on
                   <div key={i} className={"of-msg " + (item.m.role === "me" ? "me" : "them")}>
                     <div className="of-msg-bubble">
                       {item.m.template && <span className="of-msg-tpl">📤 Template (disparo)</span>}
-                      {item.m.tipo && item.m.tipo !== "text" && item.m.mid && item.m.arquivo && (
+                      {item.m.tipo && item.m.tipo !== "text" && item.m.mid && (item.m.arquivo || item.m.mediaId) && (
                         <OfMidia chatId={conversa.id} m={item.m} />
                       )}
-                      {(!item.m.tipo || item.m.tipo === "text" || !item.m.arquivo || item.m.template) && item.m.content}
+                      {(!item.m.tipo || item.m.tipo === "text" || !(item.m.arquivo || item.m.mediaId) || item.m.template) && item.m.content}
                       <span className="of-msg-hora">{horaCurta(item.m.ts)}{item.m.role === "me" && <Ticks status={item.m.status} erro={item.m.erro} erroCodigo={item.m.erroCodigo} lidoEm={item.m.lidoEm} texto={!!item.m.template || item.m.status === "read"} />}</span>
                     </div>
                   </div>

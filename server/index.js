@@ -3,7 +3,7 @@ import fs from "fs";
 import path from "path";
 import crypto from "crypto";
 import { fileURLToPath } from "url";
-import { instalarCanalOficial } from "./oficial.js";
+import { instalarCanalOficial, SAUDE_MIDIA } from "./oficial.js";
 import { instalarVendas } from "./vendas.js";
 import { instalarRecados } from "./recados.js";
 import { instalarAnaliseAtendimento } from "./atendimento.js";
@@ -19,7 +19,7 @@ app.use(express.urlencoded({ extended: false, limit: "10mb" })); // Twilio manda
 // Versão do sistema — pra CONFIRMAR qual código está no ar (abra /api/versao no navegador).
 // Se aqui aparecer a versão nova mas o bug continuar, o problema é outro; se aparecer
 // uma versão antiga (ou 404), o deploy não subiu de verdade.
-const VERSAO_SISTEMA = "v2.4-cursos-padrao";
+const VERSAO_SISTEMA = "v2.4.1-audio";
 
 /* ============================================================
    IDENTIFICAÇÃO DA UNIDADE (mesmo código, deploys separados)
@@ -62,7 +62,17 @@ app.get("/api/versao", (req, res) => res.set("Cache-Control", "no-store").json({
   unidadeConfigurada: UNIDADE_INFO.configurada,
   unidadeOrigem: UNIDADE_INFO.origem,
   quando: new Date().toISOString(),
+  saude: saudeServidor(),
 }));
+// saúde do servidor (sem dado sensível): espaço no disco de dados + áudio/foto
+function saudeServidor() {
+  const r = { midia: { ...SAUDE_MIDIA } };
+  try {
+    const st = fs.statfsSync(path.dirname(DB_PATH));
+    r.disco = { livreMB: Math.round((st.bavail * st.bsize) / 1048576), totalMB: Math.round((st.blocks * st.bsize) / 1048576) };
+  } catch (e) { r.disco = { erro: e.code || e.message }; }
+  return r;
+}
 console.log("==> Instructiva CRM versão:", VERSAO_SISTEMA);
 
 
@@ -501,6 +511,15 @@ function fazerBackup() {
     // backup COMPLETO do dia (banco + conversas juntas), já que agora o crm.json
     // no disco não guarda as conversas (elas ficam no waChats.json).
     const completo = JSON.stringify(db);
+    // disco quase cheio: não grava backup novo (senão enche de vez e o banco para de salvar)
+    try {
+      const st = fs.statfsSync(BACKUP_DIR);
+      const livre = st.bavail * st.bsize;
+      if (livre < Buffer.byteLength(completo) * 3 + 200 * 1048576) {
+        console.warn(`[backup] PULEI o backup de hoje: pouco espaço no disco (${Math.round(livre / 1048576)} MB livres)`);
+        return;
+      }
+    } catch (_) {}
 
     // SEGURANÇA: o backup do dia é sobrescrito a cada restart. Se o banco tiver
     // ENCOLHIDO muito (sinal de que algo se perdeu), NÃO joga a cópia boa fora —
