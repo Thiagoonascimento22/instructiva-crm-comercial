@@ -2,6 +2,8 @@ import express from "express";
 import fs from "fs";
 import path from "path";
 import crypto from "crypto";
+import os from "os";
+import { monitorEventLoopDelay } from "perf_hooks";
 import { fileURLToPath } from "url";
 import { instalarCanalOficial, SAUDE_MIDIA } from "./oficial.js";
 import { instalarVendas } from "./vendas.js";
@@ -16,10 +18,40 @@ const app = express();
 app.use(express.json({ limit: "40mb" }));
 app.use(express.urlencoded({ extended: false, limit: "10mb" })); // Twilio manda form-urlencoded (ligação IA)
 
+/* ===== MEDIDOR DE VELOCIDADE (v2.5) =====
+   Mostra em /api/versao (saude.velocidade) se o servidor está travando, quanto
+   demora cada gravação e quais telas estão pesadas. Nada de dado de cliente:
+   só tempos, tamanhos e o caminho da rota (com os ids trocados por ":id"). */
+const METRICAS = {
+  banco: { gravacoes: 0, ultimaMs: 0, maiorMs: 0, mb: 0 },
+  chats: { gravacoes: 0, puladas: 0, ultimaMs: 0, refeitas: 0, conversas: 0, mb: 0 },
+  lentas: [],
+};
+const _laco = (() => { try { const h = monitorEventLoopDelay({ resolution: 20 }); h.enable(); return h; } catch (_) { return null; } })();
+const _lacoHist = []; // um registro por minuto, última hora
+setInterval(() => {
+  if (!_laco) return;
+  _lacoHist.push({ p99: Math.round(_laco.percentile(99) / 1e6), max: Math.round(_laco.max / 1e6) });
+  if (_lacoHist.length > 60) _lacoHist.shift();
+  _laco.reset();
+}, 60000).unref();
+app.use((req, res, next) => {
+  if (!req.path.startsWith("/api/")) return next();
+  const t0 = Date.now();
+  res.on("finish", () => {
+    const ms = Date.now() - t0;
+    if (ms < 700) return;
+    const rota = req.method + " " + req.path.replace(/\/[^/]*\d[^/]*(?=\/|$)/g, "/:id").slice(0, 80);
+    METRICAS.lentas.push({ rota, ms, kb: Math.round((Number(res.getHeader("content-length")) || 0) / 1024), em: new Date().toISOString().slice(11, 19) });
+    if (METRICAS.lentas.length > 25) METRICAS.lentas.shift();
+  });
+  next();
+});
+
 // Versão do sistema — pra CONFIRMAR qual código está no ar (abra /api/versao no navegador).
 // Se aqui aparecer a versão nova mas o bug continuar, o problema é outro; se aparecer
 // uma versão antiga (ou 404), o deploy não subiu de verdade.
-const VERSAO_SISTEMA = "v2.4.1-audio";
+const VERSAO_SISTEMA = "v2.5-veloz";
 
 /* ============================================================
    IDENTIFICAÇÃO DA UNIDADE (mesmo código, deploys separados)
@@ -71,8 +103,56 @@ function saudeServidor() {
     const st = fs.statfsSync(path.dirname(DB_PATH));
     r.disco = { livreMB: Math.round((st.bavail * st.bsize) / 1048576), totalMB: Math.round((st.blocks * st.bsize) / 1048576) };
   } catch (e) { r.disco = { erro: e.code || e.message }; }
+  try {
+    const mem = process.memoryUsage();
+    const hora = _lacoHist.reduce((a, x) => ({ p99: Math.max(a.p99, x.p99), max: Math.max(a.max, x.max) }), { p99: 0, max: 0 });
+    r.velocidade = {
+      travadaAgoraMs: _laco ? { p99: Math.round(_laco.percentile(99) / 1e6), max: Math.round(_laco.max / 1e6) } : null,
+      piorDaUltimaHoraMs: hora,
+      banco: METRICAS.banco,
+      conversas: METRICAS.chats,
+      memoriaMB: { rss: Math.round(mem.rss / 1048576), heap: Math.round(mem.heapUsed / 1048576) },
+      nucleos: (os.cpus() || []).length,
+      ligadoHaMin: Math.round(process.uptime() / 60),
+      lentas: METRICAS.lentas.slice(-12),
+      tamanhos: _tamanhos,
+    };
+  } catch (_) {}
   return r;
 }
+// quanto pesa cada parte do banco (medido com calma, a cada 30 min, cedendo a vez)
+let _tamanhos = null;
+async function medirTamanhos() {
+  try {
+    const out = {};
+    const pesar = (v) => JSON.stringify(v === undefined ? null : v).length;
+    for (const k of Object.keys(db)) {
+      if (k === "waChats") continue;
+      if (k === "oficial" && db.oficial && typeof db.oficial === "object") {
+        for (const k2 of Object.keys(db.oficial)) {
+          const n = pesar(db.oficial[k2]);
+          if (n > 20000) out["oficial." + k2] = +(n / 1048576).toFixed(2);
+          await new Promise((ok) => setImmediate(ok));
+        }
+        continue;
+      }
+      const n = pesar(db[k]);
+      if (n > 20000) out[k] = +(n / 1048576).toFixed(2);
+      await new Promise((ok) => setImmediate(ok));
+    }
+    let mensagens = 0;
+    const chats = Object.values(db.waChats || {});
+    for (const c of chats) mensagens += c && Array.isArray(c.mensagens) ? c.mensagens.length : 0;
+    _tamanhos = {
+      emMB: Object.fromEntries(Object.entries(out).sort((a, b) => b[1] - a[1]).slice(0, 14)),
+      conversas: chats.length, mensagens,
+      leads: ((db.oficial || {}).crmLeads || []).length,
+      medidoEm: new Date().toISOString().slice(0, 16),
+    };
+  } catch (_) {}
+}
+setTimeout(medirTamanhos, 90000).unref();
+setInterval(medirTamanhos, 30 * 60000).unref();
 console.log("==> Instructiva CRM versão:", VERSAO_SISTEMA);
 
 
@@ -281,10 +361,12 @@ function loadDB() {
           if (rem) { limpou.push("wamidChat " + rem); of.wamidChat = novo; }
         }
         // 3) msgCampanha: remove cópias de mensagens de campanhas que não existem mais
+        //    (mapa wamid -> id da campanha; v2.5: antes comparava o wamid com o id da
+        //    campanha e apagava o mapa inteiro a cada reinício)
         if (of.msgCampanha && typeof of.msgCampanha === "object") {
           const campVivas = new Set((of.campanhas || []).map((c) => c.id));
           let rem = 0; const novo = {};
-          for (const [cid, v] of Object.entries(of.msgCampanha)) { if (campVivas.has(cid)) novo[cid] = v; else rem++; }
+          for (const [wamid, campId] of Object.entries(of.msgCampanha)) { if (campVivas.has(campId)) novo[wamid] = campId; else rem++; }
           if (rem) { limpou.push("msgCampanha " + rem); of.msgCampanha = novo; }
         }
         // 4) conversas de DISPARO que NUNCA responderam com mais de N dias (padrão 3).
@@ -397,19 +479,105 @@ function _gravarNoDisco(paraGravar) {
 }
 
 /* ===== arquivo separado das conversas (waChats.json) =====
-   Gravar o banco inteiro a cada mensagem era o que travava tudo. Agora as
-   conversas moram no próprio arquivo e são gravadas no MÁXIMO a cada 4s
-   (throttle). O banco principal (pequeno) continua gravando na hora. */
+   v2.5: o arquivo deixou de ser refeito do zero a cada gravação.
+   Cada conversa guarda o próprio pedaço de texto já pronto e só refaz o
+   pedaço de quem mudou (uma "assinatura" barata diz se mudou). O arquivo
+   continua exatamente no mesmo formato (um objeto com todas as conversas).
+   A montagem é feita em partes, cedendo a vez pro servidor atender as telas
+   no meio do caminho: gravar conversas não trava mais ninguém.
+   Por garantia, de minuto em minuto refaz tudo (pega qualquer mudança que a
+   assinatura não viu) e, ao desligar, grava tudo de uma vez (síncrono). */
 let _chatsSujo = false, _chatsGravando = false, _chatsUltimo = 0, _chatsTimer = null;
 const CHATS_INTERVALO = 4000;
+const CHATS_COMPLETO_MS = 60000;
+const _jsonChat = new Map();   // id da conversa -> { sig, json }
+let _chatsUltimoCompleto = 0;
+let _chatsGeracao = 0;         // muda quando alguém grava tudo na marra (restauração, saída)
+let _chatsConferir = false;    // houve gravação "rápida": falta a conferência completa
+let _chatsTimerConferir = null;
 
-function _gravarChatsSync() { // usado no encerramento e na migração
+// texto curto entra inteiro; longo entra como tamanho + final (muda quando edita)
+function _sigValor(v) {
+  if (v == null) return "~";
+  const t = typeof v;
+  if (t === "string") return v.length <= 48 ? v : v.length + "…" + v.slice(-12);
+  if (t === "number" || t === "boolean") return String(v);
+  if (Array.isArray(v)) return "[" + v.length;
+  if (t === "object") {
+    let s = "{";
+    for (const k in v) {
+      const x = v[k];
+      s += k + ":" + (x !== null && typeof x === "object" ? (Array.isArray(x) ? "[" + x.length : "{") : _sigValor(x)) + ",";
+    }
+    return s;
+  }
+  return "?";
+}
+function _assinaturaChat(c) {
+  let s = "";
+  for (const k in c) if (k !== "mensagens") s += k + "=" + _sigValor(c[k]) + ";";
+  const ms = Array.isArray(c.mensagens) ? c.mensagens : [];
+  s += "#" + ms.length;
+  for (let i = Math.max(0, ms.length - 12); i < ms.length; i++) s += "|" + _sigValor(ms[i]);
+  return s;
+}
+const _cederVez = () => new Promise((r) => setImmediate(r));
+// carimbo curto de uma conversa: a tela manda o último que viu e, se não mudou,
+// o servidor responde só { mesmo: true } (não manda as mensagens de novo)
+function versaoConversa(c, extra) {
+  return crypto.createHash("md5").update(_assinaturaChat(c) + "|" + (extra || "")).digest("base64").slice(0, 14);
+}
+
+// monta os pedaços do arquivo; só faz JSON.stringify de quem mudou
+async function _montarChats(completo) {
+  const chats = db.waChats || {};
+  const partes = [];
+  const vistos = new Set();
+  let mudou = false, refeitos = 0, t = Date.now();
+  for (const id of Object.keys(chats)) {
+    const c = chats[id];
+    if (c === undefined) continue; // igual ao JSON.stringify: undefined não entra
+    vistos.add(id);
+    let json;
+    if (c === null || typeof c !== "object") {
+      json = JSON.stringify(c);
+    } else {
+      let item = _jsonChat.get(id);
+      const sig = _assinaturaChat(c);
+      if (completo || !item || item.sig !== sig) {
+        json = JSON.stringify(c);
+        if (!item || item.json !== json) mudou = true;
+        item = { sig, json };
+        _jsonChat.set(id, item);
+        refeitos++;
+      }
+      json = item.json;
+    }
+    partes.push(JSON.stringify(id) + ":" + json);
+    if (Date.now() - t > 12) { await _cederVez(); t = Date.now(); }
+  }
+  for (const id of _jsonChat.keys()) if (!vistos.has(id)) { _jsonChat.delete(id); mudou = true; }
+  return { partes, mudou, refeitos };
+}
+// escreve em blocos de ~1 MB (sem montar uma string gigante na memória)
+function* _blocosArquivo(partes) {
+  let buf = "{";
+  for (let i = 0; i < partes.length; i++) {
+    buf += (i ? "," : "") + partes[i];
+    if (buf.length > 1048576) { yield buf; buf = ""; }
+  }
+  yield buf + "}";
+}
+
+function _gravarChatsSync() { // usado no encerramento, na restauração e na migração
   try {
+    _chatsGeracao++;
     const json = JSON.stringify(db.waChats || {});
     const tmp = CHATS_PATH + ".tmp";
     fs.writeFileSync(tmp, json);
     fs.renameSync(tmp, CHATS_PATH);
-    _chatsSujo = false; _chatsUltimo = Date.now();
+    _chatsSujo = false; _chatsConferir = false; _chatsUltimo = Date.now();
+    METRICAS.chats.mb = +(json.length / 1048576).toFixed(1);
   } catch (e) { console.error("Erro ao salvar conversas:", e.message); }
 }
 
@@ -422,23 +590,44 @@ function gravarChatsEmBreve() {
     if (_chatsGravando) { gravarChatsEmBreve(); return; }
     if (!_chatsSujo) return;
     _chatsGravando = true;
+    _chatsSujo = false; // o que mudar daqui pra frente agenda outra gravação
+    const geracao = _chatsGeracao;
+    const t0 = Date.now();
     try {
-      const json = JSON.stringify(db.waChats || {});
-      const tmp = CHATS_PATH + ".tmp";
-      await fs.promises.writeFile(tmp, json);   // assíncrono: não trava o servidor
-      await fs.promises.rename(tmp, CHATS_PATH);
-      _chatsSujo = false; _chatsUltimo = Date.now();
+      const completo = Date.now() - _chatsUltimoCompleto > CHATS_COMPLETO_MS;
+      const r = await _montarChats(completo);
+      if (completo) { _chatsUltimoCompleto = Date.now(); _chatsConferir = false; }
+      else _chatsConferir = true;
+      let bytes = 0;
+      if (r.mudou && geracao === _chatsGeracao) {
+        for (const p of r.partes) bytes += p.length + 1;
+        const tmp = CHATS_PATH + ".tmp-inc";
+        await fs.promises.writeFile(tmp, _blocosArquivo(r.partes));   // assíncrono: não trava o servidor
+        if (geracao === _chatsGeracao) await fs.promises.rename(tmp, CHATS_PATH);
+        else fs.promises.unlink(tmp).catch(() => {});
+      }
+      _chatsUltimo = Date.now();
+      const m = METRICAS.chats;
+      m.gravacoes++; if (!r.mudou) m.puladas++;
+      m.ultimaMs = Date.now() - t0; m.refeitas = r.refeitos; m.conversas = r.partes.length;
+      if (bytes) m.mb = +(bytes / 1048576).toFixed(1);
     } catch (e) {
       console.error("Erro ao salvar conversas:", e.message);
       try { _gravarChatsSync(); } catch (_) {}
     } finally {
       _chatsGravando = false;
       if (_chatsSujo) gravarChatsEmBreve();   // mudou de novo durante a gravação
+      else if (_chatsConferir && !_chatsTimerConferir) {
+        // garante a conferência completa (pega mudança que a assinatura rápida não vê,
+        // ex.: o tique de "lida" numa mensagem antiga)
+        const falta = Math.max(1000, CHATS_COMPLETO_MS - (Date.now() - _chatsUltimoCompleto) + 50);
+        _chatsTimerConferir = setTimeout(() => { _chatsTimerConferir = null; if (_chatsConferir) gravarChatsEmBreve(); }, falta);
+      }
     }
   }, espera);
 }
 
-// gravação imediata (usada no encerramento e em pontos críticos)
+// gravação imediata do banco principal + conversas (boot, restauração, saída)
 function saveDB() {
   try {
     // a proteção de deploy só faz sentido nos primeiros minutos de vida do processo
@@ -452,31 +641,39 @@ function saveDB() {
   }
 }
 
-// gravação agrupada do banco principal (pequeno): rápida e frequente.
+// gravação agrupada do banco principal: no máx. 1x a cada 1,5s, assíncrona.
 // As conversas são agendadas à parte (gravarChatsEmBreve), com folga.
-const SAVE_DEBOUNCE = 700;
+const SAVE_DEBOUNCE = 1500;
 function saveSoon() {
+  gravarChatsEmBreve();   // qualquer mudança também agenda as conversas (no máx. 1x/4s, só o que mudou)
+  _agendarBanco();
+}
+function _agendarBanco() {
   _sujo = true;
-  gravarChatsEmBreve();   // qualquer mudança também agenda a gravação das conversas (no máx. 1x/4s)
   if (_timerSave) return;
   _timerSave = setTimeout(async () => {
     _timerSave = null;
-    if (_gravando) { saveSoon(); return; }   // já tem gravação rolando: tenta de novo depois
+    if (_gravando) { _agendarBanco(); return; }   // já tem gravação rolando: tenta de novo depois
     _gravando = true;
+    _sujo = false; // o que mudar durante a gravação agenda outra
     try {
+      const t0 = Date.now();
       const paraGravar = _savesFeitos < 3 ? _mesclarComDisco() : db;
       _savesFeitos++;
       const json = JSON.stringify(_semChats(paraGravar));  // conversas NÃO entram aqui
+      const msMontar = Date.now() - t0;
       const tmp = DB_PATH + ".tmp";
       await fs.promises.writeFile(tmp, json);   // assíncrono: não trava o servidor
       await fs.promises.rename(tmp, DB_PATH);
-      _sujo = false;
+      const m = METRICAS.banco;
+      m.gravacoes++; m.ultimaMs = msMontar; m.mb = +(json.length / 1048576).toFixed(1);
+      if (msMontar > m.maiorMs) m.maiorMs = msMontar;
     } catch (e) {
       console.error("Erro ao salvar banco:", e.message);
       try { saveDB(); } catch (_) {}          // se falhar, tenta do jeito antigo
     } finally {
       _gravando = false;
-      if (_sujo) saveSoon();                  // mudou de novo durante a gravação
+      if (_sujo) _agendarBanco();             // mudou de novo durante a gravação
     }
   }, SAVE_DEBOUNCE);
 }
@@ -486,16 +683,16 @@ function _salvarAoSair(sinal) {
   try {
     if (_timerSave) { clearTimeout(_timerSave); _timerSave = null; }
     if (_chatsTimer) { clearTimeout(_chatsTimer); _chatsTimer = null; }
-    if (_sujo) saveDB();                    // banco principal + conversas (saveDB grava os dois)
-    else if (_chatsSujo) _gravarChatsSync(); // se só as conversas mudaram, grava elas
+    if (_sujo || _gravando) saveDB();                        // banco principal + conversas
+    else if (_chatsSujo || _chatsGravando || _chatsConferir) _gravarChatsSync(); // só as conversas
   } catch (_) {}
   if (sinal) process.exit(0);
 }
 process.on("SIGTERM", () => _salvarAoSair("SIGTERM"));
 process.on("SIGINT", () => _salvarAoSair("SIGINT"));
 process.on("exit", () => _salvarAoSair(null));
-// rede de segurança: se algo ficou sujo por muito tempo, grava
-setInterval(() => { if (_sujo && !_timerSave && !_gravando) saveDB(); }, 5000);
+// rede de segurança: se algo ficou sujo sem gravação agendada, agenda
+setInterval(() => { if (_sujo && !_timerSave && !_gravando) _agendarBanco(); }, 5000);
 
 // BACKUP DIÁRIO do banco: copia o crm.json pra pasta backups/ com a data, e mantém
 // os últimos 14 dias (apaga os mais antigos). Roda ao subir e a cada 24h.
@@ -695,7 +892,7 @@ app.put("/api/modulos", auth, donoOnly, (req, res) => {
   const base = dbVazio().modulos;
   if (!db.modulos) db.modulos = { ...base };
   Object.keys(base).forEach((k) => { if (typeof m[k] === "boolean") db.modulos[k] = m[k]; });
-  saveDB();
+  saveSoon();
   res.json({ ok: true, modulos: db.modulos });
 });
 
@@ -1627,6 +1824,20 @@ app.get("/api/wa/minha", auth, async (req, res) => {
   res.json({ instance, estado });
 });
 
+/* ---- carimbo leve da lista (a tela pergunta isso e só baixa a lista se mudou) ---- */
+app.get("/api/wa/chats-versao", auth, (req, res) => {
+  const permitidas = new Set(instanciasDoUser(req.user));
+  let n = 0, maxAt = 0, naoLidas = 0, arq = 0;
+  for (const c of Object.values(db.waChats || {})) {
+    if (!c || !permitidas.has(c.instance)) continue;
+    if (c.arquivada) { arq++; continue; }
+    n++;
+    if ((c.atualizadoEm || 0) > maxAt) maxAt = c.atualizadoEm || 0;
+    naoLidas += c.naoLidas || 0;
+  }
+  res.json({ v: n + ":" + arq + ":" + maxAt + ":" + naoLidas });
+});
+
 /* ---- listar conversas (escopo por instância) ---- */
 app.get("/api/wa/chats", auth, (req, res) => {
   const permitidas = new Set(instanciasDoUser(req.user));
@@ -1635,7 +1846,9 @@ app.get("/api/wa/chats", auth, (req, res) => {
   if (req.user.role === "gerente" && req.query.instance && req.query.instance !== "todas") {
     chats = chats.filter((c) => c.instance === req.query.instance);
   }
-  const q = String(req.query.q || "").trim().toLowerCase();
+  // busca sem acento e sem maiúscula ("nao" acha "Não"), também no texto dos áudios
+  const semAc = (t) => String(t || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  const q = semAc(String(req.query.q || "").trim());
   const qDig = q.replace(/\D/g, "");
   const agora = Date.now();
   let itens = chats.map((c) => {
@@ -1643,12 +1856,16 @@ app.get("/api/wa/chats", auth, (req, res) => {
     const aguardando = !!(ult && ult.role === "them") && !c.encerrado;
     let trecho = "";
     if (q) {
-      const nomeOk = (c.nome || "").toLowerCase().includes(q);
+      const nomeOk = semAc(c.nome).includes(q);
       const numOk = qDig && (c.numero || "").replace(/\D/g, "").includes(qDig);
       if (!nomeOk && !numOk) {
-        const m = [...c.mensagens].reverse().find((mm) => String(mm.content || "").toLowerCase().includes(q));
+        let m = null;
+        for (let i = c.mensagens.length - 1; i >= 0 && !m; i--) {
+          const mm = c.mensagens[i];
+          if (semAc((mm.content || "") + " " + (mm.transcricao || "")).includes(q)) m = mm;
+        }
         if (!m) return null; // não bate em nome, número nem mensagem
-        trecho = String(m.content).slice(0, 120);
+        trecho = String(m.content || m.transcricao || "").slice(0, 120);
       }
     }
     return {
@@ -1676,9 +1893,11 @@ app.get("/api/wa/chats/:id", auth, (req, res) => {
   const permitidas = new Set(instanciasDoUser(req.user));
   if (!permitidas.has(chat.instance))
     return res.status(403).json({ error: "Sem acesso a essa conversa" });
-  chat.naoLidas = 0;
-  saveSoon();
-  res.json(chat);
+  // v2.5: só grava se tinha não-lida (antes gravava a cada 10s com a conversa aberta)
+  if (chat.naoLidas) { chat.naoLidas = 0; saveSoon(); }
+  const v = versaoConversa(chat);
+  if (req.query.v && req.query.v === v) return res.json({ mesmo: true, v });
+  res.json({ ...chat, _v: v });
 });
 
 /* ---- servir mídia (áudio / imagem / vídeo / documento) ---- */
@@ -2356,13 +2575,13 @@ const permiteVendVendas = (chave) => (req, res, next) => {
   if (req.user.role === "vendedor" && ((db.oficial && db.oficial.acessoVend) || {})[chave] === true) return next();
   return res.status(403).json({ error: "Acesso restrito" });
 };
-instalarVendas({ app, getDb: () => db, saveDB, proximoId, auth, gerenteOnly, permiteVend: permiteVendVendas, dbPath: DB_PATH });
+instalarVendas({ app, getDb: () => db, saveDB, saveSoon, proximoId, auth, gerenteOnly, permiteVend: permiteVendVendas, dbPath: DB_PATH });
 
 /* Recados do time: mensagem do dono na primeira entrada do dia */
-instalarRecados({ app, getDb: () => db, saveDB, auth, donoOnly });
+instalarRecados({ app, getDb: () => db, saveDB: saveSoon, auth, donoOnly });
 
 /* Análise de atendimento por IA (só o dono enxerga) */
-instalarAnaliseAtendimento({ app, getDb: () => db, saveDB, auth, donoOnly });
+instalarAnaliseAtendimento({ app, getDb: () => db, saveDB: saveSoon, auth, donoOnly });
 
 instalarRotasBackup(app, auth, gerenteOnly);
 
@@ -2385,6 +2604,7 @@ app.put("/api/aviso", auth, gerenteOnly, (req, res) => {
 });
 
 const canalOficial = instalarCanalOficial({
+  versaoConversa,
   app,
   getDb: () => db,
   saveDB,

@@ -34,6 +34,7 @@ const I = {
   refresh: (p) => (<svg {...p} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 12a9 9 0 0 1 15-6.7L21 8M21 3v5h-5M21 12a9 9 0 0 1-15 6.7L3 16M3 21v-5h5"/></svg>),
   link: (p) => (<svg {...p} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.5 1.5"/><path d="M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.5-1.5"/></svg>),
   chevron: (p) => (<svg {...p} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M6 9l6 6 6-6"/></svg>),
+  chevCima: (p) => (<svg {...p} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 15l-6-6-6 6"/></svg>),
   copy: (p) => (<svg {...p} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>),
   key: (p) => (<svg {...p} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.778-7.778zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg>),
   dash: (p) => (<svg {...p} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M3 3v18h18"/><rect x="7" y="11" width="3" height="6" rx="1"/><rect x="12" y="7" width="3" height="10" rx="1"/><rect x="17" y="13" width="3" height="4" rx="1"/></svg>),
@@ -266,12 +267,16 @@ function AvisoAtualizacao() {
 
 /* ============================ NOVIDADES DA VERSÃO (v2.2) ============================ */
 // Aparece uma vez só pra cada pessoa (fica marcado no servidor). Dá pra rever clicando na versão, no rodapé do menu.
-const VERSAO_NOVIDADES = "v2.4";
+const VERSAO_NOVIDADES = "v2.5";
 function Novidades({ user, perfil, pode, ehMac, onClose, soNovos = false }) {
   const itens = [
-    { ic: I.list, t: "Curso escolhido da lista", d: "Na hora de lançar a venda é só clicar e escolher o curso, ou digitar \"inv\", \"solar\", \"odonto\" que ele aparece. Nada de nome escrito errado.", para: "comercial", se: pode.vendas, novo: true },
-    { ic: I.cash, t: "Lançar venda de cara nova", d: "Tudo em 4 passos, com forma de pagamento e plataforma num clique. Combo e Todos os cursos já pedem os itens e a oferta.", para: "comercial", se: pode.vendas, novo: true },
-    { ic: I.nota, t: "Cursos padronizados", d: "Em Vendas › Gerenciar: Padronizar cursos deixa as vendas antigas com o nome certo, e Cursos cadastra os novos.", para: "gerente", novo: true },
+    { ic: I.search, t: "Busca nas mensagens", d: "Na Caixa de entrada, digite qualquer palavra: aparecem as conversas e as mensagens que falam disso, igual ao WhatsApp. Pode escrever sem acento, e acha até o que foi falado nos áudios.", para: "comercial", se: pode.caixa, novo: true },
+    { ic: I.chat, t: "Buscar dentro da conversa", d: "Clique na lupa no topo da conversa e use as setinhas pra pular de uma mensagem pra outra.", para: "comercial", se: pode.caixa, novo: true },
+    { ic: I.raio, t: "Sistema mais rápido", d: "Conversas, Pipeline e lançamento de venda abrem e atualizam bem mais rápido, sem aquelas travadinhas.", para: "todos", novo: true },
+    { ic: I.brilho, t: "Visual 2.5", d: "Menu grafite, cada contato com a sua cor e a data separando as mensagens de cada dia, como no WhatsApp.", para: "todos", novo: true },
+    { ic: I.list, t: "Curso escolhido da lista", d: "Na hora de lançar a venda é só clicar e escolher o curso, ou digitar \"inv\", \"solar\", \"odonto\" que ele aparece. Nada de nome escrito errado.", para: "comercial", se: pode.vendas },
+    { ic: I.cash, t: "Lançar venda de cara nova", d: "Tudo em 4 passos, com forma de pagamento e plataforma num clique. Combo e Todos os cursos já pedem os itens e a oferta.", para: "comercial", se: pode.vendas },
+    { ic: I.nota, t: "Cursos padronizados", d: "Em Vendas › Gerenciar: Padronizar cursos deixa as vendas antigas com o nome certo, e Cursos cadastra os novos.", para: "gerente" },
     { ic: I.image, t: "Disparo com imagem", d: "No Disparo, escolha Só a imagem ou Imagem + mensagem. Dá pra arrastar a foto direto pra tela e ver a prévia igual no WhatsApp.", para: "comercial", se: pode.disparo },
     { ic: I.user, t: "Nome do cliente no disparo", d: "Template com {{1}} sai com o primeiro nome de cada contato da lista. Quem estiver sem nome recebe um texto que você escolhe.", para: "comercial", se: pode.disparo },
     { ic: I.brilho, t: "Visual novo", d: "Cores grafite e esmeralda, modo claro e escuro e um menu que recolhe pra sobrar mais espaço na tela.", para: "todos" },
@@ -304,9 +309,9 @@ function Novidades({ user, perfil, pode, ehMac, onClose, soNovos = false }) {
         <div className="nov" role="dialog" aria-modal="true" aria-labelledby="nov-tit">
           <div className="nov-topo">
             <button type="button" className="nov-x" onClick={onClose} aria-label="Fechar"><I.x className="ico" /></button>
-            <span className="nov-selo"><I.brilho className="ico" /> Novidades · versão 2.4</span>
-            <h2 id="nov-tit">{soNovos ? "Lançar venda ficou mais fácil" : "O sistema ficou de cara nova"}</h2>
-            <p>{nome ? "Oi, " + nome + "! " : ""}{soNovos ? "Agora o curso é escolhido da lista, sem digitar. Veja o que mudou:" : "Separamos o que mudou pra deixar o seu dia mais fácil e as vendas mais rápidas."}</p>
+            <span className="nov-selo"><I.brilho className="ico" /> Novidades · versão 2.5</span>
+            <h2 id="nov-tit">{soNovos ? "Mais rápido, e agora com busca nas mensagens" : "O sistema ficou de cara nova"}</h2>
+            <p>{nome ? "Oi, " + nome + "! " : ""}{soNovos ? "Achar aquela conversa ficou fácil. Veja o que mudou:" : "Separamos o que mudou pra deixar o seu dia mais fácil e as vendas mais rápidas."}</p>
           </div>
           <div className="nov-grade">
             {lista.map((it, i) => (
@@ -321,7 +326,7 @@ function Novidades({ user, perfil, pode, ehMac, onClose, soNovos = false }) {
             ))}
           </div>
           <div className="nov-pe">
-            <span>Pra ver de novo, clique em <b>v2.4</b> no rodapé do menu.</span>
+            <span>Pra ver de novo, clique em <b>v2.5</b> no rodapé do menu.</span>
             <button type="button" className="btn btn-primary nov-btn" onClick={onClose}>{perfil === "suporte" ? "Entendi, vamos lá" : "Bora vender!"}</button>
           </div>
         </div>
@@ -513,7 +518,7 @@ export default function App() {
       {!novidades && <RecadoDoDia />}
       <aside className="sidebar">
         <div className="side-topo">
-          <div className="brand"><img src={theme === "dark" ? LOGO_LIGHT : LOGO_FULL} alt="Instructiva" /></div>
+          <div className="brand"><img src={LOGO_LIGHT} alt="Instructiva" /></div>
           <button type="button" className="side-recolher" onClick={() => setMenuRecolhido((v) => !v)} title={menuRecolhido ? "Abrir menu" : "Recolher menu"} aria-label={menuRecolhido ? "Abrir menu" : "Recolher menu"}>
             <I.painelLado className="ico" />
           </button>
@@ -553,7 +558,7 @@ export default function App() {
             </div>
             <button className="side-sair" onClick={logout} title="Sair" aria-label="Sair"><I.out className="ico" /></button>
           </div>
-          <button type="button" className="side-versao" onClick={() => { setNovidadesSoNovos(false); setNovidades(true); }} title="Ver as novidades desta versão">v2.4 · novidades</button>
+          <button type="button" className="side-versao" onClick={() => { setNovidadesSoNovos(false); setNovidades(true); }} title="Ver as novidades desta versão">v2.5 · novidades</button>
         </div>
       </aside>
 
@@ -1611,10 +1616,12 @@ function OficialDisparo({ isGer = true, showToast, preset = null, onPresetUsado 
     carregarCampanhas();
     api.ofNumeros().then((ns) => setNumeros(ns.filter((n) => n.ativo))).catch(() => {});
     if (!isGer) api.ofMeuLimite().then(setMeuLimite).catch(() => {});
-    // atualiza os números do disparo automaticamente a cada 10s (recontando do servidor)
+    // atualiza os números do disparo a cada 10s; a recontagem completa (pesada: lê
+    // todas as conversas) roda no máx. a cada 2 min — v2.5
+    let recontadoEm = 0;
     const t = setInterval(async () => {
       if (document.hidden) return; // não atualiza se a aba estiver em segundo plano
-      try { await api.ofRecontar(); } catch (e) {}
+      if (Date.now() - recontadoEm > 120000) { recontadoEm = Date.now(); try { await api.ofRecontar(); } catch (e) {} }
       carregarCampanhas();
       if (!isGer) api.ofMeuLimite().then(setMeuLimite).catch(() => {});
     }, 10000);
@@ -7536,6 +7543,8 @@ function OficialCRM({ showToast, isGer = true, onAbrirWhats, onDisparar, abrirLe
   const mesmoDia = (ts, diaStr) => { if (!ts || !diaStr) return false; const d = new Date(ts); const dd = String(d.getFullYear()) + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0"); return dd === diaStr; };
 
   const carregar = () => api.ofCRM().then((d) => { setEtapas(d.etapas || []); setLeads(d.leads || []); setVendedores(d.vendedores || []); setCrmVend(d.crmVendedores || []); }).catch((e) => showToast(e.message));
+  // v2.5: a foto do vendedor vem uma vez só (lista de vendedores), não repetida em cada card
+  const fotoVend = useMemo(() => { const m = {}; vendedores.forEach((v) => { m[v.id] = v.foto || ""; }); return m; }, [vendedores]);
   const versaoCrmRef = useRef("");
   useEffect(() => {
     let vivo = true;
@@ -7579,7 +7588,7 @@ function OficialCRM({ showToast, isGer = true, onAbrirWhats, onDisparar, abrirLe
     // ganhou ou perdeu? mostra a comemoração (ou o consolo)
     const col = etapas.find((e) => e.k === etapa);
     const tipo = tipoDaColuna(col && col.lb);
-    if (tipo) setComemora({ tipo, nome: l.nome, valor: l.valor || 0, vendedor: l.vendedorNome || "", foto: l.vendedorFoto || "" });
+    if (tipo) setComemora({ tipo, nome: l.nome, valor: l.valor || 0, vendedor: l.vendedorNome || "", foto: fotoVend[l.vendedorId] || l.vendedorFoto || "" });
     if (tipo === "perda") setPerda({ id, nome: l.nome });
     try { await api.ofCrmEditar(id, { etapa }); } catch (e) { showToast(e.message); carregar(); }
   }
@@ -7835,7 +7844,7 @@ function OficialCRM({ showToast, isGer = true, onAbrirWhats, onDisparar, abrirLe
                       {l.recorrente && <span className="crm-tag-lig crm-tag-recorrente" title="Este contato voltou a se cadastrar por uma nova captação"><I.repetir className="ico-inline" /> Lead atualizado</span>}
                       <div className="crm-card-vend">
                         {l.vendedorNome
-                          ? <><Avatar nome={l.vendedorNome} foto={l.vendedorFoto} size={22} /><span className="crm-card-vend-nm">{l.vendedorNome.split(" ").slice(0, 2).join(" ")}</span></>
+                          ? <><Avatar nome={l.vendedorNome} foto={fotoVend[l.vendedorId] || l.vendedorFoto} size={22} /><span className="crm-card-vend-nm">{l.vendedorNome.split(" ").slice(0, 2).join(" ")}</span></>
                           : <span className="crm-card-semvend">sem dono</span>}
                       </div>
                       {(l.notas || []).length > 0 && <span className="crm-card-notas" title="Notas"><I.nota className="ico-inline" /> {l.notas.length}</span>}
@@ -9287,6 +9296,113 @@ function FichaLead({ chatId, telefone, nome, isGer, foco, onFechar, onRegistrarV
   );
 }
 
+/* ============================================================
+   v2.5 — BUSCA NAS MENSAGENS + CONVERSA LEVE
+   ============================================================ */
+const semAcentoTxt = (s) => String(s || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+// cor fixa por nome (o mesmo contato tem sempre a mesma cor de avatar)
+function corDoNome(nome) {
+  let h = 0; const s = String(nome || "?");
+  for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) % 360;
+  return h;
+}
+// pinta o pedaço que bate com a busca (sem acento e sem maiúscula: "nao" acha "Não")
+function TextoRealce({ texto, q }) {
+  const t = String(texto == null ? "" : texto);
+  if (!q || q.length < 2 || !t) return t;
+  const n = semAcentoTxt(t);
+  const mesmoTam = n.length === t.length;
+  const base = mesmoTam ? n : t.toLowerCase();
+  const alvo = mesmoTam ? semAcentoTxt(q) : q.toLowerCase();
+  if (!alvo) return t;
+  const partes = []; let i = 0, k = 0;
+  for (;;) {
+    const p = base.indexOf(alvo, i);
+    if (p < 0) break;
+    if (p > i) partes.push(t.slice(i, p));
+    partes.push(<mark key={k++} className="realce">{t.slice(p, p + alvo.length)}</mark>);
+    i = p + alvo.length;
+  }
+  if (!partes.length) return t;
+  if (i < t.length) partes.push(t.slice(i));
+  return <>{partes}</>;
+}
+function rotuloDia(ts) {
+  const d = new Date(ts), hoje = new Date();
+  const ini = (x) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
+  const dif = Math.round((ini(hoje) - ini(d)) / 86400000);
+  if (dif === 0) return "Hoje";
+  if (dif === 1) return "Ontem";
+  if (dif > 1 && dif < 7) { const w = d.toLocaleDateString("pt-BR", { weekday: "long" }); return w.charAt(0).toUpperCase() + w.slice(1); }
+  return d.toLocaleDateString("pt-BR", d.getFullYear() === hoje.getFullYear() ? { day: "numeric", month: "long" } : { day: "numeric", month: "long", year: "numeric" });
+}
+const horaMsg = (ts) => (ts ? new Date(ts).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }) : "");
+const ROTULO_TIPO = { image: "📷 Foto", audio: "🎤 Áudio", video: "🎥 Vídeo", document: "📄 Documento", sticker: "Figurinha", ligacao: "📞 Ligação" };
+function previaUltima(u) {
+  if (!u) return "—";
+  const txt = u.content && String(u.content).trim() ? u.content : (ROTULO_TIPO[u.tipo] || "");
+  return txt || "—";
+}
+const fmtSeg = (s) => String(Math.floor(s / 60)).padStart(2, "0") + ":" + String(s % 60).padStart(2, "0");
+
+// As mensagens só são redesenhadas quando a conversa muda de verdade
+// (antes eram redesenhadas a cada letra digitada e a cada 6 segundos).
+const MensagensOf = React.memo(function MensagensOf({ timeline, chatId, q, atualIdx, onLigacao }) {
+  const out = [];
+  let diaAnt = "";
+  timeline.forEach((item, i) => {
+    if (item.ts) {
+      const chave = new Date(item.ts).toDateString();
+      if (chave !== diaAnt) { diaAnt = chave; out.push(<div key={"d" + i} className="of-dia"><span>{rotuloDia(item.ts)}</span></div>); }
+    }
+    if (item.tipo === "nota") {
+      out.push(
+        <div key={i} className="of-nota">
+          <I.refresh className="ico" /> {item.n.texto}
+          <span className="of-nota-hora">{horaCurta(item.n.ts)}</span>
+        </div>
+      );
+      return;
+    }
+    const m = item.m;
+    if (m.tipo === "ligacao" && m.ligacao) {
+      const naoAtend = m.ligacao.atendida === false && !m.ligacao.pendente;
+      out.push(
+        <div key={i} data-idx={item.ordem} className={"of-msg " + (m.role === "me" ? "me" : "them")}>
+          <button onClick={() => onLigacao(m.ligacao)} title="Ver detalhes da ligação" className={"of-lig" + (naoAtend ? " nao" : "")}>
+            <span className="of-lig-ic">{naoAtend ? "📵" : "📞"}</span>
+            <span className="of-lig-txt">
+              <b>Ligação de voz {m.ligacao.direcao === "entrante" ? "recebida" : ""}</b>
+              <span>
+                {m.ligacao.pendente
+                  ? ((Date.now() - (m.ligacao.ts || m.ts || 0)) > 10 * 60 * 1000 ? "Sem registro de duração" : "Chamando… (o resumo aparece depois)")
+                  : naoAtend ? "Não atendida — tentativa de ligação"
+                  : m.ligacao.duracao ? "Duração: " + fmtSeg(m.ligacao.duracao)
+                  : "—"}
+                {" · "}{horaMsg(m.ts)}
+                {m.ligacao.resumoPronto ? " · 📝 resumo" : (!m.ligacao.pendente && !naoAtend && m.ligacao.audioUrl ? " · toque p/ resumo" : "")}
+              </span>
+            </span>
+          </button>
+        </div>
+      );
+      return;
+    }
+    const temMidia = m.tipo && m.tipo !== "text" && m.mid && (m.arquivo || m.mediaId);
+    out.push(
+      <div key={i} data-idx={item.ordem} className={"of-msg " + (m.role === "me" ? "me" : "them") + (item.ordem === atualIdx ? " busca-atual" : "")}>
+        <div className="of-msg-bubble">
+          {m.template && <span className="of-msg-tpl">📤 Template (disparo)</span>}
+          {temMidia && <OfMidia chatId={chatId} m={m} />}
+          {(!m.tipo || m.tipo === "text" || !(m.arquivo || m.mediaId) || m.template) && <TextoRealce texto={m.content} q={q} />}
+          <span className="of-msg-hora">{horaMsg(m.ts)}{m.role === "me" && <Ticks status={m.status} erro={m.erro} erroCodigo={m.erroCodigo} lidoEm={m.lidoEm} texto={!!m.template || m.status === "read"} />}</span>
+        </div>
+      </div>
+    );
+  });
+  return out;
+});
+
 function InboxOficial({ isGer, ehLider, showToast, onIrParaEvolution, target, onTargetUsed, onAbrirLead, meuNome }) {
   const [chats, setChats] = useState([]);
   const [carregou, setCarregou] = useState(false);
@@ -9417,6 +9533,25 @@ function InboxOficial({ isGer, ehLider, showToast, onIrParaEvolution, target, on
   const [etapas, setEtapas] = useState([]);
   const [texto, setTexto] = useState("");
   const [busca, setBusca] = useState("");
+  const [buscaDeb, setBuscaDeb] = useState("");
+  useEffect(() => { const t = setTimeout(() => setBuscaDeb(busca.trim()), 300); return () => clearTimeout(t); }, [busca]);
+  // v2.5: busca dentro das mensagens (igual ao WhatsApp)
+  const [achadosMsg, setAchadosMsg] = useState(null);
+  const [buscandoMsg, setBuscandoMsg] = useState(false);
+  useEffect(() => {
+    const q = buscaDeb;
+    if (q.length < 2) { setAchadosMsg(null); setBuscandoMsg(false); return; }
+    let vivo = true;
+    setBuscandoMsg(true);
+    api.ofBusca(q)
+      .then((r) => { if (vivo) setAchadosMsg(r); })
+      .catch(() => { if (vivo) setAchadosMsg({ q, total: 0, resultados: [], erro: true }); })
+      .finally(() => { if (vivo) setBuscandoMsg(false); });
+    return () => { vivo = false; };
+  }, [buscaDeb]);
+  const [alvoMsg, setAlvoMsg] = useState(null);      // { chatId, idx } vindo de um resultado da busca
+  const [buscaConv, setBuscaConv] = useState(null);  // busca dentro da conversa aberta (null = fechada)
+  const [buscaConvPos, setBuscaConvPos] = useState(-1);
   const [vendedores, setVendedores] = useState([]);
   const [filtroVend, setFiltroVend] = useState("todos");
   const [campanhas, setCampanhas] = useState([]);
@@ -9438,7 +9573,7 @@ function InboxOficial({ isGer, ehLider, showToast, onIrParaEvolution, target, on
   const taOfRef = useRef(null);      // campo de digitação (textarea multi-linha)
   const rapidasOf = useRespostasRapidas({ texto, setTexto, contatoNome: conversa && conversa.nome, meuNome, taRef: taOfRef, isGer, showToast });
   useEffect(() => { const el = taOfRef.current; if (el && !texto) el.style.height = "auto"; }, [texto]);
-  const [, forcarTick] = useState(0); // faz a contagem de 24h atualizar sozinha
+  const [tique30, forcarTick] = useState(0); // faz a contagem de 24h atualizar sozinha
   useEffect(() => { const t = setInterval(() => forcarTick((x) => x + 1), 30000); return () => clearInterval(t); }, []);
   const [iasDisp, setIasDisp] = useState([]);
   useEffect(() => { if (isGer) api.ofIAs().then((l) => setIasDisp((l || []).filter((x) => x.ativa))).catch(() => {}); }, [isGer]);
@@ -9453,7 +9588,7 @@ function InboxOficial({ isGer, ehLider, showToast, onIrParaEvolution, target, on
   const nearBottomRef = useRef(true); // usuário está perto do fim?
   const convIdRef = useRef(null);     // qual conversa está aberta
   const msgCountRef = useRef(0);      // qtd de mensagens da última vez
-  const carregarLista = () => api.ofChats(busca, null, campanhaFiltro === "todas" ? null : campanhaFiltro).then((cs) => { setChats(cs); setCarregou(true); }).catch(() => {});
+  const carregarLista = () => api.ofChats(buscaDeb, null, campanhaFiltro === "todas" ? null : campanhaFiltro).then((cs) => { setChats(cs); setCarregou(true); }).catch(() => {});
   const versaoRef = useRef("");
   useEffect(() => {
     carregarLista();
@@ -9463,7 +9598,7 @@ function InboxOficial({ isGer, ehLider, showToast, onIrParaEvolution, target, on
       if (document.hidden) return; // v2.0: aba escondida não fica consultando o servidor
       try {
         // durante uma busca, mantém o comportamento simples (recarrega direto)
-        if (busca && busca.trim()) { carregarLista(); return; }
+        if (buscaDeb) { carregarLista(); return; }
         const r = await api.ofChatsVersao();
         if (r && r.v !== versaoRef.current) { versaoRef.current = r.v; carregarLista(); }
       } catch (_) {}
@@ -9473,7 +9608,7 @@ function InboxOficial({ isGer, ehLider, showToast, onIrParaEvolution, target, on
     // campanhas pro filtro (o gerente vê todas; o vendedor, as dele)
     api.ofCampanhas().then((cs) => setCampanhas(cs || [])).catch(() => {});
     return () => clearInterval(t);
-  }, [busca, campanhaFiltro]);
+  }, [buscaDeb, campanhaFiltro]);
 
   // Alvo vindo do Pipeline (canal oficial): abre a conversa existente ou inicia uma nova
   const alvoOfRef = useRef(null);
@@ -9549,10 +9684,17 @@ function InboxOficial({ isGer, ehLider, showToast, onIrParaEvolution, target, on
 
   useEffect(() => {
     if (!sel) { setConversa(null); return; }
-    const carregar = () => api.ofChat(sel).then(setConversa).catch(() => {});
-    carregar();
-    const t = setInterval(() => { if (!document.hidden) carregar(); }, 6000); // v2.0: pausa com a aba escondida
-    return () => clearInterval(t);
+    let vivo = true;
+    // v2.5: manda o carimbo da versão que já está na tela; se nada mudou, o servidor
+    // responde só "mesmo" e a tela não redesenha nada (antes baixava tudo a cada 6s)
+    const carregar = (comVersao) => {
+      const atual = conversaRef.current;
+      const v = comVersao && atual && atual.id === sel ? atual._v : null;
+      return api.ofChat(sel, v).then((c) => { if (vivo && c && !c.mesmo) setConversa(c); }).catch(() => {});
+    };
+    carregar(false);
+    const t = setInterval(() => { if (!document.hidden) carregar(true); }, 6000); // pausa com a aba escondida
+    return () => { vivo = false; clearInterval(t); };
   }, [sel]);
 
   useEffect(() => { api.ofEtapas().then((d) => setEtapas(d.etapas || [])).catch(() => {}); }, []);
@@ -9753,20 +9895,115 @@ function InboxOficial({ isGer, ehLider, showToast, onIrParaEvolution, target, on
   }
 
   // monta uma timeline juntando mensagens + notas, ordenada por tempo
-  const timeline = [];
-  if (conversa) {
-    (conversa.mensagens || []).forEach((m, i) => timeline.push({ tipo: "msg", ts: m.ts, ordem: i, m }));
-    (conversa.notas || []).forEach((n, i) => timeline.push({ tipo: "nota", ts: n.ts, ordem: 100000 + i, n }));
-    // mesmo segundo? mantém a ordem em que chegou (o horário da Meta só tem segundos)
-    timeline.sort((a, b) => ((a.ts || 0) - (b.ts || 0)) || (a.ordem - b.ordem));
+  // (v2.5: só remonta quando a conversa muda — não a cada letra digitada)
+  const timeline = useMemo(() => {
+    const tl = [];
+    if (conversa) {
+      (conversa.mensagens || []).forEach((m, i) => tl.push({ tipo: "msg", ts: m.ts, ordem: i, m }));
+      (conversa.notas || []).forEach((n, i) => tl.push({ tipo: "nota", ts: n.ts, ordem: 100000 + i, n }));
+      // mesmo segundo? mantém a ordem em que chegou (o horário da Meta só tem segundos)
+      tl.sort((a, b) => ((a.ts || 0) - (b.ts || 0)) || (a.ordem - b.ordem));
+    }
+    return tl;
+  }, [conversa]);
+  const abrirResumoRef = useRef(null);
+  abrirResumoRef.current = abrirResumoLigacao;
+  const onLigacao = React.useCallback((lig) => abrirResumoRef.current && abrirResumoRef.current(lig), []);
+
+  // ---- busca dentro da conversa aberta (setinhas sobe/desce, igual ao WhatsApp) ----
+  const qConv = buscaConv && buscaConv.trim().length >= 2 ? buscaConv.trim() : "";
+  const achadosConv = useMemo(() => {
+    if (!qConv || !conversa) return [];
+    const qn = semAcentoTxt(qConv);
+    const r = [];
+    (conversa.mensagens || []).forEach((m, i) => {
+      if (semAcentoTxt((m.content || "") + " " + (m.transcricao || "") + " " + (m.filename || "")).includes(qn)) r.push(i);
+    });
+    return r;
+  }, [qConv, conversa]);
+  const convIdAtual = conversa ? conversa.id : null;
+  // começa pela mais recente
+  useEffect(() => { setBuscaConvPos(achadosConv.length ? achadosConv.length - 1 : -1); }, [qConv, convIdAtual]); // eslint-disable-line
+  // veio de um resultado da busca: vai direto na mensagem e dá um destaque
+  useEffect(() => {
+    if (!alvoMsg || !conversa || conversa.id !== alvoMsg.chatId) return;
+    const p = achadosConv.indexOf(alvoMsg.idx);
+    if (p >= 0) setBuscaConvPos(p);
+    const idx = alvoMsg.idx;
+    setAlvoMsg(null);
+    setTimeout(() => {
+      const el = msgsBoxRef.current && msgsBoxRef.current.querySelector('[data-idx="' + idx + '"]');
+      if (!el) return;
+      nearBottomRef.current = false;
+      el.scrollIntoView({ block: "center" });
+      el.classList.remove("msg-alvo"); void el.offsetWidth; el.classList.add("msg-alvo");
+    }, 60);
+  }, [conversa, alvoMsg, achadosConv]);
+  const atualIdx = buscaConvPos >= 0 && buscaConvPos < achadosConv.length ? achadosConv[buscaConvPos] : -1;
+  useEffect(() => {
+    if (atualIdx < 0) return;
+    const el = msgsBoxRef.current && msgsBoxRef.current.querySelector('[data-idx="' + atualIdx + '"]');
+    if (el) { nearBottomRef.current = false; el.scrollIntoView({ block: "center" }); }
+  }, [atualIdx]);
+  const irAchado = (d) => setBuscaConvPos((p) => { const n = achadosConv.length; if (!n) return -1; return (((p < 0 ? n - 1 : p) + d) % n + n) % n; });
+  function abrirConversa(id) { setSel(id); setBuscaConv(null); }
+  function abrirAchado(r) {
+    setNovaConv(null);
+    setSel(r.chatId);
+    setBuscaConv(buscaDeb);
+    setAlvoMsg({ chatId: r.chatId, idx: r.idx });
   }
+
+  // lista de conversas: só redesenha quando a lista/seleção muda (não a cada letra digitada)
+  const listaFiltrada = useMemo(() => chats.filter((c) => {
+    if (filtroVend === "todos") return true;
+    if (filtroVend === "ia") return c.comIA;
+    if (filtroVend === "sem") return !c.vendedorId && !c.comIA;
+    return c.vendedorId === filtroVend;
+  }), [chats, filtroVend]);
+  const buscaAtiva = buscaDeb.length >= 2;
+  const itensLista = useMemo(() => listaFiltrada.map((c) => (
+    <button key={c.id} className={sel === c.id ? "of-chat-item on" : "of-chat-item"} onClick={() => abrirConversa(c.id)}>
+      <div className="of-chat-av cor" style={{ "--h": corDoNome(c.nome) }}>{iniciais(c.nome)}</div>
+      <div className="of-chat-mid">
+        <div className="of-chat-nm">
+          <span className="of-chat-nm-t">{c.nome}</span>
+          {c.canal === "instagram" && <span className="of-pill ig">Instagram</span>}
+          {c.comIA && <span className="of-pill ia">🤖 IA atendendo</span>}
+          {c.iaPassou && <span className="of-pill ok">✓ IA passou</span>}
+          {c.origemDisparo && <span className="of-pill">{c.campanha || "Disparo"}</span>}
+        </div>
+        <div className="of-chat-last">{c.ultima && c.ultima.role === "me" ? <span className="eu">Você: </span> : null}{previaUltima(c.ultima)}</div>
+        {isGer && c.vendedorNome && <div className="of-chat-vend">→ {c.vendedorNome}</div>}
+        {isGer && !c.vendedorId && <div className="of-chat-vend sem">→ {c.canal === "instagram" ? "sem responsável" : "aguardando distribuição"}</div>}
+      </div>
+      <div className="of-chat-right">
+        <span className={"of-chat-hora" + (c.naoLidas > 0 ? " nova" : "")}>{c.atualizadoEm ? horaCurta(c.atualizadoEm) : ""}</span>
+        {c.naoLidas > 0 && <span className="of-chat-badge">{c.naoLidas}</span>}
+        {(() => {
+          const jan = janela24h(c.ultimaEntrada);
+          if (!jan) return null;
+          if (!jan.aberta) return <span className="of-jan-mini fechada" title="Janela de 24h fechada — só template"><I.lock className="ico-inline" /></span>;
+          if (jan.urgente) return <span className="of-jan-mini urg" title={"Janela fecha em " + jan.texto}><I.clock className="ico-inline" /> {jan.texto}</span>;
+          return null;
+        })()}
+      </div>
+    </button>
+  // eslint-disable-next-line
+  )), [listaFiltrada, sel, isGer, tique30]);
+  const achadosVisiveis = useMemo(() => {
+    const rs = (achadosMsg && achadosMsg.resultados) || [];
+    if (filtroVend === "todos" || filtroVend === "ia" || filtroVend === "sem") return rs;
+    return rs.filter((r) => r.vendedorId === filtroVend);
+  }, [achadosMsg, filtroVend]);
 
   return (
     <div className={"of-inbox" + (sel || novaConv ? " tem-conversa" : "") + (ficha && conversa && !novaConv ? " com-ficha" : "")}>
       <div className="of-inbox-list">
         <div className="of-inbox-search">
           <I.search className="ico" />
-          <input placeholder="Buscar por nome ou número" value={busca} onChange={(e) => setBusca(e.target.value)} />
+          <input placeholder="Buscar conversa ou mensagem" value={busca} onChange={(e) => setBusca(e.target.value)} onKeyDown={(e) => { if (e.key === "Escape") setBusca(""); }} />
+          {busca && <button className="of-busca-x" title="Limpar busca" onClick={() => setBusca("")}><I.x className="ico" /></button>}
           {isGer && <button className="of-limpar-btn" title="Limpar conversas" onClick={limpar}><I.trash className="ico" /></button>}
         </div>
         {(isGer || ehLider) && vendedores.length > 0 && (
@@ -9790,48 +10027,48 @@ function InboxOficial({ isGer, ehLider, showToast, onIrParaEvolution, target, on
           </div>
         )}
         <div className="of-inbox-items">
+        {buscaAtiva && listaFiltrada.length > 0 && <div className="busca-sec">Conversas <span>{listaFiltrada.length}</span></div>}
         {(() => {
-          const lista = chats.filter((c) => {
-            if (filtroVend === "todos") return true;
-            if (filtroVend === "ia") return c.comIA;
-            if (filtroVend === "sem") return !c.vendedorId && !c.comIA;
-            return c.vendedorId === filtroVend;
-          });
+          const lista = listaFiltrada;
+          if (buscaAtiva && lista.length === 0) return null;
           return lista.length === 0 ? (
             <div className="of-inbox-empty">
               <I.chat className="ico-empty" />
               <p>Nenhuma conversa {filtroVend !== "todos" ? "nesse filtro" : "ainda"}.</p>
               {filtroVend === "todos" && <p className="panel-sub">Quando um lead responder ao disparo, ele aparece aqui.</p>}
             </div>
-          ) : lista.map((c) => (
-          <button key={c.id} className={sel === c.id ? "of-chat-item on" : "of-chat-item"} onClick={() => setSel(c.id)}>
-            <div className="of-chat-av">{iniciais(c.nome)}</div>
-            <div className="of-chat-mid">
-              <div className="of-chat-nm">
-                {c.nome}
-                {c.canal === "instagram" && <span className="of-pill" style={{ background: "linear-gradient(45deg,#F58529,#DD2A7B,#8134AF)", color: "#fff", borderColor: "transparent" }}>📸 Instagram</span>}
-                {c.comIA && <span className="of-pill" style={{ background: "var(--surface-2)", color: "var(--brand)", borderColor: "var(--line)" }}>🤖 IA atendendo</span>}
-                {c.iaPassou && <span className="of-pill" style={{ background: "#eafaf0", color: "#1a9d54", borderColor: "#aee3c4" }}>✓ IA passou</span>}
-                {c.origemDisparo && <span className="of-pill">{c.campanha || "Disparo"}</span>}
-              </div>
-              <div className="of-chat-last">{c.ultima ? (c.ultima.role === "me" ? "Você: " : "") + c.ultima.content : "—"}</div>
-              {isGer && c.vendedorNome && <div className="of-chat-vend">→ {c.vendedorNome}</div>}
-              {isGer && !c.vendedorId && <div className="of-chat-vend sem">→ {c.canal === "instagram" ? "sem responsável" : "aguardando distribuição"}</div>}
-            </div>
-            <div className="of-chat-right">
-              <span className="of-chat-hora">{c.atualizadoEm ? horaCurta(c.atualizadoEm) : ""}</span>
-              {c.naoLidas > 0 && <span className="of-chat-badge">{c.naoLidas}</span>}
-              {(() => {
-                const jan = janela24h(c.ultimaEntrada);
-                if (!jan) return null;
-                if (!jan.aberta) return <span className="of-jan-mini fechada" title="Janela de 24h fechada — só template"><I.lock className="ico-inline" /></span>;
-                if (jan.urgente) return <span className="of-jan-mini urg" title={"Janela fecha em " + jan.texto}><I.clock className="ico-inline" /> {jan.texto}</span>;
-                return null;
-              })()}
-            </div>
-          </button>
-          ));
+          ) : itensLista;
         })()}
+        {buscaAtiva && (
+          <>
+            <div className="busca-sec">
+              Mensagens
+              {buscandoMsg ? <span className="spin" /> : achadosMsg ? <span>{achadosMsg.total > achadosVisiveis.length ? achadosVisiveis.length + " de " + achadosMsg.total : achadosVisiveis.length}</span> : null}
+            </div>
+            {!buscandoMsg && achadosMsg && achadosVisiveis.length === 0 && (
+              <div className="busca-vazia">{achadosMsg.erro ? "Não consegui buscar agora. Tente de novo." : <>Nenhuma mensagem com <b>“{buscaDeb}”</b>.</>}</div>
+            )}
+            {achadosVisiveis.map((r) => (
+              <button key={r.chatId + ":" + r.idx} className={"busca-item" + (sel === r.chatId ? " on" : "")} onClick={() => abrirAchado(r)}>
+                <div className="of-chat-av cor" style={{ "--h": corDoNome(r.nome) }}>{iniciais(r.nome || r.numero)}</div>
+                <div className="busca-item-mid">
+                  <div className="busca-item-top">
+                    <b>{r.nome || r.numero}</b>
+                    <span>{horaCurta(r.ts)}</span>
+                  </div>
+                  <div className="busca-item-txt">
+                    {r.role === "me" && <span className="eu">Você: </span>}
+                    {r.tipo === "audio" && <span className="eu">🎤 </span>}
+                    <TextoRealce texto={r.trecho} q={buscaDeb} />
+                  </div>
+                  {(isGer && r.vendedorNome) || r.encerrado ? (
+                    <div className="busca-item-pe">{isGer && r.vendedorNome ? "→ " + r.vendedorNome : ""}{r.encerrado ? <span className="of-pill">encerrada</span> : null}</div>
+                  ) : null}
+                </div>
+              </button>
+            ))}
+          </>
+        )}
         </div>
       </div>
 
@@ -9908,7 +10145,7 @@ function InboxOficial({ isGer, ehLider, showToast, onIrParaEvolution, target, on
             <div className="of-conv-head">
               <button className="of-conv-voltar" onClick={() => { setSel(null); setNovaConv(null); }} title="Voltar para a lista" aria-label="Voltar">‹</button>
               <button type="button" className="conv-quem" onClick={() => setFicha(ficha ? null : "info")} title="Ver ficha do lead">
-              <div className="of-chat-av">{iniciais(conversa.nome)}</div>
+              <div className="of-chat-av cor" style={{ "--h": corDoNome(conversa.nome) }}>{iniciais(conversa.nome)}</div>
               <div className="of-conv-info">
                 <b>{conversa.nome}</b>
                 <span>
@@ -9931,6 +10168,9 @@ function InboxOficial({ isGer, ehLider, showToast, onIrParaEvolution, target, on
                   : <span className="of-janela fechada" title={ig ? "Passou 24h desde o último DM do cliente. No Instagram só dá pra responder dentro dessa janela." : "Passou 24h desde a última mensagem do lead. Agora só template aprovado é entregue — a mensagem livre não chega."}><I.lock className="ico-inline" /> {ig ? "Janela de 24h fechada" : "Janela fechada · só template"}</span>;
               })()}
               <div className="of-conv-acoes">
+                <button className={"of-acao-btn so-ico" + (buscaConv !== null ? " on" : "")} title="Buscar nesta conversa" aria-label="Buscar nesta conversa" onClick={() => setBuscaConv((v) => (v === null ? "" : null))}>
+                  <I.search className="ico" />
+                </button>
                 {etapas.length > 0 && conversa && (
                   <select
                     value={conversa.etapaLead || ""}
@@ -10138,48 +10378,22 @@ function InboxOficial({ isGer, ehLider, showToast, onIrParaEvolution, target, on
                 </div>
               );
             })()}
+            {buscaConv !== null && (
+              <div className="conv-busca">
+                <I.search className="ico" />
+                <input autoFocus value={buscaConv} placeholder="Buscar nesta conversa…" onChange={(e) => setBuscaConv(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") { e.preventDefault(); irAchado(e.shiftKey ? 1 : -1); }
+                    if (e.key === "Escape") setBuscaConv(null);
+                  }} />
+                <span className="conv-busca-n">{qConv ? (achadosConv.length ? (buscaConvPos + 1) + " de " + achadosConv.length : "nada encontrado") : ""}</span>
+                <button type="button" onClick={() => irAchado(-1)} disabled={!achadosConv.length} title="Mais antiga (Enter)"><I.chevCima className="ico" /></button>
+                <button type="button" onClick={() => irAchado(1)} disabled={!achadosConv.length} title="Mais recente (Shift+Enter)"><I.chevron className="ico" /></button>
+                <button type="button" onClick={() => setBuscaConv(null)} title="Fechar a busca"><I.x className="ico" /></button>
+              </div>
+            )}
             <div className="of-conv-msgs" ref={msgsBoxRef} onScroll={onScrollMsgs}>
-              {timeline.map((item, i) => (
-                item.tipo === "nota" ? (
-                  <div key={i} className="of-nota">
-                    <I.refresh className="ico" /> {item.n.texto}
-                    <span className="of-nota-hora">{horaCurta(item.n.ts)}</span>
-                  </div>
-                ) : item.m.tipo === "ligacao" && item.m.ligacao ? (
-                  <div key={i} className={"of-msg " + (item.m.role === "me" ? "me" : "them")}>
-                    {(() => { const naoAtend = item.m.ligacao.atendida === false && !item.m.ligacao.pendente; return (
-                    <button onClick={() => abrirResumoLigacao(item.m.ligacao)} title="Ver detalhes da ligação" style={{ display: "flex", alignItems: "center", gap: 10, background: naoAtend ? "#fef2f2" : "#ecfdf3", border: "1px solid " + (naoAtend ? "#fecaca" : "#b7e4c7"), borderRadius: 12, padding: "10px 14px", cursor: "pointer", textAlign: "left", maxWidth: 300 }}>
-                      <div style={{ width: 34, height: 34, borderRadius: "50%", background: naoAtend ? "#fee2e2" : "#d1fae5", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                        <span style={{ fontSize: 16 }}>{naoAtend ? "📵" : "📞"}</span>
-                      </div>
-                      <div style={{ minWidth: 0 }}>
-                        <div style={{ fontSize: 13.5, fontWeight: 700, color: naoAtend ? "#991b1b" : "#065f46" }}>Ligação de voz {item.m.ligacao.direcao === "entrante" ? "recebida" : ""}</div>
-                        <div style={{ fontSize: 12, color: naoAtend ? "#b91c1c" : "#047857" }}>
-                          {item.m.ligacao.pendente
-                            ? ((Date.now() - (item.m.ligacao.ts || item.m.ts || 0)) > 10 * 60 * 1000 ? "Sem registro de duração" : "Chamando… (o resumo aparece depois)")
-                            : naoAtend ? "Não atendida — tentativa de ligação"
-                            : item.m.ligacao.duracao ? "Duração: " + fmtTempo(item.m.ligacao.duracao)
-                            : "—"}
-                          {" · "}{horaCurta(item.m.ts)}
-                          {item.m.ligacao.resumoPronto ? " · 📝 resumo" : (!item.m.ligacao.pendente && !naoAtend && item.m.ligacao.audioUrl ? " · toque p/ resumo" : "")}
-                        </div>
-                      </div>
-                    </button>
-                    ); })()}
-                  </div>
-                ) : (
-                  <div key={i} className={"of-msg " + (item.m.role === "me" ? "me" : "them")}>
-                    <div className="of-msg-bubble">
-                      {item.m.template && <span className="of-msg-tpl">📤 Template (disparo)</span>}
-                      {item.m.tipo && item.m.tipo !== "text" && item.m.mid && (item.m.arquivo || item.m.mediaId) && (
-                        <OfMidia chatId={conversa.id} m={item.m} />
-                      )}
-                      {(!item.m.tipo || item.m.tipo === "text" || !(item.m.arquivo || item.m.mediaId) || item.m.template) && item.m.content}
-                      <span className="of-msg-hora">{horaCurta(item.m.ts)}{item.m.role === "me" && <Ticks status={item.m.status} erro={item.m.erro} erroCodigo={item.m.erroCodigo} lidoEm={item.m.lidoEm} texto={!!item.m.template || item.m.status === "read"} />}</span>
-                    </div>
-                  </div>
-                )
-              ))}
+              <MensagensOf timeline={timeline} chatId={conversa.id} q={qConv} atualIdx={atualIdx} onLigacao={onLigacao} />
               <div ref={fimRef} />
             </div>
             {/* barra "Deixar a IA atender este lead?" removida a pedido */}
@@ -10410,10 +10624,15 @@ function WhatsApp({ user, showToast, target, onTargetUsed, recarregarSol, onAbri
   useEffect(() => { filtroRef.current = filtro; }, [filtro]);
   useEffect(() => { buscaRef.current = busca; }, [busca]);
 
+  const verWaRef = useRef("");      // v2.5: carimbo da lista (só baixa de novo se mudou)
+  const ultCargaWaRef = useRef(0);
+  const waChatRef = useRef(null);
+  useEffect(() => { waChatRef.current = chat; }, [chat]);
   async function carregarChats(silencioso) {
     if (!silencioso) setLoading(true);
     try {
       const cs = await api.waChats(null, buscaRef.current.trim(), arqRef.current);
+      ultCargaWaRef.current = Date.now();
       setChats(cs);
     } catch (e) { if (!silencioso) showToast("✗ " + e.message); }
     finally { if (!silencioso) setLoading(false); }
@@ -10437,9 +10656,21 @@ function WhatsApp({ user, showToast, target, onTargetUsed, recarregarSol, onAbri
     })();
     const t = setInterval(async () => {
       if (document.hidden) return; // v2.0: aba escondida não fica consultando o servidor
-      await carregarChats(true);
+      // v2.5: pergunta só o carimbo; a lista pesada vem quando algo mudou
+      // (ou a cada 1 min, pra atualizar o "esperando há X min")
+      try {
+        const r = await api.waChatsVersao();
+        const mudou = !r || r.v !== verWaRef.current;
+        if (r) verWaRef.current = r.v;
+        if (mudou || buscaRef.current.trim() || arqRef.current || Date.now() - ultCargaWaRef.current > 60000) await carregarChats(true);
+      } catch (_) { await carregarChats(true); }
       if (selRef.current) {
-        try { setChat(await api.waChat(selRef.current)); } catch (_) {}
+        try {
+          const atual = waChatRef.current;
+          const v = atual && atual.id === selRef.current ? atual._v : null;
+          const c = await api.waChat(selRef.current, v);
+          if (c && !c.mesmo && c.id === selRef.current) setChat(c);
+        } catch (_) {}
       }
     }, 10000);
     return () => clearInterval(t);

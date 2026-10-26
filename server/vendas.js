@@ -7,7 +7,7 @@
 import fs from "fs";
 import path from "path";
 
-export function instalarVendas({ app, getDb, saveDB, proximoId, auth, gerenteOnly, permiteVend, dbPath }) {
+export function instalarVendas({ app, getDb, saveDB, saveSoon, proximoId, auth, gerenteOnly, permiteVend, dbPath }) {
   /* ============================================================
      ARQUIVO PRÓPRIO PRA VENDAS
      ------------------------------------------------------------
@@ -34,7 +34,7 @@ export function instalarVendas({ app, getDb, saveDB, proximoId, auth, gerenteOnl
       const dir = path.dirname(VENDAS_PATH);
       if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
       const tmp = VENDAS_PATH + ".tmp";
-      fs.writeFileSync(tmp, JSON.stringify(_v, null, 2));
+      fs.writeFileSync(tmp, JSON.stringify(_v)); // v2.5: sem espaços (arquivo menor, grava mais rápido)
       fs.renameSync(tmp, VENDAS_PATH);
       // cópia extra de segurança a cada gravação (fica sempre a penúltima versão)
       try { fs.copyFileSync(VENDAS_PATH, VENDAS_PATH + ".bak"); } catch (_) {}
@@ -71,8 +71,10 @@ export function instalarVendas({ app, getDb, saveDB, proximoId, auth, gerenteOnl
     set: (_t, k, v) => { if (k === "vendas") { _v = v; gravarArquivo(); } else getDb()[k] = v; return true; },
     has: (_t, k) => (k === "vendas" ? true : k in getDb()),
   });
-  // salvar() agora grava o arquivo de vendas (e o banco principal, pro resto)
-  const salvar = () => { gravarArquivo(); try { saveDB(); } catch (_) {} };
+  // salvar() grava o arquivo de vendas na hora (é pequeno e é o mais importante).
+  // v2.5: o banco principal vai pela gravação agrupada — antes regravava TODAS as
+  // conversas a cada venda lançada, e o sistema inteiro travava junto.
+  const salvar = () => { gravarArquivo(); try { (saveSoon || saveDB)(); } catch (_) {} };
 
   function garantir() {
     if (!db.vendas) db.vendas = { pessoas: [], lista: [], metasMes: {} };

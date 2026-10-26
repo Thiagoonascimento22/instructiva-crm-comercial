@@ -55,7 +55,7 @@ function registrarErroMidia(etapa, msg) {
 }
 function registrarOkMidia() { SAUDE_MIDIA.ultimoOkEm = Date.now(); SAUDE_MIDIA.falhasSeguidas = 0; }
 
-export function instalarCanalOficial({ app, getDb, saveDB, saveSoon, proximoId, auth, gerenteOnly, MEDIA_DIR, fs, path }) {
+export function instalarCanalOficial({ versaoConversa, app, getDb, saveDB, saveSoon, proximoId, auth, gerenteOnly, MEDIA_DIR, fs, path }) {
   // O index.js REATRIBUI o objeto db dentro de loadDB(). Por isso resolvemos
   // o db dinamicamente via Proxy: todo acesso db.x lê/escreve no objeto atual.
   const db = new Proxy({}, {
@@ -2229,9 +2229,11 @@ export function instalarCanalOficial({ app, getDb, saveDB, saveSoon, proximoId, 
   }
   // versão LEVE pro Pipeline (lista com milhares de cards): SEM histórico/notas/respostas
   // — esses só carregam quando o lead é aberto. Isso deixa o Pipeline abrir MUITO mais rápido.
-  function crmLeadLista(l) {
-    const v = l.vendedorId ? (db.users || []).find((u) => u.id === l.vendedorId) : null;
-    return { id: l.id, nome: l.nome, telefone: l.telefone, email: l.email || "", curso: l.curso || "", etapa: l.etapa, vendedorId: l.vendedorId || null, vendedorNome: v ? v.nome : "", vendedorFoto: v ? (v.foto || "") : "", valor: l.valor || 0, formaPagamento: l.formaPagamento || "", tags: l.tags || [], tarefa: l.tarefa || null, reservaNome: l.reservaNome || "", origem: l.origem || "manual", recorrente: !!l.recorrente, criadoEm: l.criadoEm, atualizadoEm: l.atualizadoEm };
+  // v2.5: SEM a foto do vendedor em cada card (era a mesma imagem repetida milhares de
+  // vezes — o Pipeline baixava dezenas de MB). A tela pega a foto da lista "vendedores".
+  function crmLeadLista(l, nomes) {
+    const v = l.vendedorId ? (nomes ? nomes.get(l.vendedorId) : (db.users || []).find((u) => u.id === l.vendedorId)) : null;
+    return { id: l.id, nome: l.nome, telefone: l.telefone, email: l.email || "", curso: l.curso || "", etapa: l.etapa, vendedorId: l.vendedorId || null, vendedorNome: v ? v.nome : "", valor: l.valor || 0, formaPagamento: l.formaPagamento || "", tags: l.tags || [], tarefa: l.tarefa || null, reservaNome: l.reservaNome || "", origem: l.origem || "manual", recorrente: !!l.recorrente, criadoEm: l.criadoEm, atualizadoEm: l.atualizadoEm };
   }
   function proximoVendedorCRM() {
     garantirCRM();
@@ -2294,7 +2296,7 @@ export function instalarCanalOficial({ app, getDb, saveDB, saveSoon, proximoId, 
     if (ehVend) leads = leads.filter((l) => podeVerVend(req.user, l.vendedorId)); // vendedor só vê os leads dele
     res.json({
       etapas: etapasCRM(),
-      leads: leads.map(crmLeadLista),
+      leads: (() => { const nomes = new Map((db.users || []).map((u) => [u.id, u])); return leads.map((l) => crmLeadLista(l, nomes)); })(),
       // donos possíveis do lead: vendedores + gerentes (gerente que também vende
       // pode receber/assumir lead). ehGerente deixa a tela marcar quem é gerente.
       vendedores: (db.users || []).filter((u) => (u.role === "vendedor" || u.role === "gerente") && u.ativo).map((u) => ({ id: u.id, nome: u.nome, foto: u.foto || "", ehGerente: u.role === "gerente" })),
@@ -4141,7 +4143,7 @@ export function instalarCanalOficial({ app, getDb, saveDB, saveSoon, proximoId, 
     of.wamidChat = wNovo;
     const campVivas = new Set((of.campanhas || []).map((c) => c.id));
     let msgCamp = 0; const mNovo = {};
-    for (const [cid, v] of Object.entries(of.msgCampanha || {})) { if (campVivas.has(cid)) mNovo[cid] = v; else msgCamp++; }
+    for (const [wamid, campId] of Object.entries(of.msgCampanha || {})) { if (campVivas.has(campId)) mNovo[wamid] = campId; else msgCamp++; }
     of.msgCampanha = mNovo;
     db.oficial = of;
     salvar();
@@ -4367,7 +4369,12 @@ export function instalarCanalOficial({ app, getDb, saveDB, saveSoon, proximoId, 
 
   /* recalcula "responderam" de todas as campanhas com base nas conversas atuais.
      Conserta campanhas antigas onde a resposta caiu numa conversa separada. */
+  let _recontadoEm = 0;
   app.post("/api/oficial/campanhas/recontar", auth, (req, res) => {
+    // v2.5: no máx. 1 recontagem a cada 60s pro servidor todo (várias telas abertas
+    // pediam isso a cada 10s, e cada uma lia TODAS as mensagens de TODAS as conversas)
+    if (Date.now() - _recontadoEm < 60000) return res.json({ ok: true, ajustadas: 0, recente: true });
+    _recontadoEm = Date.now();
     const nucleo = (t) => String(t || "").replace(/\D/g, "").slice(-8);
     // mapa: para cada campanha, conjunto de núcleos que receberam disparo
     const porCampanha = {}; // campId -> Set(nucleos disparados)
@@ -4399,7 +4406,7 @@ export function instalarCanalOficial({ app, getDb, saveDB, saveSoon, proximoId, 
       for (const nuc of info.nucs) if (respSet.has(nuc)) n++;
       if (n !== (camp.responderam || 0)) { camp.responderam = n; ajustadas++; }
     }
-    salvar();
+    if (ajustadas) salvar(); // só grava se mudou alguma coisa
     res.json({ ok: true, ajustadas });
   });
 
@@ -4475,6 +4482,8 @@ export function instalarCanalOficial({ app, getDb, saveDB, saveSoon, proximoId, 
         (c) => (c.nome || "").toLowerCase().includes(q) || (c.numero || "").includes(q)
       );
     }
+    const usuariosPorId = new Map((db.users || []).map((u) => [u.id, u]));
+    const campanhasPorId = new Map((db.oficial.campanhas || []).map((x) => [x.id, x]));
     const lista = chats
       .sort((a, b) => (b.atualizadoEm || 0) - (a.atualizadoEm || 0))
       .slice(0, 500)
@@ -4483,8 +4492,8 @@ export function instalarCanalOficial({ app, getDb, saveDB, saveSoon, proximoId, 
         // última mensagem do LEAD (role them) -> base da janela de 24h (renova quando ele fala)
         let ultimaEntrada = 0;
         if (c.mensagens) { for (let i = c.mensagens.length - 1; i >= 0; i--) { if (c.mensagens[i].role === "them") { ultimaEntrada = c.mensagens[i].ts || 0; break; } } }
-        const v = c.vendedorId ? db.users.find((u) => u.id === c.vendedorId) : null;
-        const camp = c.campanhaId ? (db.oficial.campanhas || []).find((x) => x.id === c.campanhaId) : null;
+        const v = c.vendedorId ? usuariosPorId.get(c.vendedorId) : null;
+        const camp = c.campanhaId ? campanhasPorId.get(c.campanhaId) : null;
         return {
           id: c.id,
           canal: c.canal || "oficial",
@@ -4503,10 +4512,97 @@ export function instalarCanalOficial({ app, getDb, saveDB, saveSoon, proximoId, 
           numeroOficialId: c.numeroOficialId,
           comIA: !!(c.iaId && !c.iaPausada),
           iaPassou: !!(c.iaId && c.iaPausada && c.vendedorId),
-          ultima: ultima ? { role: ultima.role, content: String(ultima.content || "").slice(0, 80), ts: ultima.ts } : null,
+          ultima: ultima ? { role: ultima.role, content: String(ultima.content || "").slice(0, 80), ts: ultima.ts, tipo: ultima.tipo || undefined, status: ultima.role === "me" ? (ultima.status || undefined) : undefined } : null,
         };
       });
     res.json(lista);
+  });
+
+  /* ============================================================
+     BUSCA NAS MENSAGENS (igual ao WhatsApp) — v2.5
+     Procura o texto dentro das conversas que a pessoa pode ver (mesma regra
+     da caixa de entrada). Sem acento e sem maiúscula: "nao" acha "Não".
+     Também acha o que foi falado nos áudios (transcrição).
+     Cada conversa guarda o próprio texto já preparado pra busca e só prepara
+     as mensagens novas — por isso a busca é rápida mesmo com muita conversa.
+     ============================================================ */
+  const semAcentoBusca = (t) => String(t || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  const textoDaMsg = (m) => {
+    let t = m.content || "";
+    if (m.transcricao && m.transcricao !== t) t += (t ? " " : "") + m.transcricao;
+    if (m.filename && m.filename !== m.content) t += (t ? " " : "") + m.filename;
+    return t;
+  };
+  const _buscaCache = new Map(); // chatId -> { primeiro, ultimo, n, textos[], tam[] }
+  function textosDaConversa(cid, c) {
+    const ms = Array.isArray(c.mensagens) ? c.mensagens : [];
+    let e = _buscaCache.get(cid);
+    // refaz do zero se a conversa foi cortada/limpa (a 1ª mensagem mudou) ou encolheu
+    if (!e || e.primeiro !== ms[0] || ms.length < e.n || (e.n && ms[e.n - 1] !== e.ultimo)) {
+      e = { primeiro: ms[0], ultimo: null, n: 0, textos: [], tam: [] };
+      _buscaCache.set(cid, e);
+    }
+    for (let i = e.n; i < ms.length; i++) {
+      const t = textoDaMsg(ms[i]);
+      e.textos[i] = semAcentoBusca(t); e.tam[i] = t.length;
+    }
+    // as últimas podem ganhar texto depois (transcrição do áudio chega depois)
+    for (let i = Math.max(e.n - 30, 0); i < e.n; i++) {
+      const t = textoDaMsg(ms[i]);
+      if (t.length !== e.tam[i]) { e.textos[i] = semAcentoBusca(t); e.tam[i] = t.length; }
+    }
+    e.n = ms.length; e.ultimo = ms[ms.length - 1] || null;
+    return e.textos;
+  }
+  function trechoAoRedor(original, pos, tamQ) {
+    const t = String(original || "").replace(/\s+/g, " ");
+    if (pos < 0 || pos > t.length) pos = 0;
+    const ini = Math.max(0, pos - 38);
+    const fim = Math.min(t.length, pos + tamQ + 70);
+    return { trecho: (ini > 0 ? "…" : "") + t.slice(ini, fim) + (fim < t.length ? "…" : "") };
+  }
+  app.get("/api/oficial/busca", auth, async (req, res) => {
+    const bruto = String(req.query.q || "").trim().slice(0, 80);
+    const q = semAcentoBusca(bruto);
+    if (q.length < 2) return res.json({ q: bruto, resultados: [], total: 0 });
+    const ehGer = req.user.role === "gerente";
+    const usuariosPorId = new Map((db.users || []).map((u) => [u.id, u]));
+    const achados = [];
+    let total = 0, t = Date.now();
+    const vistos = new Set();
+    for (const [cid, c] of Object.entries(db.waChats || {})) {
+      if (!c || (c.canal !== "oficial" && c.canal !== "instagram")) continue;
+      vistos.add(cid);
+      if (!ehGer) {
+        if (!podeVerVend(req.user, c.vendedorId)) continue;
+        if (c.origemDisparo && !c.respondeu) continue;
+        if (c.iaId && !c.iaPausada) continue; // com a IA no comando o vendedor não abre
+      } else if (req.query.numeroId && req.query.numeroId !== "todos" && c.numeroOficialId !== req.query.numeroId) continue;
+      const textos = textosDaConversa(cid, c);
+      let naConversa = 0;
+      for (let i = textos.length - 1; i >= 0; i--) {
+        const pos = textos[i] ? textos[i].indexOf(q) : -1;
+        if (pos < 0) continue;
+        total++;
+        if (naConversa++ >= 20) continue; // conta, mas não manda mais de 20 da mesma conversa
+        const m = c.mensagens[i];
+        const original = textoDaMsg(m);
+        const posOk = original.length === (textos[i] || "").length ? pos : original.toLowerCase().indexOf(bruto.toLowerCase());
+        const tr = trechoAoRedor(original, posOk, bruto.length);
+        const v = c.vendedorId ? usuariosPorId.get(c.vendedorId) : null;
+        achados.push({
+          chatId: cid, idx: i, ts: m.ts || 0, role: m.role, tipo: m.tipo || "text",
+          nome: c.nome || "", numero: c.numero || "", canal: c.canal || "oficial",
+          vendedorId: c.vendedorId || null, vendedorNome: v ? v.nome : "", encerrado: !!c.encerrado,
+          trecho: tr.trecho,
+        });
+      }
+      if (Date.now() - t > 15) { await new Promise((ok) => setImmediate(ok)); t = Date.now(); }
+    }
+    // tira da memória o texto de conversa que não existe mais
+    if (_buscaCache.size > vistos.size) for (const id of _buscaCache.keys()) if (!vistos.has(id)) _buscaCache.delete(id);
+    achados.sort((a, b) => b.ts - a.ts);
+    res.json({ q: bruto, total, resultados: achados.slice(0, 120) });
   });
 
   /* abrir uma conversa */
@@ -4520,10 +4616,15 @@ export function instalarCanalOficial({ app, getDb, saveDB, saveSoon, proximoId, 
     if (req.user.role !== "gerente" && chat.iaId && !chat.iaPausada) {
       return res.status(403).json({ error: "Conversa em atendimento automático" });
     }
-    chat.naoLidas = 0;
-    salvar();
+    // v2.5: só grava se tinha mensagem não lida (antes gravava a cada 6s, pra cada
+    // pessoa com uma conversa aberta — era boa parte da lentidão)
+    if (chat.naoLidas) { chat.naoLidas = 0; salvar(); }
+    const leadV = leadDoChat(chat, false);
+    const versao = versaoConversa ? versaoConversa(chat, leadV ? (leadV.atualizadoEm || 0) + ":" + leadV.etapa + ":" + (leadV.tags || []).length : "") : null;
+    if (versao && req.query.v === versao) return res.json({ mesmo: true, v: versao });
     const v = chat.vendedorId ? db.users.find((u) => u.id === chat.vendedorId) : null;
     res.json({
+      _v: versao,
       id: chat.id,
       canal: chat.canal || "oficial",
       igUsuario: chat.igUsuario || "",
@@ -4539,7 +4640,7 @@ export function instalarCanalOficial({ app, getDb, saveDB, saveSoon, proximoId, 
       mensagens: chat.mensagens || [],
       notas: chat.notas || [], // notas internas (transferências etc) — lead não vê
       ...(() => {
-        const l = leadDoChat(chat, false);
+        const l = leadV;
         return {
           etapaLead: l ? l.etapa : null,
           // de onde o lead veio (pro vendedor personalizar o atendimento)
@@ -5417,6 +5518,34 @@ export function instalarCanalOficial({ app, getDb, saveDB, saveSoon, proximoId, 
     salvar();
     console.log(`[oficial] Webhook re-assinado no boot: ${ok}/${ns.length} número(s) OK`);
   }, 8000);
+  // v2.5: os "índices" de mensagem (wamid → conversa, wamid → campanha, status já
+  // contados) ganhavam 1 item por mensagem enviada e nunca diminuíam — o banco
+  // principal inchava e cada gravação ficava mais lenta. Agora guardam só as mais
+  // recentes (o suficiente pra marcar entregue/lido das mensagens dos últimos dias).
+  function apararMapa(obj, max) {
+    if (!obj || typeof obj !== "object") return { obj, cortou: 0 };
+    const ks = Object.keys(obj);
+    if (ks.length <= max) return { obj, cortou: 0 };
+    const manter = Math.floor(max * 0.8);
+    const novo = {};
+    for (let i = ks.length - manter; i < ks.length; i++) novo[ks[i]] = obj[ks[i]];
+    return { obj: novo, cortou: ks.length - manter };
+  }
+  function apararIndices() {
+    try {
+      const of = db.oficial;
+      if (!of) return;
+      let cortou = 0;
+      for (const [k, max] of [["wamidChat", 60000], ["msgCampanha", 60000], ["statusVistos", 150000]]) {
+        const r = apararMapa(of[k], max);
+        if (r.cortou) { of[k] = r.obj; cortou += r.cortou; }
+      }
+      if (cortou) { console.log("[limpeza] índices de mensagens antigas aparados:", cortou); salvar(); }
+    } catch (e) { console.error("[limpeza] índices:", e.message); }
+  }
+  setTimeout(apararIndices, 45000);
+  setInterval(apararIndices, 15 * 60000);
+
   // Roda no servidor e é confiável: as campanhas ficam salvas no banco, então mesmo
   // que o servidor reinicie, elas disparam na hora certa — e se ele estava fora na
   // hora marcada, dispara assim que voltar (agendadoPara <= agora).

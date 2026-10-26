@@ -62,7 +62,9 @@ export const api = {
       const p = [instance ? "instance=" + encodeURIComponent(instance) : "", q ? "q=" + encodeURIComponent(q) : "", arquivadas ? "arquivadas=1" : ""].filter(Boolean);
       return p.length ? "?" + p.join("&") : "";
     })()),
-  waChat: (id) => req("GET", "/api/wa/chats/" + id),
+  // v: carimbo da última versão vista — se nada mudou, volta só { mesmo: true }
+  waChat: (id, v) => req("GET", "/api/wa/chats/" + id + (v ? "?v=" + encodeURIComponent(v) : "")),
+  waChatsVersao: () => req("GET", "/api/wa/chats-versao"),
   waSendMidia: (id, dados) => req("POST", "/api/wa/chats/" + id + "/send-midia", dados),
   waArquivar: (id, arquivar) => req("POST", "/api/wa/chats/" + id + "/arquivar", { arquivar }),
   midiaUrl: (chatId, mid) => "/api/wa/midia/" + encodeURIComponent(chatId) + "/" + encodeURIComponent(mid),
@@ -154,7 +156,9 @@ export const api = {
       return p.length ? "?" + p.join("&") : "";
     })()),
   ofChatsVersao: () => req("GET", "/api/oficial/chats-versao"),
-  ofChat: (id) => req("GET", "/api/oficial/chats/" + encodeURIComponent(id)),
+  ofChat: (id, v) => req("GET", "/api/oficial/chats/" + encodeURIComponent(id) + (v ? "?v=" + encodeURIComponent(v) : "")),
+  // busca dentro das mensagens (igual ao WhatsApp)
+  ofBusca: (q, numeroId) => req("GET", "/api/oficial/busca?q=" + encodeURIComponent(q) + (numeroId ? "&numeroId=" + encodeURIComponent(numeroId) : "")),
   ofEnviar: (id, texto) => req("POST", "/api/oficial/chats/" + encodeURIComponent(id) + "/send", { texto }),
   ofEnviarMidia: (id, dados) => req("POST", "/api/oficial/chats/" + encodeURIComponent(id) + "/midia", dados),
   ofStats: (desde, ate) => req("GET", "/api/oficial/stats?desde=" + (desde || 0) + "&ate=" + (ate || Date.now())),
