@@ -3702,16 +3702,24 @@ export function instalarCanalOficial({ versaoConversa, app, getDb, saveDB, saveS
       try {
         // SÓ A IMAGEM: quem falou com a gente nas últimas 24h recebe a imagem pura (sem texto).
         // Os outros recebem o modelo com imagem (o WhatsApp exige modelo fora da janela).
-        let resp, conteudo = `[disparo] ${templateName}`;
+        let resp, conteudo = `[disparo] ${templateName}`, gratis = false;
         if (campanha.modo === "imagem" && cabecalho && dentroDaJanela(numeroCfg.id, telefone)) {
           resp = await enviarMidiaOficial(numeroCfg, telefone, cabecalho.tipo, cabecalho.id, "", cabecalho.filename);
           conteudo = "[disparo] só imagem";
+          gratis = true; // dentro das 24h e sem modelo: o WhatsApp não cobra
         } else if (templateName) {
           resp = await enviarTemplate(numeroCfg, telefone, templateName, idioma, c.variaveis || [], cabecalho);
         } else {
           throw new Error("Fora da janela de 24h (131047): esse contato não falou com vocês nas últimas 24h e o disparo não tem modelo — o WhatsApp não deixa mandar só a imagem pra ele.");
         }
         campanha.enviados++;
+        // v2.7: custo — guarda em que dia cada mensagem cobrada saiu (o re-disparo cai no dia certo)
+        if (gratis) campanha.gratis = (campanha.gratis || 0) + 1;
+        else {
+          const dk = diaBR(Date.now());
+          if (!campanha.cobradasDia) campanha.cobradasDia = {};
+          campanha.cobradasDia[dk] = (campanha.cobradasDia[dk] || 0) + 1;
+        }
         const mid = resp && resp.messages && resp.messages[0] && resp.messages[0].id;
         if (mid) {
           if (!db.oficial.msgCampanha) db.oficial.msgCampanha = {};
@@ -3808,6 +3816,7 @@ export function instalarCanalOficial({ versaoConversa, app, getDb, saveDB, saveS
       chat.mensagens.push(msgDisparo(`[template] ${template}`, ts, mid, midia));
       if (mid) { if (!db.oficial.wamidChat) db.oficial.wamidChat = {}; db.oficial.wamidChat[mid] = chat.id; }
       chat.atualizadoEm = ts;
+      contarAvulsa(req.user.id, numeroCfg.id);
       salvar();
       res.json({ ok: true, chatId: chat.id });
     } catch (e) {
@@ -4125,6 +4134,199 @@ export function instalarCanalOficial({ versaoConversa, app, getDb, saveDB, saveS
     });
   });
 
+  /* ===== v2.7 — CUSTO DOS DISPAROS =====
+     Cada mensagem cobrada pela Meta custa R$ 0,36 (o gerente muda o valor) + 12,5% de imposto.
+     Conta o que saiu de verdade (enviados menos falhas). Imagem pura pra quem falou nas
+     últimas 24h é grátis no WhatsApp e não entra. O custo é de quem disparou: o vendedor vê
+     só o dele, o líder vê o dele + liderados e o gerente vê todos. */
+  const PRECO_PADRAO = { desde: "2000-01-01", preco: 0.36, imposto: 12.5 };
+  function precosLista() {
+    const l = Array.isArray(db.oficial.custoPrecos) ? db.oficial.custoPrecos : [];
+    return l.filter((p) => p && /^\d{4}-\d{2}-\d{2}$/.test(p.desde) && Number(p.preco) >= 0)
+      .sort((a, b) => (a.desde < b.desde ? -1 : a.desde > b.desde ? 1 : 0));
+  }
+  function precoDoDia(dia, lista) {
+    let p = PRECO_PADRAO;
+    for (const x of lista) { if (x.desde <= dia) p = x; else break; }
+    return p;
+  }
+  // mensagens cobradas de uma campanha, dia a dia ({ "2026-10-28": 120 })
+  function cobradasPorDia(c) {
+    const total = Math.max(0, (Number(c.enviados) || 0) - (Number(c.gratis) || 0));
+    const out = {}; let soma = 0;
+    for (const [d, n] of Object.entries(c.cobradasDia || {})) { const v = Number(n) || 0; if (v > 0) { out[d] = v; soma += v; } }
+    if (soma < total) {
+      // campanhas de antes da v2.7: tudo no dia em que começou
+      const base = diaBR(c.iniciadoEm || c.agendadoPara || c.criadoEm || 0);
+      out[base] = (out[base] || 0) + (total - soma);
+    } else if (soma > total) {
+      // a Meta avisou falha depois do envio: tira dos dias mais recentes
+      let sobra = soma - total;
+      for (const d of Object.keys(out).sort().reverse()) { const t = Math.min(out[d], sobra); out[d] -= t; sobra -= t; if (!sobra) break; }
+    }
+    return out;
+  }
+  // { dia: { pessoa: { número: qtd } } } — usado pelas avulsas e pelo custo de campanha excluída
+  function somarNoMapa(chave, dia, uid, nid, n) {
+    if (!db.oficial[chave] || typeof db.oficial[chave] !== "object") db.oficial[chave] = {};
+    const porUser = db.oficial[chave][dia] || (db.oficial[chave][dia] = {});
+    const porNum = porUser[uid || "?"] || (porUser[uid || "?"] = {});
+    porNum[nid || "?"] = (porNum[nid || "?"] || 0) + n;
+  }
+  // template avulso (iniciar conversa com um lead) também é cobrado
+  function contarAvulsa(userId, numeroId) {
+    const dia = diaBR(Date.now());
+    if (!db.oficial.custoAvulsoDesde) db.oficial.custoAvulsoDesde = dia;
+    somarNoMapa("custoAvulso", dia, userId, numeroId, 1);
+  }
+  // excluir a campanha não apaga o que ela já custou
+  function arquivarCusto(c) {
+    for (const [dia, n] of Object.entries(cobradasPorDia(c))) if (n > 0) somarNoMapa("custoArquivo", dia, c.criadoPor, c.numeroId, n);
+  }
+  // datas "AAAA-MM-DD" (conta de calendário, sem fuso)
+  const diaMais = (dia, n) => { const [y, m, d] = dia.split("-").map(Number); return new Date(Date.UTC(y, m - 1, d + n)).toISOString().slice(0, 10); };
+  const diaDaSemana = (dia) => { const [y, m, d] = dia.split("-").map(Number); return new Date(Date.UTC(y, m - 1, d)).getUTCDay(); };
+  function periodoDe(modo, ref) {
+    if (modo === "semana") { const de = diaMais(ref, -diaDaSemana(ref)); return { de, ate: diaMais(de, 6) }; } // domingo a sábado (igual Vendas)
+    if (modo === "mes") { const de = ref.slice(0, 8) + "01"; const [y, m] = de.split("-").map(Number); return { de, ate: new Date(Date.UTC(y, m, 0)).toISOString().slice(0, 10) }; }
+    return { de: ref, ate: ref };
+  }
+  function periodoAnterior(modo, p) {
+    if (modo === "mes") return periodoDe("mes", diaMais(p.de, -1));
+    if (modo === "semana") return { de: diaMais(p.de, -7), ate: diaMais(p.de, -1) };
+    return { de: diaMais(p.de, -1), ate: diaMais(p.de, -1) };
+  }
+
+  app.get("/api/oficial/custos", auth, (req, res) => {
+    garantirEstrutura();
+    const hoje = diaBR(Date.now());
+    const modo = ["dia", "semana", "mes"].includes(req.query.modo) ? req.query.modo : "dia";
+    const ref = /^\d{4}-\d{2}-\d{2}$/.test(req.query.ref || "") && req.query.ref <= hoje ? req.query.ref : hoje;
+    const per = periodoDe(modo, ref);
+    const ant = periodoAnterior(modo, per);
+    const resumoPer = { hoje: periodoDe("dia", hoje), semana: periodoDe("semana", hoje), mes: periodoDe("mes", hoje) };
+    // gráfico: semana e mês = os dias do período; dia = os 14 dias até ele
+    const serieDe = modo === "dia" ? diaMais(ref, -13) : per.de;
+
+    const ids = idsVisiveis(req.user); // null = gerente (vê todos)
+    const ve = (uid) => ids === null || ids.includes(uid);
+    const precos = precosLista();
+    const nomeUser = {}; for (const u of db.users || []) nomeUser[u.id] = u.nome;
+    const numInfo = {};
+    for (const n of db.oficial.numeros || []) numInfo[n.id] = { apelido: n.apelido || n.numero || "Número", dono: n.vendedorId ? (nomeUser[n.vendedorId] || "") : "" };
+
+    const zero = () => ({ mensagens: 0, deDisparo: 0, avulsas: 0, custo: 0, imposto: 0, total: 0 });
+    const precosNoPeriodo = new Set();
+    const somar = (acc, n, dia, tipo) => {
+      const p = precoDoDia(dia, precos);
+      const c = n * (Number(p.preco) || 0), i = c * (Number(p.imposto) || 0) / 100;
+      acc.mensagens += n; acc[tipo] += n; acc.custo += c; acc.imposto += i; acc.total += c + i;
+    };
+    const dentro = (dia, p) => dia >= p.de && dia <= p.ate;
+    const tot = zero(), totAnt = zero();
+    const resumo = { hoje: zero(), semana: zero(), mes: zero() };
+    const serie = {}; for (let d = serieDe; d <= per.ate; d = diaMais(d, 1)) serie[d] = zero();
+    const pessoas = {}, numeros = {}, campanhas = [];
+    const pessoa = (uid, nomeAlt) => pessoas[uid] || (pessoas[uid] = { id: uid, nome: nomeUser[uid] || nomeAlt || "—", disparos: 0, responderam: 0, ...zero() });
+    const numero = (nid) => numeros[nid] || (numeros[nid] = { id: nid, apelido: (numInfo[nid] || {}).apelido || "Número removido", dono: (numInfo[nid] || {}).dono || "", ...zero() });
+    let responderam = 0;
+
+    // cada lançamento: (dia, pessoa, número, quantidade, tipo)
+    const lancar = (dia, uid, nomeAlt, nid, n, tipo) => {
+      if (!(n > 0)) return;
+      for (const k of Object.keys(resumo)) if (dentro(dia, resumoPer[k])) somar(resumo[k], n, dia, tipo);
+      if (dentro(dia, ant)) somar(totAnt, n, dia, tipo);
+      if (serie[dia]) somar(serie[dia], n, dia, tipo);
+      if (dentro(dia, per)) {
+        const p = precoDoDia(dia, precos); precosNoPeriodo.add(p.preco + "|" + p.imposto);
+        somar(tot, n, dia, tipo);
+        somar(pessoa(uid, nomeAlt), n, dia, tipo);
+        somar(numero(nid), n, dia, tipo);
+      }
+    };
+
+    for (const c of db.oficial.campanhas || []) {
+      if (!ve(c.criadoPor) || !(Number(c.enviados) > 0)) continue;
+      let noPer = 0, valorPer = 0;
+      for (const [dia, n] of Object.entries(cobradasPorDia(c))) {
+        lancar(dia, c.criadoPor, c.criadoPorNome, c.numeroId, n, "deDisparo");
+        if (n > 0 && dentro(dia, per)) { const p = precoDoDia(dia, precos); noPer += n; valorPer += n * p.preco * (1 + p.imposto / 100); }
+      }
+      if (!noPer) continue;
+      const pp = pessoa(c.criadoPor, c.criadoPorNome);
+      pp.disparos++;
+      // respostas contam no período em que a campanha começou
+      const comeco = c.iniciadoEm || c.agendadoPara || c.criadoEm || 0;
+      if (dentro(diaBR(comeco), per)) { const r = Number(c.responderam) || 0; pp.responderam += r; responderam += r; }
+      campanhas.push({
+        id: c.id, nome: c.nome || "Disparo", template: c.template || "", pessoa: nomeUser[c.criadoPor] || c.criadoPorNome || "—",
+        numero: (numInfo[c.numeroId] || {}).apelido || "", quando: comeco,
+        mensagens: noPer, total: Math.round(valorPer * 100) / 100, responderam: Number(c.responderam) || 0,
+      });
+    }
+    for (const [chave, tipo] of [["custoArquivo", "deDisparo"], ["custoAvulso", "avulsas"]]) {
+      for (const [dia, porUser] of Object.entries(db.oficial[chave] || {})) {
+        for (const [uid, porNum] of Object.entries(porUser || {})) {
+          if (!ve(uid)) continue;
+          for (const [nid, n] of Object.entries(porNum || {})) lancar(dia, uid, "", nid, Number(n) || 0, tipo);
+        }
+      }
+    }
+
+    // centavos: arredonda o total e reparte os centavos nas linhas (maior sobra primeiro),
+    // pra soma dos vendedores/números/dias bater certinho com o total
+    const cent = (v) => Math.round(v * 100 + 1e-6) / 100;
+    const r2 = (o) => { o.custo = cent(o.custo); o.imposto = cent(o.imposto); o.total = cent(o.custo + o.imposto); return o; };
+    const repartir = (lista, campo, alvo) => {
+      const base = lista.map((o) => Math.floor(o[campo] * 100 + 1e-6));
+      let resto = Math.round(alvo * 100) - base.reduce((a, b) => a + b, 0);
+      const ordem = lista.map((o, i) => [o[campo] * 100 - base[i], i]).sort((a, b) => b[0] - a[0]);
+      for (let k = 0; resto > 0 && k < ordem.length; k++, resto--) base[ordem[k][1]]++;
+      lista.forEach((o, i) => { o[campo] = base[i] / 100; });
+    };
+    const fechar = (lista, alvo) => {
+      repartir(lista, "custo", alvo.custo); repartir(lista, "imposto", alvo.imposto);
+      for (const o of lista) o.total = cent(o.custo + o.imposto);
+      return lista;
+    };
+    r2(tot);
+    const listaPessoas = fechar(Object.values(pessoas).filter((p) => p.mensagens > 0), tot).sort((a, b) => b.total - a.total);
+    const listaNumeros = ids === null ? fechar(Object.values(numeros).filter((n) => n.mensagens > 0), tot).sort((a, b) => b.total - a.total) : [];
+    const listaSerie = Object.entries(serie).map(([dia, v]) => ({ dia, mensagens: v.mensagens, total: v.total }));
+    if (modo === "dia") listaSerie.forEach((v) => { v.total = cent(v.total); }); else repartir(listaSerie, "total", tot.total);
+    const atual = precoDoDia(hoje, precos);
+    const unico = precosNoPeriodo.size === 1 ? [...precosNoPeriodo][0].split("|").map(Number) : null;
+    res.json({
+      modo, ref, hoje, de: per.de, ate: per.ate,
+      preco: { preco: atual.preco, imposto: atual.imposto, desde: atual.desde === PRECO_PADRAO.desde ? null : atual.desde },
+      precoPeriodo: unico ? { preco: unico[0], imposto: unico[1] } : null,
+      souGerente: req.user.role === "gerente",
+      equipe: ids === null || ids.length > 1,
+      totais: { ...tot, responderam }, anterior: r2(totAnt),
+      resumo: { hoje: r2(resumo.hoje), semana: r2(resumo.semana), mes: r2(resumo.mes) },
+      serie: listaSerie,
+      pessoas: listaPessoas,
+      numeros: listaNumeros,
+      campanhas: campanhas.sort((a, b) => b.quando - a.quando).slice(0, 300),
+      avulsasDesde: db.oficial.custoAvulsoDesde || null,
+    });
+  });
+
+  // gerente muda o preço por mensagem e o imposto (vale de hoje em diante, ou corrige tudo)
+  app.put("/api/oficial/custos/preco", auth, gerenteOnly, (req, res) => {
+    garantirEstrutura();
+    const b = req.body || {};
+    const num = (v) => (String(v == null ? "" : v).trim() === "" ? NaN : Number(String(v).replace(",", ".")));
+    const preco = num(b.preco), imposto = num(b.imposto);
+    if (!(preco >= 0 && preco <= 20)) return res.status(400).json({ error: "Preço por mensagem inválido" });
+    if (!(imposto >= 0 && imposto <= 100)) return res.status(400).json({ error: "Imposto inválido (use de 0 a 100%)" });
+    const hoje = diaBR(Date.now());
+    const novo = { desde: b.retroativo ? PRECO_PADRAO.desde : hoje, preco: Math.round(preco * 10000) / 10000, imposto: Math.round(imposto * 100) / 100 };
+    db.oficial.custoPrecos = b.retroativo ? [novo] : precosLista().filter((p) => p.desde < hoje).concat(novo);
+    salvar();
+    res.json({ ok: true, preco: novo });
+  });
+
   // ===== LIMPEZA MANUAL — remove conversas de disparo sem resposta + lixo técnico =====
   app.post("/api/oficial/limpar-disparos", auth, gerenteOnly, (req, res) => {
     garantirEstrutura();
@@ -4425,6 +4627,7 @@ export function instalarCanalOficial({ versaoConversa, app, getDb, saveDB, saveS
         }
       }
     }
+    arquivarCusto(camp); // v2.7: o custo do que já saiu continua nas métricas
     db.oficial.campanhas.splice(i, 1);
     salvar();
     res.json({ ok: true, conversasRemovidas });
@@ -5426,6 +5629,8 @@ export function instalarCanalOficial({ versaoConversa, app, getDb, saveDB, saveS
             } else if (st.status === "failed") {
               camp.falhas = (camp.falhas || 0) + 1;
               if (camp.enviados > 0) camp.enviados--;
+              // v2.7: se a que falhou era imagem grátis (dentro das 24h), sai da conta das grátis
+              if (camp.gratis > 0 && chatIdMsg && db.waChats[chatIdMsg] && (db.waChats[chatIdMsg].mensagens || []).some((x) => x.wamid === mid && x.content === "[disparo] só imagem")) camp.gratis--;
               // captura o MOTIVO da falha de entrega (vem em st.errors) — antes a gente jogava fora
               const err = (st.errors && st.errors[0]) || {};
               const motivo = err.message || err.title

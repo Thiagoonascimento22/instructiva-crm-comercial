@@ -267,11 +267,13 @@ function AvisoAtualizacao() {
 
 /* ============================ NOVIDADES DA VERSÃO (v2.2) ============================ */
 // Aparece uma vez só pra cada pessoa (fica marcado no servidor). Dá pra rever clicando na versão, no rodapé do menu.
-const VERSAO_NOVIDADES = "v2.6";
+const VERSAO_NOVIDADES = "v2.7";
 function Novidades({ user, perfil, pode, ehMac, onClose, soNovos = false }) {
   const itens = [
-    { ic: I.calendar, t: "Agenda com Google Agenda", d: "Nova tela Agenda: marque reunião, ligação ou visita com o cliente. Conectando o seu Google, vai junto pro Google Agenda com lembrete no celular, link do Meet e convite pro cliente.", para: "comercial", se: pode.agenda, novo: true },
-    { ic: I.clock, t: "Agendar direto do lead", d: "Na ficha do lead (ao lado da conversa) e no Pipeline tem o botão Agendar. E alguns minutos antes, o sistema te avisa na tela.", para: "comercial", se: pode.agenda, novo: true },
+    { ic: I.cash, t: "Quanto custa cada disparo", d: "Em Disparo › Métricas e custos: o custo de hoje, da semana e do mês, já com os 12,5% de imposto, e quanto saiu cada pessoa que respondeu. Cada um vê o seu.", para: "comercial", se: pode.disparo, novo: true },
+    { ic: I.users, t: "Custo por vendedor e por número", d: "Veja quanto cada vendedor gastou no dia, na semana e no mês, e confira por número com a fatura da Meta. O preço por mensagem e o imposto você muda ali mesmo.", para: "gerente", novo: true },
+    { ic: I.calendar, t: "Agenda com Google Agenda", d: "Nova tela Agenda: marque reunião, ligação ou visita com o cliente. Conectando o seu Google, vai junto pro Google Agenda com lembrete no celular, link do Meet e convite pro cliente.", para: "comercial", se: pode.agenda },
+    { ic: I.clock, t: "Agendar direto do lead", d: "Na ficha do lead (ao lado da conversa) e no Pipeline tem o botão Agendar. E alguns minutos antes, o sistema te avisa na tela.", para: "comercial", se: pode.agenda },
     { ic: I.search, t: "Busca nas mensagens", d: "Na Caixa de entrada, digite qualquer palavra: aparecem as conversas e as mensagens que falam disso, igual ao WhatsApp. Pode escrever sem acento, e acha até o que foi falado nos áudios.", para: "comercial", se: pode.caixa },
     { ic: I.chat, t: "Buscar dentro da conversa", d: "Clique na lupa no topo da conversa e use as setinhas pra pular de uma mensagem pra outra.", para: "comercial", se: pode.caixa },
     { ic: I.raio, t: "Sistema mais rápido", d: "Conversas, Pipeline e lançamento de venda abrem e atualizam bem mais rápido, sem aquelas travadinhas.", para: "todos" },
@@ -311,9 +313,9 @@ function Novidades({ user, perfil, pode, ehMac, onClose, soNovos = false }) {
         <div className="nov" role="dialog" aria-modal="true" aria-labelledby="nov-tit">
           <div className="nov-topo">
             <button type="button" className="nov-x" onClick={onClose} aria-label="Fechar"><I.x className="ico" /></button>
-            <span className="nov-selo"><I.brilho className="ico" /> Novidades · versão 2.6</span>
-            <h2 id="nov-tit">{soNovos ? "Chegou a Agenda, ligada ao Google" : "O sistema ficou de cara nova"}</h2>
-            <p>{nome ? "Oi, " + nome + "! " : ""}{soNovos ? "Reunião marcada não se perde mais. Veja o que mudou:" : "Separamos o que mudou pra deixar o seu dia mais fácil e as vendas mais rápidas."}</p>
+            <span className="nov-selo"><I.brilho className="ico" /> Novidades · versão 2.7</span>
+            <h2 id="nov-tit">{soNovos ? "Agora você vê quanto custa cada disparo" : "O sistema ficou de cara nova"}</h2>
+            <p>{nome ? "Oi, " + nome + "! " : ""}{soNovos ? "Com o custo na mão, fica fácil escolher os disparos que mais trazem resposta. Veja o que mudou:" : "Separamos o que mudou pra deixar o seu dia mais fácil e as vendas mais rápidas."}</p>
           </div>
           <div className="nov-grade">
             {lista.map((it, i) => (
@@ -328,7 +330,7 @@ function Novidades({ user, perfil, pode, ehMac, onClose, soNovos = false }) {
             ))}
           </div>
           <div className="nov-pe">
-            <span>Pra ver de novo, clique em <b>v2.6</b> no rodapé do menu.</span>
+            <span>Pra ver de novo, clique em <b>v2.7</b> no rodapé do menu.</span>
             <button type="button" className="btn btn-primary nov-btn" onClick={onClose}>{perfil === "suporte" ? "Entendi, vamos lá" : "Bora vender!"}</button>
           </div>
         </div>
@@ -568,7 +570,7 @@ export default function App() {
             </div>
             <button className="side-sair" onClick={logout} title="Sair" aria-label="Sair"><I.out className="ico" /></button>
           </div>
-          <button type="button" className="side-versao" onClick={() => { setNovidadesSoNovos(false); setNovidades(true); }} title="Ver as novidades desta versão">v2.6 · novidades</button>
+          <button type="button" className="side-versao" onClick={() => { setNovidadesSoNovos(false); setNovidades(true); }} title="Ver as novidades desta versão">v2.7 · novidades</button>
         </div>
       </aside>
 
@@ -1454,7 +1456,270 @@ function ModalRepasse({ onClose, showToast, onFeito }) {
 }
 
 
+/* ============================================================
+   v2.7 — CUSTO DOS DISPAROS (preço por mensagem + imposto)
+   ============================================================ */
+const brl = (v) => (Number(v) || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+const brlUnit = (v) => (Number(v) || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL", minimumFractionDigits: 2, maximumFractionDigits: 3 });
+const nPt = (v) => (Number(v) || 0).toLocaleString("pt-BR");
+const pctPt = (v) => (Number(v) || 0).toLocaleString("pt-BR", { maximumFractionDigits: 2 }) + "%";
+const MES_LONGO = ["janeiro", "fevereiro", "março", "abril", "maio", "junho", "julho", "agosto", "setembro", "outubro", "novembro", "dezembro"];
+const MES_CURTO = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
+const SEM_CURTO = ["dom", "seg", "ter", "qua", "qui", "sex", "sáb"];
+const SEM_LONGO = ["Domingo", "Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado"];
+const diaObj = (s) => { const [y, m, d] = String(s).split("-").map(Number); return new Date(y, m - 1, d); };
+const diaTxt = (dt) => dt.getFullYear() + "-" + String(dt.getMonth() + 1).padStart(2, "0") + "-" + String(dt.getDate()).padStart(2, "0");
+const diaSoma = (s, n) => { const d = diaObj(s); d.setDate(d.getDate() + n); return diaTxt(d); };
+const ddmm = (s) => { const d = diaObj(s); return String(d.getDate()).padStart(2, "0") + "/" + String(d.getMonth() + 1).padStart(2, "0"); };
+
+function rotuloPeriodo(modo, de, ate, hoje) {
+  if (modo === "dia") {
+    if (de === hoje) return "Hoje";
+    if (de === diaSoma(hoje, -1)) return "Ontem";
+    const d = diaObj(de); return SEM_LONGO[d.getDay()] + ", " + d.getDate() + " de " + MES_LONGO[d.getMonth()];
+  }
+  if (modo === "semana") {
+    const a = diaObj(de), b = diaObj(ate);
+    return a.getDate() + (a.getMonth() !== b.getMonth() ? " de " + MES_CURTO[a.getMonth()] : "") + " a " + b.getDate() + " de " + MES_CURTO[b.getMonth()];
+  }
+  const d = diaObj(de); const m = MES_LONGO[d.getMonth()];
+  return m.charAt(0).toUpperCase() + m.slice(1) + " de " + d.getFullYear();
+}
+function nomeAnterior(modo, de, hoje) {
+  if (modo === "dia") return de === hoje ? "ontem" : "o dia anterior";
+  if (modo === "semana") return de <= hoje && diaSoma(de, 6) >= hoje ? "a semana passada" : "a semana anterior";
+  return MES_LONGO[diaObj(diaSoma(de, -1)).getMonth()];
+}
+
+// barras do custo por dia (passa o mouse ou toca pra ver o valor)
+function GraficoCusto({ serie, hoje, destaque }) {
+  const [sel, setSel] = useState(-1);
+  const max = Math.max(0, ...serie.map((s) => s.total));
+  const muitos = serie.length > 16;
+  const soma = serie.reduce((t, s) => t + s.total, 0);
+  return (
+    <div className="cst-graf" onMouseLeave={() => setSel(-1)} role="img" aria-label={"Custo por dia: " + brl(soma) + " no total, maior dia " + brl(max)}>
+      <div className="cst-graf-max">{max > 0 ? brl(max) : "Sem custo nesses dias"}</div>
+      <div className={"cst-graf-area" + (muitos ? " muitos" : "")}>
+        {serie.map((s, i) => {
+          const dt = diaObj(s.dia);
+          const futuro = s.dia > hoje;
+          const h = s.total > 0 && max > 0 ? Math.max(3, (s.total / max) * 100) : 0;
+          const rot = muitos ? (dt.getDate() === 1 || dt.getDate() % 5 === 0 ? String(dt.getDate()) : "") : SEM_CURTO[dt.getDay()] + " " + dt.getDate();
+          const lado = i > serie.length * 0.66 ? " dir" : i < serie.length * 0.34 ? " esq" : "";
+          return (
+            <div key={s.dia} className={"cst-col" + (s.dia === destaque ? " on" : "") + (futuro ? " futuro" : "") + (sel === i ? " sel" : "")}
+              onMouseEnter={() => setSel(i)} onClick={() => setSel(i)}>
+              <div className="cst-col-trilho">{h > 0 ? <i style={{ height: h + "%" }} /> : <i className="zero" />}</div>
+              <span className="cst-col-rot">{rot}</span>
+              {sel === i && !futuro && (
+                <div className={"cst-tip" + lado}>
+                  <b>{brl(s.total)}</b>
+                  <span>{SEM_CURTO[dt.getDay()]}, {ddmm(s.dia)} · {nPt(s.mensagens)} mensage{s.mensagens === 1 ? "m" : "ns"}</span>
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function CustosDisparo({ showToast }) {
+  const [modo, setModo] = useState("mes");
+  const [ref, setRef] = useState(""); // "" = hoje
+  const [d, setD] = useState(null);
+  const [carregando, setCarregando] = useState(true);
+  const [todasCamps, setTodasCamps] = useState(false);
+  const [editPreco, setEditPreco] = useState(null);
+  const [salvando, setSalvando] = useState(false);
+  const pedido = useRef(0);
+
+  const carregar = (m, r) => {
+    const n = ++pedido.current;
+    setCarregando(true);
+    api.ofCustos(m, r)
+      .then((x) => { if (n === pedido.current) { setD(x); setCarregando(false); } })
+      .catch((e) => { if (n === pedido.current) { setCarregando(false); showToast && showToast(e.message); } });
+  };
+  useEffect(() => { carregar(modo, ref); setTodasCamps(false); /* eslint-disable-next-line */ }, [modo, ref]);
+
+  if (!d) return <div className="cst-vazio-load">{carregando ? "Calculando os custos…" : "Não consegui carregar os custos agora."}</div>;
+
+  const t = d.totais, a = d.anterior;
+  const noAtual = d.ate >= d.hoje;
+  const voltar = () => setRef(modo === "mes" ? diaSoma(d.de, -1) : modo === "semana" ? diaSoma(d.de, -7) : diaSoma(d.de, -1));
+  const avancar = () => { if (!noAtual) { const prox = diaSoma(d.ate, 1); setRef(prox >= d.hoje ? "" : prox); } };
+  const escolher = (m) => { setModo(m); setRef(""); };
+  const dif = t.total - a.total;
+  const comparacao = (t.total === 0 && a.total === 0) ? "" : a.total === 0 ? "Nada cobrado em " + nomeAnterior(modo, d.de, d.hoje)
+    : Math.abs(dif) < 0.005 ? "Igual a " + nomeAnterior(modo, d.de, d.hoje)
+    : brl(Math.abs(dif)) + (dif > 0 ? " a mais" : " a menos") + " que " + nomeAnterior(modo, d.de, d.hoje);
+  const pp = d.precoPeriodo;
+  const disparos = d.pessoas.reduce((s, p) => s + p.disparos, 0);
+  const maxPessoa = Math.max(0, ...d.pessoas.map((p) => p.total));
+  const unit = (d.preco.preco || 0) * (1 + (d.preco.imposto || 0) / 100);
+  const camps = todasCamps ? d.campanhas : d.campanhas.slice(0, 8);
+  const destaque = modo === "dia" ? d.de : d.hoje;
+  const RESUMO = [["dia", "hoje", "Hoje"], ["semana", "semana", "Esta semana"], ["mes", "mes", "Este mês"]];
+
+  async function salvarPreco() {
+    setSalvando(true);
+    try {
+      await api.ofCustosPreco({ preco: editPreco.preco, imposto: editPreco.imposto, retroativo: !!editPreco.retroativo });
+      showToast && showToast("Valores salvos");
+      setEditPreco(null);
+      carregar(modo, ref);
+    } catch (e) { showToast && showToast("✗ " + e.message); }
+    finally { setSalvando(false); }
+  }
+
+  return (
+    <div className={"cst" + (carregando ? " carregando" : "")}>
+      {/* hoje / semana / mês — sempre o período atual; clicar escolhe o detalhe */}
+      <div className="cst-resumo">
+        {RESUMO.map(([m, k, lb]) => (
+          <button key={m} className={"cst-res" + (modo === m ? " on" : "")} onClick={() => escolher(m)}>
+            <span>{lb}</span>
+            <b>{brl(d.resumo[k].total)}</b>
+            <small>{nPt(d.resumo[k].mensagens)} mensage{d.resumo[k].mensagens === 1 ? "m" : "ns"}</small>
+          </button>
+        ))}
+      </div>
+
+      {/* período escolhido */}
+      <section className="cst-hero">
+        <div className="cst-nav">
+          <button className="cst-seta esq" onClick={voltar} aria-label="Período anterior"><I.chevron /></button>
+          <b>{rotuloPeriodo(modo, d.de, d.ate, d.hoje)}</b>
+          <button className="cst-seta dir" onClick={avancar} disabled={noAtual} aria-label="Próximo período"><I.chevron /></button>
+          {ref && <button className="cst-hoje" onClick={() => setRef("")}>Voltar pro atual</button>}
+        </div>
+        <div className="cst-hero-main">
+          <div className="cst-hero-total">
+            <span>{d.souGerente ? "Custo total" : d.equipe ? "Custo da sua equipe" : "Seu custo"}</span>
+            <b>{brl(t.total)}</b>
+            <small>{t.mensagens ? comparacao : "Nenhuma mensagem cobrada nesse período."}</small>
+          </div>
+          <div className="cst-conta">
+            <div><span>{nPt(t.mensagens)} mensage{t.mensagens === 1 ? "m" : "ns"}{pp ? " × " + brlUnit(pp.preco) : ""}</span><b>{brl(t.custo)}</b></div>
+            <div><span>Imposto{pp ? " (" + pctPt(pp.imposto) + ")" : ""}</span><b>{brl(t.imposto)}</b></div>
+            <div className="tot"><span>Total</span><b>{brl(t.total)}</b></div>
+          </div>
+        </div>
+        <div className="cst-chips">
+          <span><b>{nPt(disparos)}</b> disparo{disparos === 1 ? "" : "s"}</span>
+          {t.avulsas > 0 && <span><b>{nPt(t.avulsas)}</b> avulsa{t.avulsas === 1 ? "" : "s"}</span>}
+          {t.responderam > 0 && <span><b>{nPt(t.responderam)}</b> responderam · <b>{brl(t.total / t.responderam)}</b> por resposta</span>}
+        </div>
+      </section>
+
+      {/* custo por dia */}
+      {modo !== "dia" || d.serie.some((s) => s.total > 0) ? (
+        <section className="cst-card">
+          <div className="cst-card-h"><b>Custo por dia</b>{modo === "dia" && <small>últimos 14 dias</small>}</div>
+          <GraficoCusto serie={d.serie} hoje={d.hoje} destaque={destaque} />
+        </section>
+      ) : null}
+
+      {/* por vendedor (gerente e líder) */}
+      {d.equipe && (
+        <section className="cst-card">
+          <div className="cst-card-h"><b>Por vendedor</b><small>quem disparou</small></div>
+          {d.pessoas.length === 0 ? <div className="cst-vazio">Ninguém disparou nesse período.</div> : (
+            <div className="cst-pessoas">
+              {d.pessoas.map((p) => (
+                <div key={p.id} className="cst-pessoa">
+                  <div className="of-chat-av cor cst-av" style={{ "--h": corDoNome(p.nome) }}>{iniciais(p.nome)}</div>
+                  <div className="cst-pessoa-info">
+                    <div className="cst-pessoa-l1"><b>{p.nome}</b><em>{t.total > 0 ? Math.round((p.total / t.total) * 100) : 0}% do total</em></div>
+                    <span>{nPt(p.disparos)} disparo{p.disparos === 1 ? "" : "s"} · {nPt(p.mensagens)} mensage{p.mensagens === 1 ? "m" : "ns"}{p.avulsas ? " (" + nPt(p.avulsas) + " avulsa" + (p.avulsas === 1 ? "" : "s") + ")" : ""}</span>
+                    <div className="cst-barra"><i style={{ width: (maxPessoa > 0 ? (p.total / maxPessoa) * 100 : 0) + "%" }} /></div>
+                  </div>
+                  <div className="cst-pessoa-val">
+                    <b>{brl(p.total)}</b>
+                    <span>{brl(p.custo)} + {brl(p.imposto)} imposto</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+      )}
+
+      {/* por número (só o gerente) — bate com a fatura de cada número na Meta */}
+      {d.numeros.length > 1 && (
+        <section className="cst-card">
+          <div className="cst-card-h"><b>Por número</b><small>pra conferir com a fatura da Meta</small></div>
+          <div className="cst-nums">
+            {d.numeros.map((n) => (
+              <div key={n.id} className="cst-num">
+                <span className="cst-num-nome"><b>{n.apelido}</b>{n.dono && <em>{n.dono}</em>}</span>
+                <span className="cst-num-q">{nPt(n.mensagens)} msg</span>
+                <b className="cst-num-v">{brl(n.total)}</b>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {/* disparos do período */}
+      {d.campanhas.length > 0 && (
+        <section className="cst-card">
+          <div className="cst-card-h"><b>Disparos do período</b><small>{nPt(d.campanhas.length)}{d.campanhas.length >= 300 ? "+" : ""}</small></div>
+          <div className="cst-camps">
+            {camps.map((c) => (
+              <div key={c.id} className="cst-camp">
+                <div className="cst-camp-main">
+                  <b>{c.nome}</b>
+                  <span>{d.equipe ? c.pessoa + " · " : ""}{c.quando ? new Date(c.quando).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }) : ""}<em className="cst-so-cel"> · {nPt(c.mensagens)} msg</em></span>
+                </div>
+                <div className="cst-camp-n"><b>{nPt(c.mensagens)}</b><span>mensagens</span></div>
+                <div className="cst-camp-n"><b>{nPt(c.responderam)}</b><span>respostas</span></div>
+                <b className="cst-camp-v">{brl(c.total)}</b>
+              </div>
+            ))}
+          </div>
+          {d.campanhas.length > 8 && (
+            <button className="cst-mais" onClick={() => setTodasCamps((v) => !v)}>{todasCamps ? "Mostrar menos" : "Ver todos os " + nPt(d.campanhas.length) + " disparos"}</button>
+          )}
+        </section>
+      )}
+
+      {/* valores usados na conta */}
+      <section className="cst-preco">
+        {!editPreco ? (
+          <>
+            <div className="cst-preco-txt">
+              <I.cash className="ico" />
+              <span>Cada mensagem custa <b>{brlUnit(d.preco.preco)}</b> + <b>{pctPt(d.preco.imposto)}</b> de imposto = <b>{brlUnit(unit)}</b> por mensagem.</span>
+            </div>
+            {d.souGerente && <button className="btn btn-sm" onClick={() => setEditPreco({ preco: String(d.preco.preco).replace(".", ","), imposto: String(d.preco.imposto).replace(".", ","), retroativo: false })}>Alterar valores</button>}
+          </>
+        ) : (
+          <div className="cst-preco-form">
+            <label><span>Preço por mensagem (R$)</span><input className="input" inputMode="decimal" value={editPreco.preco} onChange={(e) => setEditPreco({ ...editPreco, preco: e.target.value })} /></label>
+            <label><span>Imposto (%)</span><input className="input" inputMode="decimal" value={editPreco.imposto} onChange={(e) => setEditPreco({ ...editPreco, imposto: e.target.value })} /></label>
+            <label className="cst-check"><input type="checkbox" checked={!!editPreco.retroativo} onChange={(e) => setEditPreco({ ...editPreco, retroativo: e.target.checked })} /> Recalcular também os dias anteriores</label>
+            <div className="cst-preco-acoes">
+              <button className="btn btn-sm" onClick={() => setEditPreco(null)} disabled={salvando}>Cancelar</button>
+              <button className="btn btn-sm btn-primary" onClick={salvarPreco} disabled={salvando}>{salvando ? "Salvando…" : "Salvar valores"}</button>
+            </div>
+            <small>{editPreco.retroativo ? "Todo o histórico passa a usar esses valores." : "Vale de hoje em diante. Os dias anteriores continuam com o valor antigo."}</small>
+          </div>
+        )}
+        <p className="cst-nota">
+          Conta só as mensagens que saíram — as que falharam não entram. Imagem sem texto pra quem falou com você nas últimas 24h é grátis no WhatsApp e também não entra.
+          {" "}Templates avulsos (iniciar conversa com um lead) entram na conta{d.avulsasDesde ? " desde " + ddmm(d.avulsasDesde) : ""}.
+        </p>
+      </section>
+    </div>
+  );
+}
+
 function MetricasDisparo({ isGer = true, showToast, onClose, onLimpou }) {
+  const [aba, setAba] = useState("custos");
   const [dados, setDados] = useState(null);
   const [periodo, setPeriodo] = useState("30");
   const [carregando, setCarregando] = useState(true);
@@ -1482,23 +1747,29 @@ function MetricasDisparo({ isGer = true, showToast, onClose, onLimpou }) {
 
   return (
     <div>
-      <div style={{ padding: "20px 24px", borderBottom: "1px solid " + DES.line, display: "flex", alignItems: "center", justifyContent: "space-between", position: "sticky", top: 0, background: "var(--card)", zIndex: 2, borderRadius: "14px 14px 0 0", flexWrap: "wrap", gap: 10 }}>
-        <div>
-          <div style={{ fontSize: 18, fontWeight: 700, color: DES.ink }}>Métricas de disparo</div>
-          <div style={{ fontSize: 12.5, color: DES.mut, marginTop: 2 }}>Entrega, leitura e resposta — direto da Meta</div>
+      <div className="mtd-head">
+        <div className="mtd-tit">
+          <b>Métricas de disparo</b>
+          <span>{aba === "custos" ? "Quanto cada envio está custando" : "Entrega, leitura e resposta — direto da Meta"}</span>
         </div>
-        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-          <select className="input" value={periodo} onChange={(e) => { setPeriodo(e.target.value); carregar(e.target.value); }} style={{ minWidth: 120 }}>
+        <div className="mtd-abas" role="tablist">
+          <button role="tab" aria-selected={aba === "custos"} className={aba === "custos" ? "on" : ""} onClick={() => setAba("custos")}><I.cash className="ico" /> Custos</button>
+          <button role="tab" aria-selected={aba === "entrega"} className={aba === "entrega" ? "on" : ""} onClick={() => setAba("entrega")}><I.gauge className="ico" /> Entrega e resposta</button>
+        </div>
+        <button className="crm-x" onClick={onClose}>✕</button>
+      </div>
+
+      {aba === "custos" ? <div className="mtd-corpo"><CustosDisparo showToast={showToast} /></div> : (
+      <div style={{ padding: 24 }}>
+        <div className="mtd-periodo">
+          <span>Período</span>
+          <select className="input" value={periodo} onChange={(e) => { setPeriodo(e.target.value); carregar(e.target.value); }} style={{ minWidth: 150 }}>
             <option value="hoje">Hoje</option>
             <option value="7">Últimos 7 dias</option>
             <option value="30">Últimos 30 dias</option>
             <option value="tudo">Tudo</option>
           </select>
-          <button className="crm-x" onClick={onClose}>✕</button>
         </div>
-      </div>
-
-      <div style={{ padding: 24 }}>
         {carregando || !g ? <div style={{ padding: 30, color: DES.mut }}>Carregando…</div> : (
           <>
             {/* números gerais */}
@@ -1590,6 +1861,7 @@ function MetricasDisparo({ isGer = true, showToast, onClose, onLimpou }) {
           </>
         )}
       </div>
+      )}
     </div>
   );
 }
@@ -1605,7 +1877,6 @@ function OficialDisparo({ isGer = true, showToast, preset = null, onPresetUsado 
   const dataRef = useRef(dataFiltro);
   useEffect(() => { dataRef.current = dataFiltro; }, [dataFiltro]);
   const [meuLimite, setMeuLimite] = useState(null); // só vendedor
-  const [showResumo, setShowResumo] = useState(false);
   const [showTemplates, setShowTemplates] = useState(false);
   const [showDistrib, setShowDistrib] = useState(false);
   const [showMetricas, setShowMetricas] = useState(false);
@@ -1645,18 +1916,6 @@ function OficialDisparo({ isGer = true, showToast, preset = null, onPresetUsado 
     return () => clearInterval(t);
   }, []);
   useEffect(() => { carregarCampanhas(); }, [dataFiltro]); // recarrega ao trocar a data
-
-  // resumo: quantos disparos e quantos enviados por pessoa (no filtro atual)
-  const resumoPessoas = useMemo(() => {
-    const map = {};
-    for (const c of campanhas) {
-      const nome = c.criadoPorNome || "—";
-      if (!map[nome]) map[nome] = { disparos: 0, enviados: 0 };
-      map[nome].disparos += 1;
-      map[nome].enviados += c.enviados || 0;
-    }
-    return Object.entries(map).map(([nome, v]) => ({ nome, ...v })).sort((a, b) => b.disparos - a.disparos);
-  }, [campanhas]);
 
   async function redispararCampanha(c) {
     if (!confirm(`Re-disparar a campanha "${c.nome}"?\n\nVai reenviar o template pra TODO MUNDO que recebeu mas ainda não respondeu (não manda pra quem já respondeu).`)) return;
@@ -1700,7 +1959,7 @@ function OficialDisparo({ isGer = true, showToast, preset = null, onPresetUsado 
             <I.send className="ico" /> Novo disparo
           </button>
           <button className="onum-btn-ghost" onClick={() => setShowTemplates(true)}><I.chat className="ico" /> Templates</button>
-          <button className="onum-btn-ghost" onClick={() => setShowMetricas(true)}><I.gauge className="ico" /> Métricas</button>
+          <button className="onum-btn-ghost" onClick={() => setShowMetricas(true)}><I.gauge className="ico" /> Métricas e custos</button>
           {isGer && <button className="onum-btn-ghost" onClick={() => setShowDistrib(true)}><I.users className="ico" /> Quem recebe os leads</button>}
           {!isGer && meuLimite && !meuLimite.ilimitado && (
             <span className="disp-limite-chip" style={{ color: meuLimite.restante > 0 ? "var(--muted)" : "#dc2626", background: meuLimite.restante > 0 ? "var(--surface-2, #f1f3f8)" : "#fef2f2" }}>
@@ -1740,26 +1999,6 @@ function OficialDisparo({ isGer = true, showToast, preset = null, onPresetUsado 
           </div>
         );
       })()}
-
-      {/* resumo por pessoa (gerente) — agrupado e colapsável */}
-      {isGer && campanhas.length > 0 && (
-        <div className="disp-box">
-          <button className="disp-box-head" onClick={() => setShowResumo((v) => !v)}>
-            <span className="disp-box-tit">Disparos por pessoa {dataFiltro ? "no dia" : ""} <em>· {campanhas.length} campanha{campanhas.length > 1 ? "s" : ""}</em></span>
-            <span className="disp-box-tog">{showResumo ? "esconder ▲" : "mostrar ▼"}</span>
-          </button>
-          {showResumo && (
-            <div className="disp-pessoas">
-              {resumoPessoas.map((p) => (
-                <div key={p.nome} className="disp-pessoa">
-                  <span className="disp-pessoa-nome">{p.nome}</span>
-                  <span className="disp-pessoa-num"><b>{p.disparos}</b> disparo{p.disparos > 1 ? "s" : ""} · {p.enviados} enviados</span>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
 
       {/* limite por vendedor (gerente) */}
       {isGer && <LimitesVendedores showToast={showToast} />}
@@ -1834,7 +2073,7 @@ function OficialDisparo({ isGer = true, showToast, preset = null, onPresetUsado 
       )}
       {showMetricas && (
         <div className="pop-bg" onClick={(e) => e.target === e.currentTarget && setShowMetricas(false)}>
-          <div className="pop-sheet" style={{ maxWidth: 860, width: "96%", maxHeight: "92vh", overflowY: "auto", padding: 0 }}>
+          <div className="pop-sheet mtd-sheet" style={{ maxWidth: 1000, width: "96%", maxHeight: "92vh", overflowY: "auto", padding: 0 }}>
             <MetricasDisparo isGer={isGer} showToast={showToast} onClose={() => setShowMetricas(false)} onLimpou={() => { setShowMetricas(false); setTimeout(carregarCampanhas, 800); }} />
           </div>
         </div>
