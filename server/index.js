@@ -9,6 +9,7 @@ import { instalarCanalOficial, SAUDE_MIDIA } from "./oficial.js";
 import { instalarVendas } from "./vendas.js";
 import { instalarRecados } from "./recados.js";
 import { instalarAnaliseAtendimento } from "./atendimento.js";
+import { instalarAgenda } from "./agenda.js";
 
 // horário comercial / dias da semana são calculados no fuso de Brasília
 process.env.TZ = process.env.TZ || "America/Sao_Paulo";
@@ -51,7 +52,7 @@ app.use((req, res, next) => {
 // Versão do sistema — pra CONFIRMAR qual código está no ar (abra /api/versao no navegador).
 // Se aqui aparecer a versão nova mas o bug continuar, o problema é outro; se aparecer
 // uma versão antiga (ou 404), o deploy não subiu de verdade.
-const VERSAO_SISTEMA = "v2.5-veloz";
+const VERSAO_SISTEMA = "v2.6-agenda";
 
 /* ============================================================
    IDENTIFICAÇÃO DA UNIDADE (mesmo código, deploys separados)
@@ -256,7 +257,7 @@ function dbVazio() {
   return {
     modulos: {
       caixa: true, disparo: true, templates: true, numeros: true, ia: true,
-      ligacoes: true, crm: true, temperatura: true, solicitacoes: true, equipe: true,
+      ligacoes: true, crm: true, temperatura: true, solicitacoes: true, equipe: true, agenda: true,
     },
     users: [
       {
@@ -2582,6 +2583,8 @@ instalarRecados({ app, getDb: () => db, saveDB: saveSoon, auth, donoOnly });
 
 /* Análise de atendimento por IA (só o dono enxerga) */
 instalarAnaliseAtendimento({ app, getDb: () => db, saveDB: saveSoon, auth, donoOnly });
+// v2.6: agenda com Google Agenda (compromissos, link do Meet, convite pro cliente)
+instalarAgenda({ app, getDb: () => db, salvar: saveSoon, auth, donoOnly });
 
 instalarRotasBackup(app, auth, gerenteOnly);
 

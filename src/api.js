@@ -156,6 +156,18 @@ export const api = {
       return p.length ? "?" + p.join("&") : "";
     })()),
   ofChatsVersao: () => req("GET", "/api/oficial/chats-versao"),
+  // v2.6: agenda + Google Agenda
+  agendaConfig: () => req("GET", "/api/agenda/config"),
+  agendaSalvarConfig: (dados) => req("PUT", "/api/agenda/config", dados),
+  agendaConectar: () => req("GET", "/api/agenda/google/conectar"),
+  agendaDesconectar: () => req("POST", "/api/agenda/google/desconectar"),
+  agendaEventos: (de, ate, quem) => req("GET", "/api/agenda/eventos?de=" + de + "&ate=" + ate + "&quem=" + encodeURIComponent(quem || "eu")),
+  agendaDoLead: (leadId) => req("GET", "/api/agenda/eventos?leadId=" + encodeURIComponent(leadId)),
+  agendaProximos: () => req("GET", "/api/agenda/proximos"),
+  agendaLeads: (q) => req("GET", "/api/agenda/leads?q=" + encodeURIComponent(q)),
+  agendaCriar: (dados) => req("POST", "/api/agenda/eventos", dados),
+  agendaEditar: (id, dados) => req("PUT", "/api/agenda/eventos/" + encodeURIComponent(id), dados),
+  agendaExcluir: (id) => req("DELETE", "/api/agenda/eventos/" + encodeURIComponent(id)),
   ofChat: (id, v) => req("GET", "/api/oficial/chats/" + encodeURIComponent(id) + (v ? "?v=" + encodeURIComponent(v) : "")),
   // busca dentro das mensagens (igual ao WhatsApp)
   ofBusca: (q, numeroId) => req("GET", "/api/oficial/busca?q=" + encodeURIComponent(q) + (numeroId ? "&numeroId=" + encodeURIComponent(numeroId) : "")),

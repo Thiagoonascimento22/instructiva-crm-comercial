@@ -267,13 +267,15 @@ function AvisoAtualizacao() {
 
 /* ============================ NOVIDADES DA VERSÃO (v2.2) ============================ */
 // Aparece uma vez só pra cada pessoa (fica marcado no servidor). Dá pra rever clicando na versão, no rodapé do menu.
-const VERSAO_NOVIDADES = "v2.5";
+const VERSAO_NOVIDADES = "v2.6";
 function Novidades({ user, perfil, pode, ehMac, onClose, soNovos = false }) {
   const itens = [
-    { ic: I.search, t: "Busca nas mensagens", d: "Na Caixa de entrada, digite qualquer palavra: aparecem as conversas e as mensagens que falam disso, igual ao WhatsApp. Pode escrever sem acento, e acha até o que foi falado nos áudios.", para: "comercial", se: pode.caixa, novo: true },
-    { ic: I.chat, t: "Buscar dentro da conversa", d: "Clique na lupa no topo da conversa e use as setinhas pra pular de uma mensagem pra outra.", para: "comercial", se: pode.caixa, novo: true },
-    { ic: I.raio, t: "Sistema mais rápido", d: "Conversas, Pipeline e lançamento de venda abrem e atualizam bem mais rápido, sem aquelas travadinhas.", para: "todos", novo: true },
-    { ic: I.brilho, t: "Visual 2.5", d: "Menu grafite, cada contato com a sua cor e a data separando as mensagens de cada dia, como no WhatsApp.", para: "todos", novo: true },
+    { ic: I.calendar, t: "Agenda com Google Agenda", d: "Nova tela Agenda: marque reunião, ligação ou visita com o cliente. Conectando o seu Google, vai junto pro Google Agenda com lembrete no celular, link do Meet e convite pro cliente.", para: "comercial", se: pode.agenda, novo: true },
+    { ic: I.clock, t: "Agendar direto do lead", d: "Na ficha do lead (ao lado da conversa) e no Pipeline tem o botão Agendar. E alguns minutos antes, o sistema te avisa na tela.", para: "comercial", se: pode.agenda, novo: true },
+    { ic: I.search, t: "Busca nas mensagens", d: "Na Caixa de entrada, digite qualquer palavra: aparecem as conversas e as mensagens que falam disso, igual ao WhatsApp. Pode escrever sem acento, e acha até o que foi falado nos áudios.", para: "comercial", se: pode.caixa },
+    { ic: I.chat, t: "Buscar dentro da conversa", d: "Clique na lupa no topo da conversa e use as setinhas pra pular de uma mensagem pra outra.", para: "comercial", se: pode.caixa },
+    { ic: I.raio, t: "Sistema mais rápido", d: "Conversas, Pipeline e lançamento de venda abrem e atualizam bem mais rápido, sem aquelas travadinhas.", para: "todos" },
+    { ic: I.brilho, t: "Visual 2.5", d: "Menu grafite, cada contato com a sua cor e a data separando as mensagens de cada dia, como no WhatsApp.", para: "todos" },
     { ic: I.list, t: "Curso escolhido da lista", d: "Na hora de lançar a venda é só clicar e escolher o curso, ou digitar \"inv\", \"solar\", \"odonto\" que ele aparece. Nada de nome escrito errado.", para: "comercial", se: pode.vendas },
     { ic: I.cash, t: "Lançar venda de cara nova", d: "Tudo em 4 passos, com forma de pagamento e plataforma num clique. Combo e Todos os cursos já pedem os itens e a oferta.", para: "comercial", se: pode.vendas },
     { ic: I.nota, t: "Cursos padronizados", d: "Em Vendas › Gerenciar: Padronizar cursos deixa as vendas antigas com o nome certo, e Cursos cadastra os novos.", para: "gerente" },
@@ -309,9 +311,9 @@ function Novidades({ user, perfil, pode, ehMac, onClose, soNovos = false }) {
         <div className="nov" role="dialog" aria-modal="true" aria-labelledby="nov-tit">
           <div className="nov-topo">
             <button type="button" className="nov-x" onClick={onClose} aria-label="Fechar"><I.x className="ico" /></button>
-            <span className="nov-selo"><I.brilho className="ico" /> Novidades · versão 2.5</span>
-            <h2 id="nov-tit">{soNovos ? "Mais rápido, e agora com busca nas mensagens" : "O sistema ficou de cara nova"}</h2>
-            <p>{nome ? "Oi, " + nome + "! " : ""}{soNovos ? "Achar aquela conversa ficou fácil. Veja o que mudou:" : "Separamos o que mudou pra deixar o seu dia mais fácil e as vendas mais rápidas."}</p>
+            <span className="nov-selo"><I.brilho className="ico" /> Novidades · versão 2.6</span>
+            <h2 id="nov-tit">{soNovos ? "Chegou a Agenda, ligada ao Google" : "O sistema ficou de cara nova"}</h2>
+            <p>{nome ? "Oi, " + nome + "! " : ""}{soNovos ? "Reunião marcada não se perde mais. Veja o que mudou:" : "Separamos o que mudou pra deixar o seu dia mais fácil e as vendas mais rápidas."}</p>
           </div>
           <div className="nov-grade">
             {lista.map((it, i) => (
@@ -326,7 +328,7 @@ function Novidades({ user, perfil, pode, ehMac, onClose, soNovos = false }) {
             ))}
           </div>
           <div className="nov-pe">
-            <span>Pra ver de novo, clique em <b>v2.5</b> no rodapé do menu.</span>
+            <span>Pra ver de novo, clique em <b>v2.6</b> no rodapé do menu.</span>
             <button type="button" className="btn btn-primary nov-btn" onClick={onClose}>{perfil === "suporte" ? "Entendi, vamos lá" : "Bora vender!"}</button>
           </div>
         </div>
@@ -356,6 +358,8 @@ export default function App() {
   const [waTarget, setWaTarget] = useState(null);
   const [disparoPreset, setDisparoPreset] = useState(null); // leads levados do Pipeline pro Disparo
   const [crmAbrir, setCrmAbrir] = useState(null); // v2.1: lead pra abrir direto no Pipeline (vindo da ficha ou da busca)
+  // v2.6: volta da tela do Google (?agenda=conectado / negado / erro…)
+  const [retornoGoogle, setRetornoGoogle] = useState(() => { try { return new URLSearchParams(window.location.search).get("agenda") || ""; } catch (_) { return ""; } });
   const [minhasSol, setMinhasSol] = useState([]);
   const carregarMinhasSol = () => { api.solicitacoes().then(setMinhasSol).catch(() => {}); };
   const [toast, setToast] = useState(null);
@@ -415,10 +419,11 @@ export default function App() {
     vistaInicial.current = true;
     // valida a aba restaurada: se não for permitida pro perfil, cai numa aba segura
     const porRole = {
-      gerente: ["whatsapp", "disparo", "numeros", "crm", "vendas", "desempenho", "analiseia", "solicitacoes", "config"],
+      gerente: ["whatsapp", "disparo", "numeros", "crm", "agenda", "vendas", "desempenho", "analiseia", "solicitacoes", "config"],
       suporte: ["solicitacoes", "config"],
     };
-    const permitidas = porRole[user.role] || ["whatsapp", "disparo", "minhasSolicitacoes", "config", "crm", "vendas", "desempenho", "analiseia"];
+    const permitidas = porRole[user.role] || ["whatsapp", "disparo", "minhasSolicitacoes", "config", "crm", "agenda", "vendas", "desempenho", "analiseia"];
+    if (retornoGoogle && user.role !== "suporte") { setView("agenda"); try { window.history.replaceState({}, "", "/"); } catch (_) {} return; }
     if (!permitidas.includes(view)) setView(user.role === "suporte" ? "solicitacoes" : "whatsapp");
   }, [user]);
 
@@ -479,6 +484,7 @@ export default function App() {
     numeros: { t: "Números", s: "Números oficiais conectados à sua conta Meta" },
     analiseia: { t: "Análise IA", s: "A IA lê as conversas e aponta o que está bom, o que melhorar e alertas" },
     crm: { t: "Pipeline", s: "Funil de leads — arraste entre as etapas, atribua e acompanhe" },
+    agenda: { t: "Agenda", s: "Reuniões, ligações e visitas com os clientes — integrada ao Google Agenda" },
     vendas: { t: "Vendas", s: "Metas, ranking e todas as vendas do time" },
     desempenho: { t: "Desempenho", s: "Métricas, cargo, faixa e progresso de cada vendedor" },
     sistema: { t: "Sistema", s: "Controle dos módulos entregues — visível só pra você (dono)" },
@@ -492,6 +498,7 @@ export default function App() {
   const grupos = [
     { t: "Comercial", itens: [
       (isGer || vendPode("crm")) && mod("crm") && { k: "crm", ic: I.pipe, label: "Pipeline" },
+      !isSuporte && mod("agenda") && { k: "agenda", ic: I.calendar, label: "Agenda" },
       (isGer || vendPode("vendas")) && mod("vendas") && { k: "vendas", ic: I.trend, label: "Vendas" },
       (isGer || (isVend && !(acessoVend && acessoVend.desempenhoOculto))) && mod("desempenho") && { k: "desempenho", ic: I.medal, label: "Desempenho" },
     ] },
@@ -513,9 +520,12 @@ export default function App() {
     ? ({ toledo: "Toledo", jesuitas: "Jesuítas" }[unidade] || unidade.charAt(0).toUpperCase() + unidade.slice(1))
     : "";
 
+  const podeAgenda = !isSuporte && mod("agenda");
   return (
+    <AppCtx.Provider value={{ podeAgenda }}>
     <div className={"shell" + (menuRecolhido ? " menu-recolhido" : "")}>
       {!novidades && <RecadoDoDia />}
+      {podeAgenda && view !== "agenda" && <LembreteAgenda onAbrirAgenda={() => setView("agenda")} />}
       <aside className="sidebar">
         <div className="side-topo">
           <div className="brand"><img src={LOGO_LIGHT} alt="Instructiva" /></div>
@@ -558,7 +568,7 @@ export default function App() {
             </div>
             <button className="side-sair" onClick={logout} title="Sair" aria-label="Sair"><I.out className="ico" /></button>
           </div>
-          <button type="button" className="side-versao" onClick={() => { setNovidadesSoNovos(false); setNovidades(true); }} title="Ver as novidades desta versão">v2.5 · novidades</button>
+          <button type="button" className="side-versao" onClick={() => { setNovidadesSoNovos(false); setNovidades(true); }} title="Ver as novidades desta versão">v2.6 · novidades</button>
         </div>
       </aside>
 
@@ -588,6 +598,12 @@ export default function App() {
           {view === "disparo" && (isGer || isVend) && mod("disparo") && <OficialDisparo isGer={isGer} showToast={showToast} preset={disparoPreset} onPresetUsado={() => setDisparoPreset(null)} />}
           {view === "numeros" && isGer && mod("numeros") && <OficialNumeros showToast={showToast} />}
           {view === "vendas" && (isGer || vendPode("vendas")) && mod("vendas") && <PainelVendas showToast={showToast} isGer={isGer} ehLider={ehLider} />}
+          {view === "agenda" && podeAgenda && (
+            <PaginaAgenda user={user} isGer={isGer} ehLider={ehLider} showToast={showToast}
+              retornoGoogle={retornoGoogle} onRetornoVisto={() => setRetornoGoogle("")}
+              onAbrirLead={(isGer || vendPode("crm")) && mod("crm") ? (id) => { setCrmAbrir(id); setView("crm"); } : null}
+              onAbrirConversa={mod("caixa") ? (tel, nome) => { setWaTarget({ numero: tel, canal: "oficial", nome }); setView("whatsapp"); } : null} />
+          )}
           {view === "crm" && (isGer || vendPode("crm")) && mod("crm") && <OficialCRM showToast={showToast} isGer={isGer} abrirLeadId={crmAbrir} onLeadAberto={() => setCrmAbrir(null)} onAbrirWhats={(tel, canal, nome) => { setWaTarget({ numero: tel, canal, nome }); setView("whatsapp"); }} onDisparar={(preset) => { setDisparoPreset(preset); setView("disparo"); }} />}
           {view === "desempenho" && (isGer || (isVend && !(acessoVend && acessoVend.desempenhoOculto))) && mod("desempenho") && <Desempenho showToast={showToast} isGer={isGer} ehLider={ehLider} />}
           {view === "analiseia" && (isGer || isVend) && mod("caixa") && <AnaliseIAVendedor showToast={showToast} isGer={isGer} />}
@@ -610,7 +626,7 @@ export default function App() {
       )}
       {novidades && (
         <Novidades user={user} perfil={isGer ? "gerente" : isSuporte ? "suporte" : "vendedor"} ehMac={ehMac} onClose={fecharNovidades} soNovos={novidadesSoNovos}
-          pode={{ disparo: (isGer || isVend) && mod("disparo"), vendas: (isGer || vendPode("vendas")) && mod("vendas"), crm: (isGer || vendPode("crm")) && mod("crm"), caixa: !isSuporte && mod("caixa") }} />
+          pode={{ agenda: podeAgenda, disparo: (isGer || isVend) && mod("disparo"), vendas: (isGer || vendPode("vendas")) && mod("vendas"), crm: (isGer || vendPode("crm")) && mod("crm"), caixa: !isSuporte && mod("caixa") }} />
       )}
       {novaVersao && <AvisoAtualizacao />}
       {toast && (() => {
@@ -622,6 +638,7 @@ export default function App() {
         return <div className={"toast toast-" + tipo} role="status"><span className="toast-ic"><Ico className="ico" /></span><span>{limpo}</span></div>;
       })()}
     </div>
+    </AppCtx.Provider>
   );
 }
 
@@ -2976,6 +2993,7 @@ function PainelSistema({ modulos, onSalvo, showToast }) {
     ["templates", "Templates", "Modelos de mensagem aprovados pela Meta."],
     ["numeros", "Números", "Números oficiais conectados e qualidade de cada um."],
     ["crm", "Pipeline", "Funil de vendas visual (Kanban) com etapas e distribuição."],
+    ["agenda", "Agenda", "Reuniões e ligações com os clientes, integradas ao Google Agenda."],
     ["solicitacoes", "Solicitações", "Pedidos de suporte dos vendedores."],
     ["equipe", "Equipe & Acessos", "Gestão de usuários e permissões da equipe."],
   ];
@@ -7545,6 +7563,8 @@ function OficialCRM({ showToast, isGer = true, onAbrirWhats, onDisparar, abrirLe
   const carregar = () => api.ofCRM().then((d) => { setEtapas(d.etapas || []); setLeads(d.leads || []); setVendedores(d.vendedores || []); setCrmVend(d.crmVendedores || []); }).catch((e) => showToast(e.message));
   // v2.5: a foto do vendedor vem uma vez só (lista de vendedores), não repetida em cada card
   const fotoVend = useMemo(() => { const m = {}; vendedores.forEach((v) => { m[v.id] = v.foto || ""; }); return m; }, [vendedores]);
+  const { podeAgenda: podeAgendaCRM } = React.useContext(AppCtx);
+  const [agendarLead, setAgendarLead] = useState(null);
   const versaoCrmRef = useRef("");
   useEffect(() => {
     let vivo = true;
@@ -7863,6 +7883,10 @@ function OficialCRM({ showToast, isGer = true, onAbrirWhats, onDisparar, abrirLe
         })}
       </div>
 
+      {agendarLead && (
+        <ModalAgendamento showToast={showToast} onClose={() => setAgendarLead(null)}
+          inicial={{ leadId: agendarLead.id, leadNome: agendarLead.nome || "", telefone: agendarLead.telefone || "", email: agendarLead.email || "" }} />
+      )}
       {leadSel && (
         <div className="crm-modal-bg" onClick={(e) => e.target === e.currentTarget && setSel(null)}>
           <div className="crm-modal">
@@ -7916,6 +7940,11 @@ function OficialCRM({ showToast, isGer = true, onAbrirWhats, onDisparar, abrirLe
                 </>
               )}
 
+              {podeAgendaCRM && (
+                <button type="button" className="crm-agendar" onClick={() => setAgendarLead(leadSel)}>
+                  <I.calendar className="ico" /><span><b>Agendar reunião ou ligação</b><small>Vai pra Agenda{" "}e pro Google Agenda, com lembrete</small></span>
+                </button>
+              )}
               <div className="crm-sec-t"><I.clock className="ico-inline" /> Próxima tarefa (follow-up)</div>
               <div className="crm-tarefa-box">
                 {leadSel.tarefa && !leadSel.tarefa.feito && (
@@ -9097,6 +9126,13 @@ function FichaLead({ chatId, telefone, nome, isGer, foco, onFechar, onRegistrarV
   const [tarefaData, setTarefaData] = useState("");
   const [rascunho, setRascunho] = useState({});
   const obsRef = useRef(null);
+  // v2.6: compromissos da agenda com este lead
+  const { podeAgenda } = React.useContext(AppCtx);
+  const [agendarAberto, setAgendarAberto] = useState(false);
+  const [compromissos, setCompromissos] = useState([]);
+  const carregarCompromissos = (id) => { if (podeAgenda && id) api.agendaDoLead(id).then((r) => setCompromissos(r.eventos || [])).catch(() => {}); else setCompromissos([]); };
+  const leadIdAtual = lead ? lead.id : null;
+  useEffect(() => { carregarCompromissos(leadIdAtual); /* eslint-disable-next-line */ }, [leadIdAtual, podeAgenda]);
 
   async function carregar() {
     setCarregando(true);
@@ -9161,6 +9197,7 @@ function FichaLead({ chatId, telefone, nome, isGer, foco, onFechar, onRegistrarV
         <div className="ficha-acoes">
           {onLigar && <button type="button" className="ficha-acao" onClick={onLigar}><I.fone className="ico" /><span>Ligar</span></button>}
           {onRegistrarVenda && <button type="button" className="ficha-acao" onClick={onRegistrarVenda}><I.cash className="ico" /><span>Venda</span></button>}
+          {podeAgenda && <button type="button" className="ficha-acao" onClick={() => setAgendarAberto(true)}><I.calendar className="ico" /><span>Agendar</span></button>}
           {lead && onAbrirPipeline && <button type="button" className="ficha-acao" onClick={() => onAbrirPipeline(lead.id)}><I.pipe className="ico" /><span>Pipeline</span></button>}
         </div>
       </div>
@@ -9188,6 +9225,25 @@ function FichaLead({ chatId, telefone, nome, isGer, foco, onFechar, onRegistrarV
                 ))}
               </div>
             </section>
+
+            {podeAgenda && (() => {
+              const futuros = compromissos.filter((c) => c.fim > Date.now() && c.status === "marcado").slice(0, 3);
+              if (!futuros.length) return null;
+              return (
+                <section className="ficha-sec">
+                  <div className="ficha-sec-t">Agenda</div>
+                  <div className="ficha-agenda">
+                    {futuros.map((c) => (
+                      <div key={c.id} className="ficha-ag" style={{ "--c": tipoAgenda(c.tipo).cor }}>
+                        <span className="ficha-ag-quando"><b>{hm(c.inicio)}</b><small>{rotuloDiaAgenda(c.inicio)}</small></span>
+                        <span className="ficha-ag-txt">{c.titulo}{c.donoNome ? <small>com {c.donoNome}</small> : null}</span>
+                        {c.meetLink && <a className="ficha-mini" href={c.meetLink} target="_blank" rel="noreferrer" title="Entrar no Google Meet"><I.play className="ico" /></a>}
+                      </div>
+                    ))}
+                  </div>
+                </section>
+              );
+            })()}
 
             <section className="ficha-sec">
               <div className="ficha-sec-t">Próxima tarefa</div>
@@ -9275,6 +9331,11 @@ function FichaLead({ chatId, telefone, nome, isGer, foco, onFechar, onRegistrarV
           )}
         </section>
 
+        {agendarAberto && (
+          <ModalAgendamento showToast={showToast} onClose={() => setAgendarAberto(false)} onSalvo={() => carregarCompromissos(leadIdAtual)}
+            inicial={{ leadId: lead ? lead.id : null, leadNome: (lead && lead.nome) || nome || "", telefone: (lead && lead.telefone) || telefone || "", email: (lead && lead.email) || "" }} />
+        )}
+
         {lead && historico.length > 0 && (
           <section className="ficha-sec">
             <div className="ficha-sec-t">Histórico</div>
@@ -9293,6 +9354,713 @@ function FichaLead({ chatId, telefone, nome, isGer, foco, onFechar, onRegistrarV
         )}
       </div>
     </aside>
+  );
+}
+
+/* ============================================================
+   v2.6 — AGENDA (integrada ao Google Agenda)
+   Cada pessoa marca reunião, ligação, visita ou aula. Com o Google
+   conectado, vai junto pro Google Agenda (lembrete no celular, link
+   do Meet e convite pro cliente). Tarefas do Pipeline aparecem aqui.
+   ============================================================ */
+const AppCtx = React.createContext({});
+const TIPOS_AGENDA = [
+  { k: "reuniao", lb: "Reunião", ic: "users", cor: "#059669", titulo: (n) => (n ? "Reunião com " + n : "Reunião") },
+  { k: "ligacao", lb: "Ligação", ic: "fone", cor: "#2563eb", titulo: (n) => (n ? "Ligar para " + n : "Ligação") },
+  { k: "visita", lb: "Visita", ic: "user", cor: "#d97706", titulo: (n) => (n ? "Visita — " + n : "Visita") },
+  { k: "aula", lb: "Aula / demonstração", ic: "play", cor: "#7c3aed", titulo: (n) => (n ? "Aula demonstrativa — " + n : "Aula demonstrativa") },
+  { k: "outro", lb: "Outro", ic: "calendar", cor: "#0891b2", titulo: (n) => (n ? "Compromisso — " + n : "") },
+];
+function tipoAgenda(k) {
+  if (k === "google") return { k, lb: "Google Agenda", ic: "calendar", cor: "#64748b" };
+  if (k === "tarefa") return { k, lb: "Tarefa do Pipeline", ic: "clock", cor: "#f59e0b" };
+  return TIPOS_AGENDA.find((t) => t.k === k) || TIPOS_AGENDA[4];
+}
+const DURACOES = [[15, "15 min"], [30, "30 min"], [45, "45 min"], [60, "1h"], [90, "1h30"], [120, "2h"]];
+const LEMBRETES = [[0, "Na hora"], [5, "5 min antes"], [10, "10 min antes"], [15, "15 min antes"], [30, "30 min antes"], [60, "1h antes"], [1440, "1 dia antes"]];
+const p2 = (n) => String(n).padStart(2, "0");
+function inicioSemana(t) { const d = new Date(t); d.setHours(0, 0, 0, 0); d.setDate(d.getDate() - ((d.getDay() + 6) % 7)); return d.getTime(); }
+function somaDias(t, n) { const d = new Date(t); d.setDate(d.getDate() + n); return d.getTime(); }
+function inicioDia(t) { const d = new Date(t); d.setHours(0, 0, 0, 0); return d.getTime(); }
+const dataInput = (t) => { const d = new Date(t); return d.getFullYear() + "-" + p2(d.getMonth() + 1) + "-" + p2(d.getDate()); };
+const horaInput = (t) => { const d = new Date(t); return p2(d.getHours()) + ":" + p2(d.getMinutes()); };
+function deInputs(data, hora) {
+  const [a, m, d] = String(data || "").split("-").map(Number);
+  const [h, mi] = String(hora || "").split(":").map(Number);
+  if (!a || !m || !d || !Number.isFinite(h)) return 0;
+  return new Date(a, m - 1, d, h, mi || 0, 0).getTime();
+}
+function proximaMeiaHora() { const d = new Date(); d.setSeconds(0, 0); d.setMinutes(d.getMinutes() < 30 ? 30 : 60); return d.getTime(); }
+const hm = (t) => new Date(t).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+function diaLongo(t) {
+  const s = new Date(t).toLocaleDateString("pt-BR", { weekday: "long", day: "numeric", month: "long" });
+  return s.charAt(0).toUpperCase() + s.slice(1);
+}
+function rotuloDiaAgenda(t) {
+  const dif = Math.round((inicioDia(t) - inicioDia(Date.now())) / 86400000);
+  if (dif === 0) return "Hoje";
+  if (dif === 1) return "Amanhã";
+  if (dif === -1) return "Ontem";
+  return diaLongo(t);
+}
+const MSG_RETORNO_GOOGLE = {
+  conectado: ["ok", "Google Agenda conectado! Agora o que você marcar aqui vai pro seu Google, com lembrete no celular."],
+  negado: ["erro", "Você não autorizou o acesso ao Google Agenda. Quando quiser, é só clicar em Conectar de novo."],
+  semagenda: ["aviso", "Faltou marcar a caixinha da agenda na tela do Google. Conecte de novo e deixe marcada a opção de ver e editar eventos."],
+  expirou: ["aviso", "A autorização demorou demais. Clique em Conectar meu Google Agenda de novo."],
+  semtoken: ["erro", "O Google não devolveu a permissão completa. Conecte de novo."],
+  erro: ["erro", "Não deu pra conectar ao Google agora. Tente de novo em instantes."],
+};
+
+// janela de criar/editar compromisso (usada na Agenda, na ficha do lead e no Pipeline)
+function ModalAgendamento({ inicial, onClose, onSalvo, showToast }) {
+  const ini = inicial || {};
+  const editando = !!ini.id;
+  const ini0 = ini.inicio || proximaMeiaHora();
+  const [google, setGoogle] = useState(null);
+  const [tipo, setTipo] = useState(ini.tipo && ini.tipo !== "google" && ini.tipo !== "tarefa" ? ini.tipo : "reuniao");
+  const [titulo, setTitulo] = useState(ini.titulo || "");
+  const [tituloMexido, setTituloMexido] = useState(!!ini.titulo);
+  const [data, setData] = useState(dataInput(ini0));
+  const [hora, setHora] = useState(horaInput(ini0));
+  const [dur, setDur] = useState(ini.fim && ini.inicio ? Math.max(15, Math.round((ini.fim - ini.inicio) / 60000)) : 30);
+  const [lead, setLead] = useState(ini.leadId || ini.leadNome ? { id: ini.leadId || null, nome: ini.leadNome || "", telefone: ini.telefone || "", email: ini.email || "" } : null);
+  const [buscaLead, setBuscaLead] = useState("");
+  const [achados, setAchados] = useState([]);
+  const [convidados, setConvidados] = useState(editando ? (ini.convidados || []).join(", ") : "");
+  const [meet, setMeet] = useState(editando ? !!ini.meetLink : true);
+  const [meetMexido, setMeetMexido] = useState(editando);
+  // Meet já vem marcado pra reunião e aula; ligação e visita não precisam
+  useEffect(() => { if (!meetMexido) setMeet(tipo === "reuniao" || tipo === "aula"); }, [tipo, meetMexido]);
+  const [lembrete, setLembrete] = useState(Number.isFinite(ini.lembreteMin) ? ini.lembreteMin : 10);
+  const [local, setLocal] = useState(ini.local || "");
+  const [descricao, setDescricao] = useState(ini.descricao || "");
+  const [salvando, setSalvando] = useState(false);
+  useEffect(() => { api.agendaConfig().then(setGoogle).catch(() => setGoogle({})); }, []);
+  useEffect(() => {
+    const esc = (e) => { if (e.key === "Escape") onClose(); };
+    window.addEventListener("keydown", esc);
+    return () => window.removeEventListener("keydown", esc);
+  }, [onClose]);
+  // título sugerido: "Reunião com João" (até a pessoa escrever o dela)
+  useEffect(() => {
+    if (tituloMexido) return;
+    setTitulo(tipoAgenda(tipo).titulo(lead ? primeiroNome(lead.nome) || lead.nome : ""));
+  }, [tipo, lead, tituloMexido]);
+  useEffect(() => {
+    const q = buscaLead.trim();
+    if (q.length < 2) { setAchados([]); return; }
+    let vivo = true;
+    const t = setTimeout(() => api.agendaLeads(q).then((r) => { if (vivo) setAchados(r.leads || []); }).catch(() => {}), 280);
+    return () => { vivo = false; clearTimeout(t); };
+  }, [buscaLead]);
+  function escolherLead(l) { setLead(l); setBuscaLead(""); setAchados([]); }
+  const conectado = !!(google && google.conectado);
+  const temConvite = !!convidados.trim();
+  async function salvar() {
+    const inicio = deInputs(data, hora);
+    if (!inicio) { showToast("⚠ Escolha a data e a hora"); return; }
+    if (!titulo.trim()) { showToast("⚠ Dê um nome ao compromisso"); return; }
+    setSalvando(true);
+    const dados = {
+      titulo: titulo.trim(), tipo, inicio, fim: inicio + dur * 60000,
+      leadId: lead ? lead.id : null, leadNome: lead ? lead.nome : "", telefone: lead ? lead.telefone : "",
+      convidados: convidados.split(/[,;\s]+/).map((x) => x.trim()).filter(Boolean),
+      descricao, local, lembreteMin: lembrete, meet: conectado && meet,
+    };
+    try {
+      const r = editando ? await api.agendaEditar(ini.id, dados) : await api.agendaCriar(dados);
+      if (r.aviso) showToast("⚠ " + r.aviso);
+      else showToast(conectado ? "✓ Agendado e enviado pro seu Google Agenda" : "✓ Agendado");
+      onSalvo && onSalvo(r.evento);
+      onClose();
+    } catch (e) { showToast("✗ " + e.message); } finally { setSalvando(false); }
+  }
+  const T = tipoAgenda(tipo);
+  return (
+    <Portal>
+      <div className="modal" onClick={(e) => e.target === e.currentTarget && onClose()}>
+        <div className="onum-modal ag-modal" role="dialog" aria-modal="true" aria-labelledby="ag-modal-tit" style={{ "--c": T.cor }}>
+          <div className="ag-modal-topo">
+            <div>
+              <b id="ag-modal-tit">{editando ? "Editar compromisso" : "Novo agendamento"}</b>
+              <span>{conectado ? <>Vai pro seu Google Agenda <em>{google.email}</em></> : google && google.configurado ? "Fica salvo no CRM. Conecte seu Google Agenda pra receber no celular." : "Fica salvo no CRM e aparece na sua Agenda."}</span>
+            </div>
+            <button className="crm-x" onClick={onClose} aria-label="Fechar"><I.x className="ico" /></button>
+          </div>
+          <div className="ag-modal-corpo">
+            <div className="ag-tipos" role="radiogroup" aria-label="Tipo de compromisso">
+              {TIPOS_AGENDA.map((t) => {
+                const Ic = I[t.ic] || I.calendar;
+                return (
+                  <button type="button" key={t.k} role="radio" aria-checked={tipo === t.k} className={"ag-tipo" + (tipo === t.k ? " on" : "")} style={{ "--c": t.cor }} onClick={() => setTipo(t.k)}>
+                    <Ic className="ico" /><span>{t.lb}</span>
+                  </button>
+                );
+              })}
+            </div>
+
+            <label className="ag-campo"><span>Cliente / lead</span>
+              {lead ? (
+                <div className="ag-lead">
+                  <div className="of-chat-av cor" style={{ "--h": corDoNome(lead.nome) }}>{iniciais(lead.nome)}</div>
+                  <div className="ag-lead-txt"><b>{lead.nome || "Contato"}</b><small>{[lead.telefone, lead.email].filter(Boolean).join(" · ")}</small></div>
+                  <button type="button" className="ag-lead-x" onClick={() => setLead(null)} title="Tirar o lead" aria-label="Tirar o lead"><I.x className="ico" /></button>
+                </div>
+              ) : (
+                <div className="ag-lead-busca">
+                  <I.search className="ico" />
+                  <input className="input" value={buscaLead} placeholder="Buscar no Pipeline pelo nome ou telefone (opcional)" onChange={(e) => setBuscaLead(e.target.value)} />
+                  {achados.length > 0 && (
+                    <div className="ag-lead-lista">
+                      {achados.map((l) => (
+                        <button type="button" key={l.id} onClick={() => escolherLead(l)}>
+                          <b>{l.nome || "Sem nome"}</b><small>{[l.telefone, l.curso].filter(Boolean).join(" · ")}</small>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </label>
+
+            <label className="ag-campo"><span>Título</span>
+              <input className="input" value={titulo} maxLength={200} placeholder="Ex.: Reunião de apresentação do curso" onChange={(e) => { setTitulo(e.target.value); setTituloMexido(true); }} />
+            </label>
+
+            <div className="ag-linha">
+              <label className="ag-campo"><span>Dia</span><input className="input" type="date" value={data} onChange={(e) => setData(e.target.value)} /></label>
+              <label className="ag-campo"><span>Hora</span><input className="input" type="time" step={300} value={hora} onChange={(e) => setHora(e.target.value)} /></label>
+            </div>
+            <div className="ag-campo"><span>Duração</span>
+              <div className="ag-chips">
+                {DURACOES.map(([m, lb]) => <button type="button" key={m} className={"ag-chip" + (dur === m ? " on" : "")} onClick={() => setDur(m)}>{lb}</button>)}
+              </div>
+            </div>
+
+            {conectado && (
+              <label className={"ag-check" + (meet ? " on" : "")}>
+                <input type="checkbox" checked={meet} onChange={(e) => { setMeet(e.target.checked); setMeetMexido(true); }} />
+                <span className="ag-check-ic"><I.play className="ico" /></span>
+                <span><b>Criar link do Google Meet</b><small>A videochamada já sai pronta no convite</small></span>
+              </label>
+            )}
+            <label className="ag-campo"><span>Convidar por e-mail {conectado ? "" : "(vale quando o Google estiver conectado)"}</span>
+              <input className="input" type="text" inputMode="email" value={convidados} placeholder="email do cliente (separe vários com vírgula)" onChange={(e) => setConvidados(e.target.value)} />
+              {lead && lead.email && !convidados.toLowerCase().includes(lead.email.toLowerCase()) && (
+                <button type="button" className="ag-sugestao" onClick={() => setConvidados((c) => (c.trim() ? c.trim().replace(/,$/, "") + ", " : "") + lead.email)}><I.plus className="ico" /> Convidar {lead.email}</button>
+              )}
+              {conectado && temConvite && <small className="ag-dica">O Google manda o convite pra esse e-mail, com {meet ? "o link do Meet e " : ""}a data na agenda da pessoa.</small>}
+            </label>
+
+            <div className="ag-linha">
+              <label className="ag-campo"><span>Lembrete</span>
+                <select className="input" value={lembrete} onChange={(e) => setLembrete(Number(e.target.value))}>
+                  {LEMBRETES.map(([m, lb]) => <option key={m} value={m}>{lb}</option>)}
+                </select>
+              </label>
+              <label className="ag-campo"><span>Local (opcional)</span><input className="input" value={local} placeholder="Escola, endereço ou link" onChange={(e) => setLocal(e.target.value)} /></label>
+            </div>
+            <label className="ag-campo"><span>Anotações (opcional)</span>
+              <textarea className="input" rows={2} value={descricao} placeholder="O que falar, o que levar, o que o cliente pediu…" onChange={(e) => setDescricao(e.target.value)} />
+            </label>
+          </div>
+          <div className="ag-modal-pe">
+            <button className="btn" onClick={onClose}>Cancelar</button>
+            <button className="btn btn-primary" disabled={salvando} onClick={salvar}>
+              {salvando ? "Salvando…" : editando ? "Salvar alterações" : conectado ? "Agendar e enviar pro Google" : "Agendar"}
+            </button>
+          </div>
+        </div>
+      </div>
+    </Portal>
+  );
+}
+
+// detalhe de um compromisso (clicou no calendário)
+function DetalheCompromisso({ ev, onClose, onEditar, onMudou, onAbrirLead, onAbrirConversa, showToast }) {
+  const T = tipoAgenda(ev.tipo);
+  const Ic = I[T.ic] || I.calendar;
+  const doCRM = ev.origem === "crm";
+  const passou = ev.fim < Date.now();
+  const [ocupado, setOcupado] = useState(false);
+  useEffect(() => {
+    const esc = (e) => { if (e.key === "Escape") onClose(); };
+    window.addEventListener("keydown", esc);
+    return () => window.removeEventListener("keydown", esc);
+  }, [onClose]);
+  async function status(s, aviso) {
+    setOcupado(true);
+    try { await api.agendaEditar(ev.id, { status: s }); showToast("✓ " + aviso); onMudou(); onClose(); }
+    catch (e) { showToast("✗ " + e.message); } finally { setOcupado(false); }
+  }
+  async function excluir() {
+    const txt = ev.convidados && ev.convidados.length ? "Desmarcar este compromisso? Os convidados recebem o aviso de cancelamento pelo Google." : "Excluir este compromisso?";
+    if (!window.confirm(txt)) return;
+    setOcupado(true);
+    try { const r = await api.agendaExcluir(ev.id); showToast(r.aviso ? "⚠ " + r.aviso : "✓ Compromisso excluído"); onMudou(); onClose(); }
+    catch (e) { showToast("✗ " + e.message); } finally { setOcupado(false); }
+  }
+  async function concluirTarefa() {
+    setOcupado(true);
+    try { await api.ofCrmEditar(ev.leadId, { tarefa: { texto: ev.titulo, quando: ev.inicio, feito: true } }); showToast("✓ Tarefa concluída"); onMudou(); onClose(); }
+    catch (e) { showToast("✗ " + e.message); } finally { setOcupado(false); }
+  }
+  return (
+    <Portal>
+      <div className="modal" onClick={(e) => e.target === e.currentTarget && onClose()}>
+        <div className="onum-modal ag-det" role="dialog" aria-modal="true" aria-labelledby="ag-det-tit" style={{ "--c": T.cor }}>
+          <div className="ag-det-topo">
+            <span className="ag-det-ic"><Ic className="ico" /></span>
+            <div className="ag-det-tt">
+              <small>{T.lb}{ev.status === "feito" ? " · feito ✓" : ev.status === "naoveio" ? " · não compareceu" : ""}{ev.donoNome && doCRM ? " · " + ev.donoNome : ""}</small>
+              <b id="ag-det-tit">{ev.titulo}</b>
+              <span>{ev.diaInteiro ? diaLongo(ev.inicio) + " · dia inteiro" : diaLongo(ev.inicio) + " · " + hm(ev.inicio) + " às " + hm(ev.fim)}</span>
+            </div>
+            <button className="crm-x" onClick={onClose} aria-label="Fechar"><I.x className="ico" /></button>
+          </div>
+          <div className="ag-det-corpo">
+            {ev.meetLink && <a className="ag-meet" href={ev.meetLink} target="_blank" rel="noreferrer"><I.play className="ico" /> Entrar no Google Meet</a>}
+            {(ev.leadNome || ev.telefone) && (
+              <div className="ag-det-lead">
+                <div className="of-chat-av cor" style={{ "--h": corDoNome(ev.leadNome) }}>{iniciais(ev.leadNome || "?")}</div>
+                <div className="ag-lead-txt"><b>{ev.leadNome || "Contato"}</b><small>{ev.telefone}</small></div>
+                {ev.telefone && onAbrirConversa && <button type="button" className="btn btn-sm" onClick={() => { onClose(); onAbrirConversa(ev.telefone, ev.leadNome); }}><I.chat className="ico" /> Conversa</button>}
+                {ev.leadId && onAbrirLead && <button type="button" className="btn btn-sm" onClick={() => { onClose(); onAbrirLead(ev.leadId); }}><I.pipe className="ico" /> Pipeline</button>}
+              </div>
+            )}
+            {ev.convidados && ev.convidados.length > 0 && <div className="ag-det-linha"><I.users className="ico" /><span>{ev.convidados.join(", ")}</span></div>}
+            {ev.local && <div className="ag-det-linha"><I.link className="ico" /><span>{ev.local}</span></div>}
+            {ev.lembreteMin != null && doCRM && <div className="ag-det-linha"><I.clock className="ico" /><span>Lembrete {(LEMBRETES.find(([m]) => m === ev.lembreteMin) || [0, ev.lembreteMin + " min antes"])[1].toLowerCase()}</span></div>}
+            {ev.descricao && <div className="ag-det-desc">{ev.descricao}</div>}
+            {doCRM && ev.googleErro && <div className="ag-aviso aviso"><I.alert className="ico" /> {ev.googleErro}</div>}
+            {doCRM && ev.noGoogle && !ev.googleErro && <div className="ag-det-sync"><I.check className="ico" /> Está no Google Agenda{ev.googleLink ? <> · <a href={ev.googleLink} target="_blank" rel="noreferrer">abrir lá</a></> : null}</div>}
+            {ev.origem === "google" && <div className="ag-det-sync">Compromisso do seu Google Agenda{ev.googleLink ? <> · <a href={ev.googleLink} target="_blank" rel="noreferrer">abrir lá</a></> : null}</div>}
+            {ev.origem === "tarefa" && <div className="ag-det-sync">Tarefa marcada no lead, dentro do Pipeline.</div>}
+          </div>
+          <div className="ag-det-pe">
+            {doCRM && (
+              <>
+                <button className="btn btn-danger btn-sm" disabled={ocupado} onClick={excluir}><I.trash className="ico" /> {ev.convidados && ev.convidados.length ? "Desmarcar" : "Excluir"}</button>
+                <span className="ag-esp" />
+                {passou && ev.status === "marcado" && <button className="btn btn-sm" disabled={ocupado} onClick={() => status("naoveio", "Marcado como não compareceu")}>Não compareceu</button>}
+                {ev.status === "marcado"
+                  ? <button className="btn btn-sm" disabled={ocupado} onClick={() => status("feito", "Marcado como feito")}><I.check className="ico" /> Feito</button>
+                  : <button className="btn btn-sm" disabled={ocupado} onClick={() => status("marcado", "Voltou pra marcado")}>Desfazer</button>}
+                <button className="btn btn-primary btn-sm" disabled={ocupado} onClick={() => { onClose(); onEditar(ev); }}>Editar</button>
+              </>
+            )}
+            {ev.origem === "tarefa" && (
+              <>
+                <span className="ag-esp" />
+                {ev.leadId && onAbrirLead && <button className="btn btn-sm" onClick={() => { onClose(); onAbrirLead(ev.leadId); }}>Abrir lead</button>}
+                <button className="btn btn-primary btn-sm" disabled={ocupado} onClick={concluirTarefa}><I.check className="ico" /> Concluir tarefa</button>
+              </>
+            )}
+            {ev.origem === "google" && <><span className="ag-esp" /><button className="btn btn-sm" onClick={onClose}>Fechar</button></>}
+          </div>
+        </div>
+      </div>
+    </Portal>
+  );
+}
+
+// configuração do Google (só o dono vê) — passo a passo do Google Cloud
+function ConfigGoogleAgenda({ cfg, onClose, onSalvo, showToast }) {
+  const [clientId, setClientId] = useState(cfg.clientId || "");
+  const [segredo, setSegredo] = useState("");
+  const [salvando, setSalvando] = useState(false);
+  async function salvar() {
+    setSalvando(true);
+    try { await api.agendaSalvarConfig({ clientId: clientId.trim(), clientSecret: segredo.trim() }); showToast("✓ Google Agenda ligado pra equipe"); onSalvo(); onClose(); }
+    catch (e) { showToast("✗ " + e.message); } finally { setSalvando(false); }
+  }
+  function copiar(t) { try { navigator.clipboard.writeText(t); showToast("✓ Copiado"); } catch (_) {} }
+  return (
+    <Portal>
+      <div className="modal" onClick={(e) => e.target === e.currentTarget && onClose()}>
+        <div className="onum-modal ag-modal ag-config">
+          <div className="ag-modal-topo">
+            <div><b>Ligar o Google Agenda pra equipe</b><span>Feito uma vez só. Depois, cada pessoa conecta a própria conta com um clique.</span></div>
+            <button className="crm-x" onClick={onClose} aria-label="Fechar"><I.x className="ico" /></button>
+          </div>
+          <div className="ag-modal-corpo">
+            <ol className="ag-passos">
+              <li>Entre em <a href="https://console.cloud.google.com/projectcreate" target="_blank" rel="noreferrer">console.cloud.google.com</a> com a conta Google da escola e crie um projeto chamado <b>CRM Instructiva</b>.</li>
+              <li>Em <b>APIs e serviços › Biblioteca</b>, procure <b>Google Calendar API</b> e clique em <b>Ativar</b>.</li>
+              <li>Em <b>Tela de consentimento OAuth</b>: tipo <b>Externo</b> (ou <b>Interno</b>, se todo mundo usa e-mail da escola no Google Workspace). Nome do app: <b>CRM Instructiva</b>. Depois clique em <b>Publicar aplicativo</b>.</li>
+              <li>Em <b>Credenciais › Criar credenciais › ID do cliente OAuth</b>, escolha <b>Aplicativo da Web</b> e, em <b>URIs de redirecionamento autorizados</b>, cole o endereço abaixo (e o mesmo endereço do sistema da outra unidade).</li>
+              <li>Copie o <b>ID do cliente</b> e a <b>Chave secreta do cliente</b> e cole aqui embaixo. Faça o mesmo no sistema da outra unidade.</li>
+            </ol>
+            <div className="ag-campo"><span>Endereço de retorno desta unidade</span>
+              <div className="ag-copiar"><code>{cfg.urlRetorno}</code><button type="button" className="btn btn-sm" onClick={() => copiar(cfg.urlRetorno)}><I.copy className="ico" /> Copiar</button></div>
+            </div>
+            {cfg.doAmbiente ? (
+              <div className="ag-aviso ok"><I.check className="ico" /> Já está configurado pelas variáveis do Railway (GOOGLE_CLIENT_ID e GOOGLE_CLIENT_SECRET).</div>
+            ) : (
+              <>
+                <label className="ag-campo"><span>ID do cliente (Client ID)</span>
+                  <input className="input mono" value={clientId} placeholder="123456789-abc.apps.googleusercontent.com" onChange={(e) => setClientId(e.target.value)} autoComplete="off" />
+                </label>
+                <label className="ag-campo"><span>Chave secreta do cliente (Client Secret)</span>
+                  <input className="input mono" type="password" value={segredo} placeholder={cfg.temSegredo ? "•••••••• (já salva — só cole se for trocar)" : "GOCSPX-…"} onChange={(e) => setSegredo(e.target.value)} autoComplete="new-password" />
+                </label>
+              </>
+            )}
+          </div>
+          {!cfg.doAmbiente && (
+            <div className="ag-modal-pe">
+              <button className="btn" onClick={onClose}>Cancelar</button>
+              <button className="btn btn-primary" disabled={salvando || !clientId.trim() || (!segredo.trim() && !cfg.temSegredo)} onClick={salvar}>{salvando ? "Salvando…" : "Salvar e ligar"}</button>
+            </div>
+          )}
+        </div>
+      </div>
+    </Portal>
+  );
+}
+
+// lado a lado sem encavalar: compromissos no mesmo horário dividem a coluna do dia
+function colunasDoDia(evs) {
+  const out = [];
+  let grupo = [], fimGrupo = 0;
+  const fechar = () => {
+    const raias = [];
+    grupo.forEach((e) => {
+      let i = raias.findIndex((f) => f <= e._ini);
+      if (i < 0) { i = raias.length; raias.push(0); }
+      raias[i] = e._fim; e._raia = i;
+    });
+    grupo.forEach((e) => { e._raias = raias.length; out.push(e); });
+    grupo = [];
+  };
+  evs.forEach((e) => {
+    if (grupo.length && e._ini >= fimGrupo) fechar();
+    grupo.push(e); fimGrupo = Math.max(fimGrupo, e._fim);
+  });
+  if (grupo.length) fechar();
+  return out;
+}
+
+const HORA_PX = 52;
+function PaginaAgenda({ user, isGer, ehLider, showToast, retornoGoogle, onRetornoVisto, onAbrirLead, onAbrirConversa }) {
+  const [cfg, setCfg] = useState(null);
+  const [semana, setSemana] = useState(() => inicioSemana(Date.now()));
+  const [modo, setModo] = useState(() => {
+    if (typeof window !== "undefined" && window.innerWidth < 760) return "lista";
+    try { return localStorage.getItem("instructiva_agenda_modo") || "semana"; } catch (_) { return "semana"; }
+  });
+  const [quem, setQuem] = useState("eu");
+  const [equipe, setEquipe] = useState([]);
+  const [eventos, setEventos] = useState(null);
+  const [googleErro, setGoogleErro] = useState("");
+  const [novo, setNovo] = useState(null);
+  const [detalhe, setDetalhe] = useState(null);
+  const [setup, setSetup] = useState(false);
+  const [menuG, setMenuG] = useState(false);
+  const [agora, setAgora] = useState(Date.now());
+  const gradeRef = useRef(null);
+  const podeEquipe = isGer || ehLider;
+  useEffect(() => { try { localStorage.setItem("instructiva_agenda_modo", modo); } catch (_) {} }, [modo]);
+  const carregarCfg = () => api.agendaConfig().then(setCfg).catch(() => setCfg({}));
+  useEffect(() => { carregarCfg(); }, []);
+  useEffect(() => { if (podeEquipe) api.ofVendedoresLista().then((l) => setEquipe(Array.isArray(l) ? l : [])).catch(() => {}); }, [podeEquipe]);
+  const de = modo === "semana" ? semana : inicioDia(Date.now());
+  const ate = modo === "semana" ? somaDias(semana, 7) : somaDias(inicioDia(Date.now()), 30);
+  const reqRef = useRef(0);
+  const carregar = React.useCallback(() => {
+    const n = ++reqRef.current;
+    return api.agendaEventos(de, ate, quem).then((r) => {
+      if (n !== reqRef.current) return;
+      setEventos(r.eventos || []);
+      setGoogleErro((r.google && r.google.erro) || "");
+    }).catch((e) => { if (n === reqRef.current) { setEventos((x) => x || []); showToast("✗ " + e.message); } });
+    // eslint-disable-next-line
+  }, [de, ate, quem]);
+  useEffect(() => {
+    setEventos(null);
+    carregar();
+    const t = setInterval(() => { if (!document.hidden) { carregar(); setAgora(Date.now()); } }, 60000);
+    return () => clearInterval(t);
+  }, [carregar]);
+  // abre a semana já mostrando o horário de agora (ou 8h)
+  useEffect(() => {
+    if (modo !== "semana" || !gradeRef.current || eventos === null) return;
+    const h = new Date().getHours();
+    gradeRef.current.scrollTop = Math.max(0, (Math.min(Math.max(h - 1, 7), 20) - horaIni) * HORA_PX);
+    // eslint-disable-next-line
+  }, [modo, semana, eventos === null]);
+
+  async function conectar() {
+    try { const r = await api.agendaConectar(); try { localStorage.setItem("instructiva_view", "agenda"); } catch (_) {} window.location.href = r.url; }
+    catch (e) { showToast("✗ " + e.message); }
+  }
+  async function desconectar() {
+    setMenuG(false);
+    if (!window.confirm("Desconectar o seu Google Agenda? O que já foi pro Google continua lá; só os próximos agendamentos ficam apenas no CRM.")) return;
+    try { await api.agendaDesconectar(); showToast("✓ Google Agenda desconectado"); carregarCfg(); carregar(); }
+    catch (e) { showToast("✗ " + e.message); }
+  }
+
+  const lista = eventos || [];
+  const dias = Array.from({ length: 7 }, (_, i) => somaDias(semana, i));
+  const comHora = lista.filter((e) => !e.diaInteiro);
+  let horaIni = 7, horaFim = 21;
+  comHora.forEach((e) => {
+    if (e.inicio < semana || e.inicio >= somaDias(semana, 7)) return;
+    const d = new Date(e.inicio); const f = new Date(e.fim);
+    horaIni = Math.min(horaIni, d.getHours());
+    horaFim = Math.max(horaFim, inicioDia(e.fim) > inicioDia(e.inicio) ? 24 : f.getHours() + (f.getMinutes() > 0 ? 1 : 0));
+  });
+  horaIni = Math.max(0, horaIni); horaFim = Math.min(24, Math.max(horaFim, horaIni + 1));
+  const horas = Array.from({ length: horaFim - horaIni }, (_, i) => horaIni + i);
+  const hojeIni = inicioDia(agora);
+  const rotuloSemana = (() => {
+    const a = new Date(semana), b = new Date(somaDias(semana, 6));
+    const mes = (d) => d.toLocaleDateString("pt-BR", { month: "short" }).replace(".", "");
+    return a.getMonth() === b.getMonth()
+      ? `${a.getDate()} – ${b.getDate()} de ${b.toLocaleDateString("pt-BR", { month: "long" })} ${b.getFullYear()}`
+      : `${a.getDate()} ${mes(a)} – ${b.getDate()} ${mes(b)} ${b.getFullYear()}`;
+  })();
+  const resumo = (() => {
+    const hojeEvs = lista.filter((e) => e.inicio >= hojeIni && e.inicio < hojeIni + 86400000 && e.status !== "feito");
+    const prox = lista.find((e) => e.inicio > agora && !e.diaInteiro && e.status !== "feito");
+    return { hoje: hojeEvs.length, prox };
+  })();
+  function novoNoHorario(dia, ev) {
+    const caixa = ev.currentTarget.getBoundingClientRect();
+    const min = Math.floor(((ev.clientY - caixa.top) / HORA_PX) * 60 / 30) * 30 + horaIni * 60;
+    setNovo({ inicio: dia + min * 60000 });
+  }
+
+  const googleChip = (() => {
+    if (!cfg) return null;
+    if (!cfg.configurado) {
+      return cfg.ehDono
+        ? <button className="ag-gbtn" onClick={() => setSetup(true)}><span className="ag-glogo" /> Ligar o Google Agenda</button>
+        : <span className="ag-gchip off" title="O dono do sistema precisa ligar a integração uma vez"><span className="ag-glogo" /> Google Agenda: aguardando o gestor ligar</span>;
+    }
+    if (!cfg.conectado) return <button className="ag-gbtn" onClick={conectar}><span className="ag-glogo" /> Conectar meu Google Agenda</button>;
+    if (cfg.precisaReconectar) return <button className="ag-gbtn aviso" onClick={conectar}><I.alert className="ico" /> Reconectar Google</button>;
+    return (
+      <div className="ag-gwrap">
+        <button className="ag-gchip" onClick={() => setMenuG((v) => !v)} title="Google Agenda conectado">
+          <span className="ag-gdot" /> Google Agenda <em>{cfg.email}</em><I.chevron className="ico" />
+        </button>
+        {menuG && (
+          <div className="ag-gmenu" onMouseLeave={() => setMenuG(false)}>
+            <a href="https://calendar.google.com" target="_blank" rel="noreferrer" onClick={() => setMenuG(false)}><I.link className="ico" /> Abrir o Google Agenda</a>
+            {cfg.ehDono && <button onClick={() => { setMenuG(false); setSetup(true); }}><I.cog className="ico" /> Configurar integração</button>}
+            <button onClick={desconectar} className="perigo"><I.out className="ico" /> Desconectar minha conta</button>
+          </div>
+        )}
+      </div>
+    );
+  })();
+  const retorno = retornoGoogle && MSG_RETORNO_GOOGLE[retornoGoogle];
+
+  return (
+    <div className="ag-pagina">
+      {retorno && (
+        <div className={"ag-aviso " + retorno[0]}>
+          {retorno[0] === "ok" ? <I.check className="ico" /> : <I.alert className="ico" />}
+          <span>{retorno[1]}</span>
+          <button className="ag-aviso-x" onClick={onRetornoVisto} aria-label="Fechar aviso"><I.x className="ico" /></button>
+        </div>
+      )}
+      {googleErro && <div className="ag-aviso aviso"><I.alert className="ico" /><span>Não consegui ler o Google Agenda agora: {googleErro}</span></div>}
+
+      <div className="ag-barra">
+        <div className="ag-nav">
+          <button className="btn btn-sm" onClick={() => setSemana(inicioSemana(Date.now()))}>Hoje</button>
+          {modo === "semana" && (
+            <>
+              <button className="ag-seta" onClick={() => setSemana((s) => somaDias(s, -7))} aria-label="Semana anterior"><I.chevron className="ico" style={{ transform: "rotate(90deg)" }} /></button>
+              <button className="ag-seta" onClick={() => setSemana((s) => somaDias(s, 7))} aria-label="Próxima semana"><I.chevron className="ico" style={{ transform: "rotate(-90deg)" }} /></button>
+              <b className="ag-periodo">{rotuloSemana}</b>
+            </>
+          )}
+          {modo === "lista" && <b className="ag-periodo">Próximos 30 dias</b>}
+        </div>
+        <div className="ag-acoes">
+          <div className="ag-seg" role="group" aria-label="Modo de ver">
+            <button className={modo === "semana" ? "on" : ""} onClick={() => setModo("semana")}>Semana</button>
+            <button className={modo === "lista" ? "on" : ""} onClick={() => setModo("lista")}>Lista</button>
+          </div>
+          {podeEquipe && (
+            <select className="input ag-quem" value={quem} onChange={(e) => setQuem(e.target.value)} aria-label="De quem é a agenda">
+              <option value="eu">Minha agenda</option>
+              <option value="equipe">{isGer ? "Equipe toda" : "Minha equipe"}</option>
+              {equipe.filter((v) => v.id !== user.id).map((v) => <option key={v.id} value={v.id}>{v.nome}</option>)}
+            </select>
+          )}
+          {googleChip}
+          <button className="btn btn-primary ag-novo" onClick={() => setNovo({})}><I.plus className="ico" /> Agendar</button>
+        </div>
+      </div>
+
+      <div className="ag-resumo">
+        <span><b>{resumo.hoje}</b> {resumo.hoje === 1 ? "compromisso hoje" : "compromissos hoje"}</span>
+        {resumo.prox && <span className="ag-resumo-prox">Próximo: <b>{resumo.prox.titulo}</b> · {rotuloDiaAgenda(resumo.prox.inicio).toLowerCase()} às {hm(resumo.prox.inicio)}</span>}
+        <span className="ag-legenda">
+          {TIPOS_AGENDA.slice(0, 4).map((t) => <i key={t.k} style={{ "--c": t.cor }}>{t.lb.split(" ")[0]}</i>)}
+          <i style={{ "--c": "#f59e0b" }}>Tarefa</i>
+          {cfg && cfg.conectado && <i style={{ "--c": "#64748b" }}>Google</i>}
+        </span>
+      </div>
+
+      {eventos === null ? (
+        <div className="ag-carregando"><span className="skel" /><span className="skel" /><span className="skel curto" /></div>
+      ) : modo === "semana" ? (
+        <div className="ag-semana">
+          <div className="ag-cab">
+            <div className="ag-cab-canto" />
+            {dias.map((d) => {
+              const dt = new Date(d);
+              const diaInt = lista.filter((e) => e.diaInteiro && e.inicio < somaDias(d, 1) && e.fim > d);
+              return (
+                <div key={d} className={"ag-cab-dia" + (d === hojeIni ? " hoje" : "") + (d < hojeIni ? " passado" : "")}>
+                  <small>{dt.toLocaleDateString("pt-BR", { weekday: "short" }).replace(".", "")}</small>
+                  <b>{dt.getDate()}</b>
+                  {diaInt.map((e) => (
+                    <button key={e.id} className="ag-diaint" style={{ "--c": tipoAgenda(e.tipo).cor }} onClick={() => setDetalhe(e)} title={e.titulo}>{e.titulo}</button>
+                  ))}
+                </div>
+              );
+            })}
+          </div>
+          <div className="ag-grade" ref={gradeRef}>
+            <div className="ag-horas">
+              {horas.map((h) => <div key={h} className="ag-hora" style={{ height: HORA_PX }}><span>{p2(h)}:00</span></div>)}
+            </div>
+            {dias.map((d) => {
+              const doDia = colunasDoDia(comHora
+                .filter((e) => e.inicio < somaDias(d, 1) && e.fim > d)
+                .map((e) => ({ ...e, _ini: Math.max(e.inicio, d), _fim: Math.max(Math.min(e.fim, somaDias(d, 1)), Math.max(e.inicio, d) + 20 * 60000) }))
+                .sort((a, b) => a._ini - b._ini));
+              const ehHoje = d === hojeIni;
+              return (
+                <div key={d} className={"ag-col" + (ehHoje ? " hoje" : "") + (d < hojeIni ? " passado" : "")}
+                  style={{ height: horas.length * HORA_PX, "--hpx": HORA_PX + "px" }}
+                  onClick={(ev) => { if (ev.target === ev.currentTarget) novoNoHorario(d, ev); }}>
+                  {ehHoje && agora >= d + horaIni * 3600000 && agora < d + horaFim * 3600000 && (
+                    <div className="ag-agora" style={{ top: ((agora - d) / 60000 - horaIni * 60) * HORA_PX / 60 }} />
+                  )}
+                  {doDia.map((e) => {
+                    const T = tipoAgenda(e.tipo);
+                    const top = ((e._ini - d) / 60000 - horaIni * 60) * HORA_PX / 60;
+                    const alt = Math.max(22, ((e._fim - e._ini) / 60000) * HORA_PX / 60 - 2);
+                    const larg = 100 / e._raias;
+                    return (
+                      <button key={e.id} type="button"
+                        className={"ag-ev o-" + e.origem + (e.status === "feito" ? " feito" : "") + (e.status === "naoveio" ? " naoveio" : "") + (e.fim < agora ? " passou" : "") + (alt < 40 ? " curto" : "")}
+                        style={{ "--c": T.cor, top, height: alt, left: `calc(${e._raia * larg}% + 2px)`, width: `calc(${larg}% - 4px)` }}
+                        onClick={() => setDetalhe(e)} title={e.titulo + " · " + hm(e.inicio) + "–" + hm(e.fim)}>
+                        <b>{e.titulo}</b>
+                        <span>{hm(e.inicio)}{alt >= 40 && e.leadNome && e.titulo.indexOf(primeiroNome(e.leadNome)) < 0 ? " · " + e.leadNome : ""}{e.meetLink ? " · Meet" : ""}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      ) : (
+        <div className="ag-lista">
+          {lista.length === 0 ? (
+            <div className="ag-vazio">
+              <I.calendar className="ico" />
+              <b>Nada marcado nos próximos 30 dias</b>
+              <span>Marque a próxima reunião ou ligação com um cliente — fica tudo aqui, com lembrete.</span>
+              <button className="btn btn-primary" onClick={() => setNovo({})}><I.plus className="ico" /> Agendar agora</button>
+            </div>
+          ) : (() => {
+            const grupos = [];
+            lista.forEach((e) => {
+              const k = inicioDia(e.inicio);
+              let g = grupos.find((x) => x.k === k);
+              if (!g) { g = { k, itens: [] }; grupos.push(g); }
+              g.itens.push(e);
+            });
+            return grupos.map((g) => (
+              <section key={g.k} className="ag-lista-dia">
+                <h4 className={g.k === hojeIni ? "hoje" : ""}>{rotuloDiaAgenda(g.k)}<small>{g.itens.length}</small></h4>
+                {g.itens.map((e) => {
+                  const T = tipoAgenda(e.tipo);
+                  return (
+                    <button key={e.id} className={"ag-item" + (e.status === "feito" ? " feito" : "") + (e.fim < agora ? " passou" : "")} style={{ "--c": T.cor }} onClick={() => setDetalhe(e)}>
+                      <span className="ag-item-hora">{e.diaInteiro ? "Dia todo" : <>{hm(e.inicio)}<small>{hm(e.fim)}</small></>}</span>
+                      <span className="ag-item-barra" />
+                      <span className="ag-item-txt">
+                        <b>{e.titulo}</b>
+                        <small>{[T.lb, e.leadNome && e.titulo.indexOf(primeiroNome(e.leadNome)) < 0 ? e.leadNome : "", quem !== "eu" && e.donoNome ? "com " + e.donoNome : ""].filter(Boolean).join(" · ")}</small>
+                      </span>
+                      {e.meetLink && <span className="ag-tag meet">Meet</span>}
+                      {e.status === "feito" && <span className="ag-tag ok">Feito</span>}
+                      {e.status === "naoveio" && <span className="ag-tag ruim">Não veio</span>}
+                      {e.origem === "google" && <span className="ag-tag">Google</span>}
+                    </button>
+                  );
+                })}
+              </section>
+            ));
+          })()}
+        </div>
+      )}
+
+      {novo && <ModalAgendamento inicial={novo} onClose={() => setNovo(null)} onSalvo={() => carregar()} showToast={showToast} />}
+      {detalhe && (
+        <DetalheCompromisso ev={detalhe} onClose={() => setDetalhe(null)} onMudou={carregar} showToast={showToast}
+          onEditar={(ev) => setNovo({ ...ev, email: "" })} onAbrirLead={onAbrirLead} onAbrirConversa={onAbrirConversa} />
+      )}
+      {setup && cfg && <ConfigGoogleAgenda cfg={cfg} onClose={() => setSetup(false)} onSalvo={carregarCfg} showToast={showToast} />}
+    </div>
+  );
+}
+
+// aviso flutuante antes do compromisso (em qualquer tela do sistema)
+function LembreteAgenda({ onAbrirAgenda }) {
+  const [proximos, setProximos] = useState([]);
+  const [agora, setAgora] = useState(Date.now());
+  const [fechados, setFechados] = useState(() => { try { return JSON.parse(sessionStorage.getItem("instructiva_lembretes") || "[]"); } catch (_) { return []; } });
+  useEffect(() => {
+    let vivo = true;
+    const buscar = () => { if (!document.hidden) api.agendaProximos().then((r) => { if (vivo) setProximos(r.eventos || []); }).catch(() => {}); };
+    buscar();
+    const t = setInterval(buscar, 120000);
+    const tique = setInterval(() => setAgora(Date.now()), 20000);
+    const aoVoltar = () => { if (!document.hidden) { buscar(); setAgora(Date.now()); } };
+    document.addEventListener("visibilitychange", aoVoltar);
+    return () => { vivo = false; clearInterval(t); clearInterval(tique); document.removeEventListener("visibilitychange", aoVoltar); };
+  }, []);
+  const ev = proximos.find((e) => {
+    if (fechados.includes(e.id + ":" + e.inicio)) return false;
+    const antes = (Number.isFinite(e.lembreteMin) ? e.lembreteMin : 10) * 60000;
+    return agora >= e.inicio - Math.max(antes, 60000) && agora < e.inicio + 10 * 60000;
+  });
+  if (!ev) return null;
+  const falta = Math.round((ev.inicio - agora) / 60000);
+  const quando = falta > 1 ? "Daqui a " + falta + " min" : falta >= -1 ? "Começando agora" : "Começou há " + -falta + " min";
+  function fechar() {
+    const n = [...fechados, ev.id + ":" + ev.inicio].slice(-50);
+    setFechados(n);
+    try { sessionStorage.setItem("instructiva_lembretes", JSON.stringify(n)); } catch (_) {}
+  }
+  const T = tipoAgenda(ev.tipo);
+  return (
+    <div className="ag-lembrete" role="status" style={{ "--c": T.cor }}>
+      <span className="ag-lembrete-ic"><I.calendar className="ico" /></span>
+      <div className="ag-lembrete-txt">
+        <small>{quando} · {hm(ev.inicio)}</small>
+        <b>{ev.titulo}</b>
+        <div className="ag-lembrete-acoes">
+          {ev.meetLink && <a className="btn btn-primary btn-sm" href={ev.meetLink} target="_blank" rel="noreferrer" onClick={fechar}>Entrar no Meet</a>}
+          <button className="btn btn-sm" onClick={() => { onAbrirAgenda(); }}>Ver na agenda</button>
+        </div>
+      </div>
+      <button className="ag-lembrete-x" onClick={fechar} aria-label="Fechar lembrete"><I.x className="ico" /></button>
+    </div>
   );
 }
 
@@ -9946,7 +10714,7 @@ function InboxOficial({ isGer, ehLider, showToast, onIrParaEvolution, target, on
     if (el) { nearBottomRef.current = false; el.scrollIntoView({ block: "center" }); }
   }, [atualIdx]);
   const irAchado = (d) => setBuscaConvPos((p) => { const n = achadosConv.length; if (!n) return -1; return (((p < 0 ? n - 1 : p) + d) % n + n) % n; });
-  function abrirConversa(id) { setSel(id); setBuscaConv(null); }
+  function abrirConversa(id) { setNovaConv(null); setSel(id); setBuscaConv(null); }
   function abrirAchado(r) {
     setNovaConv(null);
     setSel(r.chatId);
