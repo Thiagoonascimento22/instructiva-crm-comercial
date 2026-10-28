@@ -583,3 +583,24 @@ mark.realce { background: var(--realce); color: var(--realce-ink); border-radius
   .ag-cab, .ag-grade { grid-template-columns: 40px repeat(7, minmax(44px, 1fr)); }
   .ag-semana { overflow-x: auto; }
 }
+
+/* v2.6.2 — Agenda mais organizada: Google pessoal discreto e com opção de esconder */
+.ag-gtoggle {
+  display: inline-flex; align-items: center; gap: 8px; height: 30px; padding: 0 12px 0 8px; border-radius: 999px; cursor: pointer;
+  border: 1px solid var(--line); background: var(--card); color: var(--muted); font: inherit; font-size: 12.5px; font-weight: 600;
+}
+.ag-gtoggle em { font-style: normal; font-weight: 500; color: var(--faint); }
+.ag-gtoggle:hover { border-color: var(--line-forte); color: var(--text); }
+.ag-switch { width: 26px; height: 15px; border-radius: 999px; background: var(--line-forte); position: relative; flex: none; transition: background .15s; }
+.ag-switch::after { content: ""; position: absolute; top: 2px; left: 2px; width: 11px; height: 11px; border-radius: 50%; background: #fff; box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2); transition: transform .15s; }
+.ag-gtoggle.on .ag-switch { background: #10b981; }
+.ag-gtoggle.on .ag-switch::after { transform: translateX(11px); }
+.ag-glogo.mini { display: inline-block; width: 10px; height: 10px; vertical-align: -1px; -webkit-mask: radial-gradient(circle at center, transparent 2px, #000 2.4px); mask: radial-gradient(circle at center, transparent 2px, #000 2.4px); }
+.ag-item.o-google { background: transparent; box-shadow: none; border-style: dashed; }
+.ag-item.o-google .ag-item-barra { background: repeating-linear-gradient(to bottom, var(--c) 0 4px, transparent 4px 7px); }
+.ag-item.o-google .ag-item-txt b { font-weight: 500; color: var(--muted); }
+.ag-item.o-google .ag-item-hora { color: var(--muted); font-weight: 600; }
+.ag-item.convite { border-color: color-mix(in srgb, #f59e0b 45%, var(--line)); }
+.ag-ev.o-google { background: color-mix(in srgb, var(--c) 7%, var(--card)); border-left-style: dashed; box-shadow: none; }
+.ag-ev.o-google b { font-weight: 500; color: var(--muted); }
+.ag-ev.convite { outline: 1px dashed #f59e0b; outline-offset: -1px; }

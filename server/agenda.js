@@ -196,8 +196,13 @@ export function instalarAgenda({ app, getDb, salvar, auth, donoOnly }) {
     const diaInteiro = !!(g.start && g.start.date && !g.start.dateTime);
     const ini = diaInteiro ? new Date(g.start.date + "T00:00:00").getTime() : Date.parse(g.start && g.start.dateTime);
     const fim = diaInteiro ? new Date(g.end.date + "T00:00:00").getTime() : Date.parse(g.end && g.end.dateTime);
+    // convite que outra pessoa mandou e que ainda não foi respondido
+    const eu = (g.attendees || []).find((x) => x.self);
+    const deOutro = !!(g.organizer && !g.organizer.self);
     return {
       id: "g_" + g.id, origem: "google", googleId: g.id,
+      convite: !!(eu && deOutro && eu.responseStatus === "needsAction"),
+      convidadoPor: deOutro ? (g.organizer.displayName || g.organizer.email || "") : "",
       titulo: g.summary || "(sem título)", tipo: "google",
       inicio: ini, fim: fim || ini + 3600000, diaInteiro,
       local: g.location || "", meetLink: g.hangoutLink || "", googleLink: g.htmlLink || "",
@@ -214,13 +219,38 @@ export function instalarAgenda({ app, getDb, salvar, auth, donoOnly }) {
       const q = { timeMin: new Date(de).toISOString(), timeMax: new Date(ate).toISOString(), singleEvents: "true", orderBy: "startTime", maxResults: "250" };
       if (pageToken) q.pageToken = pageToken;
       const j = await google(userId, "GET", "/calendars/primary/events", q);
-      (j.items || []).filter((g) => g.status !== "cancelled" && g.start && g.eventType !== "workingLocation").forEach((g) => lista.push(doGoogle(g)));
+      (j.items || [])
+        .filter((g) => g.status !== "cancelled" && g.start && g.eventType !== "workingLocation")
+        // convite recusado não aparece (igual ao Google Agenda)
+        .filter((g) => !(g.attendees || []).some((x) => x.self && x.responseStatus === "declined"))
+        .forEach((g) => lista.push(doGoogle(g)));
       if (!j.nextPageToken) break;
       pageToken = j.nextPageToken;
     }
     _cacheGoogle.set(chave, { em: Date.now(), lista });
     if (_cacheGoogle.size > 300) _cacheGoogle.delete(_cacheGoogle.keys().next().value);
     return lista;
+  }
+  // compromissos de hoje em diante que ficaram só no CRM (marcados antes de conectar o Google)
+  const _pendentesRodando = new Set();
+  const _pendentesConferido = new Map(); // userId -> quando conferiu (no máx. 1x a cada 5 min)
+  async function enviarPendentes(userId) {
+    if (_pendentesRodando.has(userId)) return;
+    _pendentesRodando.add(userId);
+    _pendentesConferido.set(userId, Date.now());
+    try { await _enviarPendentes(userId); } finally { _pendentesRodando.delete(userId); }
+  }
+  async function _enviarPendentes(userId) {
+    const agora = new Date(); agora.setHours(0, 0, 0, 0); // desde o começo de hoje
+    const lista = base().eventos
+      .filter((ev) => ev.userId === userId && !ev.googleId && !ev.soCRM && ev.status === "marcado" && ev.fim > agora.getTime())
+      .slice(0, 60);
+    let ok = 0;
+    for (const ev of lista) {
+      try { await enviarProGoogle(ev, { novo: true, querMeet: ev.tipo === "reuniao" || ev.tipo === "aula" }); ok++; }
+      catch (e) { ev.googleErro = e.message; }
+    }
+    if (lista.length) { limparCacheGoogle(userId); salvar(); console.log("[agenda] enviados pro Google depois de conectar:", ok + "/" + lista.length); }
   }
   const limparCacheGoogle = (userId) => { for (const k of _cacheGoogle.keys()) if (k.startsWith(userId + "|")) _cacheGoogle.delete(k); };
 
@@ -361,6 +391,7 @@ export function instalarAgenda({ app, getDb, salvar, auth, donoOnly }) {
       limparCacheGoogle(st.userId);
       salvar();
       console.log("[agenda] Google conectado:", nomeDe(st.userId), email);
+      try { await enviarPendentes(st.userId); } catch (_) {}
       volta("conectado");
     } catch (e) {
       console.error("[agenda] erro no retorno do Google:", e.message);
@@ -402,6 +433,10 @@ export function instalarAgenda({ app, getDb, salvar, auth, donoOnly }) {
     else if (quem === "equipe") ids = idsVisiveis(req.user);
     else ids = podeVer(req.user, quem) ? [quem] : [req.user.id];
     const noPeriodo = (ev) => ev.fim > de && ev.inicio < ate;
+    // quem já tinha o Google conectado: o que ficou só no CRM vai agora (antes de montar a lista)
+    if (quem === "eu" && statusGoogle(req.user.id).conectado && Date.now() - (_pendentesConferido.get(req.user.id) || 0) > 5 * 60000) {
+      try { await enviarPendentes(req.user.id); } catch (_) {}
+    }
     const locais = a.eventos.filter((ev) => noPeriodo(ev) && (ids === null || ids.includes(ev.userId)) && ev.status !== "cancelado");
     let lista = locais.map(publico);
     // Google: só a agenda da própria pessoa
@@ -481,6 +516,7 @@ export function instalarAgenda({ app, getDb, salvar, auth, donoOnly }) {
   app.post("/api/agenda/eventos", auth, async (req, res) => {
     const b = req.body || {};
     const ev = { id: novoId(), userId: req.user.id, status: "marcado", lembreteMin: 10, convidados: [], criadoEm: Date.now() };
+    if (b.noGoogle === false) ev.soCRM = true; // pediram pra ficar só no CRM
     const erros = lerCampos(b, ev);
     if (erros.length) return res.status(400).json({ error: erros[0] });
     ev.atualizadoEm = Date.now();
@@ -513,7 +549,8 @@ export function instalarAgenda({ app, getDb, salvar, auth, donoOnly }) {
     salvar();
     let aviso = "";
     const soStatus = Object.keys(b).every((k) => k === "status");
-    if (!soStatus && statusGoogle(ev.userId).conectado && (ev.googleId || b.noGoogle)) {
+    if (b.noGoogle === true) ev.soCRM = false;
+    if (!soStatus && statusGoogle(ev.userId).conectado && (ev.googleId || !ev.soCRM)) {
       try { await enviarProGoogle(ev, { novo: false, querMeet: !!b.meet }); }
       catch (e) { ev.googleErro = e.message; aviso = "Salvo no CRM, mas o Google não atualizou: " + e.message; }
       limparCacheGoogle(ev.userId);

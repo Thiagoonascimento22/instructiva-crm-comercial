@@ -9578,7 +9578,7 @@ function ModalAgendamento({ inicial, onClose, onSalvo, showToast }) {
 }
 
 // detalhe de um compromisso (clicou no calendário)
-function DetalheCompromisso({ ev, onClose, onEditar, onMudou, onAbrirLead, onAbrirConversa, showToast }) {
+function DetalheCompromisso({ ev, googleConectado, onClose, onEditar, onMudou, onAbrirLead, onAbrirConversa, showToast }) {
   const T = tipoAgenda(ev.tipo);
   const Ic = I[T.ic] || I.calendar;
   const doCRM = ev.origem === "crm";
@@ -9600,6 +9600,13 @@ function DetalheCompromisso({ ev, onClose, onEditar, onMudou, onAbrirLead, onAbr
     setOcupado(true);
     try { const r = await api.agendaExcluir(ev.id); showToast(r.aviso ? "⚠ " + r.aviso : "✓ Compromisso excluído"); onMudou(); onClose(); }
     catch (e) { showToast("✗ " + e.message); } finally { setOcupado(false); }
+  }
+  async function mandarProGoogle() {
+    setOcupado(true);
+    try {
+      const r = await api.agendaEditar(ev.id, { noGoogle: true, meet: ev.tipo === "reuniao" || ev.tipo === "aula" });
+      showToast(r.aviso ? "⚠ " + r.aviso : "✓ Enviado pro seu Google Agenda"); onMudou(); onClose();
+    } catch (e) { showToast("✗ " + e.message); } finally { setOcupado(false); }
   }
   async function concluirTarefa() {
     setOcupado(true);
@@ -9634,8 +9641,14 @@ function DetalheCompromisso({ ev, onClose, onEditar, onMudou, onAbrirLead, onAbr
             {ev.lembreteMin != null && doCRM && <div className="ag-det-linha"><I.clock className="ico" /><span>Lembrete {(LEMBRETES.find(([m]) => m === ev.lembreteMin) || [0, ev.lembreteMin + " min antes"])[1].toLowerCase()}</span></div>}
             {ev.descricao && <div className="ag-det-desc">{ev.descricao}</div>}
             {doCRM && ev.googleErro && <div className="ag-aviso aviso"><I.alert className="ico" /> {ev.googleErro}</div>}
+            {doCRM && !ev.noGoogle && googleConectado && ev.status === "marcado" && ev.fim > Date.now() && (
+              <div className="ag-aviso aviso"><I.alert className="ico" /><span>Este compromisso está só no CRM (foi marcado antes de conectar o Google).</span>
+                <button className="btn btn-sm" disabled={ocupado} onClick={mandarProGoogle}>Enviar pro Google</button>
+              </div>
+            )}
             {doCRM && ev.noGoogle && !ev.googleErro && <div className="ag-det-sync"><I.check className="ico" /> Está no Google Agenda{ev.googleLink ? <> · <a href={ev.googleLink} target="_blank" rel="noreferrer">abrir lá</a></> : null}</div>}
-            {ev.origem === "google" && <div className="ag-det-sync">Compromisso do seu Google Agenda{ev.googleLink ? <> · <a href={ev.googleLink} target="_blank" rel="noreferrer">abrir lá</a></> : null}</div>}
+            {ev.origem === "google" && ev.convite && <div className="ag-aviso aviso"><I.alert className="ico" /><span>Convite{ev.convidadoPor ? " de " + ev.convidadoPor : ""}. Você ainda não respondeu — aceite ou recuse no Google Agenda.</span></div>}
+            {ev.origem === "google" && <div className="ag-det-sync">Compromisso do seu Google Agenda (não foi marcado pelo CRM){ev.googleLink ? <> · <a href={ev.googleLink} target="_blank" rel="noreferrer">abrir lá</a></> : null}</div>}
             {ev.origem === "tarefa" && <div className="ag-det-sync">Tarefa marcada no lead, dentro do Pipeline.</div>}
           </div>
           <div className="ag-det-pe">
@@ -9761,6 +9774,9 @@ function PaginaAgenda({ user, isGer, ehLider, showToast, retornoGoogle, onRetorn
   const [agora, setAgora] = useState(Date.now());
   const gradeRef = useRef(null);
   const podeEquipe = isGer || ehLider;
+  // os compromissos do Google pessoal podem ser escondidos (fica só o que é do CRM)
+  const [verGoogle, setVerGoogle] = useState(() => { try { return localStorage.getItem("instructiva_agenda_google") !== "0"; } catch (_) { return true; } });
+  useEffect(() => { try { localStorage.setItem("instructiva_agenda_google", verGoogle ? "1" : "0"); } catch (_) {} }, [verGoogle]);
   useEffect(() => { try { localStorage.setItem("instructiva_agenda_modo", modo); } catch (_) {} }, [modo]);
   const carregarCfg = () => api.agendaConfig().then(setCfg).catch(() => setCfg({}));
   useEffect(() => { carregarCfg(); }, []);
@@ -9802,7 +9818,8 @@ function PaginaAgenda({ user, isGer, ehLider, showToast, retornoGoogle, onRetorn
     catch (e) { showToast("✗ " + e.message); }
   }
 
-  const lista = eventos || [];
+  const lista = (eventos || []).filter((e) => verGoogle || e.origem !== "google");
+  const qtdGoogle = (eventos || []).filter((e) => e.origem === "google").length;
   const dias = Array.from({ length: 7 }, (_, i) => somaDias(semana, i));
   const comHora = lista.filter((e) => !e.diaInteiro);
   let horaIni = 7, horaFim = 21;
@@ -9905,8 +9922,13 @@ function PaginaAgenda({ user, isGer, ehLider, showToast, retornoGoogle, onRetorn
         <span className="ag-legenda">
           {TIPOS_AGENDA.slice(0, 4).map((t) => <i key={t.k} style={{ "--c": t.cor }}>{t.lb.split(" ")[0]}</i>)}
           <i style={{ "--c": "#f59e0b" }}>Tarefa</i>
-          {cfg && cfg.conectado && <i style={{ "--c": "#64748b" }}>Google</i>}
         </span>
+        {cfg && cfg.conectado && (
+          <button type="button" className={"ag-gtoggle" + (verGoogle ? " on" : "")} onClick={() => setVerGoogle((v) => !v)} aria-pressed={verGoogle}
+            title={verGoogle ? "Esconder os compromissos pessoais do Google" : "Mostrar os compromissos pessoais do Google"}>
+            <span className="ag-switch" /><span className="ag-glogo" /> Meu Google Agenda{!verGoogle && qtdGoogle ? <em>{qtdGoogle} escondido{qtdGoogle > 1 ? "s" : ""}</em> : null}
+          </button>
+        )}
       </div>
 
       {eventos === null ? (
@@ -9953,7 +9975,7 @@ function PaginaAgenda({ user, isGer, ehLider, showToast, retornoGoogle, onRetorn
                     const larg = 100 / e._raias;
                     return (
                       <button key={e.id} type="button"
-                        className={"ag-ev o-" + e.origem + (e.status === "feito" ? " feito" : "") + (e.status === "naoveio" ? " naoveio" : "") + (e.fim < agora ? " passou" : "") + (alt < 40 ? " curto" : "")}
+                        className={"ag-ev o-" + e.origem + (e.convite ? " convite" : "") + (e.status === "feito" ? " feito" : "") + (e.status === "naoveio" ? " naoveio" : "") + (e.fim < agora ? " passou" : "") + (alt < 40 ? " curto" : "")}
                         style={{ "--c": T.cor, top, height: alt, left: `calc(${e._raia * larg}% + 2px)`, width: `calc(${larg}% - 4px)` }}
                         onClick={() => setDetalhe(e)} title={e.titulo + " · " + hm(e.inicio) + "–" + hm(e.fim)}>
                         <b>{e.titulo}</b>
@@ -9989,17 +10011,19 @@ function PaginaAgenda({ user, isGer, ehLider, showToast, retornoGoogle, onRetorn
                 {g.itens.map((e) => {
                   const T = tipoAgenda(e.tipo);
                   return (
-                    <button key={e.id} className={"ag-item" + (e.status === "feito" ? " feito" : "") + (e.fim < agora ? " passou" : "")} style={{ "--c": T.cor }} onClick={() => setDetalhe(e)}>
+                    <button key={e.id} className={"ag-item o-" + e.origem + (e.convite ? " convite" : "") + (e.status === "feito" ? " feito" : "") + (e.fim < agora ? " passou" : "")} style={{ "--c": T.cor }} onClick={() => setDetalhe(e)}>
                       <span className="ag-item-hora">{e.diaInteiro ? "Dia todo" : <>{hm(e.inicio)}<small>{hm(e.fim)}</small></>}</span>
                       <span className="ag-item-barra" />
                       <span className="ag-item-txt">
                         <b>{e.titulo}</b>
-                        <small>{[T.lb, e.leadNome && e.titulo.indexOf(primeiroNome(e.leadNome)) < 0 ? e.leadNome : "", quem !== "eu" && e.donoNome ? "com " + e.donoNome : ""].filter(Boolean).join(" · ")}</small>
+                        {e.origem === "google"
+                          ? <small><span className="ag-glogo mini" /> {e.convite ? "Convite" + (e.convidadoPor ? " de " + e.convidadoPor : "") + " — você ainda não respondeu" : "Do seu Google Agenda"}</small>
+                          : <small>{[T.lb, e.leadNome && e.titulo.indexOf(primeiroNome(e.leadNome)) < 0 ? e.leadNome : "", quem !== "eu" && e.donoNome ? "com " + e.donoNome : ""].filter(Boolean).join(" · ")}</small>}
                       </span>
                       {e.meetLink && <span className="ag-tag meet">Meet</span>}
                       {e.status === "feito" && <span className="ag-tag ok">Feito</span>}
                       {e.status === "naoveio" && <span className="ag-tag ruim">Não veio</span>}
-                      {e.origem === "google" && <span className="ag-tag">Google</span>}
+                      {e.convite && <span className="ag-tag ruim">Convite</span>}
                     </button>
                   );
                 })}
@@ -10011,7 +10035,7 @@ function PaginaAgenda({ user, isGer, ehLider, showToast, retornoGoogle, onRetorn
 
       {novo && <ModalAgendamento inicial={novo} onClose={() => setNovo(null)} onSalvo={() => carregar()} showToast={showToast} />}
       {detalhe && (
-        <DetalheCompromisso ev={detalhe} onClose={() => setDetalhe(null)} onMudou={carregar} showToast={showToast}
+        <DetalheCompromisso ev={detalhe} googleConectado={!!(cfg && cfg.conectado && !cfg.precisaReconectar)} onClose={() => setDetalhe(null)} onMudou={carregar} showToast={showToast}
           onEditar={(ev) => setNovo({ ...ev, email: "" })} onAbrirLead={onAbrirLead} onAbrirConversa={onAbrirConversa} />
       )}
       {setup && cfg && <ConfigGoogleAgenda cfg={cfg} onClose={() => setSetup(false)} onSalvo={carregarCfg} showToast={showToast} />}
