@@ -90,6 +90,14 @@ export function instalarCanalOficial({ versaoConversa, app, getDb, saveDB, saveS
       db.oficial._iaOffV63 = true;
       saveDB();
     }
+    // v2.7.1: gerente (admin) agora pode entrar no rodízio. Uma única vez, todo gerente
+    // começa DESLIGADO (ex.: quem era vendedor ligado e virou gerente) — o dono liga
+    // em "Quem recebe os leads" quem ele quiser.
+    if (!db.oficial._gerenteRodizioV271) {
+      db.oficial._gerenteRodizioV271 = true;
+      for (const u of db.users || []) if (u && u.role === "gerente" && u.oficialAtivo) u.oficialAtivo = false;
+      saveDB();
+    }
     // Recuperação única: conversas de DISPARO que já eram de um vendedor mas foram
     // "sequestradas" pela IA padrão do número (bug antigo) ficavam invisíveis pra ele.
     // Pausa a IA nessas conversas pra elas reaparecerem na Caixa de entrada do vendedor.
@@ -268,17 +276,18 @@ export function instalarCanalOficial({ versaoConversa, app, getDb, saveDB, saveS
   }
 
   /* ============================================================
-     MOTOR DE DISTRIBUIÇÃO PONDERADA (só vendedores ATIVOS)
+     MOTOR DE DISTRIBUIÇÃO PONDERADA (só quem está LIGADO)
      ------------------------------------------------------------
-     Lê db.users (role=vendedor). Usa flag .oficialAtivo e o peso
+     Lê db.users (vendedores e, desde a v2.7.1, gerentes/admin que
+     o dono ligar em "Quem recebe os leads"). Usa flag .oficialAtivo e o peso
      .oficialPercentual. Distribui respeitando o percentual entre
      os ativos, dando o lead a quem está mais abaixo da própria
      cota (déficit). Empate -> menor contador absoluto.
      ============================================================ */
+  // quem pode entrar no rodízio: vendedor ou gerente (admin) — só recebe quem estiver ligado
+  const podeReceberLeads = (u) => !!u && (u.role === "vendedor" || u.role === "gerente") && u.ativo;
   function vendedoresElegiveis() {
-    return db.users.filter(
-      (u) => u.role === "vendedor" && u.ativo && u.oficialAtivo
-    );
+    return db.users.filter((u) => podeReceberLeads(u) && u.oficialAtivo);
   }
 
   // peso = quantos leads a pessoa recebe por rodada (padrão 1)
@@ -1496,11 +1505,14 @@ export function instalarCanalOficial({ versaoConversa, app, getDb, saveDB, saveS
 
   app.get("/api/oficial/vendedores", auth, gerenteOnly, (req, res) => {
     const prox = proximoDaVez();
+    // vendedores primeiro, depois os gerentes/admin (começam desligados até o dono ligar)
     const lista = db.users
-      .filter((u) => u.role === "vendedor" && u.ativo)
+      .filter(podeReceberLeads)
+      .sort((a, b) => (a.role === "gerente") - (b.role === "gerente"))
       .map((u) => ({
         id: u.id,
         nome: u.nome,
+        gerente: u.role === "gerente",
         oficialAtivo: !!u.oficialAtivo,
         oficialPercentual: Number(u.oficialPercentual) || 0,
         oficialLeadsRecebidos: u.oficialLeadsRecebidos || 0,
@@ -1511,8 +1523,8 @@ export function instalarCanalOficial({ versaoConversa, app, getDb, saveDB, saveS
   });
 
   app.put("/api/oficial/vendedores/:id", auth, gerenteOnly, (req, res) => {
-    const u = db.users.find((x) => x.id === req.params.id && x.role === "vendedor");
-    if (!u) return res.status(404).json({ error: "Vendedor não encontrado" });
+    const u = db.users.find((x) => x.id === req.params.id && podeReceberLeads(x));
+    if (!u) return res.status(404).json({ error: "Pessoa não encontrada" });
     const b = req.body || {};
     if (b.oficialAtivo !== undefined) u.oficialAtivo = !!b.oficialAtivo;
     if (b.oficialPercentual !== undefined) {
@@ -1532,7 +1544,7 @@ export function instalarCanalOficial({ versaoConversa, app, getDb, saveDB, saveS
 
   // zera os contadores (recomeça a distribuição do zero)
   app.post("/api/oficial/vendedores/zerar", auth, gerenteOnly, (req, res) => {
-    db.users.forEach((u) => { if (u.role === "vendedor") u.oficialLeadsRecebidos = 0; });
+    db.users.forEach((u) => { if (u.role === "vendedor" || u.role === "gerente") u.oficialLeadsRecebidos = 0; });
     db.oficial.rodada = null; // recomeça a rodada do zero também
     salvar();
     res.json({ ok: true });

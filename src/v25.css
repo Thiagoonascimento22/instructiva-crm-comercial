@@ -800,3 +800,6 @@ mark.realce { background: var(--realce); color: var(--realce-ink); border-radius
   .cst-preco-form label { flex: 1 1 140px; }
   .cst-preco-form .input { width: 100%; }
 }
+
+/* v2.7.1 — gerente (admin) também pode receber leads no rodízio */
+.of-vend-ger { display: inline-block; margin-left: 8px; padding: 1px 7px; border-radius: 999px; font-size: 10.5px; font-weight: 650; letter-spacing: .02em; vertical-align: 1px; background: var(--info-bg); color: var(--info-ink); }

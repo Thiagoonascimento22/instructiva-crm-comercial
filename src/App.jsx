@@ -2972,7 +2972,7 @@ function OficialVendedores({ showToast }) {
     <div className="panel">
       <div className="panel-h"><I.users className="ico" /> Quem recebe os leads</div>
       <div className="panel-sub">
-        <b>Desligue quem não vai trabalhar</b> — os leads caem só entre os ligados, e vale <b>na hora</b> (já pros próximos). Cada ligado recebe <b>1 lead por vez</b>, em rodízio. Se quiser que alguém receba mais, aumente os <b>leads por rodada</b> dele (2 = o dobro, e assim por diante).
+        <b>Desligue quem não vai trabalhar</b> — os leads caem só entre os ligados, e vale <b>na hora</b> (já pros próximos). Cada ligado recebe <b>1 lead por vez</b>, em rodízio. Se quiser que alguém receba mais, aumente os <b>leads por rodada</b> dele (2 = o dobro, e assim por diante). Os <b>gerentes</b> aparecem no fim da lista: ligue quem também vai atender.
       </div>
 
       <div className="of-vend-top">
@@ -2987,7 +2987,7 @@ function OficialVendedores({ showToast }) {
               <span className="of-switch-dot" />
             </button>
             <div className="of-vend-nome">
-              <b>{v.nome}{v.proximo && <span className="of-vez">← próximo</span>}</b>
+              <b>{v.nome}{v.gerente && <span className="of-vend-ger">Gerente</span>}{v.proximo && <span className="of-vez">← próximo</span>}</b>
               <span className="of-vend-sub">{v.oficialLeadsRecebidos || 0} leads recebidos{v.oficialAtivo ? "" : " · desligado"}</span>
             </div>
             {v.oficialAtivo && (
@@ -10992,6 +10992,12 @@ function InboxOficial({ isGer, ehLider, showToast, onIrParaEvolution, target, on
     if (filtroVend === "sem") return !c.vendedorId && !c.comIA;
     return c.vendedorId === filtroVend;
   }), [chats, filtroVend]);
+  // v2.7.1: gerente que entrou no rodízio também tem conversas — aparece no filtro
+  const donosForaDaLista = useMemo(() => {
+    const m = new Map();
+    for (const c of chats) if (c.vendedorId && c.vendedorNome && !m.has(c.vendedorId) && !vendedores.some((v) => v.id === c.vendedorId)) m.set(c.vendedorId, { id: c.vendedorId, nome: c.vendedorNome });
+    return [...m.values()].sort((a, b) => a.nome.localeCompare(b.nome));
+  }, [chats, vendedores]);
   const buscaAtiva = buscaDeb.length >= 2;
   const itensLista = useMemo(() => listaFiltrada.map((c) => (
     <button key={c.id} className={sel === c.id ? "of-chat-item on" : "of-chat-item"} onClick={() => abrirConversa(c.id)}>
@@ -11044,6 +11050,7 @@ function InboxOficial({ isGer, ehLider, showToast, onIrParaEvolution, target, on
               {isGer && <option value="ia">🤖 Em atendimento por IA</option>}
               {isGer && <option value="sem">Aguardando distribuição</option>}
               {vendedores.map((v) => <option key={v.id} value={v.id}>{v.nome}{v.ehGerente ? " (gerente)" : ""}</option>)}
+              {donosForaDaLista.map((v) => <option key={v.id} value={v.id}>{v.nome} (gerente)</option>)}
             </select>
           </div>
         )}
