@@ -98,20 +98,26 @@ export function instalarCanalOficial({ versaoConversa, app, getDb, saveDB, saveS
       for (const u of db.users || []) if (u && u.role === "gerente" && u.oficialAtivo) u.oficialAtivo = false;
       saveDB();
     }
-    // v2.7.3: o Éder (Toledo) virou líder de vendas. Continua comissionando como vendedor
-    // (faturamento + conversão) e, de nov/2026 em diante, ganha +0,5% do que o time de
-    // Toledo vende (sem as vendas dele). Pré-configura uma vez; o gerente ajusta no Desempenho.
-    if (!db.oficial._liderEderV273) {
-      db.oficial._liderEderV273 = true;
-      if (String(process.env.UNIDADE || "").trim().toLowerCase() === "toledo") {
+    // v2.7.3/v2.7.4: líderes de vendas — Éder (Toledo) e Gislaine (Jesuítas). Continuam
+    // comissionando como vendedor (faturamento + conversão) e, de nov/2026 em diante, ganham
+    // +0,5% do que o time da unidade vende (sem as vendas deles). Pré-configura uma vez por
+    // líder; o gerente ajusta no Desempenho (bloco Comissão).
+    const LIDERES_PRE = [
+      { flag: "_liderEderV273", unidade: "toledo", primeiroNome: "eder" },
+      { flag: "_liderGislaineV274", unidade: "jesuitas", primeiroNome: "gislaine" },
+    ];
+    for (const L of LIDERES_PRE) {
+      if (db.oficial[L.flag]) continue;
+      db.oficial[L.flag] = true;
+      if (String(process.env.UNIDADE || "").trim().toLowerCase() === L.unidade) {
         const norm = (n) => String(n || "").normalize("NFD").replace(/[̀-ͯ]/g, "").trim().toLowerCase();
-        const achados = (db.users || []).filter((u) => u && u.ativo && (u.role === "vendedor" || u.role === "gerente") && norm(u.nome).split(/\s+/)[0] === "eder");
+        const achados = (db.users || []).filter((u) => u && u.ativo && (u.role === "vendedor" || u.role === "gerente") && norm(u.nome).split(/\s+/)[0] === L.primeiroNome);
         if (achados.length === 1) {
           const u = achados[0];
           if (u.comissaoRegra === undefined) u.comissaoRegra = "vendedor";
           if (u.comissaoLideranca === undefined) u.comissaoLideranca = { pct: 0.5, desde: "2026-11" };
-          console.log("[v2.7.3] comissão de líder configurada para", u.nome);
-        } else console.log("[v2.7.3] líder Éder não identificado (" + achados.length + " nomes) — configurar no Desempenho");
+          console.log("[líder] comissão de líder configurada para", u.nome);
+        } else console.log("[líder] " + L.primeiroNome + " não identificado (" + achados.length + " nomes) — configurar no Desempenho");
       }
       saveDB();
     }
