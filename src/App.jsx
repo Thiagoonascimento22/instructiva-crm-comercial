@@ -7792,7 +7792,7 @@ function DetalheVendedor({ v, dados, mes, isGer, showToast, onClose, onMudou, ca
               <tbody>
                 {(v.semanas || []).map((s) => (
                   <tr key={s.n} style={{ borderTop: "1px solid " + DES.line, textAlign: "center", opacity: s.jaComecou ? 1 : 0.4 }}>
-                    <td style={{ padding: "9px 14px", textAlign: "left", color: DES.ink, fontWeight: 500 }}>Semana {s.n}</td>
+                    <td style={{ padding: "9px 14px", textAlign: "left", color: DES.ink, fontWeight: 500 }}>Semana {s.n}{s.dias && <div style={{ fontSize: 10.5, color: DES.mut2, fontWeight: 400 }}>dias {s.dias}{s.extraSemana5 > 0 ? " · +" + s.extraSemana5 + " da antiga semana 5" : ""}</div>}</td>
                     <td><b style={{ color: DES.green, fontSize: 14 }}>{s.conversaoPts}</b> <span style={{ color: DES.mut2, fontSize: 10.5 }}>{fmtPctD(s.conversao)}</span></td>
                     <td>{isGer ? <select className="input" value={s.crm} onChange={(e) => salvarSemana(s.n, "crm", e.target.value)} style={sel}><option value={0}>0</option><option value={1}>1</option></select> : <b>{s.crm}</b>}</td>
                     <td>{isGer ? <select className="input" value={s.cultura} onChange={(e) => salvarSemana(s.n, "cultura", e.target.value)} style={sel}><option value={0}>0</option><option value={1}>1</option><option value={2}>2</option></select> : <b>{s.cultura}</b>}</td>

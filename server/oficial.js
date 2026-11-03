@@ -5240,18 +5240,18 @@ export function instalarCanalOficial({ versaoConversa, app, getDb, saveDB, saveS
     const pct = Math.round((_comBaseFat(receita) + _comAdicConv(Number(conversao) || 0)) * 100) / 100;
     return { pct, valor: receita * pct / 100, regra: "vendedor" };
   }
-  // semanas do mês (cortes fixos por dia — "semana comercial" provisória)
+  // semanas do mês (cortes fixos por dia). v2.7.5: o mês tem 4 semanas — a 4ª vai do dia 22
+  // até o fim do mês (absorve os dias 29–31, que antes eram a "semana 5").
   function semanasDoMes(mes) {
     const p = mes.split("-").map(Number), a = p[0], m = p[1];
     const ultimo = new Date(a, m, 0).getDate();
-    const cortes = [[1, 7], [8, 14], [15, 21], [22, 28], [29, ultimo]];
-    const out = [];
-    for (let i = 0; i < cortes.length; i++) {
-      const d1 = cortes[i][0], d2 = Math.min(cortes[i][1], ultimo);
-      if (d1 > ultimo) break;
-      out.push({ n: i + 1, ini: new Date(a, m - 1, d1, 0, 0, 0).getTime(), fim: new Date(a, m - 1, d2, 23, 59, 59).getTime() });
-    }
-    return out;
+    const cortes = [[1, 7], [8, 14], [15, 21], [22, ultimo]];
+    return cortes.map(([d1, d2], i) => ({
+      n: i + 1, dias: d1 + "–" + d2,
+      ini: new Date(a, m - 1, d1, 0, 0, 0).getTime(), fim: new Date(a, m - 1, d2, 23, 59, 59).getTime(),
+      // fim do trecho 22–28 da 4ª semana (pra ela nunca pontuar menos que as antigas semanas 4 + 5)
+      fimSete: d2 > d1 + 6 ? new Date(a, m - 1, d1 + 6, 23, 59, 59).getTime() : null,
+    }));
   }
   function pontosManuais(userId, mes, semana) {
     const dp = (db.oficial.desempenhoPontos || {})[mes] || {};
@@ -5261,18 +5261,32 @@ export function instalarCanalOficial({ versaoConversa, app, getDb, saveDB, saveS
   // pontos de um user num mês: por semana, conversão (automática) + manuais
   function pontosMes(userId, pes, mes, vendas, leads) {
     const semanas = semanasDoMes(mes), agora = Date.now();
+    const contar = (ini, fim) => {
+      const vend = pes ? vendas.filter((v) => v.pessoaId === pes.id && v.data >= ini && v.data <= fim).length : 0;
+      const lds = leads.filter((l) => l.vendedorId === userId && l.criadoEm >= ini && l.criadoEm <= fim).length;
+      return { vend, lds, conv: lds ? (vend / lds) * 100 : 0 };
+    };
     const detalhe = semanas.map((s) => {
       const jaComecou = s.ini <= agora;
-      const vend = pes ? vendas.filter((v) => v.pessoaId === pes.id && v.data >= s.ini && v.data <= s.fim).length : 0;
-      const lds = leads.filter((l) => l.vendedorId === userId && l.criadoEm >= s.ini && l.criadoEm <= s.fim).length;
-      const conv = lds ? (vend / lds) * 100 : 0;
-      const pc = jaComecou ? pontosConversao(conv) : 0;
-      const man = pontosManuais(userId, mes, s.n);
-      const crm = Math.max(0, Math.min(1, Number(man.crm) || 0));
-      const cultura = Math.max(0, Math.min(2, Number(man.cultura) || 0));
-      const pont = Math.max(0, Math.min(1, Number(man.pontualidade) || 0));
-      const indicacao = Math.max(0, Math.min(5, Number(man.indicacao) || 0));
-      return { n: s.n, jaComecou, vendas: vend, leads: lds, conversao: Math.round(conv * 100) / 100, conversaoPts: pc, crm, cultura, pontualidade: pont, indicacao, total: pc + crm + cultura + pont + indicacao };
+      const { vend, lds, conv } = contar(s.ini, s.fim);
+      let pc = jaComecou ? pontosConversao(conv) : 0;
+      // 4ª semana (22 até o fim): vale o MAIOR entre a conta do período inteiro e a soma das
+      // antigas semanas 4 (22–28) e 5 (29–fim) — juntar as semanas nunca tira ponto de ninguém.
+      if (jaComecou && s.fimSete) {
+        const a = contar(s.ini, s.fimSete), b = s.fimSete + 1000 <= agora ? contar(s.fimSete + 1000, s.fim) : { conv: 0 };
+        pc = Math.max(pc, pontosConversao(a.conv) + pontosConversao(b.conv));
+      }
+      const manuais = (man) => ({
+        crm: Math.max(0, Math.min(1, Number(man.crm) || 0)),
+        cultura: Math.max(0, Math.min(2, Number(man.cultura) || 0)),
+        pontualidade: Math.max(0, Math.min(1, Number(man.pontualidade) || 0)),
+        indicacao: Math.max(0, Math.min(5, Number(man.indicacao) || 0)),
+      });
+      const { crm, cultura, pontualidade: pont, indicacao } = manuais(pontosManuais(userId, mes, s.n));
+      // pontos já lançados na antiga semana 5 (meses de antes da v2.7.5) entram como extra na 4ª
+      let extraSemana5 = 0;
+      if (s.n === 4) { const m5 = manuais(pontosManuais(userId, mes, 5)); extraSemana5 = m5.crm + m5.cultura + m5.pontualidade + m5.indicacao; }
+      return { n: s.n, dias: s.dias, jaComecou, vendas: vend, leads: lds, conversao: Math.round(conv * 100) / 100, conversaoPts: pc, crm, cultura, pontualidade: pont, indicacao, extraSemana5, total: pc + crm + cultura + pont + indicacao + extraSemana5 };
     });
     return { total: detalhe.reduce((s, x) => s + x.total, 0), semanas: detalhe };
   }
@@ -5418,7 +5432,7 @@ export function instalarCanalOficial({ versaoConversa, app, getDb, saveDB, saveS
     if (!u) return res.status(404).json({ error: "Usuário não encontrado" });
     const b = req.body || {};
     const mes = /^\d{4}-\d{2}$/.test(String(b.mes || "")) ? b.mes : mesDesempenho(Date.now());
-    const semana = Math.max(1, Math.min(5, parseInt(b.semana, 10) || 1));
+    const semana = Math.max(1, Math.min(4, parseInt(b.semana, 10) || 1));
     if (!db.oficial.desempenhoPontos) db.oficial.desempenhoPontos = {};
     if (!db.oficial.desempenhoPontos[mes]) db.oficial.desempenhoPontos[mes] = {};
     if (!db.oficial.desempenhoPontos[mes][u.id]) db.oficial.desempenhoPontos[mes][u.id] = {};
