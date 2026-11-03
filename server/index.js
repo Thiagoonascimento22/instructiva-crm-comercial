@@ -52,7 +52,7 @@ app.use((req, res, next) => {
 // Versão do sistema — pra CONFIRMAR qual código está no ar (abra /api/versao no navegador).
 // Se aqui aparecer a versão nova mas o bug continuar, o problema é outro; se aparecer
 // uma versão antiga (ou 404), o deploy não subiu de verdade.
-const VERSAO_SISTEMA = "v2.7.5-quatro-semanas";
+const VERSAO_SISTEMA = "v2.7.6-silenciosa";
 
 /* ============================================================
    IDENTIFICAÇÃO DA UNIDADE (mesmo código, deploys separados)
@@ -90,7 +90,9 @@ function buildNoAr() {
 }
 app.get("/api/versao", (req, res) => res.set("Cache-Control", "no-store").json({
   versao: VERSAO_SISTEMA,
-  build: buildNoAr(),
+  // v2.7.6: era "build". Com o nome novo, a tela antiga (que lia "build") não mostra mais o
+  // aviso "Saiu uma versão nova" pra equipe; a tela nova lê "pacote" e se atualiza em silêncio.
+  pacote: buildNoAr(),
   unidade: UNIDADE_INFO.unidade,
   unidadeConfigurada: UNIDADE_INFO.configurada,
   unidadeOrigem: UNIDADE_INFO.origem,

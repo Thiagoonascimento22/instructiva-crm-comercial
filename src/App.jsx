@@ -208,61 +208,50 @@ function fmtEspera(seg) {
   return Math.floor(seg / 86400) + "d";
 }
 
-/* ============================ ATUALIZAÇÃO AUTOMÁTICA (v2.2) ============================ */
+/* ============================ ATUALIZAÇÃO AUTOMÁTICA (v2.2 → silenciosa na v2.7.6) ============================ */
 // Compara o pacote que este navegador abriu com o que está no ar. Se subiu versão nova,
-// avisa e recarrega sozinho — mas espera a pessoa terminar de digitar ou fechar uma janela aberta.
-function useVersaoNova() {
-  const [nova, setNova] = useState(false);
+// recarrega sozinho SEM aviso na tela: assim que a aba fica escondida ou depois de 5 min
+// sem ninguém mexer. Nunca recarrega com texto digitado (nem rascunho de mensagem) ou janela aberta.
+function useAtualizacaoSilenciosa() {
   useEffect(() => {
     const tag = document.querySelector('script[src*="/assets/index-"]');
     const meu = tag ? String(tag.getAttribute("src") || "").split("/").pop() : "";
     if (!meu) return; // modo de desenvolvimento: não tem pacote pra comparar
-    let parado = false;
-    const checar = () => {
-      if (parado) return;
-      fetch("/api/versao", { cache: "no-store" }).then((r) => r.json()).then((j) => {
-        if (!parado && j && j.build && j.build !== meu) { parado = true; setNova(true); }
-      }).catch(() => {});
-    };
-    const aoVoltar = () => { if (!document.hidden) checar(); };
-    const t0 = setTimeout(checar, 15000);
-    const t = setInterval(aoVoltar, 120000);
-    document.addEventListener("visibilitychange", aoVoltar);
-    window.addEventListener("focus", aoVoltar);
-    return () => { parado = true; clearTimeout(t0); clearInterval(t); document.removeEventListener("visibilitychange", aoVoltar); window.removeEventListener("focus", aoVoltar); };
-  }, []);
-  return nova;
-}
-function AvisoAtualizacao() {
-  const [seg, setSeg] = useState(10);
-  const [esperando, setEsperando] = useState(false);
-  useEffect(() => {
+    let parado = false, nova = false, ultimoMexeu = Date.now();
     const ocupado = () => {
       const el = document.activeElement;
       const campo = el && (el.tagName === "TEXTAREA" || el.isContentEditable || (el.tagName === "INPUT" && !["button", "checkbox", "radio", "submit", "range", "color", "file"].includes(el.type)));
-      const digitando = campo && String(el.value || el.textContent || "").trim().length > 0;
-      return digitando || !!document.querySelector(".modal, .pop-bg, .rec-bg, .nov-bg");
+      if (campo && String(el.value || el.textContent || "").trim()) return true;
+      if ([...document.querySelectorAll("textarea")].some((t) => t.value.trim())) return true; // rascunho fora de foco
+      return !!document.querySelector(".modal, .pop-bg, .rec-bg, .nov-bg");
     };
-    let restante = 10;
-    const t = setInterval(() => {
-      if (ocupado()) { setEsperando(true); return; }
-      setEsperando(false);
-      if (document.hidden) { window.location.reload(); return; }
-      restante -= 1; setSeg(restante);
-      if (restante <= 0) window.location.reload();
-    }, 1000);
-    return () => clearInterval(t);
+    const tentar = () => {
+      if (parado || !nova || ocupado()) return;
+      if (document.hidden || Date.now() - ultimoMexeu > 5 * 60000) { parado = true; window.location.reload(); }
+    };
+    const checar = () => {
+      if (parado || nova) return;
+      // v2.7.6: o servidor manda o nome do pacote em "pacote" (o campo antigo "build" fazia a
+      // versão anterior mostrar o aviso "Saiu uma versão nova" pra todo mundo)
+      fetch("/api/versao", { cache: "no-store" }).then((r) => r.json()).then((j) => {
+        if (!parado && j && j.pacote && j.pacote !== meu) { nova = true; tentar(); }
+      }).catch(() => {});
+    };
+    const mexeu = () => { ultimoMexeu = Date.now(); };
+    const aoVoltar = () => { if (document.hidden) tentar(); else checar(); };
+    const t0 = setTimeout(checar, 15000);
+    const t = setInterval(() => { if (!document.hidden) checar(); }, 120000);
+    const t2 = setInterval(tentar, 20000);
+    const eventos = ["pointerdown", "pointermove", "keydown", "wheel", "touchstart"];
+    eventos.forEach((e) => window.addEventListener(e, mexeu, { passive: true }));
+    document.addEventListener("visibilitychange", aoVoltar);
+    window.addEventListener("focus", aoVoltar);
+    return () => {
+      parado = true; clearTimeout(t0); clearInterval(t); clearInterval(t2);
+      eventos.forEach((e) => window.removeEventListener(e, mexeu));
+      document.removeEventListener("visibilitychange", aoVoltar); window.removeEventListener("focus", aoVoltar);
+    };
   }, []);
-  return (
-    <div className="atualiza" role="status">
-      <span className="atualiza-ic"><I.repetir className="ico" /></span>
-      <div className="atualiza-txt">
-        <b>Saiu uma versão nova do sistema</b>
-        <span>{esperando ? "Atualiza assim que você terminar o que está fazendo." : `Atualizando em ${Math.max(0, seg)}s…`}</span>
-      </div>
-      <button className="btn btn-primary btn-sm" onClick={() => window.location.reload()}>Atualizar agora</button>
-    </div>
-  );
 }
 
 /* ============================ NOVIDADES DA VERSÃO (v2.2) ============================ */
@@ -347,7 +336,7 @@ export default function App() {
   const [ehDono, setEhDono] = useState(false);
   const [acessoVend, setAcessoVend] = useState({});
   const [aviso, setAviso] = useState(null);
-  const novaVersao = useVersaoNova();   // v2.2: saiu versão nova? (aí todo mundo se atualiza sozinho)
+  useAtualizacaoSilenciosa();   // v2.2/v2.7.6: saiu versão nova? cada um se atualiza sozinho, sem aviso na tela
   const [novidades, setNovidades] = useState(false);
   const [novidadesSoNovos, setNovidadesSoNovos] = useState(false); // já viu a versão anterior -> mostra só o novo
   const carregarModulos = () => api.getModulos().then((r) => { setModulos(r.modulos); setEhDono(!!r.dono); }).catch(() => {});
@@ -469,8 +458,8 @@ export default function App() {
   }
 
   if (booting) return <div className="login-wrap"><div className="spin" /></div>;
-  if (!user) return <>{novaVersao && <AvisoAtualizacao />}<Login onDone={(u) => setUser(u)} unidade={unidade} /></>;
-  if (user.precisaOnboarding) return <>{novaVersao && <AvisoAtualizacao />}<Onboarding user={user} onDone={setUser} unidade={unidade} /></>;
+  if (!user) return <><Login onDone={(u) => setUser(u)} unidade={unidade} /></>;
+  if (user.precisaOnboarding) return <><Onboarding user={user} onDone={setUser} unidade={unidade} /></>;
 
   const isGer = user.role === "gerente";
   const isSuporte = user.role === "suporte";
@@ -630,7 +619,6 @@ export default function App() {
         <Novidades user={user} perfil={isGer ? "gerente" : isSuporte ? "suporte" : "vendedor"} ehMac={ehMac} onClose={fecharNovidades} soNovos={novidadesSoNovos}
           pode={{ agenda: podeAgenda, disparo: (isGer || isVend) && mod("disparo"), vendas: (isGer || vendPode("vendas")) && mod("vendas"), crm: (isGer || vendPode("crm")) && mod("crm"), caixa: !isSuporte && mod("caixa") }} />
       )}
-      {novaVersao && <AvisoAtualizacao />}
       {toast && (() => {
         // v2.1: aviso com ícone e cor (✓ deu certo, ✗ deu errado, resto = informação)
         const txt = String(toast);
@@ -10688,22 +10676,24 @@ function InboxOficial({ isGer, ehLider, showToast, onIrParaEvolution, target, on
   // v2.5: busca dentro das mensagens (igual ao WhatsApp)
   const [achadosMsg, setAchadosMsg] = useState(null);
   const [buscandoMsg, setBuscandoMsg] = useState(false);
+  const [filtroVend, setFiltroVend] = useState("todos");
+  // v2.7.6: vendedor escolhido no filtro vai pro servidor (lista e busca vêm só dele)
+  const vendDoFiltro = filtroVend === "todos" ? null : filtroVend;
   useEffect(() => {
     const q = buscaDeb;
     if (q.length < 2) { setAchadosMsg(null); setBuscandoMsg(false); return; }
     let vivo = true;
     setBuscandoMsg(true);
-    api.ofBusca(q)
+    api.ofBusca(q, null, vendDoFiltro)
       .then((r) => { if (vivo) setAchadosMsg(r); })
       .catch(() => { if (vivo) setAchadosMsg({ q, total: 0, resultados: [], erro: true }); })
       .finally(() => { if (vivo) setBuscandoMsg(false); });
     return () => { vivo = false; };
-  }, [buscaDeb]);
+  }, [buscaDeb, vendDoFiltro]);
   const [alvoMsg, setAlvoMsg] = useState(null);      // { chatId, idx } vindo de um resultado da busca
   const [buscaConv, setBuscaConv] = useState(null);  // busca dentro da conversa aberta (null = fechada)
   const [buscaConvPos, setBuscaConvPos] = useState(-1);
   const [vendedores, setVendedores] = useState([]);
-  const [filtroVend, setFiltroVend] = useState("todos");
   const [campanhas, setCampanhas] = useState([]);
   const [campanhaFiltro, setCampanhaFiltro] = useState("todas");
   const [showTransfer, setShowTransfer] = useState(false);
@@ -10738,7 +10728,15 @@ function InboxOficial({ isGer, ehLider, showToast, onIrParaEvolution, target, on
   const nearBottomRef = useRef(true); // usuário está perto do fim?
   const convIdRef = useRef(null);     // qual conversa está aberta
   const msgCountRef = useRef(0);      // qtd de mensagens da última vez
-  const carregarLista = () => api.ofChats(buscaDeb, null, campanhaFiltro === "todas" ? null : campanhaFiltro).then((cs) => { setChats(cs); setCarregou(true); }).catch(() => {});
+  // listaDe = de qual filtro é a lista na tela (enquanto troca, mostra "carregando" e não "nenhuma")
+  const [listaDe, setListaDe] = useState("todos");
+  const pedidoListaRef = useRef(0);
+  const carregarLista = () => {
+    const meu = ++pedidoListaRef.current, de = filtroVend;
+    return api.ofChats(buscaDeb, null, campanhaFiltro === "todas" ? null : campanhaFiltro, vendDoFiltro)
+      .then((cs) => { if (meu !== pedidoListaRef.current) return; setChats(cs); setListaDe(de); setCarregou(true); })
+      .catch(() => {});
+  };
   const versaoRef = useRef("");
   useEffect(() => {
     carregarLista();
@@ -10753,11 +10751,13 @@ function InboxOficial({ isGer, ehLider, showToast, onIrParaEvolution, target, on
         if (r && r.v !== versaoRef.current) { versaoRef.current = r.v; carregarLista(); }
       } catch (_) {}
     }, 6000);
+    return () => clearInterval(t);
+  }, [buscaDeb, campanhaFiltro, vendDoFiltro]);
+  useEffect(() => {
     // todos (gerente e vendedor) podem ver a lista pra transferir
     api.ofVendedoresLista().then(setVendedores).catch(() => {});
     // campanhas pro filtro (o gerente vê todas; o vendedor, as dele)
     api.ofCampanhas().then((cs) => setCampanhas(cs || [])).catch(() => {});
-    return () => clearInterval(t);
   }, [buscaDeb, campanhaFiltro]);
 
   // Alvo vindo do Pipeline (canal oficial): abre a conversa existente ou inicia uma nova
@@ -10768,8 +10768,16 @@ function InboxOficial({ isGer, ehLider, showToast, onIrParaEvolution, target, on
     alvoOfRef.current = target.numero;
     const num = soDigitos(target.numero);
     const achado = chats.find((c) => numIgual(c.numero, target.numero));
+    const abrirNova = () => { setSel(null); setNovaConv({ telefone: num, nome: target.nome || "" }); };
     if (achado) { setSel(achado.id); setNovaConv(null); }
-    else { setSel(null); setNovaConv({ telefone: num, nome: target.nome || "" }); }
+    // v2.7.6: a lista da tela traz só as mais recentes (ou só do filtro) — antes de abrir
+    // conversa nova, procura no servidor se esse número já tem conversa
+    else if (num.length >= 8) {
+      api.ofChats(num.slice(-8)).then((cs) => {
+        const a = (cs || []).find((c) => numIgual(c.numero, target.numero));
+        if (a) { setSel(a.id); setNovaConv(null); } else abrirNova();
+      }).catch(abrirNova);
+    } else abrirNova();
     onTargetUsed && onTargetUsed();
     // eslint-disable-next-line
   }, [target, carregou, chats]);
@@ -11112,10 +11120,12 @@ function InboxOficial({ isGer, ehLider, showToast, onIrParaEvolution, target, on
     return c.vendedorId === filtroVend;
   }), [chats, filtroVend]);
   // v2.7.1: gerente que entrou no rodízio também tem conversas — aparece no filtro
+  // (v2.7.6: guarda quem já apareceu, porque com filtro a lista traz só um dono)
+  const donosVistosRef = useRef(new Map());
   const donosForaDaLista = useMemo(() => {
-    const m = new Map();
-    for (const c of chats) if (c.vendedorId && c.vendedorNome && !m.has(c.vendedorId) && !vendedores.some((v) => v.id === c.vendedorId)) m.set(c.vendedorId, { id: c.vendedorId, nome: c.vendedorNome });
-    return [...m.values()].sort((a, b) => a.nome.localeCompare(b.nome));
+    const m = donosVistosRef.current;
+    for (const c of chats) if (c.vendedorId && c.vendedorNome && !m.has(c.vendedorId)) m.set(c.vendedorId, { id: c.vendedorId, nome: c.vendedorNome });
+    return [...m.values()].filter((d) => !vendedores.some((v) => v.id === d.id)).sort((a, b) => a.nome.localeCompare(b.nome));
   }, [chats, vendedores]);
   const buscaAtiva = buscaDeb.length >= 2;
   const itensLista = useMemo(() => listaFiltrada.map((c) => (
@@ -11188,6 +11198,7 @@ function InboxOficial({ isGer, ehLider, showToast, onIrParaEvolution, target, on
         {(() => {
           const lista = listaFiltrada;
           if (buscaAtiva && lista.length === 0) return null;
+          if (lista.length === 0 && listaDe !== filtroVend) return <div className="of-inbox-empty"><span className="spin" /><p>Carregando conversas…</p></div>;
           return lista.length === 0 ? (
             <div className="of-inbox-empty">
               <I.chat className="ico-empty" />
@@ -11196,6 +11207,11 @@ function InboxOficial({ isGer, ehLider, showToast, onIrParaEvolution, target, on
             </div>
           ) : itensLista;
         })()}
+        {!buscaAtiva && chats.length >= 500 && (
+          <p className="panel-sub" style={{ padding: "12px 16px", textAlign: "center" }}>
+            Aqui aparecem as conversas mais recentes. Para achar uma mais antiga, {filtroVend === "todos" && (isGer || ehLider) ? "escolha o vendedor no filtro ou " : ""}use a busca.
+          </p>
+        )}
         {buscaAtiva && (
           <>
             <div className="busca-sec">

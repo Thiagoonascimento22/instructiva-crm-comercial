@@ -4708,8 +4708,14 @@ export function instalarCanalOficial({ versaoConversa, app, getDb, saveDB, saveS
       chats = chats.filter((c) => c.numeroOficialId === req.query.numeroId);
     }
     // filtro por vendedor específico (gerente vê todos; líder só os que ele pode ver)
-    if (req.query.vendedorId && req.query.vendedorId !== "todos" && podeVerVend(req.user, req.query.vendedorId)) {
-      chats = chats.filter((c) => c.vendedorId === req.query.vendedorId);
+    // v2.7.6: o filtro é feito AQUI, antes do corte da lista. Antes a tela recebia as 500
+    // mais recentes de todo mundo e só depois filtrava — e as conversas de quem não
+    // disparou por último (ex.: Éder) sumiam do filtro.
+    const fv = String(req.query.vendedorId || "");
+    if (fv === "ia" && req.user.role === "gerente") chats = chats.filter((c) => c.iaId && !c.iaPausada);
+    else if (fv === "sem" && req.user.role === "gerente") chats = chats.filter((c) => !c.vendedorId && !(c.iaId && !c.iaPausada));
+    else if (fv && fv !== "todos" && podeVerVend(req.user, fv)) {
+      chats = chats.filter((c) => c.vendedorId === fv);
     }
     // filtro por campanha (ex: ver só as conversas do disparo que EU fiz)
     if (req.query.campanhaId && req.query.campanhaId !== "todas") {
@@ -4722,9 +4728,14 @@ export function instalarCanalOficial({ versaoConversa, app, getDb, saveDB, saveS
     }
     const usuariosPorId = new Map((db.users || []).map((u) => [u.id, u]));
     const campanhasPorId = new Map((db.oficial.campanhas || []).map((x) => [x.id, x]));
+    // v2.7.6: disparo sem resposta não empurra conversa de verdade pra fora da lista.
+    // Vão as 500 conversas mais recentes em que o lead falou + os 150 disparos sem
+    // resposta mais recentes (o resto continua salvo e aparece pela busca/filtro).
+    chats.sort((a, b) => (b.atualizadoEm || 0) - (a.atualizadoEm || 0));
+    const semResposta = (c) => c.origemDisparo && !c.respondeu;
+    let nConv = 0, nDisp = 0;
     const lista = chats
-      .sort((a, b) => (b.atualizadoEm || 0) - (a.atualizadoEm || 0))
-      .slice(0, 500)
+      .filter((c) => (semResposta(c) ? ++nDisp <= 150 : ++nConv <= 500))
       .map((c) => {
         const ultima = c.mensagens && c.mensagens.length ? c.mensagens[c.mensagens.length - 1] : null;
         // última mensagem do LEAD (role them) -> base da janela de 24h (renova quando ele fala)
@@ -4804,6 +4815,8 @@ export function instalarCanalOficial({ versaoConversa, app, getDb, saveDB, saveS
     const q = semAcentoBusca(bruto);
     if (q.length < 2) return res.json({ q: bruto, resultados: [], total: 0 });
     const ehGer = req.user.role === "gerente";
+    const fv = String(req.query.vendedorId || "");
+    const soDoVend = fv && fv !== "todos" && fv !== "ia" && fv !== "sem" && podeVerVend(req.user, fv) ? fv : null;
     const usuariosPorId = new Map((db.users || []).map((u) => [u.id, u]));
     const achados = [];
     let total = 0, t = Date.now();
@@ -4816,6 +4829,7 @@ export function instalarCanalOficial({ versaoConversa, app, getDb, saveDB, saveS
         if (c.origemDisparo && !c.respondeu) continue;
         if (c.iaId && !c.iaPausada) continue; // com a IA no comando o vendedor não abre
       } else if (req.query.numeroId && req.query.numeroId !== "todos" && c.numeroOficialId !== req.query.numeroId) continue;
+      if (soDoVend && c.vendedorId !== soDoVend) continue; // v2.7.6: filtro antes do corte de 120
       const textos = textosDaConversa(cid, c);
       let naConversa = 0;
       for (let i = textos.length - 1; i >= 0; i--) {

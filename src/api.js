@@ -170,7 +170,7 @@ export const api = {
   agendaExcluir: (id) => req("DELETE", "/api/agenda/eventos/" + encodeURIComponent(id)),
   ofChat: (id, v) => req("GET", "/api/oficial/chats/" + encodeURIComponent(id) + (v ? "?v=" + encodeURIComponent(v) : "")),
   // busca dentro das mensagens (igual ao WhatsApp)
-  ofBusca: (q, numeroId) => req("GET", "/api/oficial/busca?q=" + encodeURIComponent(q) + (numeroId ? "&numeroId=" + encodeURIComponent(numeroId) : "")),
+  ofBusca: (q, numeroId, vendedorId) => req("GET", "/api/oficial/busca?q=" + encodeURIComponent(q) + (numeroId ? "&numeroId=" + encodeURIComponent(numeroId) : "") + (vendedorId ? "&vendedorId=" + encodeURIComponent(vendedorId) : "")),
   ofEnviar: (id, texto) => req("POST", "/api/oficial/chats/" + encodeURIComponent(id) + "/send", { texto }),
   ofEnviarMidia: (id, dados) => req("POST", "/api/oficial/chats/" + encodeURIComponent(id) + "/midia", dados),
   ofStats: (desde, ate) => req("GET", "/api/oficial/stats?desde=" + (desde || 0) + "&ate=" + (ate || Date.now())),
