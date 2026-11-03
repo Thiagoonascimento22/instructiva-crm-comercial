@@ -251,6 +251,7 @@ export const api = {
   ofSetCargoFaixa: (id, dados) => req("PUT", "/api/oficial/desempenho/" + id + "/cargo-faixa", dados),
   ofSetPontos: (id, dados) => req("PUT", "/api/oficial/desempenho/" + id + "/pontos", dados),
   ofOcultarVend: (id, oculto) => req("PUT", "/api/oficial/desempenho/" + id + "/ocultar", { oculto }),
+  ofSetComissao: (id, dados) => req("PUT", "/api/oficial/desempenho/" + id + "/comissao", dados),
   ofLigarPessoa: (id, pessoaId) => req("PUT", "/api/oficial/desempenho/" + id + "/pessoa", { pessoaId }),
   ofEtapas: () => req("GET", "/api/oficial/etapas"),
   ofSetEtapaChat: (id, etapa) => req("POST", "/api/oficial/chats/" + id + "/etapa", { etapa }),

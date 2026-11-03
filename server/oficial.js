@@ -98,6 +98,23 @@ export function instalarCanalOficial({ versaoConversa, app, getDb, saveDB, saveS
       for (const u of db.users || []) if (u && u.role === "gerente" && u.oficialAtivo) u.oficialAtivo = false;
       saveDB();
     }
+    // v2.7.3: o Éder (Toledo) virou líder de vendas. Continua comissionando como vendedor
+    // (faturamento + conversão) e, de nov/2026 em diante, ganha +0,5% do que o time de
+    // Toledo vende (sem as vendas dele). Pré-configura uma vez; o gerente ajusta no Desempenho.
+    if (!db.oficial._liderEderV273) {
+      db.oficial._liderEderV273 = true;
+      if (String(process.env.UNIDADE || "").trim().toLowerCase() === "toledo") {
+        const norm = (n) => String(n || "").normalize("NFD").replace(/[̀-ͯ]/g, "").trim().toLowerCase();
+        const achados = (db.users || []).filter((u) => u && u.ativo && (u.role === "vendedor" || u.role === "gerente") && norm(u.nome).split(/\s+/)[0] === "eder");
+        if (achados.length === 1) {
+          const u = achados[0];
+          if (u.comissaoRegra === undefined) u.comissaoRegra = "vendedor";
+          if (u.comissaoLideranca === undefined) u.comissaoLideranca = { pct: 0.5, desde: "2026-11" };
+          console.log("[v2.7.3] comissão de líder configurada para", u.nome);
+        } else console.log("[v2.7.3] líder Éder não identificado (" + achados.length + " nomes) — configurar no Desempenho");
+      }
+      saveDB();
+    }
     // Recuperação única: conversas de DISPARO que já eram de um vendedor mas foram
     // "sequestradas" pela IA padrão do número (bug antigo) ficavam invisíveis pra ele.
     // Pausa a IA nessas conversas pra elas reaparecerem na Caixa de entrada do vendedor.
@@ -5201,6 +5218,14 @@ export function instalarCanalOficial({ versaoConversa, app, getDb, saveDB, saveS
     if (c >= 1.5) return 0.2;
     return 0; // < 1,5%: sem bônus de conversão, mas mantém a base
   }
+  // Regra sobre as PRÓPRIAS vendas: vendedor = tabela; gerente = 1% fixo, a não ser que o
+  // gerente defina que essa pessoa comissiona como vendedor (ex.: líder que também vende).
+  const regraComissao = (u) => (u.role === "gerente" && u.comissaoRegra !== "vendedor" ? "gerente" : "vendedor");
+  // Comissão de liderança: { pct, desde: "AAAA-MM" } — vale do mês "desde" em diante
+  function liderancaNoMes(u, mes) {
+    const l = u.comissaoLideranca;
+    return l && Number(l.pct) > 0 && (!l.desde || mes >= l.desde) ? l : null;
+  }
   function calcularComissao(role, receita, conversao) {
     receita = Number(receita) || 0;
     if (role === "gerente") {
@@ -5259,7 +5284,7 @@ export function instalarCanalOficial({ versaoConversa, app, getDb, saveDB, saveS
     const leads = db.oficial.crmLeads || [];
     const ocultos = new Set(db.oficial.desempenhoOcultos || []);
     const usuarios = (db.users || []).filter((u) => (u.role === "vendedor" || u.role === "gerente") && u.ativo);
-    return usuarios.map((u) => {
+    const lista = usuarios.map((u) => {
       const pes = (u.vendasPessoaId && pessoas.find((p) => p.id === u.vendasPessoaId))
         || pessoas.find((p) => p.userId === u.id)
         || pessoas.find((p) => chaveNomeDes(p.nome) === chaveNomeDes(u.nome));
@@ -5288,10 +5313,25 @@ export function instalarCanalOficial({ versaoConversa, app, getDb, saveDB, saveS
         conversao: Math.round(conversao * 100) / 100,
         meta: metaVendedorMes(pes, mes, metasMes),
         pontos: pontos.total, semanas: pontos.semanas, bonus: bonusPontos(pontos.total),
-        comissao: (() => { const convExib = Math.round(conversao * 10) / 10; const c = calcularComissao(u.role, receita, convExib); return { pct: c.pct, valor: Math.round(c.valor * 100) / 100, regra: c.regra }; })(),
+        comissao: (() => { const convExib = Math.round(conversao * 10) / 10; const c = calcularComissao(regraComissao(u), receita, convExib); return { pct: c.pct, valor: Math.round(c.valor * 100) / 100, regra: c.regra }; })(),
+        comissaoConfig: { regra: regraComissao(u), lideranca: u.comissaoLideranca || null },
         faixaMeta: mf ? { proxima: mf.proxima, pontos: mf.pontos, meses: mf.meses, mesesSeguidos } : null,
       };
     });
+    // Liderança: X% do que o time vendeu no mês (quem comissiona como vendedor e não está
+    // oculto), sem as vendas do próprio líder. "total" = própria + liderança.
+    const baseTime = lista.filter((x) => x.comissao.regra === "vendedor" && !x.oculto).reduce((s, x) => s + (x.receita || 0), 0);
+    lista.forEach((x, i) => {
+      const l = liderancaNoMes(usuarios[i], mes), c = x.comissao;
+      c.lideranca = null;
+      if (l) {
+        const proprio = c.regra === "vendedor" && !x.oculto ? x.receita || 0 : 0;
+        const base = Math.max(0, baseTime - proprio), pct = Number(l.pct);
+        c.lideranca = { pct, base: Math.round(base * 100) / 100, valor: Math.round(base * pct) / 100, desde: l.desde || null };
+      }
+      c.total = Math.round((c.valor + (c.lideranca ? c.lideranca.valor : 0)) * 100) / 100;
+    });
+    return lista;
   }
 
   app.get("/api/oficial/desempenho", auth, (req, res) => {
@@ -5299,12 +5339,13 @@ export function instalarCanalOficial({ versaoConversa, app, getDb, saveDB, saveS
     // gerente pode esconder o desempenho dos vendedores
     if (req.user.role === "vendedor" && acessoVend().desempenhoOculto) return res.status(403).json({ error: "Acesso restrito" });
     const mes = /^\d{4}-\d{2}$/.test(String(req.query.mes || "")) ? req.query.mes : mesDesempenho(Date.now());
-    let lista = desempenhoDoMes(mes);
+    const todosMes = desempenhoDoMes(mes);
+    let lista = todosMes;
     const souGerente = req.user.role === "gerente";
     if (!souGerente) lista = lista.filter((x) => podeVerVend(req.user, x.id));
     else if (String(req.query.incluirOcultos || "") !== "1") lista = lista.filter((x) => !x.oculto);
     lista.sort((a, b) => b.receita - a.receita || b.conversao - a.conversao);
-    const qtdOcultos = souGerente ? desempenhoDoMes(mes).filter((x) => x.oculto).length : 0;
+    const qtdOcultos = souGerente ? todosMes.filter((x) => x.oculto).length : 0;
     // lista de "pessoas" das Vendas, pro gerente ligar cada vendedor à pessoa certa
     const pessoasVendas = souGerente ? (lerVendasArquivo().pessoas || []).map((p) => ({ id: p.id, nome: p.nome })) : [];
     // Comissão de GESTÃO: 1% de tudo que os vendedores da unidade venderam, pra gestora da unidade.
@@ -5313,8 +5354,10 @@ export function instalarCanalOficial({ versaoConversa, app, getDb, saveDB, saveS
     const GESTORA_POR_UNIDADE = { jesuitas: "thalia", toledo: "maeli" };
     const primeiroNomeGestora = GESTORA_POR_UNIDADE[unidade];
     let gestao = null;
-    if (primeiroNomeGestora) {
-      const totalVendedores = lista.filter((v) => v.role !== "gerente").reduce((s, v) => s + (v.receita || 0), 0);
+    // base = quem comissiona como vendedor (inclui líder que vende, ex. Éder), fora os ocultos;
+    // não depende do filtro "ver ocultos" da tela. Só o gerente recebe esse bloco.
+    if (primeiroNomeGestora && souGerente) {
+      const totalVendedores = todosMes.filter((v) => v.comissao.regra === "vendedor" && !v.oculto).reduce((s, v) => s + (v.receita || 0), 0);
       const uGest = (db.users || []).find((x) => (x.role === "vendedor" || x.role === "gerente") && x.ativo && chaveNomeDes(x.nome).startsWith(primeiroNomeGestora));
       gestao = {
         nome: uGest ? uGest.nome : (primeiroNomeGestora.charAt(0).toUpperCase() + primeiroNomeGestora.slice(1)),
@@ -5345,6 +5388,22 @@ export function instalarCanalOficial({ versaoConversa, app, getDb, saveDB, saveS
     if (b.faixa !== undefined && FAIXAS.some((f) => f.k === b.faixa)) u.faixa = b.faixa;
     salvar();
     res.json({ ok: true, cargo: u.cargo, faixa: u.faixa });
+  });
+
+  // gerente define a comissão de alguém: regra sobre as próprias vendas (um gerente pode
+  // comissionar como vendedor) e a liderança (X% do time, de um mês em diante; 0 = sem)
+  app.put("/api/oficial/desempenho/:id/comissao", auth, gerenteOnly, (req, res) => {
+    const u = (db.users || []).find((x) => x.id === req.params.id);
+    if (!u) return res.status(404).json({ error: "Usuário não encontrado" });
+    const b = req.body || {};
+    if (b.regra === "vendedor" || b.regra === "gerente") u.comissaoRegra = b.regra;
+    if (b.liderancaPct !== undefined) {
+      const pct = Math.max(0, Math.min(5, Math.round((Number(b.liderancaPct) || 0) * 100) / 100));
+      const desde = /^\d{4}-\d{2}$/.test(String(b.liderancaDesde || "")) ? b.liderancaDesde : mesDesempenho(Date.now());
+      u.comissaoLideranca = pct > 0 ? { pct, desde } : null;
+    }
+    salvar();
+    res.json({ ok: true, regra: regraComissao(u), lideranca: u.comissaoLideranca || null });
   });
 
   // gerente lança os pontos manuais de uma semana (CRM, cultura, pontualidade)
