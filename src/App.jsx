@@ -7352,6 +7352,7 @@ function Desempenho({ showToast, isGer = true, ehLider = false }) {
       const pct = (n) => (Number(n) || 0).toLocaleString("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + "%";
       const mesLabel = (dados && dados.mes) ? dados.mes.split("-").reverse().join("/") : "";
       const com = v.comissao || { pct: 0, valor: 0, regra: "vendedor" };
+      const ehGer = v.role === "gerente"; // gerente não tem plano de carreira (cargo/faixa/pontos)
       const linha = (rot, val) => `<tr><td style="padding:9px 4px;color:#5f6b7a;font-size:13px;border-bottom:1px solid #eef1f3">${rot}</td><td style="padding:9px 4px;text-align:right;font-weight:700;color:#0b1220;font-size:13px;border-bottom:1px solid #eef1f3">${val}</td></tr>`;
       const html = `<div style="width:720px;padding:30px;font-family:Inter,Arial,sans-serif;background:#fff;color:#0b1220">
         <div style="display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid #F26522;padding-bottom:14px;margin-bottom:18px">
@@ -7360,14 +7361,14 @@ function Desempenho({ showToast, isGer = true, ehLider = false }) {
           <div style="font-size:11px;color:#5f6b7a;text-align:right">Mês ${esc(mesLabel)}<br>Emitido em ${esc(new Date().toLocaleString("pt-BR"))}</div></div>
         <div style="background:#f4f6f8;border:1px solid #e6e8ee;border-radius:12px;padding:14px 16px;margin-bottom:18px">
           <div style="font-weight:700;font-size:17px">${esc(v.nome)}</div>
-          <div style="color:#5f6b7a;margin-top:3px;font-size:13px">${esc(cargoNome || "")}${faixaNome ? " · Faixa " + esc(faixaNome) : ""}</div>
+          <div style="color:#5f6b7a;margin-top:3px;font-size:13px">${ehGer ? "Gerente · vendas próprias" : esc(cargoNome || "") + (faixaNome ? " · Faixa " + esc(faixaNome) : "")}</div>
         </div>
         <table style="width:100%;border-collapse:collapse;margin-bottom:18px">
           ${linha("Faturamento (receita)", money(v.receita))}
           ${linha("Taxa de conversão", pct(v.conversao))}
           ${linha("Vendas no mês", String(v.vendas || 0))}
           ${linha("Ticket médio", money(v.ticket))}
-          ${linha("Pontos no mês", String(v.pontos || 0))}
+          ${ehGer ? "" : linha("Pontos no mês", String(v.pontos || 0))}
         </table>
         <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:14px;padding:18px 20px;display:flex;justify-content:space-between;align-items:center">
           <div><div style="font-size:12px;color:#5f6b7a;font-weight:700;text-transform:uppercase;letter-spacing:.04em">Comissão a receber</div>
@@ -7402,7 +7403,7 @@ function Desempenho({ showToast, isGer = true, ehLider = false }) {
       const td = (t, r, b) => `<td style="padding:9px 8px;text-align:${r ? "right" : "left"};font-size:12.5px;color:#0b1220;${b ? "font-weight:700;" : ""}border-bottom:1px solid #eef1f3">${t}</td>`;
       const linhas = lista.map((v) => {
         const c = v.comissao || { pct: 0, valor: 0 };
-        return `<tr>${td(esc(v.nome))}${td(money(v.receita), true)}${td(pctf(v.conversao), true)}${td(String(v.vendas || 0), true)}${td(pctf(c.pct), true)}${td(money(c.valor), true, true)}</tr>`;
+        return `<tr>${td(esc(v.nome) + (v.role === "gerente" ? " <span style='color:#5f6b7a;font-size:11px'>· gerente</span>" : ""))}${td(money(v.receita), true)}${td(pctf(v.conversao), true)}${td(String(v.vendas || 0), true)}${td(pctf(c.pct), true)}${td(money(c.valor), true, true)}</tr>`;
       }).join("");
       const html = `<div style="width:760px;padding:30px;font-family:Inter,Arial,sans-serif;background:#fff;color:#0b1220">
         <div style="display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid #F26522;padding-bottom:14px;margin-bottom:18px">
@@ -7410,15 +7411,15 @@ function Desempenho({ showToast, isGer = true, ehLider = false }) {
           <div style="font-size:15px;font-weight:700;margin-top:8px">Desempenho e comissões do time${gestao && gestao.unidade ? " · " + esc(gestao.unidade.charAt(0).toUpperCase() + gestao.unidade.slice(1)) : ""}</div></div>
           <div style="font-size:11px;color:#5f6b7a;text-align:right">Mês ${esc(mesLabel)}<br>Emitido em ${esc(new Date().toLocaleString("pt-BR"))}</div></div>
         <table style="width:100%;border-collapse:collapse;margin-bottom:16px">
-          <thead><tr>${th("Vendedor")}${th("Receita", true)}${th("Conversão", true)}${th("Vendas", true)}${th("Comissão %", true)}${th("A receber", true)}</tr></thead>
+          <thead><tr>${th("Nome")}${th("Receita", true)}${th("Conversão", true)}${th("Vendas", true)}${th("Comissão %", true)}${th("A receber", true)}</tr></thead>
           <tbody>${linhas}</tbody>
           <tfoot><tr style="border-top:2px solid #e6e8ee">${td("<b>TOTAL</b>")}${td("<b>" + money(totReceita) + "</b>", true)}${td("", true)}${td("<b>" + totVendas + "</b>", true)}${td("", true)}${td("<b style='color:#16a34a'>" + money(totComissao) + "</b>", true)}</tr></tfoot>
         </table>
         ${gestao ? `<div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:14px;padding:18px 20px;display:flex;justify-content:space-between;align-items:center;text-transform:uppercase">
-          <div style="font-weight:800;font-size:15px;letter-spacing:.02em;color:#0b1220">${esc(gestao.nome)} · 1% DAS VENDAS DA UNIDADE<div style="font-size:11px;font-weight:600;color:#5f6b7a;text-transform:none;margin-top:3px">1% de ${money(gestao.baseVendas)} vendidos${gestao.unidade ? " em " + esc(gestao.unidade.charAt(0).toUpperCase() + gestao.unidade.slice(1)) : ""}</div></div>
+          <div style="font-weight:800;font-size:15px;letter-spacing:.02em;color:#0b1220">${esc(gestao.nome)} · 1% DAS VENDAS DA UNIDADE<div style="font-size:11px;font-weight:600;color:#5f6b7a;text-transform:none;margin-top:3px">1% de ${money(gestao.baseVendas)} vendidos pelos vendedores${gestao.unidade ? " em " + esc(gestao.unidade.charAt(0).toUpperCase() + gestao.unidade.slice(1)) : ""}</div></div>
           <div style="font-weight:850;font-size:24px;color:#16a34a;letter-spacing:-.01em">${money(gestao.valor)}</div>
         </div>` : ""}
-        <div style="text-align:center;color:#aab2bd;font-size:10px;margin-top:20px;border-top:1px solid #eee;padding-top:10px">Instructiva · Sistema Comercial — comissão pela Política Comercial (faturamento + conversão)${gestao ? " · gestão = 1% do total vendido pela unidade" : ""}</div>
+        <div style="text-align:center;color:#aab2bd;font-size:10px;margin-top:20px;border-top:1px solid #eee;padding-top:10px">Instructiva · Sistema Comercial — comissão pela Política Comercial (faturamento + conversão)${gestao ? " · gestão = 1% do total vendido pelos vendedores da unidade" : ""}${lista.some((v) => v.role === "gerente") ? " · gerente = 1% fixo sobre as próprias vendas" : ""}</div>
       </div>`;
       const holder = document.createElement("div");
       holder.style.position = "fixed"; holder.style.left = "-9999px"; holder.style.top = "0";
@@ -7453,11 +7454,14 @@ function Desempenho({ showToast, isGer = true, ehLider = false }) {
   const cargoDe = (k) => cargos.find((c) => c.k === k) || { nome: k, salario: 0 };
   const faixaDe = (k) => faixas.find((f) => f.k === k) || { k, nome: k, cor: "#e5e7eb", texto: "#374151" };
   const vends = dados.vendedores || [];
-  // ranking mostra só os vendedores; o gerente fica FORA do Desempenho (removido da visão e dos totais)
+  // ranking mostra só os vendedores. Gerente que vendeu no mês aparece à parte (seção Gerência),
+  // fora do ranking, com a comissão dele; entra nos totais e no PDF. Gerente sem venda não aparece.
   const rankVends = vends.filter((v) => v.role !== "gerente");
-  const totReceita = rankVends.reduce((s, v) => s + v.receita, 0);
-  const totVendas = rankVends.reduce((s, v) => s + v.vendas, 0);
-  const totLeads = rankVends.reduce((s, v) => s + v.leads, 0);
+  const gerVends = vends.filter((v) => v.role === "gerente" && (v.vendas > 0 || v.receita > 0));
+  const todos = rankVends.concat(gerVends);
+  const totReceita = todos.reduce((s, v) => s + v.receita, 0);
+  const totVendas = todos.reduce((s, v) => s + v.vendas, 0);
+  const totLeads = todos.reduce((s, v) => s + v.leads, 0);
   const convMedia = totLeads ? (totVendas / totLeads) * 100 : 0;
   const ticketMedio = totVendas ? totReceita / totVendas : 0;
 
@@ -7487,8 +7491,8 @@ function Desempenho({ showToast, isGer = true, ehLider = false }) {
           <select className="input" value={mes} onChange={(e) => carregar(e.target.value)} style={{ minWidth: 150, fontWeight: 600 }}>
             {mesesOpcoes.map((m) => <option key={m} value={m}>{nomeMes(m)}</option>)}
           </select>
-          {dados.souGerente && rankVends.length > 0 && (
-            <button onClick={() => exportarTodosPDF(rankVends)} disabled={pdfId === "__todos__"}
+          {dados.souGerente && todos.length > 0 && (
+            <button onClick={() => exportarTodosPDF(todos)} disabled={pdfId === "__todos__"}
               style={{ border: "1px solid " + DES.line, background: "var(--card)", color: DES.ink, borderRadius: 10, padding: "9px 14px", fontSize: 13, fontWeight: 600, cursor: "pointer", whiteSpace: "nowrap", display: "flex", alignItems: "center", gap: 6 }}>
               {pdfId === "__todos__" ? "Gerando…" : "⬇ Exportar todos"}
             </button>
@@ -7497,7 +7501,7 @@ function Desempenho({ showToast, isGer = true, ehLider = false }) {
       </div>
 
       {dados.souGerente && (
-        <div style={{ background: "var(--card)", border: "1px solid " + DES.line, borderRadius: 16, padding: "18px 8px", marginBottom: 22, display: "flex", boxShadow: "0 1px 2px rgba(15,23,42,.04)" }}>
+        <div className="des-stats des-stats-time" style={{ background: "var(--card)", border: "1px solid " + DES.line, borderRadius: 16, padding: "18px 8px", marginBottom: 22, display: "flex", boxShadow: "0 1px 2px rgba(15,23,42,.04)" }}>
           <Stat label="Receita do time" valor={fmtMoneyD(totReceita)} />
           <Stat label="Vendas" valor={String(totVendas)} borda />
           <Stat label="Leads recebidos" valor={String(totLeads)} borda />
@@ -7506,10 +7510,10 @@ function Desempenho({ showToast, isGer = true, ehLider = false }) {
         </div>
       )}
 
-      {rankVends.length === 0 ? (
+      {todos.length === 0 ? (
         <div style={{ padding: 40, color: DES.mut, background: "var(--card)", borderRadius: 16, border: "1px solid " + DES.line, textAlign: "center" }}>Nenhum vendedor pra mostrar neste mês.</div>
-      ) : (
-        <div style={{ display: "grid", gridTemplateColumns: dados.souGerente ? "repeat(auto-fill,minmax(410px,1fr))" : "minmax(0,560px)", gap: 18 }}>
+      ) : rankVends.length > 0 && (
+        <div style={{ display: "grid", gridTemplateColumns: dados.souGerente ? "repeat(auto-fill,minmax(min(410px,100%),1fr))" : "minmax(0,560px)", gap: 18 }}>
           {rankVends.map((v, idx) => {
             const cargo = cargoDe(v.cargo), faixa = faixaDe(v.faixa), fm = v.faixaMeta;
             const prox = fm ? faixaDe(fm.proxima) : null;
@@ -7543,7 +7547,7 @@ function Desempenho({ showToast, isGer = true, ehLider = false }) {
                   </div>
                 </div>
 
-                <div style={{ display: "flex", borderTop: "1px solid " + DES.line, paddingTop: 16 }}>
+                <div className="des-stats" style={{ display: "flex", borderTop: "1px solid " + DES.line, paddingTop: 16 }}>
                   <Stat label="Receita" valor={fmtMoneyD(v.receita)} />
                   <Stat label="Conversão" valor={fmtPctD(v.conversao)} cor={DES.green} borda />
                   <Stat label="Vendas" valor={String(v.vendas)} borda />
@@ -7570,6 +7574,58 @@ function Desempenho({ showToast, isGer = true, ehLider = false }) {
               </div>
             );
           })}
+        </div>
+      )}
+
+      {gerVends.length > 0 && (
+        <div style={{ marginTop: rankVends.length ? 34 : 0 }}>
+          <div style={{ marginBottom: 14 }}>
+            <div style={{ fontSize: 17, fontWeight: 700, color: DES.ink, letterSpacing: "-.01em" }}>Gerência · vendas próprias</div>
+            <div style={{ fontSize: 13, color: DES.mut, marginTop: 2 }}>Gerentes que venderam neste mês. Ficam fora do ranking e recebem 1% fixo sobre o que venderam.</div>
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(min(410px,100%),1fr))", gap: 18 }}>
+            {gerVends.map((v) => (
+              <div key={v.id} style={{ background: "var(--card)", border: "1px solid " + DES.line, borderRadius: 20, padding: 24, opacity: v.oculto ? 0.5 : 1, boxShadow: "0 1px 2px rgba(15,23,42,.04)" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 13, marginBottom: 18 }}>
+                  {v.foto ? <img src={v.foto} alt="" style={{ width: 46, height: 46, borderRadius: "50%", objectFit: "cover" }} /> : <div style={{ width: 46, height: 46, borderRadius: "50%", background: "linear-gradient(135deg,#F26522,#16a34a)", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700, fontSize: 18 }}>{(v.nome || "?").slice(0, 1).toUpperCase()}</div>}
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontWeight: 700, fontSize: 16.5, color: DES.ink, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{v.nome}<span className="of-vend-ger">Gerente</span>{v.oculto ? " · oculto" : ""}</div>
+                    <div style={{ fontSize: 12.5, color: DES.mut, marginTop: 2 }}>{v.vendas} {v.vendas === 1 ? "venda" : "vendas"} no mês</div>
+                  </div>
+                </div>
+
+                <div className="des-stats" style={{ display: "flex", borderTop: "1px solid " + DES.line, paddingTop: 16 }}>
+                  <Stat label="Receita" valor={fmtMoneyD(v.receita)} />
+                  <Stat label="Conversão" valor={fmtPctD(v.conversao)} cor={DES.green} borda />
+                  <Stat label="Vendas" valor={String(v.vendas)} borda />
+                  <Stat label="Ticket" valor={fmtMoneyD(v.ticket)} borda />
+                </div>
+
+                {v.comissao && (
+                  <div style={{ marginTop: 16, background: "var(--surface-2)", border: "1px solid " + DES.line, borderRadius: 14, padding: "13px 16px", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+                    <div>
+                      <div style={{ fontSize: 12, color: DES.mut2, fontWeight: 700, textTransform: "uppercase", letterSpacing: ".04em" }}>Comissão a receber</div>
+                      <div style={{ fontSize: 12, color: DES.mut, marginTop: 2 }}>{fmtPctD(v.comissao.pct)} sobre {fmtMoneyD(v.receita)} · gerente (1% fixo)</div>
+                    </div>
+                    <div style={{ fontSize: 26, fontWeight: 850, color: DES.green, letterSpacing: "-.02em" }}>{fmtMoneyD(v.comissao.valor)}</div>
+                  </div>
+                )}
+
+                <div style={{ marginTop: 16, display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                  <button onClick={() => exportarVendedorPDF(v)} disabled={pdfId === v.id}
+                    style={{ flex: "0 0 auto", border: "1px solid " + DES.line, background: "var(--card)", color: DES.ink, borderRadius: 10, padding: "8px 12px", fontSize: 12.5, fontWeight: 600, cursor: "pointer", display: "flex", alignItems: "center", gap: 6 }}>
+                    {pdfId === v.id ? "Gerando…" : "⬇ Exportar PDF"}
+                  </button>
+                  {v.oculto && dados.souGerente && (
+                    <button onClick={async () => { try { await api.ofOcultarVend(v.id, false); carregar(mes); showToast("Mostrando de novo"); } catch (e) { showToast("❌ " + e.message); } }}
+                      style={{ border: "1px solid " + DES.line, background: "var(--card)", color: DES.green, borderRadius: 10, padding: "8px 12px", fontSize: 12.5, fontWeight: 600, cursor: "pointer" }}>
+                      Mostrar no dashboard
+                    </button>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       )}
 

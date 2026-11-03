@@ -803,3 +803,10 @@ mark.realce { background: var(--realce); color: var(--realce-ink); border-radius
 
 /* v2.7.1 — gerente (admin) também pode receber leads no rodízio */
 .of-vend-ger { display: inline-block; margin-left: 8px; padding: 1px 7px; border-radius: 999px; font-size: 10.5px; font-weight: 650; letter-spacing: .02em; vertical-align: 1px; background: var(--info-bg); color: var(--info-ink); }
+
+/* v2.7.2 — Desempenho no celular: os números do cartão vão pra 2 colunas em vez de se sobrepor */
+@media (max-width: 640px) {
+  .des-stats { display: grid !important; grid-template-columns: 1fr 1fr; row-gap: 14px; }
+  .des-stats > div { border-left: none !important; padding: 0 6px !important; }
+  .des-stats-time { padding: 16px 12px !important; }
+}
