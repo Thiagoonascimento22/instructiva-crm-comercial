@@ -9,9 +9,8 @@
 import { execFile } from "child_process";
 import os from "os";
 import { createRequire } from "module";
-// v2.8 — o mesmo lead agora PODE entrar de novo (card novo a cada captação/lista/import),
-// então não fundimos mais no card antigo. A lógica de "Lead Atualizado" (merge) saiu daqui;
-// o módulo server/leadRecorrente.js fica como referência, mas não é mais usado.
+// lógica central do "Lead Atualizado" (recorrente), pura e testada (server/leadRecorrente.js)
+import { decidirResponsavel, mesclarDados, registrarCaptacao } from "./leadRecorrente.js";
 
 const require = createRequire(import.meta.url);
 const GRAPH = "https://graph.facebook.com/v21.0";
@@ -2355,26 +2354,47 @@ export function instalarCanalOficial({ versaoConversa, app, getDb, saveDB, saveS
     const telDigitos = String(b.telefone || "").replace(/\D/g, "");
     const chave = telDigitos.slice(-8);
 
-    // v2.8 — O MESMO LEAD PODE ENTRAR DE NOVO (um card novo a cada captação).
-    // Não fundimos mais no card antigo. Mantemos só a proteção contra a MESMA
-    // submissão repetida (retry de rede / clique duplo), que não é reentrada de verdade.
-    let recontato = false;
     if (ehCaptacao && chave.length >= 8) {
-      // idempotência: a MESMA submissão (submissionId) nunca vira dois cards,
-      // mesmo que a pessoa já tenha outros cards no CRM.
-      if (b.submissionId) {
-        const jaReg = (db.oficial.crmLeads || []).find((l) => (l.historico || []).some((h) => h && h.dados && h.dados.submissionId === b.submissionId));
-        if (jaReg) return res.json({ ok: true, atualizado: true, duplicada: true, lead: crmLeadPublico(jaReg) });
+      const existente = (db.oficial.crmLeads || []).find((x) => String(x.telefone || "").replace(/\D/g, "").slice(-8) === chave);
+      if (existente) {
+        // ===== CONTATO JÁ EXISTIA → LEAD ATUALIZADO =====
+        // idempotência: se a MESMA submissão já foi registrada, não duplica
+        if (b.submissionId) {
+          const jaTem = (existente.historico || []).some((h) => h && h.dados && h.dados.submissionId === b.submissionId);
+          if (jaTem) return res.json({ ok: true, atualizado: true, duplicada: true, lead: crmLeadPublico(existente) });
+        }
+        // 1) atualiza os dados atuais SEM apagar dado válido (campo vazio não zera o anterior)
+        const merged = mesclarDados(existente, {
+          nome: b.nome, email: b.email, telefone: telDigitos, curso: b.curso,
+          valor: b.valor, origem: b.origem, respostasFormulario: b.respostasFormulario,
+        });
+        Object.assign(existente, merged.lead);
+        // 2) registra a nova captação no histórico (preserva tudo que já existia)
+        const comHist = registrarCaptacao(existente, {
+          lista: b.lista, origem: b.origem, campanha: b.campanha, curso: b.curso,
+          respostas: b.respostasFormulario, utms: b.utms, submissionId: b.submissionId,
+        });
+        existente.historico = comHist.historico;
+        existente.atualizadoEm = comHist.atualizadoEm;
+        // 3) marca como Lead Atualizado (recorrente) — pro card identificar
+        existente.recorrente = true;
+        existente.ultimaCaptacaoEm = Date.now();
+        // 4) decide o responsável: ativo MANTÉM o vendedor; perdido REDISTRIBUI (rodízio existente)
+        const antes = existente.vendedorId;
+        const dec = decidirResponsavel(existente, () => proximoVendedorCRM());
+        existente.vendedorId = dec.vendedorId;
+        // 5) se estava PERDIDO, reativa: volta pro atendimento numa etapa ativa
+        if (existente.etapa === "perdido") {
+          existente.etapa = etapasCRM().some((e) => e.k === "novo") ? "novo" : (etapasCRM()[0] || {}).k;
+        }
+        if (dec.redistribuido && antes !== existente.vendedorId) {
+          const v = existente.vendedorId ? db.users.find((u) => u.id === existente.vendedorId) : null;
+          existente.historico.push({ tipo: "atribuido", texto: "Redistribuído" + (v ? " para " + v.nome : "") + " (lead recorrente)", ts: Date.now(), dados: { de: null, para: (v ? v.id : null), por: null, auto: true, lote: false, redistribuido: true } });
+        }
+        salvar();
+        return res.json({ ok: true, atualizado: true, lead: crmLeadPublico(existente) });
       }
-      const mesmosTel = (db.oficial.crmLeads || []).filter((x) => String(x.telefone || "").replace(/\D/g, "").slice(-8) === chave);
-      recontato = mesmosTel.length > 0;
-      // "segue a regra de hoje": se já há um vendedor trabalhando essa pessoa (card ativo),
-      // o card novo vai pro mesmo; se só havia card perdido/sem dono, cai no rodízio.
-      // (só mexe no dono quando é REENTRADA; lead 100% novo segue o fluxo de sempre.)
-      if (recontato && !b.vendedorId) {
-        const donoAtivo = mesmosTel.filter((x) => x.etapa !== "perdido" && x.vendedorId).sort((a, c) => (c.atualizadoEm || 0) - (a.atualizadoEm || 0))[0];
-        b.vendedorId = donoAtivo ? donoAtivo.vendedorId : (proximoVendedorCRM() || null);
-      }
+      // não existe → cai no fluxo normal abaixo (cria novo), já com origem/etapa da captação
     }
 
     const lead = {
@@ -2390,8 +2410,6 @@ export function instalarCanalOficial({ versaoConversa, app, getDb, saveDB, saveS
       historico: [{ tipo: "criado", texto: ehCaptacao ? ("Lead captado" + (b.lista ? " (" + b.lista + ")" : "")) : "Lead criado manualmente", ts: Date.now() }],
       criadoEm: Date.now(), atualizadoEm: Date.now(),
     };
-    // reentrada: já havia card(s) desse telefone -> marca recorrente (não conta como gente nova)
-    if (recontato) { lead.recorrente = true; lead.ultimaCaptacaoEm = Date.now(); }
     db.oficial.crmLeads.unshift(lead);
     salvar();
     res.json({ ok: true, lead: crmLeadPublico(lead) });
@@ -2606,15 +2624,8 @@ export function instalarCanalOficial({ versaoConversa, app, getDb, saveDB, saveS
       const telefone = String((row && row.telefone) || "").replace(/\D/g, "");
       if (telefone.length < 10 || telefone.length > 13) { pulados++; continue; }
       const nome = String((row && row.nome) || "").trim().slice(0, 80) || telefone;
-      // v2.8 — NÃO pula mais quando o telefone já existe: o mesmo lead PODE entrar de novo (card novo).
-      const mesmosTel = (db.oficial.crmLeads || []).filter((x) => x.telefone === telefone);
-      const recontato = mesmosTel.length > 0;
-      // segue a regra de hoje: se já há vendedor ativo nessa pessoa, o card vai pra ele;
-      // senão, usa a distribuição escolhida na importação (automático/manual).
-      const donoAtivo = mesmosTel.filter((x) => x.etapa !== "perdido" && x.vendedorId).sort((a, c) => (c.atualizadoEm || 0) - (a.atualizadoEm || 0))[0];
-      const dist = donoAtivo
-        ? { vendedorId: donoAtivo.vendedorId, vendedorNome: (db.users.find((u) => u.id === donoAtivo.vendedorId) || {}).nome || "" }
-        : (modo === "manual" ? { vendedorId: null, vendedorNome: "" } : distribuirReserva());
+      if ((db.oficial.crmLeads || []).some((x) => x.telefone === telefone)) { pulados++; continue; } // dedupe por telefone
+      const dist = modo === "manual" ? { vendedorId: null, vendedorNome: "" } : distribuirReserva();
       const lead = {
         id: "lead_" + Date.now().toString(36) + "_" + i + Math.random().toString(36).slice(2, 5),
         nome, telefone,
@@ -2627,10 +2638,9 @@ export function instalarCanalOficial({ versaoConversa, app, getDb, saveDB, saveS
         origem: "importado",
         tags: tag ? [tag] : [],
         notas: [],
-        historico: [{ tipo: "criado", texto: recontato ? "Importado de planilha (reentrada)" : "Importado de planilha", ts: Date.now() }],
+        historico: [{ tipo: "criado", texto: "Importado de planilha", ts: Date.now() }],
         criadoEm: Date.now(), atualizadoEm: Date.now(),
       };
-      if (recontato) { lead.recorrente = true; lead.ultimaCaptacaoEm = Date.now(); }
       db.oficial.crmLeads.unshift(lead);
       criados++;
     }
@@ -2973,17 +2983,64 @@ export function instalarCanalOficial({ versaoConversa, app, getDb, saveDB, saveS
       return res.json({ ok: true, jaEstava: true });
     }
 
-    // 2) v2.8 — JÁ EXISTE por telefone, entrando por OUTRA lista? O mesmo lead PODE entrar
-    //    de novo: cria um CARD NOVO (não funde mais no antigo). A proteção `jaNaLista`
-    //    acima ainda evita duplicar a MESMA pessoa na MESMA lista (reenvio acidental).
-    const mesmosTel = (db.oficial.crmLeads || []).filter((x) => x.telefone === telefone);
-    const recontato = mesmosTel.length > 0;
-    // segue a regra de hoje: vendedor ativo nessa pessoa fica com o card novo;
-    // senão, usa a distribuição da lista.
-    const donoAtivo = mesmosTel.filter((x) => x.etapa !== "perdido" && x.vendedorId).sort((a, c) => (c.atualizadoEm || 0) - (a.atualizadoEm || 0))[0];
-    const dist = donoAtivo
-      ? { vendedorId: donoAtivo.vendedorId, vendedorNome: (db.users.find((u) => u.id === donoAtivo.vendedorId) || {}).nome || "" }
-      : donoDaLista(lista);
+    // 2) JÁ EXISTE NO CRM por telefone, entrando por uma lista DIFERENTE da atual.
+    //    ITEM 1 — em vez de só colar a tag, MOVE o lead para a etapa inicial (destino) da
+    //    lista nova e atualiza os dados dela, registrando no histórico. O VENDEDOR NÃO MUDA.
+    //    (A proteção `jaNaLista` acima já cuida da MESMA pessoa na MESMA lista -> jaEstava.)
+    const existente = (db.oficial.crmLeads || []).find((x) => x.telefone === telefone);
+    if (existente) {
+      if (!Array.isArray(existente.historico)) existente.historico = [];
+      if (!Array.isArray(existente.tags)) existente.tags = [];
+      // passa a pertencer também a esta lista (sem perder as listas antigas)
+      if (!Array.isArray(existente.reservaIds)) existente.reservaIds = existente.reservaId ? [existente.reservaId] : [];
+      if (!existente.reservaIds.includes(lista.id)) existente.reservaIds.push(lista.id);
+      // tag da nova lista, SOMANDO (nunca apaga as tags antigas)
+      if (novaTag && !existente.tags.includes(novaTag)) existente.tags.push(novaTag);
+
+      const etapas = etapasCRM();
+      const rotulo = (k) => { const e = etapas.find((x) => x.k === k); return e ? (e.lb || e.k) : k; };
+      const etapaAnteriorK = existente.etapa;
+      const vendedorAntes = existente.vendedorId || null;
+      // SEGURANÇA: não puxa um GANHO (matriculado) de volta pro começo — isso tiraria uma
+      // venda fechada do funil. Nesse caso a etapa fica como está; o resto atualiza normal.
+      const ehGanho = String(existente.etapa || "") === "matriculado";
+      let movido = false;
+      if (!ehGanho && etapaDestino && existente.etapa !== etapaDestino) {
+        existente.etapa = etapaDestino;
+        movido = true;
+      }
+
+      // dados da lista nova — reservaNome passa a ser o da lista nova (pedido do ITEM 1)
+      existente.reservaNome = lista.nome;
+      if (lista.curso) existente.curso = lista.curso;
+      if (opc) { existente.valor = opc.preco; existente.formaPagamento = opc.forma; }
+      if (nome && (!existente.nome || existente.nome === existente.telefone)) existente.nome = nome;
+      if (email && !existente.email) existente.email = email;
+      if (respForm) existente.respostasFormulario = { ...(existente.respostasFormulario || {}), ...respForm };
+
+      // se estava SEM dono e a lista distribui automático, distribui agora.
+      // (ITEM 1 NÃO troca quem já é dono — mexer no vendedor de quem já existe é o ITEM 2.)
+      if (!existente.vendedorId && lista.distribuir !== "manual") {
+        const d = donoDaLista(lista); existente.vendedorId = d.vendedorId; existente.vendedorNome = d.vendedorNome;
+        if (existente.vendedorId) existente.historico.push({ tipo: "atribuido", texto: "Atribuído a " + (existente.vendedorNome || existente.vendedorId) + " (distribuição da lista)", ts: Date.now(), dados: { de: null, para: existente.vendedorId, por: null, auto: true, lote: false, redistribuido: false } });
+      }
+
+      existente.recorrente = true;
+      existente.ultimaCaptacaoEm = Date.now();
+      // histórico claro do que aconteceu (pedido do ITEM 1)
+      const txtEntrada = movido
+        ? ("Entrou pela lista " + lista.nome + " — movido de " + rotulo(etapaAnteriorK) + " para " + rotulo(etapaDestino))
+        : (ehGanho
+            ? ("Entrou pela lista " + lista.nome + " — já matriculado, mantido em " + rotulo(etapaAnteriorK))
+            : ("Entrou pela lista " + lista.nome + " — mantido em " + rotulo(etapaAnteriorK)));
+      existente.historico.push({ tipo: "lista", texto: txtEntrada, ts: Date.now(), dados: { de: etapaAnteriorK || null, para: (movido ? etapaDestino : etapaAnteriorK), lista: lista.id, por: null, auto: true } });
+      existente.atualizadoEm = Date.now();
+      salvar();
+      return res.json({ ok: true, atualizado: true, movido, etapaAnterior: etapaAnteriorK || null, etapaNova: existente.etapa || null, vendedorAnterior: vendedorAntes, vendedorNovo: existente.vendedorId || null });
+    }
+
+    // 3) NÃO EXISTE -> cria novo lead
+    const dist = donoDaLista(lista);
     const lead = {
       id: "lead_" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
       nome, telefone, email,
@@ -2996,11 +3053,9 @@ export function instalarCanalOficial({ versaoConversa, app, getDb, saveDB, saveS
       tags: novaTag ? [novaTag] : [],
       respostasFormulario: respForm || undefined, // NOVO: respostas do formulário
       notas: [],
-      historico: [{ tipo: "criado", texto: (recontato ? "Entrou de novo pela lista de reserva: " : "Entrou pela lista de reserva: ") + lista.nome + (opc ? (" — " + opc.forma) : ""), ts: Date.now() }],
+      historico: [{ tipo: "criado", texto: "Entrou pela lista de reserva: " + lista.nome + (opc ? (" — " + opc.forma) : ""), ts: Date.now() }],
       criadoEm: Date.now(), atualizadoEm: Date.now(),
     };
-    // reentrada: já havia card(s) desse telefone -> marca recorrente (não conta como gente nova)
-    if (recontato) { lead.recorrente = true; lead.ultimaCaptacaoEm = Date.now(); }
     if (dist.vendedorId) lead.historico.push({ tipo: "atribuido", texto: "Atribuído a " + (dist.vendedorNome || dist.vendedorId) + " (distribuição da lista)", ts: Date.now(), dados: { de: null, para: dist.vendedorId, por: null, auto: true, lote: false, redistribuido: false } });
     // registra a atribuição AUTOMÁTICA de entrada (pro Dashboard reconstruir carteira/histórico)
     if (dist.vendedorId) {
