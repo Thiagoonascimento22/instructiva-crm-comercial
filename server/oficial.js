@@ -2983,45 +2983,60 @@ export function instalarCanalOficial({ versaoConversa, app, getDb, saveDB, saveS
       return res.json({ ok: true, jaEstava: true });
     }
 
-    // 2) JÁ EXISTE NO CRM por telefone, mas entrou por OUTRA lista -> ATUALIZA (não duplica):
-    //    adiciona a tag da nova lista e joga na pipeline dela.
+    // 2) JÁ EXISTE NO CRM por telefone, entrando por uma lista DIFERENTE da atual.
+    //    ITEM 1 — em vez de só colar a tag, MOVE o lead para a etapa inicial (destino) da
+    //    lista nova e atualiza os dados dela, registrando no histórico. O VENDEDOR NÃO MUDA.
+    //    (A proteção `jaNaLista` acima já cuida da MESMA pessoa na MESMA lista -> jaEstava.)
     const existente = (db.oficial.crmLeads || []).find((x) => x.telefone === telefone);
     if (existente) {
       if (!Array.isArray(existente.historico)) existente.historico = [];
       if (!Array.isArray(existente.tags)) existente.tags = [];
-      // passa a pertencer também a esta lista
+      // passa a pertencer também a esta lista (sem perder as listas antigas)
       if (!Array.isArray(existente.reservaIds)) existente.reservaIds = existente.reservaId ? [existente.reservaId] : [];
       if (!existente.reservaIds.includes(lista.id)) existente.reservaIds.push(lista.id);
-      // tag da nova lista (sem repetir)
+      // tag da nova lista, SOMANDO (nunca apaga as tags antigas)
       if (novaTag && !existente.tags.includes(novaTag)) existente.tags.push(novaTag);
-      // pipeline (etapa) da nova lista — sem NUNCA puxar o lead pra trás
-      // (se ele já está numa etapa mais avançada, ex: matriculado, mantém onde está)
+
       const etapas = etapasCRM();
-      const iAtual = etapas.findIndex((e) => e.k === existente.etapa);
-      const iNova = etapas.findIndex((e) => e.k === etapaDestino);
-      if (iNova > -1 && (iAtual === -1 || iNova >= iAtual) && existente.etapa !== etapaDestino) {
+      const rotulo = (k) => { const e = etapas.find((x) => x.k === k); return e ? (e.lb || e.k) : k; };
+      const etapaAnteriorK = existente.etapa;
+      const vendedorAntes = existente.vendedorId || null;
+      // SEGURANÇA: não puxa um GANHO (matriculado) de volta pro começo — isso tiraria uma
+      // venda fechada do funil. Nesse caso a etapa fica como está; o resto atualiza normal.
+      const ehGanho = String(existente.etapa || "") === "matriculado";
+      let movido = false;
+      if (!ehGanho && etapaDestino && existente.etapa !== etapaDestino) {
         existente.etapa = etapaDestino;
-        existente.historico.push({ tipo: "etapa", texto: "Movido para " + (etapas[iNova] ? etapas[iNova].lb : etapaDestino) + " pela lista " + lista.nome, ts: Date.now(), dados: { de: existente.etapa || null, para: etapaDestino, por: null, auto: true } });
+        movido = true;
       }
-      // atualiza o interesse pra refletir a nova lista (curso/valor/forma) — sem apagar dado bom com vazio
+
+      // dados da lista nova — reservaNome passa a ser o da lista nova (pedido do ITEM 1)
+      existente.reservaNome = lista.nome;
       if (lista.curso) existente.curso = lista.curso;
       if (opc) { existente.valor = opc.preco; existente.formaPagamento = opc.forma; }
-      // completa nome/email se estavam faltando
       if (nome && (!existente.nome || existente.nome === existente.telefone)) existente.nome = nome;
       if (email && !existente.email) existente.email = email;
-      if (respForm) existente.respostasFormulario = { ...(existente.respostasFormulario || {}), ...respForm }; // NOVO
-      // se ainda não tinha dono e a lista distribui automático, distribui agora
+      if (respForm) existente.respostasFormulario = { ...(existente.respostasFormulario || {}), ...respForm };
+
+      // se estava SEM dono e a lista distribui automático, distribui agora.
+      // (ITEM 1 NÃO troca quem já é dono — mexer no vendedor de quem já existe é o ITEM 2.)
       if (!existente.vendedorId && lista.distribuir !== "manual") {
         const d = donoDaLista(lista); existente.vendedorId = d.vendedorId; existente.vendedorNome = d.vendedorNome;
         if (existente.vendedorId) existente.historico.push({ tipo: "atribuido", texto: "Atribuído a " + (existente.vendedorNome || existente.vendedorId) + " (distribuição da lista)", ts: Date.now(), dados: { de: null, para: existente.vendedorId, por: null, auto: true, lote: false, redistribuido: false } });
       }
-      // marca como lead recorrente (Dashboard usa isso pra saber que é recontato, não gente nova)
+
       existente.recorrente = true;
       existente.ultimaCaptacaoEm = Date.now();
-      existente.historico.push({ tipo: "lista", texto: "Entrou também pela lista: " + lista.nome + (opc ? (" — " + opc.forma) : ""), ts: Date.now() });
+      // histórico claro do que aconteceu (pedido do ITEM 1)
+      const txtEntrada = movido
+        ? ("Entrou pela lista " + lista.nome + " — movido de " + rotulo(etapaAnteriorK) + " para " + rotulo(etapaDestino))
+        : (ehGanho
+            ? ("Entrou pela lista " + lista.nome + " — já matriculado, mantido em " + rotulo(etapaAnteriorK))
+            : ("Entrou pela lista " + lista.nome + " — mantido em " + rotulo(etapaAnteriorK)));
+      existente.historico.push({ tipo: "lista", texto: txtEntrada, ts: Date.now(), dados: { de: etapaAnteriorK || null, para: (movido ? etapaDestino : etapaAnteriorK), lista: lista.id, por: null, auto: true } });
       existente.atualizadoEm = Date.now();
       salvar();
-      return res.json({ ok: true, atualizado: true });
+      return res.json({ ok: true, atualizado: true, movido, etapaAnterior: etapaAnteriorK || null, etapaNova: existente.etapa || null, vendedorAnterior: vendedorAntes, vendedorNovo: existente.vendedorId || null });
     }
 
     // 3) NÃO EXISTE -> cria novo lead
@@ -4696,14 +4711,13 @@ export function instalarCanalOficial({ versaoConversa, app, getDb, saveDB, saveS
     const incluirEncerrados = String(req.query.encerrados || "") === "1";
     if (!incluirEncerrados) chats = chats.filter((c) => !c.encerrado);
     if (req.user.role !== "gerente") {
-      // vendedor vê conversas atribuídas a ele que o lead já respondeu
-      // (disparo sem resposta fica invisível pra não lotar a caixa).
-      // GARANTIA: se a conversa é DELE, ela SEMPRE aparece — nenhuma IA esconde
-      // uma conversa que já tem dono. IA só atende lead novo/sem dono.
-      chats = chats.filter((c) =>
-        podeVerVend(req.user, c.vendedorId) &&
-        (!c.origemDisparo || c.respondeu)
-      );
+      // v2.7.8: o vendedor vê TODAS as conversas atribuídas a ele, inclusive os
+      // disparos que o lead ainda NÃO respondeu (antes o disparo sem resposta
+      // ficava invisível). Assim o que ele envia aparece na hora na caixa, e
+      // quando o lead responde a conversa sobe pro topo (ordenação por
+      // atualizadoEm, mais abaixo). PRA VOLTAR AO DE ANTES, troque a linha de
+      // baixo por: podeVerVend(req.user, c.vendedorId) && (!c.origemDisparo || c.respondeu)
+      chats = chats.filter((c) => podeVerVend(req.user, c.vendedorId));
     } else if (req.query.numeroId && req.query.numeroId !== "todos") {
       chats = chats.filter((c) => c.numeroOficialId === req.query.numeroId);
     }
@@ -4826,7 +4840,8 @@ export function instalarCanalOficial({ versaoConversa, app, getDb, saveDB, saveS
       vistos.add(cid);
       if (!ehGer) {
         if (!podeVerVend(req.user, c.vendedorId)) continue;
-        if (c.origemDisparo && !c.respondeu) continue;
+        // v2.7.8: disparo sem resposta TAMBÉM aparece na busca do vendedor
+        // (removida: if (c.origemDisparo && !c.respondeu) continue;)
         if (c.iaId && !c.iaPausada) continue; // com a IA no comando o vendedor não abre
       } else if (req.query.numeroId && req.query.numeroId !== "todos" && c.numeroOficialId !== req.query.numeroId) continue;
       if (soDoVend && c.vendedorId !== soDoVend) continue; // v2.7.6: filtro antes do corte de 120
