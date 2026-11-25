@@ -2260,7 +2260,7 @@ export function instalarCanalOficial({ versaoConversa, app, getDb, saveDB, saveS
   }
   function crmLeadPublico(l) {
     const v = l.vendedorId ? (db.users || []).find((u) => u.id === l.vendedorId) : null;
-    return { id: l.id, nome: l.nome, telefone: l.telefone, email: l.email || "", curso: l.curso || "", etapa: l.etapa, vendedorId: l.vendedorId || null, vendedorNome: v ? v.nome : "", vendedorFoto: v ? (v.foto || "") : "", valor: l.valor || 0, formaPagamento: l.formaPagamento || "", tags: l.tags || [], tarefa: l.tarefa || null, reservaNome: l.reservaNome || "", origem: l.origem || "manual", respostasFormulario: l.respostasFormulario || null, notas: l.notas || [], historico: l.historico || [], recorrente: !!l.recorrente, ultimaCaptacaoEm: l.ultimaCaptacaoEm || null, criadoEm: l.criadoEm, atualizadoEm: l.atualizadoEm };
+    return { id: l.id, nome: l.nome, telefone: l.telefone, email: l.email || "", curso: l.curso || "", etapa: l.etapa, vendedorId: l.vendedorId || null, vendedorNome: v ? v.nome : "", vendedorFoto: v ? (v.foto || "") : "", valor: l.valor || 0, formaPagamento: l.formaPagamento || "", tags: l.tags || [], tarefa: l.tarefa || null, reservaNome: l.reservaNome || "", origem: l.origem || "manual", respostasFormulario: l.respostasFormulario || null, notas: l.notas || [], historico: l.historico || [], recorrente: !!l.recorrente, ultimaCaptacaoEm: l.ultimaCaptacaoEm || null, base: !!l.base, baseEm: l.baseEm || null, baseSemana: l.baseSemana || "", criadoEm: l.criadoEm, atualizadoEm: l.atualizadoEm };
   }
   // versão LEVE pro Pipeline (lista com milhares de cards): SEM histórico/notas/respostas
   // — esses só carregam quando o lead é aberto. Isso deixa o Pipeline abrir MUITO mais rápido.
@@ -2647,6 +2647,195 @@ export function instalarCanalOficial({ versaoConversa, app, getDb, saveDB, saveS
     salvar();
     res.json({ ok: true, criados, pulados });
   });
+
+  /* ============================================================
+     LEADS DA BASE (v2.9) — o gerente distribui uma base de leads
+     por vendedor (ex.: ~300 por semana). É SÓ uma marca no lead
+     (base / baseEm / baseSemana) + tag "Base"; NÃO cria estrutura
+     nova, NÃO mexe em quem não é base. Lead vazio = comum (como hoje).
+     ============================================================ */
+  function semanaBR(ts) {
+    // rótulo da semana = segunda-feira (horário BR), no formato AAAA-MM-DD
+    const d = new Date((ts || Date.now()) - 3 * 3600000);
+    const dow = d.getUTCDay();               // 0=dom .. 6=sáb
+    const desdeSegunda = dow === 0 ? 6 : dow - 1;
+    const seg = new Date(d.getTime() - desdeSegunda * 86400000);
+    return seg.getUTCFullYear() + "-" + String(seg.getUTCMonth() + 1).padStart(2, "0") + "-" + String(seg.getUTCDate()).padStart(2, "0");
+  }
+  function etapaInicialBase() {
+    const et = etapasCRM();
+    return (et.some((e) => e.k === "reserva") ? "reserva" : ((et[0] || {}).k || "novo"));
+  }
+  // marca um lead JÁ existente como "base": não mexe na etapa; troca o dono
+  // pro vendedor escolhido (o dono confirmou essa regra) e grava histórico.
+  function marcarBase(lead, vendedor, semana, ts) {
+    lead.base = true; lead.baseEm = ts; lead.baseSemana = semana;
+    if (!Array.isArray(lead.tags)) lead.tags = [];
+    if (!lead.tags.includes("Base")) lead.tags.push("Base");
+    if (!Array.isArray(lead.historico)) lead.historico = [];
+    if (vendedor) {
+      const de = lead.vendedorId || null;
+      lead.vendedorId = vendedor.id; lead.vendedorNome = vendedor.nome;
+      lead.historico.push({ tipo: "base", texto: "Entrou na base de " + vendedor.nome, ts, dados: { de, para: vendedor.id, semana, por: null, auto: false } });
+    } else {
+      lead.historico.push({ tipo: "base", texto: "Entrou na base", ts, dados: { semana } });
+    }
+    lead.atualizadoEm = ts;
+  }
+
+  // GERENTE: distribui uma planilha de leads pra base dos vendedores.
+  // body: { leads:[{telefone,nome?,email?,curso?}],
+  //         porVendedor:[{vendedorId,qtd}]  (em ordem)  |  vendedorId (todos p/ um),
+  //         etapaNovos? }  -> leads NOVOS entram nessa etapa (padrão: a inicial).
+  app.post("/api/oficial/base/distribuir", auth, gerenteOnly, (req, res) => {
+    garantirEstrutura(); garantirCRM();
+    const b = req.body || {};
+    const linhas = Array.isArray(b.leads) ? b.leads.slice(0, 5000) : [];
+    if (!linhas.length) return res.status(400).json({ error: "Nenhum lead na lista." });
+    // monta o plano de atribuição: um vendedor por lead, na ordem
+    const plano = [];
+    if (b.vendedorId) {
+      const v = db.users.find((u) => u.id === b.vendedorId);
+      if (!podeReceberLeads(v)) return res.status(400).json({ error: "Vendedor inválido." });
+      for (let i = 0; i < linhas.length; i++) plano.push(v);
+    } else if (Array.isArray(b.porVendedor) && b.porVendedor.length) {
+      for (const item of b.porVendedor) {
+        const v = db.users.find((u) => u.id === (item && item.vendedorId));
+        const qtd = Math.max(0, parseInt(item && item.qtd) || 0);
+        if (!podeReceberLeads(v)) return res.status(400).json({ error: "Vendedor inválido na distribuição." });
+        for (let i = 0; i < qtd; i++) plano.push(v);
+      }
+    } else {
+      return res.status(400).json({ error: "Escolha pra quem distribuir (vendedorId ou porVendedor)." });
+    }
+    const ts = Date.now();
+    const semana = semanaBR(ts);
+    const etapaNovos = etapasCRM().some((e) => e.k === b.etapaNovos) ? b.etapaNovos : etapaInicialBase();
+    const vistos = new Set();             // dedupe DENTRO do lote
+    const porV = new Map();               // vendedorId -> total atribuído
+    let criados = 0, atualizados = 0, pulados = 0, jaMatriculados = 0, semVendedor = 0, novoSeq = 0, assigned = 0;
+    for (const row of linhas) {
+      const telefone = String((row && row.telefone) || "").replace(/\D/g, "");
+      if (telefone.length < 10 || telefone.length > 13) { pulados++; continue; }
+      if (vistos.has(telefone)) { pulados++; continue; }
+      vistos.add(telefone);
+      const vendedor = plano[assigned];
+      if (!vendedor) { semVendedor++; continue; }   // acabaram as cotas
+      const existente = (db.oficial.crmLeads || []).find((x) => x.telefone === telefone);
+      if (existente) {
+        if (String(existente.etapa) === "matriculado") { jaMatriculados++; continue; } // não mexe em venda feita (não gasta cota)
+        marcarBase(existente, vendedor, semana, ts);
+        atualizados++;
+      } else {
+        novoSeq++;
+        const lead = {
+          id: "lead_" + ts.toString(36) + "_b" + novoSeq + Math.random().toString(36).slice(2, 5),
+          nome: String((row && row.nome) || "").trim().slice(0, 80) || telefone,
+          telefone,
+          email: String((row && row.email) || "").trim().slice(0, 120),
+          curso: String((row && row.curso) || "").trim().slice(0, 120),
+          valor: 0, formaPagamento: "",
+          etapa: etapaNovos,
+          vendedorId: vendedor.id, vendedorNome: vendedor.nome,
+          origem: "base",
+          base: true, baseEm: ts, baseSemana: semana,
+          tags: ["Base"],
+          notas: [],
+          historico: [{ tipo: "base", texto: "Entrou na base de " + vendedor.nome, ts, dados: { de: null, para: vendedor.id, semana, por: null, auto: false } }],
+          criadoEm: ts, atualizadoEm: ts,
+        };
+        db.oficial.crmLeads.unshift(lead);
+        criados++;
+      }
+      assigned++;
+      porV.set(vendedor.id, (porV.get(vendedor.id) || 0) + 1);
+    }
+    salvar();
+    const resumoVend = [...porV.entries()].map(([vid, total]) => {
+      const v = db.users.find((u) => u.id === vid);
+      return { vendedorId: vid, vendedorNome: v ? v.nome : "", total };
+    });
+    res.json({ ok: true, semana, criados, atualizados, pulados, jaMatriculados, semVendedor, porVendedor: resumoVend });
+  });
+
+  // mapa "últimos 8 dígitos" -> { disparo, resp } a partir das conversas oficiais.
+  // Serve pra saber, por lead da base, se ele já recebeu disparo e se respondeu.
+  function mapaContatoBase() {
+    const por8 = new Map();
+    for (const c of Object.values(db.waChats || {})) {
+      if (!c || (c.canal !== "oficial" && c.canal !== "instagram")) continue;
+      const n8 = String(c.numero || "").replace(/\D/g, "").slice(-8);
+      if (n8.length < 8) continue;
+      const disparo = !!c.origemDisparo || (Array.isArray(c.mensagens) && c.mensagens.some((m) => m && m.template));
+      const resp = !!c.respondeu || (Array.isArray(c.mensagens) && c.mensagens.some((m) => m && m.role === "them"));
+      const prev = por8.get(n8) || { disparo: false, resp: false };
+      por8.set(n8, { disparo: prev.disparo || disparo, resp: prev.resp || resp });
+    }
+    return por8;
+  }
+
+  // RENDIMENTO da base por vendedor (gerente: todos; vendedor: só o dele).
+  // ?semana=AAAA-MM-DD filtra uma leva; vazio = toda a base.
+  app.get("/api/oficial/base/rendimento", auth, permiteVend("crm"), (req, res) => {
+    garantirCRM();
+    const ehGer = req.user.role === "gerente";
+    const semana = String(req.query.semana || "").trim();
+    const por8 = mapaContatoBase();
+    const porV = new Map();
+    const zero = () => ({ total: 0, disparados: 0, responderam: 0, novos: 0, emAndamento: 0, matriculados: 0, perdidos: 0 });
+    for (const l of (db.oficial.crmLeads || [])) {
+      if (!l.base) continue;
+      if (semana && l.baseSemana !== semana) continue;
+      if (!ehGer && !podeVerVend(req.user, l.vendedorId)) continue;
+      const vid = l.vendedorId || "sem";
+      if (!porV.has(vid)) porV.set(vid, zero());
+      const r = porV.get(vid);
+      r.total++;
+      const st = por8.get(String(l.telefone || "").replace(/\D/g, "").slice(-8));
+      if (st && st.disparo) r.disparados++;
+      if (st && st.resp) r.responderam++;
+      const e = String(l.etapa || "");
+      if (e === "matriculado") r.matriculados++;
+      else if (e === "perdido") r.perdidos++;
+      else if (e === "contato" || e === "qualificado") r.emAndamento++;
+      else r.novos++;
+    }
+    const usuarios = new Map((db.users || []).map((u) => [u.id, u]));
+    const linhas = [...porV.entries()].map(([vid, r]) => {
+      const v = usuarios.get(vid);
+      const pct = (a, b2) => (b2 ? Math.round((a / b2) * 1000) / 10 : 0);
+      return {
+        vendedorId: vid === "sem" ? null : vid,
+        vendedorNome: v ? v.nome : (vid === "sem" ? "Sem dono" : vid),
+        ...r,
+        conversao: pct(r.matriculados, r.total),
+        taxaResposta: pct(r.responderam, r.disparados),
+      };
+    }).sort((a, b) => b.total - a.total);
+    const semanas = [...new Set((db.oficial.crmLeads || []).filter((l) => l.base && l.baseSemana).map((l) => l.baseSemana))].sort().reverse();
+    res.json({ ok: true, semana: semana || null, semanas, linhas });
+  });
+
+  // LISTA os leads da base (gerente: todos/filtra; vendedor: só os dele).
+  app.get("/api/oficial/base/leads", auth, permiteVend("crm"), (req, res) => {
+    garantirCRM();
+    const ehGer = req.user.role === "gerente";
+    const semana = String(req.query.semana || "").trim();
+    const fv = String(req.query.vendedorId || "").trim();
+    const por8 = mapaContatoBase();
+    const nomes = new Map((db.users || []).map((u) => [u.id, u]));
+    let leads = (db.oficial.crmLeads || []).filter((l) => l.base);
+    if (semana) leads = leads.filter((l) => l.baseSemana === semana);
+    if (!ehGer) leads = leads.filter((l) => podeVerVend(req.user, l.vendedorId));
+    else if (fv && fv !== "todos") leads = leads.filter((l) => l.vendedorId === fv);
+    leads.sort((a, b) => (b.baseEm || 0) - (a.baseEm || 0));
+    const lista = leads.slice(0, 3000).map((l) => {
+      const st = por8.get(String(l.telefone || "").replace(/\D/g, "").slice(-8)) || {};
+      return { ...crmLeadLista(l, nomes), base: true, baseEm: l.baseEm || null, baseSemana: l.baseSemana || "", disparado: !!st.disparo, respondeu: !!st.resp };
+    });
+    res.json({ ok: true, total: leads.length, leads: lista });
+  });
+
 
   // ---- Ações em lote (selecionar vários leads) ----
   app.post("/api/oficial/crm/lote/atribuir", auth, permiteVend("crm"), (req, res) => {

@@ -410,10 +410,10 @@ export default function App() {
     vistaInicial.current = true;
     // valida a aba restaurada: se não for permitida pro perfil, cai numa aba segura
     const porRole = {
-      gerente: ["whatsapp", "disparo", "numeros", "crm", "agenda", "vendas", "desempenho", "analiseia", "solicitacoes", "config"],
+      gerente: ["whatsapp", "disparo", "numeros", "crm", "baseleads", "agenda", "vendas", "desempenho", "analiseia", "solicitacoes", "config"],
       suporte: ["solicitacoes", "config"],
     };
-    const permitidas = porRole[user.role] || ["whatsapp", "disparo", "minhasSolicitacoes", "config", "crm", "agenda", "vendas", "desempenho", "analiseia"];
+    const permitidas = porRole[user.role] || ["whatsapp", "disparo", "minhasSolicitacoes", "config", "crm", "baseleads", "agenda", "vendas", "desempenho", "analiseia"];
     if (retornoGoogle && user.role !== "suporte") { setView("agenda"); try { window.history.replaceState({}, "", "/"); } catch (_) {} return; }
     if (!permitidas.includes(view)) setView(user.role === "suporte" ? "solicitacoes" : "whatsapp");
   }, [user]);
@@ -475,6 +475,7 @@ export default function App() {
     numeros: { t: "Números", s: "Números oficiais conectados à sua conta Meta" },
     analiseia: { t: "Análise IA", s: "A IA lê as conversas e aponta o que está bom, o que melhorar e alertas" },
     crm: { t: "Pipeline", s: "Funil de leads — arraste entre as etapas, atribua e acompanhe" },
+    baseleads: { t: "Leads da base", s: "Base de leads distribuída por vendedor — com rendimento e disparo reservado" },
     agenda: { t: "Agenda", s: "Reuniões, ligações e visitas com os clientes — integrada ao Google Agenda" },
     vendas: { t: "Vendas", s: "Metas, ranking e todas as vendas do time" },
     desempenho: { t: "Desempenho", s: "Métricas, cargo, faixa e progresso de cada vendedor" },
@@ -489,6 +490,7 @@ export default function App() {
   const grupos = [
     { t: "Comercial", itens: [
       (isGer || vendPode("crm")) && mod("crm") && { k: "crm", ic: I.pipe, label: "Pipeline" },
+      (isGer || vendPode("crm")) && mod("crm") && { k: "baseleads", ic: I.list, label: "Leads da base" },
       !isSuporte && mod("agenda") && { k: "agenda", ic: I.calendar, label: "Agenda" },
       (isGer || vendPode("vendas")) && mod("vendas") && { k: "vendas", ic: I.trend, label: "Vendas" },
       (isGer || (isVend && !(acessoVend && acessoVend.desempenhoOculto))) && mod("desempenho") && { k: "desempenho", ic: I.medal, label: "Desempenho" },
@@ -596,6 +598,7 @@ export default function App() {
               onAbrirConversa={mod("caixa") ? (tel, nome) => { setWaTarget({ numero: tel, canal: "oficial", nome }); setView("whatsapp"); } : null} />
           )}
           {view === "crm" && (isGer || vendPode("crm")) && mod("crm") && <OficialCRM showToast={showToast} isGer={isGer} abrirLeadId={crmAbrir} onLeadAberto={() => setCrmAbrir(null)} onAbrirWhats={(tel, canal, nome) => { setWaTarget({ numero: tel, canal, nome }); setView("whatsapp"); }} onDisparar={(preset) => { setDisparoPreset(preset); setView("disparo"); }} />}
+          {view === "baseleads" && (isGer || vendPode("crm")) && mod("crm") && <BaseLeads isGer={isGer} showToast={showToast} onDisparar={(preset) => { setDisparoPreset(preset); setView("disparo"); }} onAbrirWhats={(tel, canal, nome) => { setWaTarget({ numero: tel, canal, nome }); setView("whatsapp"); }} />}
           {view === "desempenho" && (isGer || (isVend && !(acessoVend && acessoVend.desempenhoOculto))) && mod("desempenho") && <Desempenho showToast={showToast} isGer={isGer} ehLider={ehLider} />}
           {view === "analiseia" && (isGer || isVend) && mod("caixa") && <AnaliseIAVendedor showToast={showToast} isGer={isGer} />}
           {view === "minhasSolicitacoes" && !isGer && !isSuporte && <PaginaMinhasSolicitacoes itens={minhasSol} recarregar={carregarMinhasSol} showToast={showToast} />}
@@ -1850,6 +1853,271 @@ function MetricasDisparo({ isGer = true, showToast, onClose, onLimpou }) {
         )}
       </div>
       )}
+    </div>
+  );
+}
+
+/* ============================================================
+   LEADS DA BASE (v2.9) — aba com a base de leads distribuída por
+   vendedor, painel de rendimento e disparador reservado. Reaproveita
+   a caixa (conversas) e o disparo por baixo — nada clonado.
+   ============================================================ */
+const BL_ETAPA = {
+  reserva: { lb: "Reserva", cor: "#8b5cf6" }, novo: { lb: "Novo", cor: "#64748b" },
+  contato: { lb: "Em contato", cor: "#3b82f6" }, qualificado: { lb: "Qualificado", cor: "var(--mint)" },
+  matriculado: { lb: "Matriculado", cor: "#d97706" }, perdido: { lb: "Perdido", cor: "#ef4444" },
+};
+const BL_BTN_SEC = { border: "1px solid var(--line)", background: "var(--card)", color: "var(--text)", borderRadius: 10, padding: "9px 14px", fontSize: 13.5, fontWeight: 600, cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 6, whiteSpace: "nowrap" };
+function BLPill({ texto, cor, forte }) {
+  return <span style={{ fontSize: 11.5, fontWeight: 700, color: forte ? "#fff" : cor, background: forte ? cor : "transparent", border: "1px solid " + cor, borderRadius: 20, padding: "2px 9px", whiteSpace: "nowrap", display: "inline-block" }}>{texto}</span>;
+}
+function BLBarra({ pct }) {
+  const p = Math.max(0, Math.min(100, pct || 0));
+  return <div style={{ height: 7, borderRadius: 20, background: "var(--surface-2)", overflow: "hidden" }}><div style={{ width: p + "%", height: "100%", borderRadius: 20, background: "linear-gradient(90deg,#F26522,#16a34a)" }} /></div>;
+}
+function blRotuloSemana(s) { if (!s) return "Todas as semanas"; const p = String(s).split("-"); return p.length === 3 ? "Semana de " + p[2] + "/" + p[1] : s; }
+
+function BaseLeads({ isGer = true, showToast, onDisparar, onAbrirWhats }) {
+  const [rend, setRend] = useState({ linhas: [], semanas: [] });
+  const [leads, setLeads] = useState([]);
+  const [semana, setSemana] = useState("");
+  const [fVend, setFVend] = useState("todos");
+  const [carregando, setCarregando] = useState(true);
+  const [addOpen, setAddOpen] = useState(false);
+
+  const carregar = () => {
+    setCarregando(true);
+    Promise.all([api.ofBaseRendimento(semana), api.ofBaseLeads(semana, isGer && fVend !== "todos" ? fVend : "")])
+      .then(([r, l]) => { setRend(r || { linhas: [], semanas: [] }); setLeads((l && l.leads) || []); })
+      .catch((e) => { showToast && showToast(e.message || "Erro ao carregar", "erro"); })
+      .finally(() => setCarregando(false));
+  };
+  useEffect(() => { carregar(); /* eslint-disable-next-line */ }, [semana, fVend]);
+
+  const tot = rend.linhas.reduce((a, x) => ({ total: a.total + x.total, disparados: a.disparados + x.disparados, responderam: a.responderam + x.responderam, matriculados: a.matriculados + x.matriculados }), { total: 0, disparados: 0, responderam: 0, matriculados: 0 });
+  const convGeral = tot.total ? Math.round((tot.matriculados / tot.total) * 1000) / 10 : 0;
+  const minha = !isGer ? (rend.linhas[0] || null) : null;
+
+  const disparar = (vendId) => {
+    const alvo = leads.filter((l) => (!vendId || l.vendedorId === vendId) && !l.respondeu);
+    if (!alvo.length) { showToast && showToast("Nenhum lead da base sem resposta pra disparar.", "erro"); return; }
+    onDisparar && onDisparar({ contatos: alvo.map((l) => ({ telefone: l.telefone, nome: l.nome })), vendedorDestino: isGer && vendId ? vendId : undefined });
+  };
+
+  return (
+    <div className="of-base">
+      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12, flexWrap: "wrap", marginBottom: 16 }}>
+        <div style={{ color: "var(--muted)", fontSize: 13.5, maxWidth: 560 }}>
+          {isGer ? "Distribua leads por vendedor (ex.: 300 por semana) e acompanhe o rendimento de cada um nessa base." : "Sua base de leads — trabalhe e dispare só pra ela."}
+        </div>
+        {isGer && <button className="btn" onClick={() => setAddOpen(true)} style={{ display: "inline-flex", alignItems: "center", gap: 7 }}><I.plus className="ico-inline" /> Adicionar à base</button>}
+      </div>
+
+      <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 18 }}>
+        <select className="input" value={semana} onChange={(e) => setSemana(e.target.value)} style={{ fontWeight: 600, minWidth: 180 }}>
+          <option value="">Todas as semanas</option>
+          {rend.semanas.map((s) => <option key={s} value={s}>{blRotuloSemana(s)}</option>)}
+        </select>
+        {isGer && (
+          <select className="input" value={fVend} onChange={(e) => setFVend(e.target.value)} style={{ fontWeight: 600, minWidth: 180 }}>
+            <option value="todos">Todos os vendedores</option>
+            {rend.linhas.filter((l) => l.vendedorId).map((l) => <option key={l.vendedorId} value={l.vendedorId}>{l.vendedorNome}</option>)}
+          </select>
+        )}
+        <button onClick={carregar} style={BL_BTN_SEC}><I.refresh className="ico-inline" /> Atualizar</button>
+        {!isGer && <button className="btn" onClick={() => disparar(null)} style={{ display: "inline-flex", alignItems: "center", gap: 6 }}><I.send className="ico-inline" /> Disparar pra base</button>}
+      </div>
+
+      {isGer && (
+        <div className="des-stats" style={{ background: "var(--card)", border: "1px solid var(--line)", borderRadius: 16, padding: "16px 8px", marginBottom: 20, display: "flex", boxShadow: "0 1px 2px rgba(15,23,42,.04)" }}>
+          <Stat label="Leads na base" valor={String(tot.total)} />
+          <Stat label="Disparados" valor={String(tot.disparados)} borda />
+          <Stat label="Responderam" valor={String(tot.responderam)} borda />
+          <Stat label="Matrículas" valor={String(tot.matriculados)} cor={DES.green} borda />
+          <Stat label="Conversão" valor={convGeral.toLocaleString("pt-BR") + "%"} cor={DES.green} borda />
+        </div>
+      )}
+
+      {carregando && !rend.linhas.length ? (
+        <div style={{ padding: 40, textAlign: "center", color: "var(--muted)" }}>Carregando…</div>
+      ) : !rend.linhas.length ? (
+        <div style={{ padding: 40, textAlign: "center", color: "var(--muted)", background: "var(--card)", border: "1px solid var(--line)", borderRadius: 16 }}>
+          {isGer ? "Nenhum lead na base ainda. Clique em “Adicionar à base” pra começar." : "Você ainda não tem leads na base."}
+        </div>
+      ) : (
+        <>
+          {isGer ? (
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(min(420px,100%),1fr))", gap: 16, marginBottom: 22 }}>
+              {rend.linhas.map((v) => (
+                <div key={v.vendedorId || "sem"} style={{ background: "var(--card)", border: "1px solid var(--line)", borderRadius: 18, padding: 20, boxShadow: "0 1px 2px rgba(15,23,42,.04)" }}>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginBottom: 14 }}>
+                    <div style={{ fontWeight: 700, fontSize: 16, color: "var(--text)", minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{v.vendedorNome}</div>
+                    {v.vendedorId && <button onClick={() => disparar(v.vendedorId)} title="Levar os leads sem resposta dessa base pro Disparo" style={{ ...BL_BTN_SEC, padding: "6px 11px", fontSize: 12.5 }}><I.send className="ico-inline" /> Disparar</button>}
+                  </div>
+                  <div className="des-stats" style={{ display: "flex", marginBottom: 14 }}>
+                    <Stat label="Base" valor={String(v.total)} />
+                    <Stat label="Disparados" valor={String(v.disparados)} borda />
+                    <Stat label="Responderam" valor={String(v.responderam)} borda />
+                    <Stat label="Matrículas" valor={String(v.matriculados)} cor={DES.green} borda />
+                  </div>
+                  <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                    <div style={{ flex: 1 }}><BLBarra pct={v.conversao} /></div>
+                    <div style={{ fontSize: 13, fontWeight: 800, color: DES.green, whiteSpace: "nowrap" }}>{(v.conversao || 0).toLocaleString("pt-BR")}% conv.</div>
+                  </div>
+                  <div style={{ marginTop: 10, fontSize: 12, color: "var(--faint)" }}>{v.emAndamento} em andamento · {v.novos} novos · {v.perdidos} perdidos{v.disparados ? " · " + (v.taxaResposta || 0).toLocaleString("pt-BR") + "% responderam o disparo" : ""}</div>
+                </div>
+              ))}
+            </div>
+          ) : minha ? (
+            <div style={{ background: "var(--card)", border: "1px solid var(--line)", borderRadius: 18, padding: 20, marginBottom: 22, maxWidth: 640 }}>
+              <div className="des-stats" style={{ display: "flex", marginBottom: 14 }}>
+                <Stat label="Minha base" valor={String(minha.total)} />
+                <Stat label="Disparados" valor={String(minha.disparados)} borda />
+                <Stat label="Responderam" valor={String(minha.responderam)} borda />
+                <Stat label="Matrículas" valor={String(minha.matriculados)} cor={DES.green} borda />
+              </div>
+              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                <div style={{ flex: 1 }}><BLBarra pct={minha.conversao} /></div>
+                <div style={{ fontSize: 13, fontWeight: 800, color: DES.green }}>{(minha.conversao || 0).toLocaleString("pt-BR")}% conv.</div>
+              </div>
+            </div>
+          ) : null}
+
+          <div style={{ background: "var(--card)", border: "1px solid var(--line)", borderRadius: 16, overflow: "hidden" }}>
+            <div style={{ padding: "13px 18px", borderBottom: "1px solid var(--line)", fontWeight: 700, fontSize: 14, color: "var(--text)", display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+              <BLPill texto="Base" cor="#8b5cf6" forte /> Leads da base <span style={{ color: "var(--faint)", fontWeight: 500 }}>({leads.length})</span>
+            </div>
+            <div style={{ overflowX: "auto" }}>
+              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13.5 }}>
+                <thead><tr style={{ color: "var(--faint)", textAlign: "left" }}>
+                  <th style={{ padding: "9px 18px", fontWeight: 600 }}>Nome</th>
+                  <th style={{ padding: "9px 10px", fontWeight: 600 }}>Telefone</th>
+                  <th style={{ padding: "9px 10px", fontWeight: 600 }}>Etapa</th>
+                  <th style={{ padding: "9px 10px", fontWeight: 600 }}>Status</th>
+                  {isGer && <th style={{ padding: "9px 10px", fontWeight: 600 }}>Vendedor</th>}
+                </tr></thead>
+                <tbody>
+                  {leads.slice(0, 300).map((l) => {
+                    const et = BL_ETAPA[l.etapa] || { lb: l.etapa, cor: "#64748b" };
+                    return (
+                      <tr key={l.id} onClick={() => onAbrirWhats && onAbrirWhats(l.telefone, "oficial", l.nome)} style={{ borderTop: "1px solid var(--line)", cursor: onAbrirWhats ? "pointer" : "default" }}>
+                        <td style={{ padding: "10px 18px", fontWeight: 600, color: "var(--text)" }}>{l.nome}</td>
+                        <td style={{ padding: "10px 10px", color: "var(--muted)", whiteSpace: "nowrap" }}>{l.telefone}</td>
+                        <td style={{ padding: "10px 10px" }}><BLPill texto={et.lb} cor={et.cor} /></td>
+                        <td style={{ padding: "10px 10px" }}>{l.respondeu ? <BLPill texto="Respondeu" cor="#16a34a" forte /> : l.disparado ? <BLPill texto="Disparado" cor="#3b82f6" /> : <span style={{ color: "var(--faint)" }}>—</span>}</td>
+                        {isGer && <td style={{ padding: "10px 10px", color: "var(--muted)", whiteSpace: "nowrap" }}>{l.vendedorNome || "—"}</td>}
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+            {leads.length > 300 && <div style={{ padding: "10px 18px", color: "var(--faint)", fontSize: 12.5, borderTop: "1px solid var(--line)" }}>Mostrando os 300 mais recentes de {leads.length}. Filtre por semana pra ver os outros.</div>}
+          </div>
+        </>
+      )}
+
+      {addOpen && <ModalAddBase showToast={showToast} onClose={() => setAddOpen(false)} onDone={() => { setAddOpen(false); carregar(); }} />}
+    </div>
+  );
+}
+
+function ModalAddBase({ showToast, onClose, onDone }) {
+  const [vends, setVends] = useState([]);
+  const [texto, setTexto] = useState("");
+  const [modo, setModo] = useState("cada");
+  const [nCada, setNCada] = useState(300);
+  const [sel, setSel] = useState([]);
+  const [cotas, setCotas] = useState({});
+  const [enviando, setEnviando] = useState(false);
+  const [resultado, setResultado] = useState(null);
+
+  useEffect(() => { api.ofVendedoresLista().then((d) => setVends((d && d.vendedores) || d || [])).catch(() => setVends([])); }, []);
+
+  const leads = (texto || "").split(/\r?\n/).map((l) => {
+    const p = l.split(/[;,\t]/).map((x) => x.trim());
+    const tel = (p[0] || "").replace(/\D/g, "");
+    if (tel.length < 10 || tel.length > 13) return null;
+    return { telefone: tel, nome: p[1] || "", email: p[2] || "", curso: p[3] || "" };
+  }).filter(Boolean);
+
+  const toggle = (id) => setSel((xs) => xs.includes(id) ? xs.filter((x) => x !== id) : [...xs, id]);
+  const totalPlano = modo === "cada" ? sel.length * (Number(nCada) || 0) : Object.values(cotas).reduce((a, q) => a + (Number(q) || 0), 0);
+
+  const enviar = async () => {
+    if (!leads.length) return showToast && showToast("Cole a lista de leads (um por linha).", "erro");
+    const body = { leads };
+    if (modo === "cada") {
+      if (!sel.length) return showToast && showToast("Escolha os vendedores.", "erro");
+      body.porVendedor = sel.map((id) => ({ vendedorId: id, qtd: Number(nCada) || 0 }));
+    } else {
+      const pv = Object.entries(cotas).filter((e) => Number(e[1]) > 0).map((e) => ({ vendedorId: e[0], qtd: Number(e[1]) }));
+      if (!pv.length) return showToast && showToast("Defina quantos pra cada vendedor.", "erro");
+      body.porVendedor = pv;
+    }
+    setEnviando(true);
+    try { const r = await api.ofBaseDistribuir(body); setResultado(r); showToast && showToast("Base atualizada!", "ok"); onDone && onDone(); }
+    catch (e) { showToast && showToast(e.message || "Erro ao distribuir", "erro"); }
+    finally { setEnviando(false); }
+  };
+
+  return (
+    <div className="modal" onClick={(e) => e.target === e.currentTarget && onClose()}>
+      <div className="modal-box grande">
+        <div className="modal-head"><b>Adicionar leads à base</b><button className="crm-x" onClick={onClose}>✕</button></div>
+        <div style={{ padding: 20, display: "grid", gap: 18, maxHeight: "70vh", overflow: "auto" }}>
+          {resultado ? (
+            <div style={{ display: "grid", gap: 12 }}>
+              <div style={{ fontWeight: 700, color: "var(--text)", fontSize: 15 }}>Pronto! ✅</div>
+              <div style={{ color: "var(--muted)", fontSize: 14 }}>{resultado.criados} criados · {resultado.atualizados} já existiam (viraram base) · {resultado.pulados} pulados{resultado.jaMatriculados ? " · " + resultado.jaMatriculados + " já matriculados (protegidos)" : ""}{resultado.semVendedor ? " · " + resultado.semVendedor + " sem cota" : ""}</div>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>{(resultado.porVendedor || []).map((p) => <span key={p.vendedorId} style={{ fontSize: 12.5, fontWeight: 700, color: "var(--text)", background: "var(--surface-2)", border: "1px solid var(--line)", borderRadius: 20, padding: "4px 11px" }}>{p.vendedorNome}: {p.total}</span>)}</div>
+              <div style={{ marginTop: 6 }}><button className="btn" onClick={onClose}>Fechar</button></div>
+            </div>
+          ) : (
+            <>
+              <div>
+                <label style={{ fontWeight: 600, fontSize: 13.5, color: "var(--text)", display: "block", marginBottom: 6 }}>Cole os leads (um por linha) — <span style={{ color: "var(--faint)", fontWeight: 400 }}>telefone, nome, email, curso</span></label>
+                <textarea className="input" value={texto} onChange={(e) => setTexto(e.target.value)} rows={7} placeholder={"5544999990001, João\n5544999990002, Maria"} style={{ width: "100%", fontFamily: "inherit", resize: "vertical" }} />
+                <div style={{ fontSize: 12.5, color: "var(--faint)", marginTop: 5 }}>{leads.length} lead(s) válido(s) na lista.</div>
+              </div>
+              <div>
+                <div style={{ fontWeight: 600, fontSize: 13.5, color: "var(--text)", marginBottom: 8 }}>Como distribuir</div>
+                <div style={{ display: "flex", gap: 8, marginBottom: 12, flexWrap: "wrap" }}>
+                  <button className={modo === "cada" ? "btn" : ""} onClick={() => setModo("cada")} style={modo === "cada" ? {} : BL_BTN_SEC}>X pra cada vendedor</button>
+                  <button className={modo === "especifico" ? "btn" : ""} onClick={() => setModo("especifico")} style={modo === "especifico" ? {} : BL_BTN_SEC}>Quantos pra cada</button>
+                </div>
+                {modo === "cada" ? (
+                  <div style={{ display: "grid", gap: 10 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                      <input className="input" type="number" value={nCada} min={1} onChange={(e) => setNCada(e.target.value)} style={{ width: 90 }} />
+                      <span style={{ color: "var(--muted)", fontSize: 14 }}>pra cada vendedor marcado:</span>
+                    </div>
+                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                      {vends.map((v) => <button key={v.id} onClick={() => toggle(v.id)} style={{ cursor: "pointer", fontSize: 13, fontWeight: 600, color: sel.includes(v.id) ? "var(--text)" : "var(--muted)", borderRadius: 20, padding: "6px 13px", border: sel.includes(v.id) ? "1px solid var(--brand)" : "1px solid var(--line)", background: sel.includes(v.id) ? "var(--surface-2)" : "transparent" }}>{sel.includes(v.id) ? "✓ " : ""}{v.nome}</button>)}
+                    </div>
+                  </div>
+                ) : (
+                  <div style={{ display: "grid", gap: 8 }}>
+                    {vends.map((v) => (
+                      <div key={v.id} style={{ display: "flex", alignItems: "center", gap: 10, justifyContent: "space-between" }}>
+                        <span style={{ color: "var(--text)", fontSize: 14 }}>{v.nome}</span>
+                        <input className="input" type="number" min={0} value={cotas[v.id] || ""} placeholder="0" onChange={(e) => setCotas((c) => ({ ...c, [v.id]: e.target.value }))} style={{ width: 90 }} />
+                      </div>
+                    ))}
+                  </div>
+                )}
+                <div style={{ fontSize: 12.5, color: "var(--faint)", marginTop: 10 }}>Plano: {totalPlano} vaga(s) para {leads.length} lead(s).{leads.length > totalPlano ? " " + (leads.length - totalPlano) + " vão sobrar sem dono." : ""}</div>
+              </div>
+            </>
+          )}
+        </div>
+        {!resultado && (
+          <div className="modal-foot">
+            <button onClick={onClose} style={BL_BTN_SEC}>Cancelar</button>
+            <button className="btn" onClick={enviar} disabled={enviando || !leads.length}>{enviando ? "Distribuindo…" : "Adicionar à base"}</button>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

@@ -221,6 +221,13 @@ export const api = {
   ofCrmNota: (id, texto) => req("POST", "/api/oficial/crm/lead/" + id + "/nota", { texto }),
   ofCrmExcluir: (id) => req("DELETE", "/api/oficial/crm/lead/" + id),
   ofCrmVendedores: (ids) => req("POST", "/api/oficial/crm/vendedores", { ids }),
+  // Leads da base (v2.9)
+  ofBaseDistribuir: (dados) => req("POST", "/api/oficial/base/distribuir", dados),
+  ofBaseRendimento: (semana) => req("GET", "/api/oficial/base/rendimento" + (semana ? "?semana=" + encodeURIComponent(semana) : "")),
+  ofBaseLeads: (semana, vendedorId) => {
+    const p = [semana ? "semana=" + encodeURIComponent(semana) : "", vendedorId ? "vendedorId=" + encodeURIComponent(vendedorId) : ""].filter(Boolean);
+    return req("GET", "/api/oficial/base/leads" + (p.length ? "?" + p.join("&") : ""));
+  },
   ofAcessoVend: () => req("GET", "/api/oficial/acesso-vendedor"),
   ofSetAcessoVend: (acessoVend) => req("PUT", "/api/oficial/acesso-vendedor", { acessoVend }),
   ofReservaListas: () => req("GET", "/api/oficial/reserva"),
