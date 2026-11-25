@@ -1859,8 +1859,8 @@ function MetricasDisparo({ isGer = true, showToast, onClose, onLimpou }) {
 
 /* ============================================================
    LEADS DA BASE (v2.9) — aba com a base de leads distribuída por
-   vendedor, painel de rendimento e disparador reservado. Reaproveita
-   a caixa (conversas) e o disparo por baixo — nada clonado.
+   vendedor, painel de rendimento, disparo reservado, exportação e
+   limpeza. Reaproveita a caixa e o disparo por baixo — nada clonado.
    ============================================================ */
 const BL_ETAPA = {
   reserva: { lb: "Reserva", cor: "#8b5cf6" }, novo: { lb: "Novo", cor: "#64748b" },
@@ -1884,6 +1884,7 @@ function BaseLeads({ isGer = true, showToast, onDisparar, onAbrirWhats }) {
   const [fVend, setFVend] = useState("todos");
   const [carregando, setCarregando] = useState(true);
   const [addOpen, setAddOpen] = useState(false);
+  const [sel, setSel] = useState([]);
 
   const carregar = () => {
     setCarregando(true);
@@ -1892,7 +1893,7 @@ function BaseLeads({ isGer = true, showToast, onDisparar, onAbrirWhats }) {
       .catch((e) => { showToast && showToast(e.message || "Erro ao carregar", "erro"); })
       .finally(() => setCarregando(false));
   };
-  useEffect(() => { carregar(); /* eslint-disable-next-line */ }, [semana, fVend]);
+  useEffect(() => { carregar(); setSel([]); /* eslint-disable-next-line */ }, [semana, fVend]);
 
   const tot = rend.linhas.reduce((a, x) => ({ total: a.total + x.total, disparados: a.disparados + x.disparados, responderam: a.responderam + x.responderam, matriculados: a.matriculados + x.matriculados }), { total: 0, disparados: 0, responderam: 0, matriculados: 0 });
   const convGeral = tot.total ? Math.round((tot.matriculados / tot.total) * 1000) / 10 : 0;
@@ -1902,6 +1903,20 @@ function BaseLeads({ isGer = true, showToast, onDisparar, onAbrirWhats }) {
     const alvo = leads.filter((l) => (!vendId || l.vendedorId === vendId) && !l.respondeu);
     if (!alvo.length) { showToast && showToast("Nenhum lead da base sem resposta pra disparar.", "erro"); return; }
     onDisparar && onDisparar({ contatos: alvo.map((l) => ({ telefone: l.telefone, nome: l.nome })), vendedorDestino: isGer && vendId ? vendId : undefined });
+  };
+  const exportar = () => {
+    const q = ["token=" + encodeURIComponent(getToken()), semana ? "semana=" + encodeURIComponent(semana) : "", isGer && fVend !== "todos" ? "vendedorId=" + encodeURIComponent(fVend) : ""].filter(Boolean).join("&");
+    window.open("/api/oficial/base/exportar?" + q, "_blank");
+  };
+  const leadsVis = leads.slice(0, 300);
+  const toggleSel = (id) => setSel((xs) => xs.includes(id) ? xs.filter((x) => x !== id) : [...xs, id]);
+  const allSel = leadsVis.length > 0 && leadsVis.every((l) => sel.includes(l.id));
+  const toggleAll = () => setSel(allSel ? [] : leadsVis.map((l) => l.id));
+  const remover = async (excluir) => {
+    if (!sel.length) return;
+    if (excluir && !window.confirm("Excluir DE VEZ " + sel.length + " lead(s)? Isso apaga do CRM e não dá pra desfazer.")) return;
+    try { const r = await api.ofBaseRemover(sel, excluir); showToast && showToast(excluir ? ((r.excluidos || 0) + " lead(s) excluído(s)") : ((r.removidos || 0) + " tirado(s) da base"), "ok"); setSel([]); carregar(); }
+    catch (e) { showToast && showToast(e.message || "Erro", "erro"); }
   };
 
   return (
@@ -1925,6 +1940,7 @@ function BaseLeads({ isGer = true, showToast, onDisparar, onAbrirWhats }) {
           </select>
         )}
         <button onClick={carregar} style={BL_BTN_SEC}><I.refresh className="ico-inline" /> Atualizar</button>
+        <button onClick={exportar} style={BL_BTN_SEC} title="Baixa uma planilha (CSV) da base — dá pra reimportar depois"><I.download className="ico-inline" /> Exportar planilha</button>
         {!isGer && <button className="btn" onClick={() => disparar(null)} style={{ display: "inline-flex", alignItems: "center", gap: 6 }}><I.send className="ico-inline" /> Disparar pra base</button>}
       </div>
 
@@ -1986,10 +2002,19 @@ function BaseLeads({ isGer = true, showToast, onDisparar, onAbrirWhats }) {
           <div style={{ background: "var(--card)", border: "1px solid var(--line)", borderRadius: 16, overflow: "hidden" }}>
             <div style={{ padding: "13px 18px", borderBottom: "1px solid var(--line)", fontWeight: 700, fontSize: 14, color: "var(--text)", display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
               <BLPill texto="Base" cor="#8b5cf6" forte /> Leads da base <span style={{ color: "var(--faint)", fontWeight: 500 }}>({leads.length})</span>
+              {isGer && sel.length > 0 && (
+                <span style={{ display: "inline-flex", alignItems: "center", gap: 8, marginLeft: "auto", flexWrap: "wrap" }}>
+                  <span style={{ color: "var(--muted)", fontWeight: 600, fontSize: 13 }}>{sel.length} selecionado(s)</span>
+                  <button onClick={() => remover(false)} style={{ ...BL_BTN_SEC, padding: "6px 11px", fontSize: 12.5 }}>Tirar da base</button>
+                  <button onClick={() => remover(true)} style={{ ...BL_BTN_SEC, padding: "6px 11px", fontSize: 12.5, color: "#dc2626", borderColor: "#f3b4b4" }}>Excluir de vez</button>
+                  <button onClick={() => setSel([])} style={{ ...BL_BTN_SEC, padding: "6px 11px", fontSize: 12.5 }}>Limpar</button>
+                </span>
+              )}
             </div>
             <div style={{ overflowX: "auto" }}>
               <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13.5 }}>
                 <thead><tr style={{ color: "var(--faint)", textAlign: "left" }}>
+                  {isGer && <th style={{ padding: "9px 10px", width: 34 }}><input type="checkbox" checked={allSel} onChange={toggleAll} title="Selecionar todos" /></th>}
                   <th style={{ padding: "9px 18px", fontWeight: 600 }}>Nome</th>
                   <th style={{ padding: "9px 10px", fontWeight: 600 }}>Telefone</th>
                   <th style={{ padding: "9px 10px", fontWeight: 600 }}>Etapa</th>
@@ -1997,10 +2022,11 @@ function BaseLeads({ isGer = true, showToast, onDisparar, onAbrirWhats }) {
                   {isGer && <th style={{ padding: "9px 10px", fontWeight: 600 }}>Vendedor</th>}
                 </tr></thead>
                 <tbody>
-                  {leads.slice(0, 300).map((l) => {
+                  {leadsVis.map((l) => {
                     const et = BL_ETAPA[l.etapa] || { lb: l.etapa, cor: "#64748b" };
                     return (
-                      <tr key={l.id} onClick={() => onAbrirWhats && onAbrirWhats(l.telefone, "oficial", l.nome)} style={{ borderTop: "1px solid var(--line)", cursor: onAbrirWhats ? "pointer" : "default" }}>
+                      <tr key={l.id} onClick={() => onAbrirWhats && onAbrirWhats(l.telefone, "oficial", l.nome)} style={{ borderTop: "1px solid var(--line)", cursor: onAbrirWhats ? "pointer" : "default", background: sel.includes(l.id) ? "var(--surface-2)" : "transparent" }}>
+                        {isGer && <td style={{ padding: "10px 10px" }} onClick={(e) => e.stopPropagation()}><input type="checkbox" checked={sel.includes(l.id)} onChange={() => toggleSel(l.id)} /></td>}
                         <td style={{ padding: "10px 18px", fontWeight: 600, color: "var(--text)" }}>{l.nome}</td>
                         <td style={{ padding: "10px 10px", color: "var(--muted)", whiteSpace: "nowrap" }}>{l.telefone}</td>
                         <td style={{ padding: "10px 10px" }}><BLPill texto={et.lb} cor={et.cor} /></td>
@@ -2035,7 +2061,7 @@ function ModalAddBase({ showToast, onClose, onDone }) {
   useEffect(() => { api.ofVendedoresLista().then((d) => setVends((d && d.vendedores) || d || [])).catch(() => setVends([])); }, []);
 
   const leads = (texto || "").split(/\r?\n/).map((l) => {
-    const p = l.split(/[;,\t]/).map((x) => x.trim());
+    const p = l.split(/[;,\t]/).map((x) => x.trim().replace(/^"|"$/g, ""));
     const tel = (p[0] || "").replace(/\D/g, "");
     if (tel.length < 10 || tel.length > 13) return null;
     return { telefone: tel, nome: p[1] || "", email: p[2] || "", curso: p[3] || "" };
@@ -2078,7 +2104,13 @@ function ModalAddBase({ showToast, onClose, onDone }) {
               <div>
                 <label style={{ fontWeight: 600, fontSize: 13.5, color: "var(--text)", display: "block", marginBottom: 6 }}>Cole os leads (um por linha) — <span style={{ color: "var(--faint)", fontWeight: 400 }}>telefone, nome, email, curso</span></label>
                 <textarea className="input" value={texto} onChange={(e) => setTexto(e.target.value)} rows={7} placeholder={"5544999990001, João\n5544999990002, Maria"} style={{ width: "100%", fontFamily: "inherit", resize: "vertical" }} />
-                <div style={{ fontSize: 12.5, color: "var(--faint)", marginTop: 5 }}>{leads.length} lead(s) válido(s) na lista.</div>
+                <div style={{ display: "flex", alignItems: "center", gap: 12, marginTop: 6, flexWrap: "wrap" }}>
+                  <span style={{ fontSize: 12.5, color: "var(--faint)" }}>{leads.length} lead(s) válido(s) na lista.</span>
+                  <label style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 13, color: "var(--brand)", fontWeight: 600, cursor: "pointer" }}>
+                    <I.download className="ico-inline" /> ou subir um arquivo (CSV/TXT)
+                    <input type="file" accept=".csv,.txt" style={{ display: "none" }} onChange={(e) => { const f = e.target.files && e.target.files[0]; if (f) f.text().then((t) => setTexto(t)).catch(() => showToast && showToast("Não consegui ler o arquivo.", "erro")); if (e.target) e.target.value = ""; }} />
+                  </label>
+                </div>
               </div>
               <div>
                 <div style={{ fontWeight: 600, fontSize: 13.5, color: "var(--text)", marginBottom: 8 }}>Como distribuir</div>

@@ -228,6 +228,7 @@ export const api = {
     const p = [semana ? "semana=" + encodeURIComponent(semana) : "", vendedorId ? "vendedorId=" + encodeURIComponent(vendedorId) : ""].filter(Boolean);
     return req("GET", "/api/oficial/base/leads" + (p.length ? "?" + p.join("&") : ""));
   },
+  ofBaseRemover: (ids, excluir) => req("POST", "/api/oficial/base/remover", { ids, excluir }),
   ofAcessoVend: () => req("GET", "/api/oficial/acesso-vendedor"),
   ofSetAcessoVend: (acessoVend) => req("PUT", "/api/oficial/acesso-vendedor", { acessoVend }),
   ofReservaListas: () => req("GET", "/api/oficial/reserva"),

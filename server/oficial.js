@@ -2836,6 +2836,67 @@ export function instalarCanalOficial({ versaoConversa, app, getDb, saveDB, saveS
     res.json({ ok: true, total: leads.length, leads: lista });
   });
 
+  // EXPORTA a base em CSV (gerente: todos/filtra; vendedor: só os dele). Reimportável
+  // (as 4 primeiras colunas = telefone, nome, email, curso). Token na query (window.open).
+  app.get("/api/oficial/base/exportar", (req, res) => {
+    const t = String(req.query.token || (req.headers.authorization || "").replace("Bearer ", "")).trim();
+    const user = (db.users || []).find((u) => u.token && u.token === t);
+    if (!user || !user.ativo) return res.status(401).send("Não autorizado");
+    garantirCRM();
+    const ehGer = user.role === "gerente";
+    const semana = String(req.query.semana || "").trim();
+    const fv = String(req.query.vendedorId || "").trim();
+    const por8 = mapaContatoBase();
+    const nomes = new Map((db.users || []).map((u) => [u.id, u]));
+    const lb = { reserva: "Reserva", novo: "Novo", contato: "Em contato", qualificado: "Qualificado", matriculado: "Matriculado", perdido: "Perdido" };
+    let leads = (db.oficial.crmLeads || []).filter((l) => l.base);
+    if (semana) leads = leads.filter((l) => l.baseSemana === semana);
+    if (!ehGer) leads = leads.filter((l) => podeVerVend(user, l.vendedorId));
+    else if (fv && fv !== "todos") leads = leads.filter((l) => l.vendedorId === fv);
+    leads.sort((a, b) => (b.baseEm || 0) - (a.baseEm || 0));
+    const linhas = [["Telefone", "Nome", "Email", "Curso", "Etapa", "Vendedor", "Disparado", "Respondeu", "Semana"]];
+    for (const l of leads) {
+      const v = l.vendedorId ? nomes.get(l.vendedorId) : null;
+      const st = por8.get(String(l.telefone || "").replace(/\D/g, "").slice(-8)) || {};
+      linhas.push([l.telefone || "", l.nome || "", l.email || "", l.curso || "", lb[l.etapa] || l.etapa || "", v ? v.nome : "", st.disparo ? "Sim" : "Não", st.resp ? "Sim" : "Não", l.baseSemana || ""]);
+    }
+    res.setHeader("Content-Type", "text/csv; charset=utf-8");
+    res.setHeader("Content-Disposition", 'attachment; filename="leads_da_base.csv"');
+    res.send(montarCSV(linhas));
+  });
+
+  // TIRA leads da base (ou EXCLUI de vez, se excluir=true) — só gerente.
+  // "tirar da base": mantém o lead no CRM, só remove a marca/selo Base.
+  app.post("/api/oficial/base/remover", auth, gerenteOnly, (req, res) => {
+    garantirCRM();
+    const b = req.body || {};
+    const ids = Array.isArray(b.ids) ? b.ids : [];
+    const excluir = b.excluir === true;
+    if (!ids.length) return res.status(400).json({ error: "Nenhum lead selecionado." });
+    const idSet = new Set(ids);
+    let removidos = 0, excluidos = 0;
+    if (excluir) {
+      const restantes = [];
+      for (const l of (db.oficial.crmLeads || [])) {
+        if (idSet.has(l.id) && l.base) { excluidos++; continue; }
+        restantes.push(l);
+      }
+      db.oficial.crmLeads = restantes;
+    } else {
+      for (const l of (db.oficial.crmLeads || [])) {
+        if (!idSet.has(l.id) || !l.base) continue;
+        l.base = false;
+        if (Array.isArray(l.tags)) l.tags = l.tags.filter((x) => x !== "Base");
+        if (!Array.isArray(l.historico)) l.historico = [];
+        l.historico.push({ tipo: "base", texto: "Retirado da base", ts: Date.now(), dados: { por: req.user.id } });
+        l.atualizadoEm = Date.now();
+        removidos++;
+      }
+    }
+    salvar();
+    res.json({ ok: true, removidos, excluidos });
+  });
+
 
   // ---- Ações em lote (selecionar vários leads) ----
   app.post("/api/oficial/crm/lote/atribuir", auth, permiteVend("crm"), (req, res) => {
