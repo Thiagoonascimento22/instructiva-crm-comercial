@@ -2121,7 +2121,7 @@ function ModalAddBase({ showToast, onClose, onDone }) {
   const [enviando, setEnviando] = useState(false);
   const [resultado, setResultado] = useState(null);
 
-  useEffect(() => { api.ofVendedoresLista().then((d) => setVends((d && d.vendedores) || d || [])).catch(() => setVends([])); }, []);
+  useEffect(() => { api.ofVendedores().then((d) => setVends((d && d.vendedores) || d || [])).catch(() => setVends([])); }, []);
 
   const leads = blLerLeads(texto);
   const toggle = (id) => setSel((xs) => xs.includes(id) ? xs.filter((x) => x !== id) : [...xs, id]);
@@ -2205,14 +2205,14 @@ function ModalAddBase({ showToast, onClose, onDone }) {
                       <span style={{ color: "var(--muted)", fontSize: 14 }}>pra cada vendedor marcado:</span>
                     </div>
                     <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                      {vends.map((v) => <button key={v.id} onClick={() => toggle(v.id)} style={{ cursor: "pointer", fontSize: 13, fontWeight: 600, color: sel.includes(v.id) ? "var(--text)" : "var(--muted)", borderRadius: 20, padding: "6px 13px", border: sel.includes(v.id) ? "1px solid var(--brand)" : "1px solid var(--line)", background: sel.includes(v.id) ? "var(--surface-2)" : "transparent" }}>{sel.includes(v.id) ? "✓ " : ""}{v.nome}</button>)}
+                      {vends.map((v) => <button key={v.id} onClick={() => toggle(v.id)} style={{ cursor: "pointer", fontSize: 13, fontWeight: 600, color: sel.includes(v.id) ? "var(--text)" : "var(--muted)", borderRadius: 20, padding: "6px 13px", border: sel.includes(v.id) ? "1px solid var(--brand)" : "1px solid var(--line)", background: sel.includes(v.id) ? "var(--surface-2)" : "transparent" }}>{sel.includes(v.id) ? "✓ " : ""}{v.nome}{v.gerente ? " · Gerente" : ""}</button>)}
                     </div>
                   </div>
                 ) : (
                   <div style={{ display: "grid", gap: 8 }}>
                     {vends.map((v) => (
                       <div key={v.id} style={{ display: "flex", alignItems: "center", gap: 10, justifyContent: "space-between" }}>
-                        <span style={{ color: "var(--text)", fontSize: 14 }}>{v.nome}</span>
+                        <span style={{ color: "var(--text)", fontSize: 14 }}>{v.nome}{v.gerente ? <span style={{ marginLeft: 6, fontSize: 11, fontWeight: 700, color: "var(--brand)", background: "var(--surface-2)", border: "1px solid var(--line)", borderRadius: 20, padding: "1px 7px" }}>Gerente</span> : ""}</span>
                         <input className="input" type="number" min={0} value={cotas[v.id] || ""} placeholder="0" onChange={(e) => setCotas((c) => ({ ...c, [v.id]: e.target.value }))} style={{ width: 90 }} />
                       </div>
                     ))}
