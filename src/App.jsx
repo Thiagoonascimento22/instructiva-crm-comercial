@@ -1877,6 +1877,33 @@ function BLBarra({ pct }) {
 }
 function blRotuloSemana(s) { if (!s) return "Todas as semanas"; const p = String(s).split("-"); return p.length === 3 ? "Semana de " + p[2] + "/" + p[1] : s; }
 
+// Leitor esperto: entende nome e telefone em QUALQUER ordem, separados por
+// espaço, vírgula, tab ou ponto-e-vírgula (e o próprio CSV exportado).
+function blLerLeads(texto) {
+  const out = [], vistos = new Set();
+  const ok = (d) => d.length >= 10 && d.length <= 13;
+  for (const raw of String(texto || "").split(/\r?\n/)) {
+    const linha = raw.trim();
+    if (!linha) continue;
+    let tel = "", nome = "", email = "", curso = "";
+    if (/[;,\t]/.test(linha)) {
+      const campos = linha.split(/[;,\t]/).map((x) => x.trim().replace(/^"|"$/g, ""));
+      for (const c of campos) { const d = c.replace(/\D/g, ""); if (ok(d)) { tel = d; break; } }
+      email = campos.find((c) => /@/.test(c)) || "";
+      nome = campos.find((c) => /[A-Za-zÀ-ÿ]{2,}/.test(c) && !/@/.test(c) && c.replace(/\D/g, "").length < 8) || "";
+    } else {
+      const m = linha.match(/\d[\d\s().\-]{7,}\d/);
+      const d = (m ? m[0] : linha).replace(/\D/g, "");
+      if (ok(d)) { tel = d; nome = linha.replace(m ? m[0] : d, " ").replace(/[\d().\-]+/g, " ").replace(/\s+/g, " ").trim(); }
+    }
+    if (!ok(tel) || vistos.has(tel)) continue;
+    vistos.add(tel);
+    if (!/[A-Za-zÀ-ÿ]/.test(nome)) nome = "";
+    out.push({ telefone: tel, nome: nome.slice(0, 80), email: /@/.test(email) ? email.slice(0, 120) : "", curso: curso.slice(0, 120) });
+  }
+  return out;
+}
+
 function BaseLeads({ isGer = true, showToast, onDisparar, onAbrirWhats }) {
   const [rend, setRend] = useState({ linhas: [], semanas: [] });
   const [leads, setLeads] = useState([]);
@@ -1885,6 +1912,7 @@ function BaseLeads({ isGer = true, showToast, onDisparar, onAbrirWhats }) {
   const [carregando, setCarregando] = useState(true);
   const [addOpen, setAddOpen] = useState(false);
   const [sel, setSel] = useState([]);
+  const [disp, setDisp] = useState(null); // { titulo, vendId, leads }
 
   const carregar = () => {
     setCarregando(true);
@@ -1899,10 +1927,15 @@ function BaseLeads({ isGer = true, showToast, onDisparar, onAbrirWhats }) {
   const convGeral = tot.total ? Math.round((tot.matriculados / tot.total) * 1000) / 10 : 0;
   const minha = !isGer ? (rend.linhas[0] || null) : null;
 
-  const disparar = (vendId) => {
+  const abrirDisparar = (vendId, titulo) => {
     const alvo = leads.filter((l) => (!vendId || l.vendedorId === vendId) && !l.respondeu);
     if (!alvo.length) { showToast && showToast("Nenhum lead da base sem resposta pra disparar.", "erro"); return; }
-    onDisparar && onDisparar({ contatos: alvo.map((l) => ({ telefone: l.telefone, nome: l.nome })), vendedorDestino: isGer && vendId ? vendId : undefined });
+    setDisp({ titulo: titulo || "", vendId: vendId || null, leads: alvo });
+  };
+  const confirmarDisparar = (n) => {
+    const alvo = (disp.leads || []).slice(0, n);
+    onDisparar && onDisparar({ contatos: alvo.map((l) => ({ telefone: l.telefone, nome: l.nome })), vendedorDestino: isGer && disp.vendId ? disp.vendId : undefined });
+    setDisp(null);
   };
   const exportar = () => {
     const q = ["token=" + encodeURIComponent(getToken()), semana ? "semana=" + encodeURIComponent(semana) : "", isGer && fVend !== "todos" ? "vendedorId=" + encodeURIComponent(fVend) : ""].filter(Boolean).join("&");
@@ -1941,7 +1974,7 @@ function BaseLeads({ isGer = true, showToast, onDisparar, onAbrirWhats }) {
         )}
         <button onClick={carregar} style={BL_BTN_SEC}><I.refresh className="ico-inline" /> Atualizar</button>
         <button onClick={exportar} style={BL_BTN_SEC} title="Baixa uma planilha (CSV) da base — dá pra reimportar depois"><I.download className="ico-inline" /> Exportar planilha</button>
-        {!isGer && <button className="btn" onClick={() => disparar(null)} style={{ display: "inline-flex", alignItems: "center", gap: 6 }}><I.send className="ico-inline" /> Disparar pra base</button>}
+        {!isGer && <button className="btn" onClick={() => abrirDisparar(null, "")} style={{ display: "inline-flex", alignItems: "center", gap: 6 }}><I.send className="ico-inline" /> Disparar pra base</button>}
       </div>
 
       {isGer && (
@@ -1968,7 +2001,7 @@ function BaseLeads({ isGer = true, showToast, onDisparar, onAbrirWhats }) {
                 <div key={v.vendedorId || "sem"} style={{ background: "var(--card)", border: "1px solid var(--line)", borderRadius: 18, padding: 20, boxShadow: "0 1px 2px rgba(15,23,42,.04)" }}>
                   <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginBottom: 14 }}>
                     <div style={{ fontWeight: 700, fontSize: 16, color: "var(--text)", minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{v.vendedorNome}</div>
-                    {v.vendedorId && <button onClick={() => disparar(v.vendedorId)} title="Levar os leads sem resposta dessa base pro Disparo" style={{ ...BL_BTN_SEC, padding: "6px 11px", fontSize: 12.5 }}><I.send className="ico-inline" /> Disparar</button>}
+                    {v.vendedorId && <button onClick={() => abrirDisparar(v.vendedorId, v.vendedorNome)} title="Disparar pros leads sem resposta dessa base" style={{ ...BL_BTN_SEC, padding: "6px 11px", fontSize: 12.5 }}><I.send className="ico-inline" /> Disparar</button>}
                   </div>
                   <div className="des-stats" style={{ display: "flex", marginBottom: 14 }}>
                     <Stat label="Base" valor={String(v.total)} />
@@ -2044,6 +2077,36 @@ function BaseLeads({ isGer = true, showToast, onDisparar, onAbrirWhats }) {
       )}
 
       {addOpen && <ModalAddBase showToast={showToast} onClose={() => setAddOpen(false)} onDone={() => { setAddOpen(false); carregar(); }} />}
+      {disp && <ModalDispararBase titulo={disp.titulo} disponiveis={disp.leads.length} onConfirm={confirmarDisparar} onClose={() => setDisp(null)} />}
+    </div>
+  );
+}
+
+// escolhe pra quantos leads da base vai disparar, antes de levar pro Disparo
+function ModalDispararBase({ titulo, disponiveis, onConfirm, onClose }) {
+  const [qtd, setQtd] = useState(disponiveis);
+  const n = Math.max(1, Math.min(disponiveis, parseInt(qtd) || 0));
+  const atalhos = [50, 100, 200, 500].filter((x) => x < disponiveis);
+  return (
+    <div className="modal" onClick={(e) => e.target === e.currentTarget && onClose()}>
+      <div className="modal-box">
+        <div className="modal-head"><b>Disparar pra base{titulo ? " — " + titulo : ""}</b><button className="crm-x" onClick={onClose}>✕</button></div>
+        <div style={{ padding: 20, display: "grid", gap: 16 }}>
+          <div style={{ color: "var(--muted)", fontSize: 14 }}>Tem <b style={{ color: "var(--text)" }}>{disponiveis}</b> lead(s) na base ainda <b>sem resposta</b>. Pra quantos você quer disparar agora?</div>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+            <input className="input" type="number" min={1} max={disponiveis} value={qtd} onChange={(e) => setQtd(e.target.value)} style={{ width: 120, fontSize: 18, fontWeight: 700, textAlign: "center" }} />
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+              {atalhos.map((x) => <button key={x} onClick={() => setQtd(x)} style={{ ...BL_BTN_SEC, padding: "6px 12px", fontSize: 13 }}>{x}</button>)}
+              <button onClick={() => setQtd(disponiveis)} style={{ ...BL_BTN_SEC, padding: "6px 12px", fontSize: 13 }}>Todos ({disponiveis})</button>
+            </div>
+          </div>
+          <div style={{ fontSize: 12.5, color: "var(--faint)" }}>Vai levar os <b style={{ color: "var(--muted)" }}>{n}</b> mais recentes pro Disparo, onde você escolhe o modelo e envia.</div>
+        </div>
+        <div className="modal-foot">
+          <button onClick={onClose} style={BL_BTN_SEC}>Cancelar</button>
+          <button className="btn" onClick={() => onConfirm(n)}>Continuar pro disparo →</button>
+        </div>
+      </div>
     </div>
   );
 }
@@ -2060,18 +2123,12 @@ function ModalAddBase({ showToast, onClose, onDone }) {
 
   useEffect(() => { api.ofVendedoresLista().then((d) => setVends((d && d.vendedores) || d || [])).catch(() => setVends([])); }, []);
 
-  const leads = (texto || "").split(/\r?\n/).map((l) => {
-    const p = l.split(/[;,\t]/).map((x) => x.trim().replace(/^"|"$/g, ""));
-    const tel = (p[0] || "").replace(/\D/g, "");
-    if (tel.length < 10 || tel.length > 13) return null;
-    return { telefone: tel, nome: p[1] || "", email: p[2] || "", curso: p[3] || "" };
-  }).filter(Boolean);
-
+  const leads = blLerLeads(texto);
   const toggle = (id) => setSel((xs) => xs.includes(id) ? xs.filter((x) => x !== id) : [...xs, id]);
   const totalPlano = modo === "cada" ? sel.length * (Number(nCada) || 0) : Object.values(cotas).reduce((a, q) => a + (Number(q) || 0), 0);
 
   const enviar = async () => {
-    if (!leads.length) return showToast && showToast("Cole a lista de leads (um por linha).", "erro");
+    if (!leads.length) return showToast && showToast("Não achei nenhum telefone válido. Confira a lista.", "erro");
     const body = { leads };
     if (modo === "cada") {
       if (!sel.length) return showToast && showToast("Escolha os vendedores.", "erro");
@@ -2087,11 +2144,13 @@ function ModalAddBase({ showToast, onClose, onDone }) {
     finally { setEnviando(false); }
   };
 
+  const lerArquivo = (e) => { const f = e.target.files && e.target.files[0]; if (f) f.text().then((t) => setTexto(t)).catch(() => showToast && showToast("Não consegui ler o arquivo.", "erro")); if (e.target) e.target.value = ""; };
+
   return (
     <div className="modal" onClick={(e) => e.target === e.currentTarget && onClose()}>
       <div className="modal-box grande">
         <div className="modal-head"><b>Adicionar leads à base</b><button className="crm-x" onClick={onClose}>✕</button></div>
-        <div style={{ padding: 20, display: "grid", gap: 18, maxHeight: "70vh", overflow: "auto" }}>
+        <div style={{ padding: 20, display: "grid", gap: 20, maxHeight: "72vh", overflow: "auto" }}>
           {resultado ? (
             <div style={{ display: "grid", gap: 12 }}>
               <div style={{ fontWeight: 700, color: "var(--text)", fontSize: 15 }}>Pronto! ✅</div>
@@ -2101,19 +2160,40 @@ function ModalAddBase({ showToast, onClose, onDone }) {
             </div>
           ) : (
             <>
+              {/* PASSO 1 — a lista */}
               <div>
-                <label style={{ fontWeight: 600, fontSize: 13.5, color: "var(--text)", display: "block", marginBottom: 6 }}>Cole os leads (um por linha) — <span style={{ color: "var(--faint)", fontWeight: 400 }}>telefone, nome, email, curso</span></label>
-                <textarea className="input" value={texto} onChange={(e) => setTexto(e.target.value)} rows={7} placeholder={"5544999990001, João\n5544999990002, Maria"} style={{ width: "100%", fontFamily: "inherit", resize: "vertical" }} />
-                <div style={{ display: "flex", alignItems: "center", gap: 12, marginTop: 6, flexWrap: "wrap" }}>
-                  <span style={{ fontSize: 12.5, color: "var(--faint)" }}>{leads.length} lead(s) válido(s) na lista.</span>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+                  <span style={{ width: 22, height: 22, borderRadius: "50%", background: "var(--brand)", color: "#fff", fontSize: 12, fontWeight: 800, display: "inline-flex", alignItems: "center", justifyContent: "center" }}>1</span>
+                  <b style={{ color: "var(--text)", fontSize: 14.5 }}>Cole ou suba a lista de leads</b>
+                </div>
+                <div style={{ fontSize: 12.5, color: "var(--muted)", marginBottom: 8 }}>Um por linha. Pode ser <b>nome e telefone em qualquer ordem</b> — ex.: <code style={{ background: "var(--surface-2)", padding: "1px 5px", borderRadius: 5 }}>Cassio Reis 44999998888</code>. Lê espaço, vírgula, tab ou planilha (CSV).</div>
+                <textarea className="input" value={texto} onChange={(e) => setTexto(e.target.value)} rows={7} placeholder={"Cassio Reis 44999998888\nMaria Souza 44988887777"} style={{ width: "100%", fontFamily: "inherit", resize: "vertical" }} />
+                <div style={{ marginTop: 8 }}>
                   <label style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 13, color: "var(--brand)", fontWeight: 600, cursor: "pointer" }}>
                     <I.download className="ico-inline" /> ou subir um arquivo (CSV/TXT)
-                    <input type="file" accept=".csv,.txt" style={{ display: "none" }} onChange={(e) => { const f = e.target.files && e.target.files[0]; if (f) f.text().then((t) => setTexto(t)).catch(() => showToast && showToast("Não consegui ler o arquivo.", "erro")); if (e.target) e.target.value = ""; }} />
+                    <input type="file" accept=".csv,.txt" style={{ display: "none" }} onChange={lerArquivo} />
                   </label>
                 </div>
+                {/* prévia do que foi lido */}
+                {leads.length > 0 ? (
+                  <div style={{ marginTop: 10, background: "var(--surface-2)", border: "1px solid var(--line)", borderRadius: 12, padding: "11px 13px" }}>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: "#16a34a", marginBottom: 6 }}>✓ Li {leads.length} lead(s)</div>
+                    <div style={{ fontSize: 12.5, color: "var(--muted)", lineHeight: 1.7 }}>
+                      {leads.slice(0, 3).map((l, i) => <div key={i}><b style={{ color: "var(--text)" }}>{l.nome || "(sem nome)"}</b> · {l.telefone}</div>)}
+                      {leads.length > 3 && <div style={{ color: "var(--faint)" }}>…e mais {leads.length - 3}</div>}
+                    </div>
+                  </div>
+                ) : texto.trim() ? (
+                  <div style={{ marginTop: 10, fontSize: 13, color: "#dc2626", background: "#fef2f2", border: "1px solid #fecaca", borderRadius: 10, padding: "9px 12px" }}>Não achei telefone válido. Garanta o telefone <b>com DDD</b> (10 a 13 dígitos) em cada linha.</div>
+                ) : null}
               </div>
+
+              {/* PASSO 2 — distribuir */}
               <div>
-                <div style={{ fontWeight: 600, fontSize: 13.5, color: "var(--text)", marginBottom: 8 }}>Como distribuir</div>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
+                  <span style={{ width: 22, height: 22, borderRadius: "50%", background: "var(--brand)", color: "#fff", fontSize: 12, fontWeight: 800, display: "inline-flex", alignItems: "center", justifyContent: "center" }}>2</span>
+                  <b style={{ color: "var(--text)", fontSize: 14.5 }}>Distribuir por vendedor</b>
+                </div>
                 <div style={{ display: "flex", gap: 8, marginBottom: 12, flexWrap: "wrap" }}>
                   <button className={modo === "cada" ? "btn" : ""} onClick={() => setModo("cada")} style={modo === "cada" ? {} : BL_BTN_SEC}>X pra cada vendedor</button>
                   <button className={modo === "especifico" ? "btn" : ""} onClick={() => setModo("especifico")} style={modo === "especifico" ? {} : BL_BTN_SEC}>Quantos pra cada</button>
@@ -2138,7 +2218,7 @@ function ModalAddBase({ showToast, onClose, onDone }) {
                     ))}
                   </div>
                 )}
-                <div style={{ fontSize: 12.5, color: "var(--faint)", marginTop: 10 }}>Plano: {totalPlano} vaga(s) para {leads.length} lead(s).{leads.length > totalPlano ? " " + (leads.length - totalPlano) + " vão sobrar sem dono." : ""}</div>
+                <div style={{ fontSize: 12.5, color: "var(--faint)", marginTop: 10 }}>Plano: <b style={{ color: "var(--muted)" }}>{totalPlano}</b> vaga(s) para <b style={{ color: "var(--muted)" }}>{leads.length}</b> lead(s).{leads.length > totalPlano ? " " + (leads.length - totalPlano) + " vão sobrar sem dono." : ""}</div>
               </div>
             </>
           )}
@@ -2146,7 +2226,7 @@ function ModalAddBase({ showToast, onClose, onDone }) {
         {!resultado && (
           <div className="modal-foot">
             <button onClick={onClose} style={BL_BTN_SEC}>Cancelar</button>
-            <button className="btn" onClick={enviar} disabled={enviando || !leads.length}>{enviando ? "Distribuindo…" : "Adicionar à base"}</button>
+            <button className="btn" onClick={enviar} disabled={enviando || !leads.length}>{enviando ? "Distribuindo…" : "Adicionar " + (leads.length ? leads.length + " à base" : "à base")}</button>
           </div>
         )}
       </div>

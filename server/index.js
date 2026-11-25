@@ -52,7 +52,7 @@ app.use((req, res, next) => {
 // Versão do sistema — pra CONFIRMAR qual código está no ar (abra /api/versao no navegador).
 // Se aqui aparecer a versão nova mas o bug continuar, o problema é outro; se aparecer
 // uma versão antiga (ou 404), o deploy não subiu de verdade.
-const VERSAO_SISTEMA = "v2.9.1-base-mais";
+const VERSAO_SISTEMA = "v2.9.2-base-import";
 
 /* ============================================================
    IDENTIFICAÇÃO DA UNIDADE (mesmo código, deploys separados)
