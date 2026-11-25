@@ -2056,7 +2056,7 @@ function BaseLeads({ isGer = true, showToast, onDisparar, onAbrirWhats }) {
                 </tr></thead>
                 <tbody>
                   {leadsVis.map((l) => {
-                    const et = BL_ETAPA[l.etapa] || { lb: l.etapa, cor: "#64748b" };
+                    const et = { lb: l.etapaLb || (BL_ETAPA[l.etapa] && BL_ETAPA[l.etapa].lb) || l.etapa, cor: l.etapaCor || (BL_ETAPA[l.etapa] && BL_ETAPA[l.etapa].cor) || "#64748b" };
                     return (
                       <tr key={l.id} onClick={() => onAbrirWhats && onAbrirWhats(l.telefone, "oficial", l.nome)} style={{ borderTop: "1px solid var(--line)", cursor: onAbrirWhats ? "pointer" : "default", background: sel.includes(l.id) ? "var(--surface-2)" : "transparent" }}>
                         {isGer && <td style={{ padding: "10px 10px" }} onClick={(e) => e.stopPropagation()}><input type="checkbox" checked={sel.includes(l.id)} onChange={() => toggleSel(l.id)} /></td>}

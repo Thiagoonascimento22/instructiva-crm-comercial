@@ -150,6 +150,26 @@ export function instalarCanalOficial({ versaoConversa, app, getDb, saveDB, saveS
       if (limpas) console.log(`[recuperação v2] ${limpas} conversa(s) de disparo liberada(s) da IA`);
       saveDB();
     }
+    // v2.9.3: leads da base que caíram na "reserva" vão pra coluna "Base de Alunos"
+    // (se o gerente criou uma). Roda uma vez por unidade.
+    if (!db.oficial._baseEtapaV293) {
+      db.oficial._baseEtapaV293 = true;
+      const ets = db.oficial.crmEtapas || [];
+      const colBase = ets.find((e) => /base/i.test(e.lb || "") || /base/i.test(e.k || ""));
+      if (colBase && colBase.k !== "reserva") {
+        let movidos = 0;
+        for (const l of (db.oficial.crmLeads || [])) {
+          if (l && l.base && l.etapa === "reserva") {
+            l.etapa = colBase.k; l.atualizadoEm = Date.now();
+            if (!Array.isArray(l.historico)) l.historico = [];
+            l.historico.push({ tipo: "base", texto: "Movido pra " + (colBase.lb || colBase.k), ts: Date.now(), dados: { auto: true } });
+            movidos++;
+          }
+        }
+        if (movidos) console.log("[base] " + movidos + " lead(s) da base movidos pra " + (colBase.lb || colBase.k));
+        saveDB();
+      }
+    }
     if (!db.oficial.verifyToken) {
       db.oficial.verifyToken = "instructiva_" + Math.random().toString(36).slice(2, 10);
     }
@@ -2662,7 +2682,14 @@ export function instalarCanalOficial({ versaoConversa, app, getDb, saveDB, saveS
     const seg = new Date(d.getTime() - desdeSegunda * 86400000);
     return seg.getUTCFullYear() + "-" + String(seg.getUTCMonth() + 1).padStart(2, "0") + "-" + String(seg.getUTCDate()).padStart(2, "0");
   }
+  function etapaBaseCol() {
+    // a coluna "Base de Alunos" que o gerente criar (qualquer etapa com "base" no nome)
+    const et = etapasCRM();
+    return et.find((e) => /base/i.test(e.lb || "") || /base/i.test(e.k || "")) || null;
+  }
   function etapaInicialBase() {
+    const b = etapaBaseCol();
+    if (b) return b.k;
     const et = etapasCRM();
     return (et.some((e) => e.k === "reserva") ? "reserva" : ((et[0] || {}).k || "novo"));
   }
@@ -2761,17 +2788,30 @@ export function instalarCanalOficial({ versaoConversa, app, getDb, saveDB, saveS
   // mapa "últimos 8 dígitos" -> { disparo, resp } a partir das conversas oficiais.
   // Serve pra saber, por lead da base, se ele já recebeu disparo e se respondeu.
   function mapaContatoBase() {
+    // por "últimos 8 dígitos": quando foi o ÚLTIMO disparo (dts) e a ÚLTIMA resposta (rts).
     const por8 = new Map();
     for (const c of Object.values(db.waChats || {})) {
       if (!c || (c.canal !== "oficial" && c.canal !== "instagram")) continue;
       const n8 = String(c.numero || "").replace(/\D/g, "").slice(-8);
       if (n8.length < 8) continue;
-      const disparo = !!c.origemDisparo || (Array.isArray(c.mensagens) && c.mensagens.some((m) => m && m.template));
-      const resp = !!c.respondeu || (Array.isArray(c.mensagens) && c.mensagens.some((m) => m && m.role === "them"));
-      const prev = por8.get(n8) || { disparo: false, resp: false };
-      por8.set(n8, { disparo: prev.disparo || disparo, resp: prev.resp || resp });
+      let dts = 0, rts = 0;
+      for (const m of (c.mensagens || [])) {
+        if (!m) continue;
+        if (m.template && (m.ts || 0) > dts) dts = m.ts || 0;
+        if (m.role === "them" && (m.ts || 0) > rts) rts = m.ts || 0;
+      }
+      if (!dts && c.origemDisparo) dts = c.atualizadoEm || c.criadoEm || 0;
+      const prev = por8.get(n8) || { dts: 0, rts: 0 };
+      por8.set(n8, { dts: Math.max(prev.dts, dts), rts: Math.max(prev.rts, rts) });
     }
     return por8;
+  }
+  // disparado/respondeu CONTAM só o que aconteceu DEPOIS que o lead entrou na base
+  // (o histórico antigo do lead não entra — a base começa zerada).
+  function baseStatus(por8, l) {
+    const st = por8.get(String(l.telefone || "").replace(/\D/g, "").slice(-8));
+    const desde = l.baseEm || 0;
+    return { disparado: !!(st && st.dts && st.dts >= desde), respondeu: !!(st && st.rts && st.rts >= desde) };
   }
 
   // RENDIMENTO da base por vendedor (gerente: todos; vendedor: só o dele).
@@ -2791,9 +2831,9 @@ export function instalarCanalOficial({ versaoConversa, app, getDb, saveDB, saveS
       if (!porV.has(vid)) porV.set(vid, zero());
       const r = porV.get(vid);
       r.total++;
-      const st = por8.get(String(l.telefone || "").replace(/\D/g, "").slice(-8));
-      if (st && st.disparo) r.disparados++;
-      if (st && st.resp) r.responderam++;
+      const bs = baseStatus(por8, l);
+      if (bs.disparado) r.disparados++;
+      if (bs.respondeu) r.responderam++;
       const e = String(l.etapa || "");
       if (e === "matriculado") r.matriculados++;
       else if (e === "perdido") r.perdidos++;
@@ -2830,8 +2870,9 @@ export function instalarCanalOficial({ versaoConversa, app, getDb, saveDB, saveS
     else if (fv && fv !== "todos") leads = leads.filter((l) => l.vendedorId === fv);
     leads.sort((a, b) => (b.baseEm || 0) - (a.baseEm || 0));
     const lista = leads.slice(0, 3000).map((l) => {
-      const st = por8.get(String(l.telefone || "").replace(/\D/g, "").slice(-8)) || {};
-      return { ...crmLeadLista(l, nomes), base: true, baseEm: l.baseEm || null, baseSemana: l.baseSemana || "", disparado: !!st.disparo, respondeu: !!st.resp };
+      const bs = baseStatus(por8, l);
+      const e = etapasCRM().find((x) => x.k === l.etapa);
+      return { ...crmLeadLista(l, nomes), base: true, baseEm: l.baseEm || null, baseSemana: l.baseSemana || "", etapaLb: e ? (e.lb || e.k) : l.etapa, etapaCor: e ? (e.cor || "") : "", disparado: bs.disparado, respondeu: bs.respondeu };
     });
     res.json({ ok: true, total: leads.length, leads: lista });
   });
@@ -2857,8 +2898,8 @@ export function instalarCanalOficial({ versaoConversa, app, getDb, saveDB, saveS
     const linhas = [["Telefone", "Nome", "Email", "Curso", "Etapa", "Vendedor", "Disparado", "Respondeu", "Semana"]];
     for (const l of leads) {
       const v = l.vendedorId ? nomes.get(l.vendedorId) : null;
-      const st = por8.get(String(l.telefone || "").replace(/\D/g, "").slice(-8)) || {};
-      linhas.push([l.telefone || "", l.nome || "", l.email || "", l.curso || "", lb[l.etapa] || l.etapa || "", v ? v.nome : "", st.disparo ? "Sim" : "Não", st.resp ? "Sim" : "Não", l.baseSemana || ""]);
+      const bs = baseStatus(por8, l);
+      linhas.push([l.telefone || "", l.nome || "", l.email || "", l.curso || "", lb[l.etapa] || l.etapa || "", v ? v.nome : "", bs.disparado ? "Sim" : "Não", bs.respondeu ? "Sim" : "Não", l.baseSemana || ""]);
     }
     res.setHeader("Content-Type", "text/csv; charset=utf-8");
     res.setHeader("Content-Disposition", 'attachment; filename="leads_da_base.csv"');
